@@ -1,6 +1,7 @@
-
 "use client";
 import { useEffect, useState } from "react";
+import { PageHeader, Section } from "@/components/ui/Page";
+
 export default function Page() {
   const [permission, setPermission] = useState<NotificationPermission>("default");
   const [mode, setMode] = useState<"files"|"custom">("files");
@@ -18,15 +19,34 @@ export default function Page() {
     alert("Notifications programmées tant que l'onglet reste ouvert.");
   }
   return (
-    <div className="card max-w-2xl space-y-4">
-      <h2 className="text-xl font-semibold">Notifications de motivation</h2>
-      <div className="flex gap-3"><button className="btn-outline" onClick={askPermission}>Autoriser</button><span className="text-sm text-gray-600">Statut: {permission}</span></div>
-      <div className="grid sm:grid-cols-2 gap-3">
-        <div><label className="label">Type</label><select className="input" value={mode} onChange={e=>setMode(e.target.value as any)}><option value="files">Notifications Files</option><option value="custom">Message perso</option></select></div>
-        <div><label className="label">Intervalle (min)</label><input className="input" type="number" min={1} value={interval} onChange={e=>setIntervalMin(parseInt(e.target.value||"1"))} /></div>
-      </div>
-      {mode==="custom" && (<div><label className="label">Message</label><input className="input" value={message} onChange={e=>setMessage(e.target.value)} /></div>)}
-      <button className="btn" onClick={schedule}>Activer</button>
-    </div>
+    <>
+      <PageHeader title="Notifications" subtitle="Active des rappels motivants" />
+      <Section title="Paramètres">
+        <div className="flex gap-3">
+          <button className="btn-outline" onClick={askPermission}>Autoriser</button>
+          <span className="text-sm" style={{color:"#6b7280"}}>Statut: {permission}</span>
+        </div>
+        <div className="grid sm:grid-cols-2 gap-3" style={{marginTop:10}}>
+          <div>
+            <label className="label">Type</label>
+            <select className="input" value={mode} onChange={e=>setMode(e.target.value as any)}>
+              <option value="files">Notifications Files</option>
+              <option value="custom">Message perso</option>
+            </select>
+          </div>
+          <div>
+            <label className="label">Intervalle (min)</label>
+            <input className="input" type="number" min={1} value={interval} onChange={e=>setIntervalMin(parseInt(e.target.value||"1"))} />
+          </div>
+        </div>
+        {mode==="custom" && (
+          <div style={{marginTop:10}}>
+            <label className="label">Message</label>
+            <input className="input" value={message} onChange={e=>setMessage(e.target.value)} />
+          </div>
+        )}
+        <div style={{marginTop:12}}><button className="btn" onClick={schedule}>Activer</button></div>
+      </Section>
+    </>
   );
 }

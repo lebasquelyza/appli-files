@@ -1,0 +1,19 @@
+:root{
+  --bg:#ffffff; --panel:#f7f7f9; --muted:#333333; --text:#111111;
+  --brand:#16a34a; --brand2:#15803d; --accent:#0ea5e9; --ring:rgba(14,165,233,.35);
+  --radius:14px; --shadow:0 6px 18px rgba(0,0,0,.08);
+}
+.h1{ font-size:32px; font-weight:800; margin:0 0 6px; color:#0b0f14; }
+.lead{ color:#1f2937; font-size:16px; margin:0; }
+.page-header{ display:flex; align-items:flex-end; justify-content:space-between; gap:16px; margin-bottom:18px; }
+.section{ background:#fff; border:1px solid #e5e7eb; border-radius:var(--radius); box-shadow:var(--shadow); padding:18px; }
+.section-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+.section-head h2{ font-size:18px; font-weight:700; margin:0; }
+.section-body{ display:block; }
+.badge{ background:#eef2f7; color:#0b0f14; border:1px solid #e5e7eb; padding:6px 10px; border-radius:999px; font-weight:700; font-size:12px; }
+.cta{ display:inline-block; padding:10px 14px; border-radius:10px; background:linear-gradient(135deg,var(--brand),var(--brand2)); color:#fff; font-weight:800; box-shadow:var(--shadow); text-decoration:none; }
+.card{ background:#ffffff; border:1px solid #e5e7eb; border-radius:var(--radius); box-shadow:var(--shadow); padding:16px; }
+.input{ width:100%; border:1px solid #e5e7eb; border-radius:12px; padding:10px; }
+.label{ color:#6b7280; font-size:14px; font-weight:600; display:block; margin-bottom:6px; }
+.btn{ padding:10px 14px; border-radius:10px; color:#fff; font-weight:800; background:linear-gradient(135deg,var(--brand),var(--brand2)); }
+.btn-outline{ padding:10px 14px; border-radius:10px; border:1px solid #e5e7eb; background:#fff; font-weight:700; }

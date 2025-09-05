@@ -18,3 +18,5 @@ body {
 .text-brand { color: var(--brand); }
 
 html{scroll-behavior:smooth}
+
+@import "../styles/brand.css";

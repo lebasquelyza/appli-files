@@ -1,8 +1,27 @@
+import { PageHeader, Section } from "@/components/ui/Page";
 
 export default function Page(){
-  return (<div className="card max-w-2xl space-y-3">
-    <h2 className="text-xl font-semibold">Réglages</h2>
-    <div className="flex items-center justify-between"><div><div className="font-medium">Thème</div><div className="text-sm text-gray-600">Couleurs partagées web & mobile</div></div><a className="btn-outline" href="https://github.com">Modifier variables</a></div>
-    <div className="flex items-center justify-between"><div><div className="font-medium">Confidentialité</div><div className="text-sm text-gray-600">Gestion des données</div></div><a className="btn-outline" href="/dashboard/connect">Ouvrir</a></div>
-  </div>);
+  return (
+    <>
+      <PageHeader title="Réglages" subtitle="Thème, confidentialité et préférences" />
+      <Section title="Apparence">
+        <div className="card flex items-center justify-between">
+          <div>
+            <div className="font-medium">Thème</div>
+            <div className="text-sm" style={{color:"#6b7280"}}>Couleurs partagées web & mobile</div>
+          </div>
+          <a className="btn-outline" href="#">Modifier variables</a>
+        </div>
+      </Section>
+      <Section title="Données">
+        <div className="card flex items-center justify-between">
+          <div>
+            <div className="font-medium">Confidentialité</div>
+            <div className="text-sm" style={{color:"#6b7280"}}>Gestion des données</div>
+          </div>
+          <a className="btn-outline" href="/dashboard/connect">Ouvrir</a>
+        </div>
+      </Section>
+    </>
+  );
 }
