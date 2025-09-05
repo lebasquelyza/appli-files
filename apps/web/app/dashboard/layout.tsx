@@ -1,6 +1,6 @@
 import "../globals.css";
 import Topbar from "@/components/Topbar";
-import { Sidebar } from "@/components/Sidebar";
+import Sidebar from "@/components/Sidebar";
 
 export const metadata = { title: "Dashboard — Files" };
 
