@@ -20,7 +20,7 @@ export default function Page(){
           </div>
         </Section>
         <Section title="Chronomètre">
-          <div className="text-5xl font-bold tabular-nums">{mins}:{secs}</div>
+          <div className="text-5xl font-bold" style={{fontVariantNumeric:"tabular-nums"}}>{mins}:{secs}</div>
           <div className="flex gap-2" style={{marginTop:10}}>
             <button className="btn" onClick={()=>setRunning(r=>!r)}>{running?"Pause":"Démarrer"}</button>
             <button className="btn-outline" onClick={reset}>Réinitialiser</button>
