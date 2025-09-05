@@ -1,18 +1,26 @@
+"use client";
+import { signIn } from "next-auth/react";
 
-import { signIn } from "@/lib/session";
-export default function Page({ searchParams }: { searchParams?: { error?: string }}) {
+export default function SignInPage() {
   return (
-    <main className="grid place-items-center min-h-screen px-4">
-      <form action={signIn} className="card w-full max-w-sm space-y-4">
-        <div className="text-center space-y-2">
-          <h1 className="text-3xl font-bold">Se connecter</h1>
-          {searchParams?.error && <p className="text-red-600 text-sm">Email et mot de passe requis.</p>}
-        </div>
-        <div><label className="label">Adresse e-mail</label><input className="input" name="email" type="email" required /></div>
-        <div><label className="label">Mot de passe</label><input className="input" name="password" type="password" required /></div>
-        <button className="btn w-full">Connexion</button>
-        <a className="link block text-center" href="/forgot-password">Mot de passe oublié ?</a>
-      </form>
-    </main>
+    <div className="container" style={{paddingTop:120, paddingBottom:40}}>
+      <div className="card" style={{maxWidth:480, margin:"0 auto"}}>
+        <h1 className="h1">Connexion</h1>
+        <p className="lead">Connecte-toi pour accéder au dashboard.</p>
+
+        <div style={{height:10}} />
+        <button
+          className="btn"
+          onClick={() => signIn("spotify", { callbackUrl: "/dashboard/music" })}
+        >
+          Continuer avec Spotify
+        </button>
+
+        <div style={{height:8}} />
+        <p className="text-sm" style={{color:"#6b7280"}}>
+          Nécessite un compte Spotify Premium pour la lecture dans l’appli.
+        </p>
+      </div>
+    </div>
   );
 }
