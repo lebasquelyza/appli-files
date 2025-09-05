@@ -17,3 +17,9 @@
 .label{ color:#6b7280; font-size:14px; font-weight:600; display:block; margin-bottom:6px; }
 .btn{ padding:10px 14px; border-radius:10px; color:#fff; font-weight:800; background:linear-gradient(135deg,var(--brand),var(--brand2)); }
 .btn-outline{ padding:10px 14px; border-radius:10px; border:1px solid #e5e7eb; background:#fff; font-weight:700; }
+
+/* Harmonisation avec la landing */
+.container{max-width:1100px;margin:0 auto;padding:0 24px}
+a{color:var(--brand);text-decoration:none}
+a:hover{text-decoration:underline}
+img{max-width:100%;display:block}
