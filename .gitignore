@@ -1,3 +1,24 @@
+# Dépendances
+node_modules/
+
+# Builds Next.js
+.next/
+apps/web/.next/
+
+# Environnements locaux
+.env
+.env.*        # ignore tous les .env sauf si tu veux commiter un exemple
+!*.example    # autorise .env.example
+apps/web/.env.local
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Cache / OS
+.DS_Store
+dist/
 node_modules
 .env
 .netlify
