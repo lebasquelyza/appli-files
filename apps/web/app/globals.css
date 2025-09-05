@@ -20,3 +20,5 @@ body {
 html{scroll-behavior:smooth}
 
 @import "../styles/brand.css";
+
+@import "./(marketing)/landing.css";
