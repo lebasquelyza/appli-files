@@ -11,7 +11,7 @@ async function refreshSpotifyToken(token: any) {
     });
 
     const basic = Buffer.from(
-      \`\${process.env.SPOTIFY_CLIENT_ID}:\${process.env.SPOTIFY_CLIENT_SECRET}\`
+      `\${process.env.SPOTIFY_CLIENT_ID}:\${process.env.SPOTIFY_CLIENT_SECRET}\`
     ).toString("base64");
 
     const res = await fetch(SPOTIFY_TOKEN_URL, {
