@@ -17,7 +17,11 @@ async function refreshSpotifyToken(token: any) {
     const res = await fetch(SPOTIFY_TOKEN_URL, {
       method: "POST",
       headers: {
+<<<<<<< HEAD
         Authorization: `Basic ${basic}`,
+=======
+        "Authorization": `Basic ${basic}`,
+>>>>>>> ab3dc7d (fix(auth): corrige template string + URLSearchParams)
         "Content-Type": "application/x-www-form-urlencoded",
       },
       body: params.toString(),
