@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { PageHeader, Section } from "@/components/ui/Page";
 
+/** Helpers minuteur **/
 function toSeconds(mmss: string) {
   const [mm = "0", ss = "0"] = mmss.split(":");
   const m = parseInt(mm || "0", 10);
@@ -9,7 +10,6 @@ function toSeconds(mmss: string) {
   if (Number.isNaN(m) || Number.isNaN(s) || m < 0 || s < 0 || s > 59) return 0;
   return m * 60 + s;
 }
-
 function toMMSS(total: number) {
   const m = Math.max(0, Math.floor(total / 60));
   const s = Math.max(0, total % 60);
@@ -17,34 +17,88 @@ function toMMSS(total: number) {
 }
 
 export default function Page(){
-  // Musique (inchangé)
+  /** Musique (inchangé) **/
   const [link,setLink]=useState("https://open.spotify.com/playlist/37i9dQZF1DX70RN3TfWWJh");
 
-  // Minuteur (nouveau)
-  const [input, setInput] = useState("05:00");     // format mm:ss
-  const [remaining, setRemaining] = useState(300); // en secondes
+  /** Minuteur **/
+  const [input, setInput] = useState("05:00");
+  const [remaining, setRemaining] = useState(300);
   const [running, setRunning] = useState(false);
   const [permission, setPermission] = useState<NotificationPermission>("default");
   const tickRef = useRef<number|null>(null);
-  const endBeepRef = useRef<HTMLAudioElement|null>(null);
 
-  useEffect(()=>{ setPermission(Notification?.permission ?? "default"); },[]);
+  /** Audio (chime) — Web Audio API pour mixer au-dessus de Spotify **/
+  const audioCtxRef = useRef<AudioContext|null>(null);
+  const masterGainRef = useRef<GainNode|null>(null);
+  const [volume, setVolume] = useState(0.8); // 0..1
 
-  // Lance / stoppe l’intervalle proprement
+  // Crée / (ré)active l'AudioContext à la 1ère interaction
+  function ensureAudioContext() {
+    if (typeof window === "undefined") return;
+    if (!audioCtxRef.current) {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const gain = ctx.createGain();
+      gain.gain.value = volume;
+      gain.connect(ctx.destination);
+      audioCtxRef.current = ctx;
+      masterGainRef.current = gain;
+    }
+    // iOS/Safari demandent un resume() sur interaction user
+    if (audioCtxRef.current.state !== "running") {
+      audioCtxRef.current.resume().catch(()=>{});
+    }
+  }
+
+  // Joue une petite cloche multi-tons (1.4s), mixée au-dessus de la musique
+  function playChime() {
+    ensureAudioContext();
+    const ctx = audioCtxRef.current;
+    const mg = masterGainRef.current;
+    if (!ctx || !mg) return;
+
+    // mini enveloppe pour éviter les "clicks"
+    const now = ctx.currentTime;
+    const tones = [
+      { f: 880,  t: 0.00, dur: 0.18, gain: 0.9 },
+      { f: 1318, t: 0.18, dur: 0.18, gain: 0.9 },
+      { f: 1760, t: 0.36, dur: 0.22, gain: 0.8 },
+      { f: 1318, t: 0.62, dur: 0.22, gain: 0.7 },
+      { f: 1760, t: 0.88, dur: 0.30, gain: 0.6 },
+    ];
+
+    tones.forEach(({ f, t, dur, gain }) => {
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, now + t);
+      g.gain.exponentialRampToValueAtTime(gain, now + t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + t + dur);
+      osc.connect(g).connect(mg);
+      osc.start(now + t);
+      osc.stop(now + t + dur + 0.02);
+    });
+  }
+
+  // Keep volume in sync
+  useEffect(()=>{ if(masterGainRef.current){ masterGainRef.current.gain.value = volume; } },[volume]);
+
+  // Notifications
+  useEffect(()=>{ setPermission(typeof Notification !== "undefined" ? Notification.permission : "default"); },[]);
+  function askPermission(){ if (typeof Notification === "undefined") return; Notification.requestPermission().then(setPermission); }
+
+  // Minuteur interval
   useEffect(()=>{
     if (running && remaining > 0) {
       tickRef.current = window.setInterval(()=> {
         setRemaining(t => {
           if (t <= 1) {
-            // Fin du compte à rebours
-            window.clearInterval(tickRef.current!);
-            tickRef.current = null;
+            // Fin : on arrête le timer, on joue le chime par-dessus la musique, et on notifie
+            if (tickRef.current) { window.clearInterval(tickRef.current); tickRef.current = null; }
             setRunning(false);
-            try {
-              endBeepRef.current?.play().catch(()=>{});
-            } catch {}
+            playChime();
             if (permission === "granted") {
-              new Notification("Minuteur terminé ⏰", { body: "Bien joué !" });
+              try { new Notification("Minuteur terminé ⏰", { body: "Bien joué !" }); } catch {}
             } else {
               alert("Minuteur terminé ⏰");
             }
@@ -59,46 +113,39 @@ export default function Page(){
     }
   }, [running, remaining, permission]);
 
+  // UI minuteur
   function setFromInput(v: string) {
     setInput(v);
     const secs = toSeconds(v);
-    if (secs > 0) setRemaining(secs);
+    if (secs >= 0) setRemaining(secs);
   }
-
   function preset(secs: number) {
     setRunning(false);
     setRemaining(secs);
     setInput(toMMSS(secs));
   }
-
   function startPause() {
     if (remaining <= 0) return;
+    ensureAudioContext(); // déverrouille l’audio au clic
     setRunning(r => !r);
   }
-
   function reset() {
     setRunning(false);
     setRemaining(toSeconds(input) || 0);
   }
-
   function clearAll() {
     setRunning(false);
     setRemaining(0);
     setInput("00:00");
   }
 
-  function askPermission(){
-    if (!("Notification" in window)) return;
-    Notification.requestPermission().then(setPermission);
-  }
-
   const mmss = toMMSS(remaining);
 
   return (
     <>
-      <PageHeader title="Musique & minuteur" subtitle="Lis ta musique et lance un compte à rebours" />
+      <PageHeader title="Musique & minuteur" subtitle="Compte à rebours avec alerte sonore (mixée avec la musique)" />
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* Bloc Musique */}
+        {/* Musique */}
         <Section title="Musique">
           <label className="label">Lien Spotify</label>
           <input className="input" value={link} onChange={e=>setLink(e.target.value)} />
@@ -113,7 +160,7 @@ export default function Page(){
           </div>
         </Section>
 
-        {/* Bloc Minuteur */}
+        {/* Minuteur */}
         <Section title="Minuteur">
           <div className="card" style={{display:"grid", gap:12}}>
             {/* Saisie mm:ss */}
@@ -135,29 +182,34 @@ export default function Page(){
               <button className="btn-outline" onClick={()=>preset(300)}>5:00</button>
             </div>
 
-            {/* Affichage temps restant */}
-            <div className="text-3xl font-bold" style={{fontVariantNumeric:"tabular-nums"}}>
-              {mmss}
-            </div>
+            {/* Temps restant */}
+            <div className="text-3xl font-bold" style={{fontVariantNumeric:"tabular-nums"}}>{mmss}</div>
 
             {/* Actions */}
             <div className="flex" style={{gap:8}}>
               <button className="btn" onClick={startPause}>{running ? "Pause" : remaining>0 ? "Démarrer" : "—"}</button>
               <button className="btn-outline" onClick={reset}>Réinitialiser</button>
               <button className="btn-outline" onClick={clearAll}>Effacer</button>
+              <button className="btn-outline" onClick={playChime} title="Tester le son">Tester le son 🔊</button>
             </div>
 
-            {/* Notifications desktop */}
+            {/* Volume du chime */}
+            <div className="flex items-center justify-between" style={{gap:10}}>
+              <div className="text-sm" style={{color:"#6b7280"}}>Volume du son</div>
+              <input
+                type="range" min={0} max={1} step={0.01}
+                value={volume}
+                onChange={(e)=>setVolume(parseFloat(e.target.value))}
+                style={{width:160}}
+              />
+            </div>
+
+            {/* Notifications bureau */}
             <div className="flex items-center justify-between">
               <div className="text-sm" style={{color:"#6b7280"}}>Notifications bureau : {permission}</div>
               <button className="btn-outline" onClick={askPermission}>Autoriser</button>
             </div>
           </div>
-
-          {/* petit bip local à la fin */}
-          <audio ref={endBeepRef}>
-            <source src="data:audio/wav;base64,UklGRkQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAAAAP8AAP8A/wD/AP8A/wD/AP8A/wD/AP8A" type="audio/wav" />
-          </audio>
         </Section>
       </div>
     </>
