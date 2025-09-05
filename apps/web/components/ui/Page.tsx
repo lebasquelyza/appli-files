@@ -24,18 +24,6 @@ export function Section({ title, children, right }: { title: string; children: R
   );
 }
 
-export function Pill({ children }: { children: React.ReactNode }) {
-  return <span className="badge">{children}</span>;
-}
-
 export function Card({ children }: { children: React.ReactNode }) {
   return <div className="card">{children}</div>;
-}
-
-export function CTA({ href = "#", children }: { href?: string; children: React.ReactNode }) {
-  return (
-    <a className="cta" href={href}>
-      {children}
-    </a>
-  );
 }
