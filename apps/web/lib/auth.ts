@@ -54,25 +54,22 @@ export const authOptions: NextAuthOptions = {
   ],
   callbacks: {
     async jwt({ token, account, user }) {
-      // Premier login : stocke les tokens
       if (account && user) {
         return {
           ...token,
           accessToken: account.access_token,
           refreshToken: account.refresh_token,
-          accessTokenExpires: account.expires_at! * 1000, // -> ms
+          accessTokenExpires: account.expires_at! * 1000,
           user,
         };
       }
-      // Toujours valide ? on garde
       if (token.accessTokenExpires && Date.now() < (token.accessTokenExpires as number)) {
         return token;
       }
-      // Sinon on rafraîchit
       return await refreshSpotifyToken(token);
     },
     async session({ session, token }) {
-      (session as any).accessToken = token.accessToken;
+      (session as any).accessToken = (token as any).accessToken;
       (session as any).error = (token as any).error;
       (session as any).spotify = {
         expiresAt: (token as any).accessTokenExpires,
