@@ -1,3 +1,10 @@
+[build]
+  base = "apps/web"
+  command = "npm run build"
+  publish = "apps/web/.next"
+
 [functions]
-  directory = "netlify/functions"
-  node_bundler = "esbuild"
+  directory = "apps/web/netlify/functions"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
