@@ -1,7 +1,7 @@
 "use client";
 import { signIn } from "next-auth/react";
 
-export default function ConnectSpotifyButton({ callbackUrl = "/dashboard/music" }:{
+export function ConnectSpotifyButton({ callbackUrl = "/dashboard/music" }:{
   callbackUrl?: string;
 }) {
   return (
@@ -10,3 +10,5 @@ export default function ConnectSpotifyButton({ callbackUrl = "/dashboard/music" 
     </button>
   );
 }
+
+export default ConnectSpotifyButton;
