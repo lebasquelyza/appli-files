@@ -11,7 +11,6 @@ export function PageHeader({ title, subtitle, cta }: { title: string; subtitle?:
     </div>
   );
 }
-
 export function Section({ title, children, right }: { title: string; children: React.ReactNode; right?: React.ReactNode }) {
   return (
     <section className="section">
@@ -23,7 +22,6 @@ export function Section({ title, children, right }: { title: string; children: R
     </section>
   );
 }
-
 export function Card({ children }: { children: React.ReactNode }) {
   return <div className="card">{children}</div>;
 }

@@ -13,7 +13,7 @@ const items = [
   { href: "/dashboard/pricing", label: "Tarifs" },
   { href: "/dashboard/bmi", label: "IMC" },
   { href: "/dashboard/music", label: "Musique" },
-  { href: "/dashboard/settings", label: "Réglages" },
+  { href: "/dashboard/settings", label: "Réglages" }
 ];
 
 export default function Sidebar(){
@@ -32,16 +32,12 @@ export default function Sidebar(){
               <Link
                 href={it.href}
                 style={{
-                  display:"block",
-                  padding:"10px 12px",
-                  borderRadius:10,
-                  margin:"4px 6px",
-                  fontWeight:600,
+                  display:"block", padding:"10px 12px", borderRadius:10, margin:"4px 6px",
+                  fontWeight:600, textDecoration:"none",
                   background: active ? "linear-gradient(135deg,var(--brand),var(--brand2))" : "transparent",
                   border: active ? "1px solid rgba(22,163,74,.25)" : "1px solid transparent",
                   boxShadow: active ? "var(--shadow)" : "none",
-                  color: active ? "#fff" : "#111",
-                  textDecoration: "none"
+                  color: active ? "#fff" : "#111"
                 }}
               >
                 {it.label}
