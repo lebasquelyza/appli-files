@@ -1,22 +1,19 @@
-// apps/web/app/music/page.tsx
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import ConnectSpotifyButton from "@/components/ConnectSpotifyButton";
+"use client";
+import { useSession } from "next-auth/react";
 
-export const dynamic = "force-dynamic";
+export default function MusicPage() {
+  const { data: session, status } = useSession();
 
-export default async function MusicPage() {
-  const session = await getServerSession(authOptions);
-  const spotify = (session as any)?.spotify;
+  if (status === "loading") return <main style={{padding:24}}>Chargement…</main>;
+  if (!session) return <main style={{padding:24}}>Pas de session. Reviens via “Se connecter avec Spotify”.</main>;
 
   return (
-    <main className="p-6 space-y-4">
-      <h1 className="text-2xl font-semibold">Musique</h1>
-      {!spotify?.accessToken ? (
-        <ConnectSpotifyButton />
-      ) : (
-        <div>Spotify est connecté ✅</div>
-      )}
+    <main style={{ padding: 24 }}>
+      <h1>Connecté à Spotify ✅</h1>
+      <pre style={{ background: "#f6f6f6", padding: 12, borderRadius: 8 }}>
+        {JSON.stringify(session, null, 2)}
+      </pre>
+      <p>Si tu vois un <code>accessToken</code>, l’OAuth est OK.</p>
     </main>
   );
 }
