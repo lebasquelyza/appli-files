@@ -1,19 +1,28 @@
 "use client";
-import ConnectSpotifyButton from "@/components/ConnectSpotifyButton";
+import { useState } from "react";
+import { signIn } from "next-auth/react";
+import { useRouter } from "next/navigation";
 
-export default function SignInPage() {
+export default function ConnectSpotifyButton() {
+  const [err, setErr] = useState<string | null>(null);
+  const router = useRouter();
+
+  async function handleClick() {
+    setErr(null);
+    const res = await signIn("spotify", {
+      callbackUrl: "/dashboard/music",
+      redirect: false, // important : on capture l'erreur au lieu de rediriger
+    });
+    if (res?.error) setErr(res.error);
+    else if (res?.url) router.push(res.url);
+  }
+
   return (
-    <div className="container" style={{maxWidth: 560, margin: "40px auto"}}>
-      <h1 className="page-title">Connexion</h1>
-      <p className="muted">Connecte ton compte pour accéder au dashboard.</p>
-
-      <div style={{height: 12}} />
-      <ConnectSpotifyButton />
-
-      <div style={{height: 8}} />
-      <p className="text-sm" style={{color:"#6b7280"}}>
-        Nécessite un compte Spotify Premium pour la lecture dans l’appli.
-      </p>
-    </div>
+    <>
+      <button type="button" className="btn" onClick={handleClick}>
+        Continuer avec Spotify
+      </button>
+      {err && <p className="text-red-600 text-sm mt-2">Erreur: {err}</p>}
+    </>
   );
 }
