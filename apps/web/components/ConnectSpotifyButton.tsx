@@ -1,4 +1,6 @@
+// apps/web/components/ConnectSpotifyButton.tsx
 "use client";
+
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
@@ -7,15 +9,18 @@ export default function ConnectSpotifyButton() {
   const [err, setErr] = useState<string | null>(null);
   const router = useRouter();
 
+  // ✅ Une seule déclaration, correctement orthographiée
   async function handleClick() {
-   sync function handleClick() {
-  setErr(null);
-  const callback = `${window.location.origin}/dashboard/music`; // URL absolue
-  const res = await signIn("spotify", { callbackUrl: callback, redirect: false });
-  console.log("signIn result:", res); // <-- important pour voir ce que renvoie NextAuth
-  if (res?.error) setErr(res.error);
-  else if (res?.url) router.push(res.url);
-}
+    setErr(null);
+    const callback = `${window.location.origin}/dashboard/music`; // URL absolue
+    const res = await signIn("spotify", { callbackUrl: callback, redirect: false });
+    console.log("signIn result:", res);
+    if (res?.error) {
+      setErr(res.error);
+    } else if (res?.url) {
+      router.push(res.url);
+    }
+  }
 
   return (
     <>
