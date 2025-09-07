@@ -1,41 +1,19 @@
-// apps/web/app/(auth)/sign-in/page.tsx
 "use client";
-import { useState } from "react";
-import { signIn } from "next-auth/react";
+import ConnectSpotifyButton from "@/components/ConnectSpotifyButton";
 
 export default function SignInPage() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [err, setErr] = useState<string | null>(null);
-
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setErr(null);
-    const res = await signIn("credentials", {
-      email, password, redirect: true, callbackUrl: "/",
-    });
-    // NextAuth gère la redirection si credentials valides
-  }
-
   return (
-    <main className="min-h-dvh flex items-center justify-center p-6">
-      <form onSubmit={onSubmit} className="max-w-sm w-full space-y-3">
-        <h1 className="text-2xl font-semibold">Connexion</h1>
-        <input
-          className="w-full border rounded p-2"
-          type="email" placeholder="Email"
-          value={email} onChange={e => setEmail(e.target.value)}
-        />
-        <input
-          className="w-full border rounded p-2"
-          type="password" placeholder="Mot de passe"
-          value={password} onChange={e => setPassword(e.target.value)}
-        />
-        {err && <p className="text-red-600 text-sm">{err}</p>}
-        <button className="w-full border rounded p-2" type="submit">
-          Se connecter
-        </button>
-      </form>
-    </main>
+    <div className="container" style={{maxWidth: 560, margin: "40px auto"}}>
+      <h1 className="page-title">Connexion</h1>
+      <p className="muted">Connecte ton compte pour accéder au dashboard.</p>
+
+      <div style={{height: 12}} />
+      <ConnectSpotifyButton />
+
+      <div style={{height: 8}} />
+      <p className="text-sm" style={{color:"#6b7280"}}>
+        Nécessite un compte Spotify Premium pour la lecture dans l’appli.
+      </p>
+    </div>
   );
 }

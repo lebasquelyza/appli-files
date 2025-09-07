@@ -1,14 +1,15 @@
 "use client";
 import { signIn } from "next-auth/react";
 
-export function ConnectSpotifyButton({ callbackUrl = "/dashboard/music" }:{
-  callbackUrl?: string;
-}) {
+export default function ConnectSpotifyButton() {
+  const handleClick = () => {
+    // Redirige vers le provider "spotify"
+    signIn("spotify", { callbackUrl: "/dashboard/music" });
+  };
+
   return (
-    <button className="btn" onClick={() => signIn("spotify", { callbackUrl })}>
-      Se connecter à Spotify
+    <button type="button" className="btn" onClick={handleClick}>
+      Continuer avec Spotify
     </button>
   );
 }
-
-export default ConnectSpotifyButton;
