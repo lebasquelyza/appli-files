@@ -8,18 +8,14 @@ export default function ConnectSpotifyButton() {
   const router = useRouter();
 
   async function handleClick() {
-    setErr(null);
-    const res = await signIn("spotify", {
-      callbackUrl: "/dashboard/music",
-      redirect: false, // important pour voir l'erreur
-    });
-    if (res?.error) {
-      console.error("OAuth error:", res.error);
-      setErr(res.error);
-    } else if (res?.url) {
-      router.push(res.url);
-    }
-  }
+   sync function handleClick() {
+  setErr(null);
+  const callback = `${window.location.origin}/dashboard/music`; // URL absolue
+  const res = await signIn("spotify", { callbackUrl: callback, redirect: false });
+  console.log("signIn result:", res); // <-- important pour voir ce que renvoie NextAuth
+  if (res?.error) setErr(res.error);
+  else if (res?.url) router.push(res.url);
+}
 
   return (
     <>
