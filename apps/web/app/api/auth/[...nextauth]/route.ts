@@ -2,12 +2,11 @@
 import NextAuth from "next-auth";
 import SpotifyProvider from "next-auth/providers/spotify";
 
-export const runtime = "nodejs";        // important hors Vercel (Netlify)
-export const dynamic = "force-dynamic"; // évite le cache sur cette route
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 const handler = NextAuth({
-  secret: process.env.NEXTAUTH_SECRET,  // <-- ajoute le secret
-  trustHost: true,                      // <-- nécessaire hors Vercel
+  secret: process.env.NEXTAUTH_SECRET,
   providers: [
     SpotifyProvider({
       clientId: process.env.SPOTIFY_CLIENT_ID!,
@@ -36,12 +35,12 @@ const handler = NextAuth({
       return token;
     },
     async session({ session, token }) {
-      // @ts-expect-error on étend la session
+      // @ts-expect-error - on étend la session
       session.accessToken = token.accessToken;
       return session;
     },
   },
-  // debug: process.env.NODE_ENV !== "production",
+  // debug: true,
 });
 
 export { handler as GET, handler as POST };
