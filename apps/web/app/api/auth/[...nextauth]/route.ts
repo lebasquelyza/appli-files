@@ -7,6 +7,10 @@ export const dynamic = "force-dynamic";
 
 const handler = NextAuth({
   secret: process.env.NEXTAUTH_SECRET,
+  // (facultatif) exposer /api/auth/signin même si tu as une page custom
+  pages: {
+    signIn: "/api/auth/signin",
+  },
   providers: [
     SpotifyProvider({
       clientId: process.env.SPOTIFY_CLIENT_ID!,
@@ -29,7 +33,8 @@ const handler = NextAuth({
             : Date.now() + Number((account as any).expires_in ?? 3600) * 1000;
 
         token.accessToken = (account as any).access_token as string | undefined;
-        token.refreshToken = ((account as any).refresh_token as string | undefined) ?? token.refreshToken;
+        token.refreshToken =
+          ((account as any).refresh_token as string | undefined) ?? token.refreshToken;
         token.expiresAt = expiresAtMs;
       }
       return token;
@@ -40,7 +45,8 @@ const handler = NextAuth({
       return session;
     },
   },
-  // debug: true,
+  // Active les logs détaillés en mettant NEXTAUTH_DEBUG=true dans Netlify (pas besoin de décommenter)
+  // debug: process.env.NEXTAUTH_DEBUG === "true",
 });
 
 export { handler as GET, handler as POST };
