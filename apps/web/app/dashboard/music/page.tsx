@@ -1,7 +1,7 @@
 // apps/web/app/music/page.tsx
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { ConnectSpotifyButton } from "@/components/ConnectSpotifyButton";
+import ConnectSpotifyButton from "@/components/ConnectSpotifyButton";
 
 export const dynamic = "force-dynamic";
 
