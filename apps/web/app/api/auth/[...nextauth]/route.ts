@@ -9,12 +9,7 @@ const handler = NextAuth({
       authorization: {
         url: "https://accounts.spotify.com/authorize",
         params: {
-          scope: [
-            "user-read-email",
-            "user-read-private",
-            // ajoute tes scopes si besoin
-          ].join(" "),
-          // show_dialog: true, // si tu veux forcer le re-consent
+          scope: ["user-read-email", "user-read-private"].join(" "),
         },
       },
     }),
@@ -22,22 +17,25 @@ const handler = NextAuth({
   session: { strategy: "jwt" },
   callbacks: {
     async jwt({ token, account }) {
-      // Lors du sign-in, NextAuth met 'account' → on stocke les tokens
-      if (account?.access_token) {
-        token.accessToken = account.access_token;
-        token.refreshToken = account.refresh_token;
-        token.expiresAt = Date.now() + (account.expires_in ?? 3600) * 1000;
+      if (account) {
+        // Certains adapters exposent expires_at (en secondes epoch). Sinon, fallback sur expires_in.
+        const expiresAtMs =
+          typeof account.expires_at === "number"
+            ? account.expires_at * 1000
+            : Date.now() + Number(account.expires_in ?? 3600) * 1000;
+
+        token.accessToken = account.access_token as unknown as string;
+        token.refreshToken = (account.refresh_token as unknown as string) ?? token.refreshToken;
+        token.expiresAt = expiresAtMs; // <-- number (ms)
       }
       return token;
     },
     async session({ session, token }) {
-      // @ts-ignore
+      // @ts-expect-error - on étend le type via la déclaration ci-dessous
       session.accessToken = token.accessToken;
       return session;
     },
   },
-  // active le debug temporairement si besoin
-  // debug: true,
 });
 
 export { handler as GET, handler as POST };
