@@ -72,36 +72,31 @@ export default function Timer() {
   const progress = 1 - Math.min(1, Math.max(0, secondsLeft / (initialRef.current || 1)));
 
   return (
-    <div
-      className="p-4 rounded-[14px] space-y-4"
-      style={{
-        background: "var(--bg)",
-        border: "1px solid rgba(0,0,0,.08)",
-        boxShadow: "var(--shadow)",
-      }}
+    <section
+      className="space-y-6 rounded-[14px]"
+      style={{ background:"var(--bg)", border:"1px solid rgba(0,0,0,.08)", boxShadow:"var(--shadow)", padding:"22px" }}
     >
-      {/* Ligne de réglages */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
+      {/* Réglages + Temps */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-5 md:gap-6">
+        <div className="flex flex-wrap items-center gap-3 md:gap-4">
           <label className="text-sm" style={{color:"var(--muted)"}}>Durée</label>
           <input
             type="number" min={0} step={1}
             value={minutes}
             disabled={running}
             onChange={(e) => setMinutes(clamp(Number(e.target.value || 0), 0, 600))}
-            className="w-24 rounded-[12px] px-3 py-2 text-sm"
+            className="rounded-[12px] text-sm"
             style={{
-              background:"var(--bg)",
-              border:"1px solid rgba(0,0,0,.12)",
-              color:"var(--text)"
+              width:"96px", padding:".6rem .75rem",
+              background:"var(--bg)", border:"1px solid rgba(0,0,0,.12)", color:"var(--text)"
             }}
           />
           <span className="text-sm" style={{color:"var(--muted)"}}>min</span>
 
-          {/* Ajout de secondes : +0/+15/+30/+45 (désaturé) */}
+          {/* Ajout de secondes : +0/+15/+30/+45 (plus espacés) */}
           <div
-            className="inline-flex gap-1 p-1 rounded-[12px]"
-            style={{ background:"var(--panel)", border:"1px solid rgba(0,0,0,.06)" }}
+            className="inline-flex gap-1.5 rounded-[12px]"
+            style={{ padding:"8px", background:"var(--panel)", border:"1px solid rgba(0,0,0,.06)" }}
           >
             {[0,15,30,45].map(v => (
               <button
@@ -110,14 +105,13 @@ export default function Timer() {
                 disabled={running}
                 onClick={() => setSecAdd(v as 0|15|30|45)}
                 style={{
-                  padding:".42rem .6rem",
+                  padding:".55rem .8rem",
                   borderRadius:"10px",
-                  fontWeight:600,
-                  fontSize:".85rem",
+                  fontWeight:700,
+                  fontSize:".9rem",
                   color: v===secAdd ? "#fff" : "var(--muted)",
                   background: v===secAdd ? "linear-gradient(90deg,var(--brand),var(--brand2))" : "transparent",
                   boxShadow: v===secAdd ? "var(--shadow)" : "none",
-                  transition:"filter .15s ease, transform .1s ease",
                 }}
               >
                 +{v}s
@@ -126,32 +120,28 @@ export default function Timer() {
           </div>
         </div>
 
-        {/* Temps très visible */}
+        {/* Temps très visible, aéré */}
         <div
           className="font-mono font-semibold tabular-nums text-center"
-          style={{ fontSize:"56px", lineHeight:1, letterSpacing:"0.01em" }}
+          style={{ fontSize:"64px", lineHeight:1, letterSpacing:"0.02em" }}
         >
           {fmt}
         </div>
       </div>
 
-      {/* Presets discrets */}
-      <div className="flex flex-wrap gap-2">
+      {/* Presets (espacés) */}
+      <div className="flex flex-wrap gap-3">
         {[{t:30,l:"30s"},{t:90,l:"1:30"},{t:180,l:"3:00"}].map(p => (
           <button
             key={p.t}
             type="button"
             disabled={running}
             onClick={() => applyPreset(p.t)}
-            className="chip"
             style={{
-              background:"var(--panel)",
-              color:"var(--text)",
-              border:"1px solid rgba(0,0,0,.06)",
-              borderRadius:"var(--radius)",
-              padding:".45rem .7rem",
-              fontWeight:600,
-              fontSize:".85rem"
+              background:"var(--panel)", color:"var(--text)",
+              border:"1px solid rgba(0,0,0,.06)", borderRadius:"var(--radius)",
+              padding:".6rem .9rem", fontWeight:700, fontSize:".9rem",
+              boxShadow:"var(--shadow)"
             }}
           >
             {p.l}
@@ -159,8 +149,8 @@ export default function Timer() {
         ))}
       </div>
 
-      {/* Barre de progression sobre */}
-      <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background:"rgba(0,0,0,.06)" }}>
+      {/* Barre de progression plus épaisse */}
+      <div className="w-full overflow-hidden rounded-full" style={{ height:"12px", background:"rgba(0,0,0,.06)" }}>
         <div
           className="h-full transition-[width]"
           style={{
@@ -171,13 +161,13 @@ export default function Timer() {
         />
       </div>
 
-      {/* Actions */}
-      <div className="flex gap-2">
+      {/* Actions (plus d'espace) */}
+      <div className="flex flex-wrap gap-3 md:gap-4">
         <button onClick={toggle} className="btn-dash">
           {running ? "Pause" : "Démarrer"}
         </button>
         <button onClick={reset} className="btn-dash">Réinitialiser</button>
       </div>
-    </div>
+    </section>
   );
 }
