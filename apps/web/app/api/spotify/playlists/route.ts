@@ -14,7 +14,7 @@ export async function GET() {
   }
 
   const resp = await fetch("https://api.spotify.com/v1/me/playlists?limit=10", {
-    headers: { Authorization: \`Bearer \${accessToken}\` },
+    headers: { Authorization: `Bearer ${accessToken}` },
     cache: "no-store",
   });
 
