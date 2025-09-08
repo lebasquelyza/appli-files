@@ -73,10 +73,6 @@ export default function SpotifyPlayer() {
       <div className="flex flex-wrap gap-2">
         <button disabled={!ready} onClick={start} className="btn-dash">▶️ Lancer la musique</button>
       </div>
-
-      <p className="text-xs" style={{color:"var(--muted)"}}>
-        ⚠️ Spotify Premium requis. Vérifie les “Web Playback SDK origins” dans ton app Spotify.
-      </p>
     </div>
   );
 }

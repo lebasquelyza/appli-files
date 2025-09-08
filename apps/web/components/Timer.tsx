@@ -11,7 +11,7 @@ export default function Timer() {
   const initialRef = useRef<number>(60);
   const intervalRef = useRef<number | null>(null);
 
-  // beep court à la fin
+  // Bip court à la fin
   function beep(duration = 250, frequency = 900, volume = 0.25) {
     try {
       const Ctx: any = (window as any).AudioContext || (window as any).webkitAudioContext;
@@ -27,12 +27,12 @@ export default function Timer() {
     } catch {}
   }
 
-  // Recalcule le total quand minutes/secAdd changent (à l'arrêt)
+  // Recalcule le total à l'arrêt
   useEffect(() => {
     if (!running) {
       const total = Math.max(0, Math.floor(minutes * 60) + secAdd);
       setSecondsLeft(total);
-      initialRef.current = total || 1; // éviter division par 0
+      initialRef.current = total || 1;
     }
   }, [minutes, secAdd, running]);
 
@@ -58,7 +58,6 @@ export default function Timer() {
   const toggle = () => setRunning((r) => !r);
   const reset = () => { setRunning(false); setSecondsLeft(initialRef.current); };
 
-  // Presets (définissent minutes + secAdd)
   function applyPreset(totalSeconds:number){
     totalSeconds = Math.max(0, Math.floor(totalSeconds));
     const m = Math.floor(totalSeconds / 60);
@@ -73,54 +72,101 @@ export default function Timer() {
   const progress = 1 - Math.min(1, Math.max(0, secondsLeft / (initialRef.current || 1)));
 
   return (
-    <div className="panel p-5 space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
+    <div
+      className="p-4 rounded-[14px] space-y-4"
+      style={{
+        background: "var(--bg)",
+        border: "1px solid rgba(0,0,0,.08)",
+        boxShadow: "var(--shadow)",
+      }}
+    >
+      {/* Ligne de réglages */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           <label className="text-sm" style={{color:"var(--muted)"}}>Durée</label>
           <input
             type="number" min={0} step={1}
             value={minutes}
             disabled={running}
             onChange={(e) => setMinutes(clamp(Number(e.target.value || 0), 0, 600))}
-            className="w-24 rounded-xl px-3 py-2 text-sm"
+            className="w-24 rounded-[12px] px-3 py-2 text-sm"
             style={{
-              background:"var(--bg)", border:"1px solid rgba(0,0,0,.12)", color:"var(--text)",
+              background:"var(--bg)",
+              border:"1px solid rgba(0,0,0,.12)",
+              color:"var(--text)"
             }}
           />
           <span className="text-sm" style={{color:"var(--muted)"}}>min</span>
-          {/* segmented: +0/+15/+30/+45 */}
-          <div className="seg">
+
+          {/* Ajout de secondes : +0/+15/+30/+45 (désaturé) */}
+          <div
+            className="inline-flex gap-1 p-1 rounded-[12px]"
+            style={{ background:"var(--panel)", border:"1px solid rgba(0,0,0,.06)" }}
+          >
             {[0,15,30,45].map(v => (
               <button
                 key={v}
                 type="button"
-                className={v===secAdd ? "active" : ""}
                 disabled={running}
                 onClick={() => setSecAdd(v as 0|15|30|45)}
+                style={{
+                  padding:".42rem .6rem",
+                  borderRadius:"10px",
+                  fontWeight:600,
+                  fontSize:".85rem",
+                  color: v===secAdd ? "#fff" : "var(--muted)",
+                  background: v===secAdd ? "linear-gradient(90deg,var(--brand),var(--brand2))" : "transparent",
+                  boxShadow: v===secAdd ? "var(--shadow)" : "none",
+                  transition:"filter .15s ease, transform .1s ease",
+                }}
               >
                 +{v}s
               </button>
             ))}
           </div>
         </div>
-        <div className="text-4xl font-mono tabular-nums">{fmt}</div>
+
+        {/* Temps très visible */}
+        <div
+          className="font-mono font-semibold tabular-nums text-center"
+          style={{ fontSize:"56px", lineHeight:1, letterSpacing:"0.01em" }}
+        >
+          {fmt}
+        </div>
       </div>
 
-      {/* Presets */}
-      <div className="chips">
-        <button type="button" className="chip" disabled={running} onClick={() => applyPreset(30)}>30s</button>
-        <button type="button" className="chip" disabled={running} onClick={() => applyPreset(90)}>1:30</button>
-        <button type="button" className="chip" disabled={running} onClick={() => applyPreset(180)}>3:00</button>
+      {/* Presets discrets */}
+      <div className="flex flex-wrap gap-2">
+        {[{t:30,l:"30s"},{t:90,l:"1:30"},{t:180,l:"3:00"}].map(p => (
+          <button
+            key={p.t}
+            type="button"
+            disabled={running}
+            onClick={() => applyPreset(p.t)}
+            className="chip"
+            style={{
+              background:"var(--panel)",
+              color:"var(--text)",
+              border:"1px solid rgba(0,0,0,.06)",
+              borderRadius:"var(--radius)",
+              padding:".45rem .7rem",
+              fontWeight:600,
+              fontSize:".85rem"
+            }}
+          >
+            {p.l}
+          </button>
+        ))}
       </div>
 
-      {/* Barre de progression */}
-      <div className="h-2 w-full overflow-hidden rounded-full" style={{background:"var(--panel)"}}>
+      {/* Barre de progression sobre */}
+      <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background:"rgba(0,0,0,.06)" }}>
         <div
           className="h-full transition-[width]"
           style={{
             width: `${progress * 100}%`,
-            backgroundImage:`linear-gradient(90deg,var(--brand),var(--brand2))`,
+            backgroundImage:"linear-gradient(90deg,var(--brand),var(--brand2))",
+            filter:"saturate(.85)",
           }}
         />
       </div>
