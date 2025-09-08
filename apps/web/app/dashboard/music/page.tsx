@@ -1,5 +1,5 @@
 "use client";
-import { useSession, signOut } from "next-auth/react";
+import { useSession, signIn, signOut } from "next-auth/react";
 import dynamic from "next/dynamic";
 
 const SpotifyPlayer = dynamic(() => import("@/components/SpotifyPlayer"), { ssr: false });
@@ -9,29 +9,35 @@ export default function MusicPage() {
 
   if (status === "loading") return <main className="p-6">Chargement…</main>;
 
-  if (!session) {
-    return (
-      <main className="p-6">
-        <p>
-          Pas connecté.{" "}
-          <a className="btn" href="/api/auth/signin/spotify?callbackUrl=%2Fdashboard%2Fmusic">
-            Se connecter
-          </a>
-        </p>
-      </main>
-    );
-  }
-
   return (
     <main className="max-w-2xl mx-auto p-6 space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Lecteur Spotify</h1>
-        <button onClick={() => signOut({ callbackUrl: "/sign-in" })} className="btn btn-outline">
-          Se déconnecter
-        </button>
+
+        {session ? (
+          <button
+            onClick={() => signOut({ callbackUrl: "/dashboard/music" })}
+            className="btn btn-outline"
+          >
+            Se déconnecter
+          </button>
+        ) : (
+          <button
+            onClick={() => signIn("spotify", { callbackUrl: "/dashboard/music" })}
+            className="btn"
+          >
+            Se connecter
+          </button>
+        )}
       </div>
 
-      <SpotifyPlayer />
+      {session ? (
+        <SpotifyPlayer />
+      ) : (
+        <p className="text-sm text-gray-600">
+          Connecte ton compte Spotify pour utiliser le lecteur.
+        </p>
+      )}
     </main>
   );
 }
