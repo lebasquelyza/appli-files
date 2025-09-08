@@ -3,10 +3,10 @@ import { useSession, signIn, signOut } from "next-auth/react";
 import dynamic from "next/dynamic";
 
 const SpotifyPlayer = dynamic(() => import("@/components/SpotifyPlayer"), { ssr: false });
-const Chrono = dynamic(() => import("@/components/Chrono"), { ssr: false });
+const Timer = dynamic(() => import("@/components/Timer"), { ssr: false });
 
-const btn = "inline-flex items-center justify-center gap-2 rounded-xl border border-gray-300 px-3 py-2 text-sm font-medium text-gray-900 bg-white hover:bg-gray-50 active:translate-y-px transition dark:text-white dark:bg-neutral-900 dark:border-neutral-700 dark:hover:bg-neutral-800";
-const btnOutline = "inline-flex items-center justify-center gap-2 rounded-xl border border-gray-300 px-3 py-2 text-sm font-medium text-gray-900 bg-transparent hover:bg-gray-100 active:translate-y-px transition dark:text-white dark:border-neutral-700 dark:hover:bg-neutral-800";
+const btnDangerOutline = "inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2 text-sm font-semibold text-red-600 border border-red-300 hover:bg-red-50 active:translate-y-px transition focus:outline-none focus:ring-2 focus:ring-red-300 focus:ring-offset-2 dark:text-red-300 dark:border-red-500/50 dark:hover:bg-red-500/10 dark:focus:ring-offset-0";
+const btnPrimary = "inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2 text-sm font-semibold text-white bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-600 hover:to-violet-700 active:translate-y-px transition focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-2 dark:focus:ring-offset-0";
 
 export default function MusicPage() {
   const { data: session, status } = useSession();
@@ -21,26 +21,26 @@ export default function MusicPage() {
         {session ? (
           <button
             onClick={() => signOut({ callbackUrl: "/dashboard/music" })}
-            className={btnOutline}
+            className={btnDangerOutline}
             title="Se déconnecter"
           >
-            Se déconnecter
+            ⏻ Se déconnecter
           </button>
         ) : (
           <button
             onClick={() => signIn("spotify", { callbackUrl: "/dashboard/music" })}
-            className={btn}
+            className={btnPrimary}
             title="Se connecter"
           >
-            Se connecter
+            🔗 Se connecter
           </button>
         )}
       </div>
 
-      {/* Chronomètre toujours visible */}
-      <Chrono />
+      {/* Minuteur (toujours visible) */}
+      <Timer />
 
-      {/* Player visible seulement si connecté */}
+      {/* Player visible uniquement si connecté */}
       {session ? (
         <SpotifyPlayer />
       ) : (
