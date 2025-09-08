@@ -1,8 +1,6 @@
 export { default } from "next-auth/middleware";
 
-// Protège tout SAUF les API, l'auth NextAuth, les assets et /sign-in
+// Exige la connexion sur /dashboard/** uniquement
 export const config = {
-  matcher: [
-    "/((?!api|_next/static|_next/image|favicon.ico|sign-in).*)",
-  ],
+  matcher: ["/dashboard/:path*"],
 };
