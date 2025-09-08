@@ -1,4 +1,4 @@
-import type { NextAuthOptions } from "next-auth";
+[import type { NextAuthOptions } from "next-auth";
 import SpotifyProvider from "next-auth/providers/spotify";
 
 async function refreshSpotifyToken(refreshToken: string) {
@@ -87,4 +87,4 @@ export const authOptions: NextAuthOptions = {
     },
   },
 };
-
+]
