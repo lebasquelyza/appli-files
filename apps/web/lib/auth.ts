@@ -1,6 +1,30 @@
 import type { NextAuthOptions } from "next-auth";
 import SpotifyProvider from "next-auth/providers/spotify";
 
+async function refreshSpotifyToken(refreshToken: string) {
+  const body = new URLSearchParams({
+    grant_type: "refresh_token",
+    refresh_token: refreshToken,
+    client_id: process.env.SPOTIFY_CLIENT_ID!,
+    client_secret: process.env.SPOTIFY_CLIENT_SECRET!,
+  });
+
+  const res = await fetch("https://accounts.spotify.com/api/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error_description || "Failed to refresh token");
+
+  const expiresAt = Date.now() + Number(data.expires_in ?? 3600) * 1000;
+  return {
+    accessToken: data.access_token as string,
+    refreshToken: (data.refresh_token as string) || refreshToken,
+    expiresAt,
+  };
+}
+
 export const authOptions: NextAuthOptions = {
   secret: process.env.NEXTAUTH_SECRET,
   providers: [
@@ -10,9 +34,8 @@ export const authOptions: NextAuthOptions = {
       authorization: {
         url: "https://accounts.spotify.com/authorize",
         params: {
-          // ajoute playlist-read-private pour l’exemple playlists
           scope: "user-read-email user-read-private playlist-read-private",
-          // show_dialog: true, // décommente si tu veux forcer le re-consent
+          // show_dialog: true, // ← décommente une fois si tu veux forcer le re-consent
         },
       },
     }),
@@ -21,23 +44,35 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async jwt({ token, account }) {
       if (account) {
-        const expiresAtMs =
+        const expiresAt =
           typeof (account as any).expires_at === "number"
             ? (account as any).expires_at * 1000
             : Date.now() + Number((account as any).expires_in ?? 3600) * 1000;
+        token.accessToken = (account as any).access_token;
+        token.refreshToken = (account as any).refresh_token ?? token.refreshToken;
+        token.expiresAt = expiresAt;
+        return token;
+      }
 
-        token.accessToken = (account as any).access_token as string | undefined;
-        token.refreshToken =
-          ((account as any).refresh_token as string | undefined) ?? token.refreshToken;
-        token.expiresAt = expiresAtMs;
+      // Auto-refresh si expiré
+      if (token.expiresAt && Date.now() > token.expiresAt - 60_000 && token.refreshToken) {
+        try {
+          const r = await refreshSpotifyToken(token.refreshToken as string);
+          token.accessToken = r.accessToken;
+          token.refreshToken = r.refreshToken;
+          token.expiresAt = r.expiresAt;
+        } catch {
+          token.accessToken = undefined;
+          token.refreshToken = undefined;
+          token.expiresAt = undefined;
+        }
       }
       return token;
     },
     async session({ session, token }) {
-      // @ts-expect-error - on étend la session
+      // @ts-expect-error extension
       session.accessToken = token.accessToken;
       return session;
     },
   },
-  // debug: process.env.NEXTAUTH_DEBUG === "true",
 };
