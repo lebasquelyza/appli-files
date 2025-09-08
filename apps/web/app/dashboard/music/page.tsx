@@ -2,7 +2,6 @@
 import { useSession, signOut } from "next-auth/react";
 import dynamic from "next/dynamic";
 
-const Playlists = dynamic(() => import("./Playlists"), { ssr: false });
 const SpotifyPlayer = dynamic(() => import("@/components/SpotifyPlayer"), { ssr: false });
 
 export default function MusicPage() {
@@ -21,16 +20,13 @@ export default function MusicPage() {
 
   return (
     <main style={{ padding: 24 }}>
-      <div style={{display:"flex", justifyContent:"space-between", alignItems:"center"}}>
-        <h1>Vos playlists</h1>
+      <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom: 12}}>
+        <h1>Lecteur Spotify</h1>
         <button onClick={() => signOut({ callbackUrl: "/sign-in" })}>Se déconnecter</button>
       </div>
 
-      {/* Player */}
+      {/* Lecteur uniquement */}
       <SpotifyPlayer />
-
-      {/* Liste des playlists */}
-      <Playlists />
     </main>
   );
 }
