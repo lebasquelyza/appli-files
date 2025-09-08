@@ -73,3 +73,36 @@ header{position:fixed;top:0;left:0;right:0;z-index:50;background:#fffffff2;backd
 :root.dark .btn.btn-outline {
   @apply bg-transparent text-white border-neutral-700 hover:bg-neutral-800;
 }
+
+/* ===== Design système (variables) ===== */
+:root{
+  --bg:#ffffff;
+  --panel:#f7f7f9;
+  --muted:#333333;
+  --text:#111111;
+  --brand:#16a34a;
+  --brand2:#15803d;
+  --accent:#0ea5e9;
+  --ring:rgba(14,165,233,.35);
+  --radius:14px;
+  --shadow:0 6px 18px rgba(0,0,0,.08);
+  --font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* Base */
+html,body{background:var(--bg); color:var(--text); font-family:var(--font-family);}
+.panel{ background:var(--panel); border-radius:var(--radius); box-shadow:var(--shadow); }
+
+/* Bouton dashboard unifié */
+.btn-dash{
+  display:inline-flex; align-items:center; justify-content:center; gap:.5rem;
+  border-radius:var(--radius);
+  padding:.6rem 1rem; font-weight:600; font-size:.9rem; line-height:1;
+  color:#fff; background-image:linear-gradient(90deg,var(--brand),var(--brand2));
+  border:1px solid rgba(0,0,0,.08); box-shadow:var(--shadow);
+  transition:transform .1s ease, filter .2s ease, box-shadow .2s ease;
+}
+.btn-dash:hover{ filter:brightness(1.03); transform:translateY(-1px); }
+.btn-dash:active{ transform:translateY(0); }
+.btn-dash:focus-visible{ outline:none; box-shadow:0 0 0 4px var(--ring), var(--shadow); }
+.btn-dash:disabled{ opacity:.6; cursor:not-allowed; }
