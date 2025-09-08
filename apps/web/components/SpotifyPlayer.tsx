@@ -75,7 +75,7 @@ export default function SpotifyPlayer() {
       return;
     }
 
-    // 1) Transférer la lecture vers le device web et démarrer (play:true)
+    // 1) Transférer la lecture vers le device web et démarrer
     let r = await fetch("/api/spotify/transfer", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -87,10 +87,9 @@ export default function SpotifyPlayer() {
       return;
     }
 
-    // Laisse Spotify activer le device
     await sleep(600);
 
-    // 2) Démarrer lecture explicite sur ce device (avec device_id)
+    // 2) Démarrer lecture explicite sur CE device
     r = await fetch("/api/spotify/play", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -108,19 +107,23 @@ export default function SpotifyPlayer() {
   if (status !== "authenticated") return null;
 
   return (
-    <div style={{ display: "grid", gap: 8, margin: "12px 0" }}>
-      {!ready && <p>Initialisation du player…</p>}
-      {err && <p style={{ color: "crimson" }}>Erreur: {String(err)}</p>}
+    <div className="space-y-3">
+      {!ready && <p className="text-sm text-gray-500">Initialisation du player…</p>}
+      {err && <p className="text-sm text-red-600">Erreur: {String(err)}</p>}
 
-      <div style={{display:"flex", gap:8}}>
-        <button disabled={!ready} onClick={start}>Lancer la musique</button>
-        <button onClick={fetchDevices} type="button">Voir mes appareils</button>
+      <div className="flex flex-wrap gap-2">
+        <button disabled={!ready} onClick={start} className="btn">
+          Lancer la musique
+        </button>
+        <button onClick={fetchDevices} type="button" className="btn btn-outline">
+          Voir mes appareils
+        </button>
       </div>
 
       {!!devices.length && (
-        <div style={{ fontSize: 12, opacity: 0.8 }}>
-          <div>Appareils détectés :</div>
-          <ul>
+        <div className="border rounded-lg p-3">
+          <div className="text-sm text-gray-600 mb-1">Appareils détectés :</div>
+          <ul className="text-sm leading-6">
             {devices.map((d:any) => (
               <li key={d.id}>
                 {d.name} {d.is_active ? "(actif)" : ""} — {d.type}
@@ -130,9 +133,8 @@ export default function SpotifyPlayer() {
         </div>
       )}
 
-      <p style={{ fontSize: 12, opacity: 0.7 }}>
-        ⚠️ Spotify Premium requis. Vérifie aussi que ton domaine est autorisé dans
-        “Web Playback SDK origins” du Spotify Dashboard.
+      <p className="text-xs text-gray-500">
+        ⚠️ Spotify Premium requis. Assure-toi que ton domaine est autorisé dans les “Web Playback SDK origins”.
       </p>
     </div>
   );
