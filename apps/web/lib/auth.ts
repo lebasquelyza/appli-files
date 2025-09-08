@@ -1,6 +1,7 @@
 import type { NextAuthOptions } from "next-auth";
 import SpotifyProvider from "next-auth/providers/spotify";
 
+// Rafraîchit l'access token quand il expire
 async function refreshSpotifyToken(refreshToken: string) {
   const body = new URLSearchParams({
     grant_type: "refresh_token",
@@ -26,6 +27,7 @@ async function refreshSpotifyToken(refreshToken: string) {
 }
 
 export const authOptions: NextAuthOptions = {
+  pages: { signIn: "/sign-in" }, // redirige les non connectés vers /sign-in
   secret: process.env.NEXTAUTH_SECRET,
   providers: [
     SpotifyProvider({
@@ -34,8 +36,9 @@ export const authOptions: NextAuthOptions = {
       authorization: {
         url: "https://accounts.spotify.com/authorize",
         params: {
+          // Garde ce scope si tu veux lister les playlists. Sinon, retire "playlist-read-private".
           scope: "user-read-email user-read-private playlist-read-private",
-          // show_dialog: true,
+          // show_dialog: true, // décommente 1x pour forcer l'écran d'autorisation
         },
       },
     }),
@@ -43,6 +46,7 @@ export const authOptions: NextAuthOptions = {
   session: { strategy: "jwt" },
   callbacks: {
     async jwt({ token, account }) {
+      // Au moment du login initial
       if (account) {
         const expiresAt =
           typeof (account as any).expires_at === "number"
@@ -56,7 +60,7 @@ export const authOptions: NextAuthOptions = {
         return token;
       }
 
-      // Auto-refresh si expiré (coercition en number)
+      // Auto-refresh si proche de l'expiration (< 60s)
       const exp =
         typeof (token as any).expiresAt === "number"
           ? (token as any).expiresAt
