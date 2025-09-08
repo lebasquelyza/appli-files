@@ -1,8 +1,9 @@
 "use client";
-import { useSession } from "next-auth/react";
+import { useSession, signOut } from "next-auth/react";
 import dynamic from "next/dynamic";
 
 const Playlists = dynamic(() => import("./Playlists"), { ssr: false });
+const SpotifyPlayer = dynamic(() => import("@/components/SpotifyPlayer"), { ssr: false });
 
 export default function MusicPage() {
   const { data: session, status } = useSession();
@@ -13,16 +14,22 @@ export default function MusicPage() {
     return (
       <main style={{padding:24}}>
         Pas connecté.{" "}
-        <a href="/api/auth/signin/spotify?callbackUrl=%2Fdashboard%2Fmusic">
-          Se connecter
-        </a>
+        <a href="/api/auth/signin/spotify?callbackUrl=%2Fdashboard%2Fmusic">Se connecter</a>
       </main>
     );
   }
 
   return (
     <main style={{ padding: 24 }}>
-      <h1>Vos playlists</h1>
+      <div style={{display:"flex", justifyContent:"space-between", alignItems:"center"}}>
+        <h1>Vos playlists</h1>
+        <button onClick={() => signOut({ callbackUrl: "/sign-in" })}>Se déconnecter</button>
+      </div>
+
+      {/* Player */}
+      <SpotifyPlayer />
+
+      {/* Liste des playlists */}
       <Playlists />
     </main>
   );

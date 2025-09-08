@@ -1,7 +1,6 @@
 import type { NextAuthOptions } from "next-auth";
 import SpotifyProvider from "next-auth/providers/spotify";
 
-// Rafraîchit l'access token quand il expire
 async function refreshSpotifyToken(refreshToken: string) {
   const body = new URLSearchParams({
     grant_type: "refresh_token",
@@ -9,7 +8,6 @@ async function refreshSpotifyToken(refreshToken: string) {
     client_id: process.env.SPOTIFY_CLIENT_ID!,
     client_secret: process.env.SPOTIFY_CLIENT_SECRET!,
   });
-
   const res = await fetch("https://accounts.spotify.com/api/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -27,7 +25,7 @@ async function refreshSpotifyToken(refreshToken: string) {
 }
 
 export const authOptions: NextAuthOptions = {
-  pages: { signIn: "/sign-in" }, // redirige les non connectés vers /sign-in
+  pages: { signIn: "/sign-in" },
   secret: process.env.NEXTAUTH_SECRET,
   providers: [
     SpotifyProvider({
@@ -36,9 +34,17 @@ export const authOptions: NextAuthOptions = {
       authorization: {
         url: "https://accounts.spotify.com/authorize",
         params: {
-          // Garde ce scope si tu veux lister les playlists. Sinon, retire "playlist-read-private".
-          scope: "user-read-email user-read-private playlist-read-private",
-          // show_dialog: true, // décommente 1x pour forcer l'écran d'autorisation
+          // Ajout des scopes playback:
+          scope: [
+            "user-read-email",
+            "user-read-private",
+            "playlist-read-private",
+            "streaming",
+            "user-modify-playback-state",
+            "user-read-playback-state",
+          ].join(" "),
+          // Décommente 1x pour forcer l’écran de consentement
+          // show_dialog: true,
         },
       },
     }),
@@ -46,28 +52,22 @@ export const authOptions: NextAuthOptions = {
   session: { strategy: "jwt" },
   callbacks: {
     async jwt({ token, account }) {
-      // Au moment du login initial
       if (account) {
         const expiresAt =
           typeof (account as any).expires_at === "number"
             ? (account as any).expires_at * 1000
             : Date.now() + Number((account as any).expires_in ?? 3600) * 1000;
-
         (token as any).accessToken = (account as any).access_token;
-        (token as any).refreshToken =
-          (account as any).refresh_token ?? (token as any).refreshToken;
+        (token as any).refreshToken = (account as any).refresh_token ?? (token as any).refreshToken;
         (token as any).expiresAt = expiresAt;
         return token;
       }
-
-      // Auto-refresh si proche de l'expiration (< 60s)
       const exp =
         typeof (token as any).expiresAt === "number"
           ? (token as any).expiresAt
           : (token as any).expiresAt
           ? Number((token as any).expiresAt)
           : 0;
-
       if (exp && Date.now() > exp - 60_000 && (token as any).refreshToken) {
         try {
           const r = await refreshSpotifyToken((token as any).refreshToken as string);
