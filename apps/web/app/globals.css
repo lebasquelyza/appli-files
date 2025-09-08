@@ -133,3 +133,17 @@ html,body{background:var(--bg); color:var(--text); font-family:var(--font-family
   font-weight:600; font-size:.85rem; cursor:pointer; transition:filter .15s ease, transform .1s ease;
 }
 .chip:hover{ filter:brightness(1.05); transform:translateY(-1px); }
+
+/* Bouton icône compact */
+.icon-btn{
+  width:40px; height:40px; display:inline-flex; align-items:center; justify-content:center;
+  border-radius:var(--radius); background:var(--panel); color:var(--text);
+  border:1px solid rgba(0,0,0,.08); box-shadow:var(--shadow);
+  transition:transform .1s ease, filter .2s ease, box-shadow .2s ease;
+}
+.icon-btn:hover{ filter:brightness(1.02); transform:translateY(-1px); }
+.icon-btn:active{ transform:translateY(0); }
+.icon-btn:disabled{ opacity:.6; cursor:not-allowed; }
+.icon{
+  width:18px; height:18px; display:block; fill:currentColor;
+}

@@ -4,11 +4,7 @@ import { useSession } from "next-auth/react";
 
 declare global { interface Window { onSpotifyWebPlaybackSDKReady?: () => void; Spotify: any; } }
 
-type NowPlaying = {
-  name: string;
-  artists: string;
-  image: string | null;
-};
+type NowPlaying = { name: string; artists: string; image: string | null; };
 
 export default function SpotifyPlayer() {
   const { data: session, status } = useSession();
@@ -16,7 +12,6 @@ export default function SpotifyPlayer() {
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-
   const [paused, setPaused] = useState(true);
   const [now, setNow] = useState<NowPlaying | null>(null);
 
@@ -44,7 +39,6 @@ export default function SpotifyPlayer() {
     player.addListener("ready", ({ device_id }: any) => {
       setDeviceId(device_id);
       setReady(true);
-      // récupère l'état courant au démarrage
       player.getCurrentState().then(readState).catch(() => {});
     });
     player.addListener("not_ready", () => setReady(false));
@@ -60,14 +54,10 @@ export default function SpotifyPlayer() {
   useEffect(() => {
     if (status !== "authenticated") return;
     setErr(null);
-
     if (window.Spotify) { initPlayer(); return; }
-
     if (!document.getElementById("spotify-player-sdk")) {
       const s = document.createElement("script");
-      s.id = "spotify-player-sdk";
-      s.src = "https://sdk.scdn.co/spotify-player.js";
-      s.async = true;
+      s.id = "spotify-player-sdk"; s.src = "https://sdk.scdn.co/spotify-player.js"; s.async = true;
       document.body.appendChild(s);
     }
     window.onSpotifyWebPlaybackSDKReady = () => initPlayer();
@@ -76,38 +66,25 @@ export default function SpotifyPlayer() {
   async function start() {
     setErr(null);
     try { await playerRef.current?.activateElement?.(); } catch {}
-
     if (!deviceId) { setErr("Player non prêt (deviceId manquant)"); return; }
 
-    // Transférer + démarrer sur CE device
     let r = await fetch("/api/spotify/transfer", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      method: "PUT", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ device_id: deviceId, play: true }),
     });
-    if (!r.ok) {
-      const j = await r.json().catch(() => ({}));
-      setErr(j?.error?.message || j?.error || `Transfer HTTP ${r.status}`);
-      return;
-    }
+    if (!r.ok) { const j = await r.json().catch(() => ({}));
+      setErr(j?.error?.message || j?.error || `Transfer HTTP ${r.status}`); return; }
 
-    // Optionnel: relancer lecture si rien ne part
     r = await fetch("/api/spotify/play", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      method: "PUT", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ device_id: deviceId }),
     });
-    if (!r.ok) {
-      const j = await r.json().catch(() => ({}));
-      setErr(j?.error?.reason || j?.error?.message || j?.error || `Play HTTP ${r.status}`);
-      return;
-    }
+    if (!r.ok) { const j = await r.json().catch(() => ({}));
+      setErr(j?.error?.reason || j?.error?.message || j?.error || `Play HTTP ${r.status}`); return; }
 
-    // maj état après démarrage
-    setTimeout(() => playerRef.current?.getCurrentState().then(readState).catch(() => {}), 600);
+    setTimeout(() => playerRef.current?.getCurrentState().then(readState).catch(() => {}), 700);
   }
 
-  // Contrôles via le SDK (sur ce device)
   const toggle = async () => { try { await playerRef.current?.togglePlay(); } catch {} };
   const next = async () => { try { await playerRef.current?.nextTrack(); } catch {} };
   const prev = async () => { try { await playerRef.current?.previousTrack(); } catch {} };
@@ -115,52 +92,65 @@ export default function SpotifyPlayer() {
   if (status !== "authenticated") return null;
 
   return (
-    <div className="space-y-4">
+    <section className="space-y-6">
       {!ready && <p className="text-sm" style={{color:"var(--muted)"}}>Initialisation du player…</p>}
       {err && <p className="text-sm" style={{color:"#dc2626"}}>Erreur: {String(err)}</p>}
 
       {/* En lecture */}
       <div
-        className="p-4 rounded-[14px] flex items-center gap-4"
-        style={{ background:"var(--bg)", border:"1px solid rgba(0,0,0,.08)", boxShadow:"var(--shadow)" }}
+        className="flex items-center gap-6 rounded-[14px]"
+        style={{ background:"var(--bg)", border:"1px solid rgba(0,0,0,.08)", boxShadow:"var(--shadow)", padding:"22px" }}
       >
         <div
           style={{
-            width: 64, height: 64, borderRadius: "12px",
+            width: 88, height: 88, borderRadius: "12px",
             background: "var(--panel)", border: "1px solid rgba(0,0,0,.06)",
             overflow: "hidden", flex: "0 0 auto"
           }}
         >
           {now?.image ? (
-            <img src={now.image} alt="" width={64} height={64} style={{width:"100%",height:"100%",objectFit:"cover"}} />
+            <img src={now.image} alt="" width={88} height={88} style={{width:"100%",height:"100%",objectFit:"cover"}} />
           ) : null}
         </div>
 
-        <div className="min-w-0 flex-1">
-          <div className="truncate" style={{fontWeight:700}}>
+        <div className="min-w-0 flex-1 space-y-2">
+          <div className="truncate" style={{fontWeight:700, fontSize:"1.05rem"}}>
             {now?.name || "Rien en lecture"}
           </div>
-          <div className="truncate" style={{color:"var(--muted)", fontSize:".9rem"}}>
+          <div className="truncate" style={{color:"var(--muted)", fontSize:".95rem"}}>
             {now?.artists || (paused ? "En pause" : "Prêt")}
           </div>
         </div>
 
-        {/* Contrôles */}
-        <div className="flex items-center gap-2">
-          <button onClick={prev} className="btn-dash" title="Piste précédente">⏮️</button>
-          <button onClick={toggle} className="btn-dash" title={paused ? "Lecture" : "Pause"}>
-            {paused ? "▶️" : "⏸️"}
+        <div className="flex items-center gap-3">
+          <button onClick={prev} className="icon-btn" aria-label="Piste précédente" title="Piste précédente">
+            <svg className="icon" viewBox="0 0 24 24">
+              <path d="M18 6h-2v12h2V6zM14.5 12L6 18V6l8.5 6z"/>
+            </svg>
           </button>
-          <button onClick={next} className="btn-dash" title="Piste suivante">⏭️</button>
+          <button onClick={toggle} className="icon-btn" aria-label={paused ? "Lecture" : "Pause"} title={paused ? "Lecture" : "Pause"}>
+            {paused ? (
+              <svg className="icon" viewBox="0 0 24 24">
+                <path d="M8 5v14l11-7z"/>
+              </svg>
+            ) : (
+              <svg className="icon" viewBox="0 0 24 24">
+                <path d="M6 5h4v14H6zM14 5h4v14h-4z"/>
+              </svg>
+            )}
+          </button>
+          <button onClick={next} className="icon-btn" aria-label="Piste suivante" title="Piste suivante">
+            <svg className="icon" viewBox="0 0 24 24">
+              <path d="M6 6h2v12H6zM9.5 12l8.5 6V6l-8.5 6z"/>
+            </svg>
+          </button>
         </div>
       </div>
 
-      {/* Bouton pour démarrer sur ce device si rien ne part */}
-      <div className="flex flex-wrap gap-2">
-        <button disabled={!ready} onClick={start} className="btn-dash">
-          ▶️ Lancer la musique
-        </button>
+      {/* Lancer sur ce device */}
+      <div className="flex flex-wrap gap-4">
+        <button disabled={!ready} onClick={start} className="btn-dash">Lancer la musique</button>
       </div>
-    </div>
+    </section>
   );
 }
