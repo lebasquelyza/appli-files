@@ -11,13 +11,14 @@ export async function PUT(req: Request) {
   if (!accessToken) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json().catch(() => ({} as any));
+  const device_id = body?.device_id as string | undefined;
+
   let playBody: any = {};
 
-  // Si l'appel fournit des uris/context_uri, on les utilise
   if (body?.uris || body?.context_uri) {
     playBody = { uris: body.uris, context_uri: body.context_uri };
   } else {
-    // Sinon, on essaie de jouer la 1ʳᵉ playlist de l'utilisateur
+    // par défaut: 1ʳᵉ playlist
     const pl = await fetch("https://api.spotify.com/v1/me/playlists?limit=1", {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
@@ -29,7 +30,10 @@ export async function PUT(req: Request) {
     playBody = { context_uri: `spotify:playlist:${first.id}` };
   }
 
-  const resp = await fetch("https://api.spotify.com/v1/me/player/play", {
+  const url = new URL("https://api.spotify.com/v1/me/player/play");
+  if (device_id) url.searchParams.set("device_id", device_id);
+
+  const resp = await fetch(url.toString(), {
     method: "PUT",
     headers: {
       Authorization: `Bearer ${accessToken}`,

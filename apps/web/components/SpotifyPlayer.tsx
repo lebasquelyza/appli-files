@@ -12,6 +12,8 @@ export default function SpotifyPlayer() {
   const [err, setErr] = useState<string | null>(null);
   const [devices, setDevices] = useState<any[]>([]);
 
+  async function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
+
   async function fetchDevices() {
     const r = await fetch("/api/spotify/devices", { cache: "no-store" });
     const j = await r.json().catch(() => ({}));
@@ -46,13 +48,11 @@ export default function SpotifyPlayer() {
     if (status !== "authenticated") return;
     setErr(null);
 
-    // si SDK déjà chargé
     if (window.Spotify) {
       initPlayer();
       return;
     }
 
-    // injecte le SDK
     if (!document.getElementById("spotify-player-sdk")) {
       const s = document.createElement("script");
       s.id = "spotify-player-sdk";
@@ -68,19 +68,18 @@ export default function SpotifyPlayer() {
 
   async function start() {
     setErr(null);
-    // important pour Safari/Chrome: activer l'élément audio après une interaction utilisateur
     try { await playerRef.current?.activateElement?.(); } catch {}
 
     if (!deviceId) {
-      setErr("Player non prêt (deviceId manquant)"); 
+      setErr("Player non prêt (deviceId manquant)");
       return;
     }
 
-    // 1) Transférer la lecture au device web
+    // 1) Transférer la lecture vers le device web et démarrer (play:true)
     let r = await fetch("/api/spotify/transfer", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ device_id: deviceId, play: false }),
+      body: JSON.stringify({ device_id: deviceId, play: true }),
     });
     if (!r.ok) {
       const j = await r.json().catch(() => ({}));
@@ -88,10 +87,14 @@ export default function SpotifyPlayer() {
       return;
     }
 
-    // 2) Démarrer la lecture (reprend contexte ou 1ʳᵉ playlist)
+    // Laisse Spotify activer le device
+    await sleep(600);
+
+    // 2) Démarrer lecture explicite sur ce device (avec device_id)
     r = await fetch("/api/spotify/play", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ device_id: deviceId }),
     });
     if (!r.ok) {
       const j = await r.json().catch(() => ({}));
@@ -99,7 +102,6 @@ export default function SpotifyPlayer() {
       return;
     }
 
-    // 3) Optionnel: rafraîchir la liste des devices pour diagnostic
     await fetchDevices();
   }
 
@@ -129,8 +131,8 @@ export default function SpotifyPlayer() {
       )}
 
       <p style={{ fontSize: 12, opacity: 0.7 }}>
-        ⚠️ Nécessite Spotify Premium. Si rien ne se lance, vérifie: Premium, domaine autorisé dans
-        Spotify Dashboard, puis reconnecte-toi pour accepter les scopes playback.
+        ⚠️ Spotify Premium requis. Vérifie aussi que ton domaine est autorisé dans
+        “Web Playback SDK origins” du Spotify Dashboard.
       </p>
     </div>
   );
