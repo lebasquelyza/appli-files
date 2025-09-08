@@ -1,6 +1,8 @@
 "use client";
 import { useSession } from "next-auth/react";
-import Playlists from "./Playlists";
+import dynamic from "next/dynamic";
+
+const Playlists = dynamic(() => import("./Playlists"), { ssr: false });
 
 export default function MusicPage() {
   const { data: session, status } = useSession();
