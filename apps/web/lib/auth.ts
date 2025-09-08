@@ -1,4 +1,4 @@
-[import type { NextAuthOptions } from "next-auth";
+import type { NextAuthOptions } from "next-auth";
 import SpotifyProvider from "next-auth/providers/spotify";
 
 async function refreshSpotifyToken(refreshToken: string) {
@@ -15,12 +15,12 @@ async function refreshSpotifyToken(refreshToken: string) {
     body,
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data?.error_description || "Failed to refresh token");
+  if (!res.ok) throw new Error((data as any)?.error_description || "Failed to refresh token");
 
-  const expiresAt = Date.now() + Number(data.expires_in ?? 3600) * 1000;
+  const expiresAt = Date.now() + Number((data as any).expires_in ?? 3600) * 1000;
   return {
-    accessToken: data.access_token as string,
-    refreshToken: (data.refresh_token as string) || refreshToken,
+    accessToken: (data as any).access_token as string,
+    refreshToken: ((data as any).refresh_token as string) || refreshToken,
     expiresAt,
   };
 }
@@ -35,7 +35,7 @@ export const authOptions: NextAuthOptions = {
         url: "https://accounts.spotify.com/authorize",
         params: {
           scope: "user-read-email user-read-private playlist-read-private",
-          // show_dialog: true, // décommente 1x si tu veux forcer le re-consent
+          // show_dialog: true,
         },
       },
     }),
@@ -44,24 +44,22 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async jwt({ token, account }) {
       if (account) {
-        // calcule une date d’expiration en ms (number)
         const expiresAt =
           typeof (account as any).expires_at === "number"
             ? (account as any).expires_at * 1000
             : Date.now() + Number((account as any).expires_in ?? 3600) * 1000;
 
-        (token as any).accessToken = (account as any).access_token as string | undefined;
+        (token as any).accessToken = (account as any).access_token;
         (token as any).refreshToken =
-          ((account as any).refresh_token as string | undefined) ?? (token as any).refreshToken;
-        (token as any).expiresAt = expiresAt as number;
-
+          (account as any).refresh_token ?? (token as any).refreshToken;
+        (token as any).expiresAt = expiresAt;
         return token;
       }
 
-      // ---- Rafraîchissement auto si expiré ----
+      // Auto-refresh si expiré (coercition en number)
       const exp =
         typeof (token as any).expiresAt === "number"
-          ? ((token as any).expiresAt as number)
+          ? (token as any).expiresAt
           : (token as any).expiresAt
           ? Number((token as any).expiresAt)
           : 0;
@@ -81,10 +79,8 @@ export const authOptions: NextAuthOptions = {
       return token;
     },
     async session({ session, token }) {
-      // @ts-expect-error — on étend la session au runtime
-      session.accessToken = (token as any).accessToken;
+      (session as any).accessToken = (token as any).accessToken;
       return session;
     },
   },
 };
-]
