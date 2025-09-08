@@ -18,6 +18,7 @@ export default function MusicPage() {
           <button
             onClick={() => signOut({ callbackUrl: "/dashboard/music" })}
             className="btn btn-outline"
+            title="Se déconnecter"
           >
             Se déconnecter
           </button>
@@ -25,6 +26,7 @@ export default function MusicPage() {
           <button
             onClick={() => signIn("spotify", { callbackUrl: "/dashboard/music" })}
             className="btn"
+            title="Se connecter"
           >
             Se connecter
           </button>
