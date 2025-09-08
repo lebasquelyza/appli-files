@@ -4,22 +4,14 @@ import { useSession } from "next-auth/react";
 
 declare global { interface Window { onSpotifyWebPlaybackSDKReady?: () => void; Spotify: any; } }
 
+const btnPrimary = "inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-white bg-black hover:bg-neutral-800 active:translate-y-px transition dark:bg-white dark:text-black dark:hover:bg-neutral-100";
+
 export default function SpotifyPlayer() {
   const { data: session, status } = useSession();
   const playerRef = useRef<any>(null);
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [devices, setDevices] = useState<any[]>([]);
-
-  async function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
-
-  async function fetchDevices() {
-    const r = await fetch("/api/spotify/devices", { cache: "no-store" });
-    const j = await r.json().catch(() => ({}));
-    if (r.ok) setDevices(j.devices || []);
-    return j;
-  }
 
   function initPlayer() {
     const token = (session as any)?.accessToken as string;
@@ -75,7 +67,7 @@ export default function SpotifyPlayer() {
       return;
     }
 
-    // 1) Transférer la lecture vers le device web et démarrer
+    // Transférer + démarrer
     let r = await fetch("/api/spotify/transfer", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -87,9 +79,7 @@ export default function SpotifyPlayer() {
       return;
     }
 
-    await sleep(600);
-
-    // 2) Démarrer lecture explicite sur CE device
+    // Lecture explicite sur CE device
     r = await fetch("/api/spotify/play", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -100,8 +90,6 @@ export default function SpotifyPlayer() {
       setErr(j?.error?.reason || j?.error?.message || j?.error || `Play HTTP ${r.status}`);
       return;
     }
-
-    await fetchDevices();
   }
 
   if (status !== "authenticated") return null;
@@ -112,26 +100,10 @@ export default function SpotifyPlayer() {
       {err && <p className="text-sm text-red-600">Erreur: {String(err)}</p>}
 
       <div className="flex flex-wrap gap-2">
-        <button disabled={!ready} onClick={start} className="btn">
+        <button disabled={!ready} onClick={start} className={btnPrimary}>
           Lancer la musique
         </button>
-        <button onClick={fetchDevices} type="button" className="btn btn-outline">
-          Voir mes appareils
-        </button>
       </div>
-
-      {!!devices.length && (
-        <div className="border rounded-lg p-3">
-          <div className="text-sm text-gray-600 mb-1">Appareils détectés :</div>
-          <ul className="text-sm leading-6">
-            {devices.map((d:any) => (
-              <li key={d.id}>
-                {d.name} {d.is_active ? "(actif)" : ""} — {d.type}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
 
       <p className="text-xs text-gray-500">
         ⚠️ Spotify Premium requis. Assure-toi que ton domaine est autorisé dans les “Web Playback SDK origins”.
