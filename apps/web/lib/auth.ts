@@ -35,7 +35,7 @@ export const authOptions: NextAuthOptions = {
         url: "https://accounts.spotify.com/authorize",
         params: {
           scope: "user-read-email user-read-private playlist-read-private",
-          // show_dialog: true, // ← décommente une fois si tu veux forcer le re-consent
+          // show_dialog: true, // décommente 1x si tu veux forcer le re-consent
         },
       },
     }),
@@ -44,34 +44,45 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async jwt({ token, account }) {
       if (account) {
+        // calcule une date d’expiration en ms (number)
         const expiresAt =
           typeof (account as any).expires_at === "number"
             ? (account as any).expires_at * 1000
             : Date.now() + Number((account as any).expires_in ?? 3600) * 1000;
-        token.accessToken = (account as any).access_token;
-        token.refreshToken = (account as any).refresh_token ?? token.refreshToken;
-        token.expiresAt = expiresAt;
+
+        (token as any).accessToken = (account as any).access_token as string | undefined;
+        (token as any).refreshToken =
+          ((account as any).refresh_token as string | undefined) ?? (token as any).refreshToken;
+        (token as any).expiresAt = expiresAt as number;
+
         return token;
       }
 
-      // Auto-refresh si expiré
-      if (token.expiresAt && Date.now() > token.expiresAt - 60_000 && token.refreshToken) {
+      // ---- Rafraîchissement auto si expiré ----
+      const exp =
+        typeof (token as any).expiresAt === "number"
+          ? ((token as any).expiresAt as number)
+          : (token as any).expiresAt
+          ? Number((token as any).expiresAt)
+          : 0;
+
+      if (exp && Date.now() > exp - 60_000 && (token as any).refreshToken) {
         try {
-          const r = await refreshSpotifyToken(token.refreshToken as string);
-          token.accessToken = r.accessToken;
-          token.refreshToken = r.refreshToken;
-          token.expiresAt = r.expiresAt;
+          const r = await refreshSpotifyToken((token as any).refreshToken as string);
+          (token as any).accessToken = r.accessToken;
+          (token as any).refreshToken = r.refreshToken;
+          (token as any).expiresAt = r.expiresAt;
         } catch {
-          token.accessToken = undefined;
-          token.refreshToken = undefined;
-          token.expiresAt = undefined;
+          (token as any).accessToken = undefined;
+          (token as any).refreshToken = undefined;
+          (token as any).expiresAt = undefined;
         }
       }
       return token;
     },
     async session({ session, token }) {
-      // @ts-expect-error extension
-      session.accessToken = token.accessToken;
+      // @ts-expect-error — on étend la session au runtime
+      session.accessToken = (token as any).accessToken;
       return session;
     },
   },
