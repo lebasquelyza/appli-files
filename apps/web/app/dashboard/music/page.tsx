@@ -1,5 +1,6 @@
 "use client";
 import { useSession } from "next-auth/react";
+import Playlists from "./Playlists";
 
 export default function MusicPage() {
   const { data: session, status } = useSession();
@@ -19,8 +20,8 @@ export default function MusicPage() {
 
   return (
     <main style={{ padding: 24 }}>
-      <h1>Connecté à Spotify ✅</h1>
-      <p>Prêt à afficher tes données Spotify !</p>
+      <h1>Vos playlists</h1>
+      <Playlists />
     </main>
   );
 }
