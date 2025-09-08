@@ -106,3 +106,30 @@ html,body{background:var(--bg); color:var(--text); font-family:var(--font-family
 .btn-dash:active{ transform:translateY(0); }
 .btn-dash:focus-visible{ outline:none; box-shadow:0 0 0 4px var(--ring), var(--shadow); }
 .btn-dash:disabled{ opacity:.6; cursor:not-allowed; }
+
+/* Segmented control (seconds add) */
+.seg {
+  display:inline-flex; gap:.25rem; padding:.25rem; border-radius:var(--radius);
+  background:var(--panel); border:1px solid rgba(0,0,0,.06); box-shadow:var(--shadow);
+}
+.seg button{
+  border:0; background:transparent; color:var(--muted);
+  padding:.45rem .6rem; border-radius:calc(var(--radius) - 6px);
+  font-weight:600; font-size:.85rem; cursor:pointer; transition:filter .15s ease, transform .1s ease;
+}
+.seg button:hover{ filter:brightness(1.05); transform:translateY(-1px); }
+.seg button.active{
+  color:#fff; background-image:linear-gradient(90deg,var(--brand),var(--brand2));
+  box-shadow:var(--shadow);
+}
+
+/* Chips presets (30s, 1:30, 3:00) */
+.chips{ display:flex; flex-wrap:wrap; gap:.5rem; }
+.chip{
+  display:inline-flex; align-items:center; justify-content:center; gap:.35rem;
+  padding:.45rem .7rem; border-radius:var(--radius);
+  background:var(--panel); color:var(--text);
+  border:1px solid rgba(0,0,0,.06); box-shadow:var(--shadow);
+  font-weight:600; font-size:.85rem; cursor:pointer; transition:filter .15s ease, transform .1s ease;
+}
+.chip:hover{ filter:brightness(1.05); transform:translateY(-1px); }
