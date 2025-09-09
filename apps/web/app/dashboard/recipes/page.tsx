@@ -35,10 +35,10 @@ function parseCsv(value?: string | string[]): string[] {
 function uid() { return "id-" + Math.random().toString(36).slice(2, 10); }
 
 // --- random avec seed ---
-function seededPRNG(seed: number) { let s = seed>>>0; return () => ((s=(s*1664525+1013904223)>>>0)/2**32); }
+function seededPRNG(seed: number) { let s = seed >>> 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 2 ** 32); }
 function seededShuffle<T>(arr: T[], seed: number): T[] {
-  const rand = seededPRNG(seed); const a=arr.slice();
-  for (let i=a.length-1;i>0;i--){ const j=Math.floor(rand()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
+  const rand = seededPRNG(seed); const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
   return a;
 }
 function pickRandomSeeded<T>(arr: T[], n: number, seed: number) {
@@ -153,6 +153,7 @@ async function generateRecipes({
     "Exige JSON STRICT, sans explication.",
   ].filter(Boolean).join("\n");
 
+  // 1) Tente l’IA
   const payload = await callOpenAIChatJSON(user);
   const arr: Recipe[] = Array.isArray(payload?.recipes) ? payload.recipes : [];
   const seen = new Set<string>();
@@ -174,6 +175,7 @@ async function generateRecipes({
       return Boolean(r.title) && r.ingredients.length >= 3;
     });
 
+  // 2) Si l’IA échoue → fallback multi-recettes
   return cleaned.length ? cleaned : sampleFallback(count);
 }
 
@@ -194,6 +196,7 @@ async function applyFiltersAction(formData: FormData) {
     redirect("/dashboard/abonnement");
   }
 
+  // Sinon on reste sur la page avec les filtres appliqués (mode GET)
   const qs = params.toString();
   redirect(`/dashboard/recipes${qs ? `?${qs}` : ""}`);
 }
@@ -208,7 +211,7 @@ export default async function Page({
   const goals = normalizeGoals(s);
 
   const kcal = Number(searchParams?.kcal ?? "");
-  the const kcalMin = Number(searchParams?.kcalMin ?? "");
+  const kcalMin = Number(searchParams?.kcalMin ?? "");
   const kcalMax = Number(searchParams?.kcalMax ?? "");
   const allergens = parseCsv(searchParams?.allergens);
   const diets = parseCsv(searchParams?.diets);
