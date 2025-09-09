@@ -1,5 +1,5 @@
-// app/dashboard/recipes/[id]/page.tsx
 import { getSession } from "@/lib/session";
+import { redirect } from "next/navigation";
 
 export const runtime = "nodejs";
 
@@ -17,15 +17,6 @@ type Recipe = {
   steps: string[];
 };
 
-function parseCsv(value?: string | string[]): string[] {
-  const raw = Array.isArray(value) ? value.join(",") : value ?? "";
-  return raw.split(/[,|]/).map((s) => s.trim().toLowerCase()).filter(Boolean);
-}
-function normalizeGoals(s: any): string[] {
-  const raw = s?.goals ?? s?.objectifs ?? s?.goal ?? s?.objectif ?? [];
-  const arr = Array.isArray(raw) ? raw : String(raw ?? "").split(/[,|]/);
-  return arr.map((x) => x.toString().trim().toLowerCase()).filter(Boolean);
-}
 function planRank(p?: Plan) { return p === "PREMIUM" ? 3 : p === "PLUS" ? 2 : 1; }
 
 // base64url decode (compat Node 16/18)
@@ -56,13 +47,17 @@ export default async function Page({
   params, searchParams,
 }: {
   params: { id: string };
-  searchParams?: { data?: string; kcal?: string; kcalMin?: string; kcalMax?: string; allergens?: string; diets?: string; };
+  searchParams?: { data?: string };
 }) {
   const s = await getSession();
   const plan: Plan = (s?.plan as Plan) || "BASIC";
-  const goals = normalizeGoals(s);
 
-  // 1) Priorité: recette encodée dans l'URL
+  // 🔒 Si l'utilisateur est BASIC, on envoie directement vers l'upgrade
+  if (plan === "BASIC") {
+    redirect("/dashboard/abonnement");
+  }
+
+  // 1) On lit la recette encodée dans l’URL
   let recipe: Recipe | null = null;
   const dataParam = (searchParams?.data ?? "") as string;
   if (dataParam) {
@@ -83,13 +78,15 @@ export default async function Page({
     );
   }
 
-  // Contrôle d'accès selon plan
+  // 2) Pour PLUS/PREMIUM : on garde le contrôle d’accès fin selon minPlan
   if (planRank(plan) < planRank(recipe.minPlan)) {
     const need = recipe.minPlan === "PREMIUM" ? "PREMIUM" : "PLUS";
     return (
       <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
         <h1 className="h1" style={{ marginBottom: 6 }}>{recipe.title}</h1>
-        <p className="lead" style={{ marginBottom: 16 }}>Cette recette est réservée au plan {recipe.minPlan}.</p>
+        <p className="lead" style={{ marginBottom: 16 }}>
+          Cette recette est réservée au plan {recipe.minPlan}.
+        </p>
         <a className="btn btn-dash" href="/dashboard/abonnement">Passer à {need}</a>
       </div>
     );
