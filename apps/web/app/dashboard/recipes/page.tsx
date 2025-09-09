@@ -1,7 +1,8 @@
 // app/dashboard/recipes/page.tsx
-import OpenAI from "openai";
 import { PageHeader, Section } from "@/components/ui/Page";
 import { getSession } from "@/lib/session";
+
+export const runtime = "nodejs"; // garantit l'exécution Node côté serveur
 
 // --- Types & helpers ---
 type Plan = "BASIC" | "PLUS" | "PREMIUM";
@@ -37,6 +38,10 @@ function parseCsv(value?: string | string[]): string[] {
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean);
 }
+function uid() {
+  // fallback simple (évite d’importer crypto si indispo)
+  return "id-" + Math.random().toString(36).slice(2, 10);
+}
 
 function sampleFallback(): Recipe[] {
   return [
@@ -63,7 +68,50 @@ function sampleFallback(): Recipe[] {
   ];
 }
 
-// --- IA generation (prompt robuste) ---
+// --- Appel REST OpenAI (sans SDK) ---
+async function callOpenAIChatJSON(userPrompt: string): Promise<any> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return {};
+
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "gpt-4o",
+      temperature: 0.7,
+      response_format: { type: "json_object" }, // force un JSON valide
+      messages: [
+        {
+          role: "system",
+          content:
+            "Tu es un chef-nutritionniste francophone. Tu proposes des recettes équilibrées, précises, et adaptées au niveau d'abonnement (BASIC/PLUS/PREMIUM). Tu dois renvoyer UNIQUEMENT du JSON valide, sans texte hors JSON.",
+        },
+        { role: "user", content: userPrompt },
+      ],
+    }),
+    // Pas de cache : on génère à la demande
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    // En prod on loguerait, ici on renvoie un objet vide
+    return {};
+  }
+
+  const data = await res.json();
+  let payload: any = {};
+  try {
+    payload = JSON.parse(data.choices?.[0]?.message?.content ?? "{}");
+  } catch {
+    payload = {};
+  }
+  return payload;
+}
+
+// --- Génération IA (prompt robuste) ---
 async function generateRecipes({
   plan,
   goals = [],
@@ -83,11 +131,6 @@ async function generateRecipes({
   allergens?: string[];
   diets?: string[];
 }): Promise<Recipe[]> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return sampleFallback();
-
-  const openai = new OpenAI({ apiKey });
-
   const constraints: string[] = [];
   if (typeof kcalTarget === "number" && !isNaN(kcalTarget)) {
     constraints.push(`- Viser ~${kcalTarget} kcal par recette (±10%).`);
@@ -110,7 +153,7 @@ async function generateRecipes({
       ? "- Au moins 60% des recettes avec minPlan = PLUS (le reste BASIC). 1-2 recettes PREMIUM possibles (verrouillables)."
       : "- Inclure quelques recettes PREMIUM.";
 
-  const parts = [
+  const user = [
     `PLAN_UTILISATEUR: ${plan}`,
     `OBJECTIFS: ${goals.join(", ") || "equilibre"}`,
     `NOMBRE_RECETTES: ${count}`,
@@ -137,37 +180,19 @@ async function generateRecipes({
     "}",
     "",
     "Exige JSON STRICT, sans explication.",
-  ].filter(Boolean);
-  const user = parts.join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 
-  const completion = await openai.chat.completions.create({
-    model: "gpt-4o",
-    temperature: 0.7,
-    response_format: { type: "json_object" },
-    messages: [
-      {
-        role: "system",
-        content:
-          "Tu es un chef-nutritionniste francophone. Tu proposes des recettes équilibrées, précises, et adaptées au niveau d'abonnement (BASIC/PLUS/PREMIUM). Tu dois renvoyer UNIQUEMENT du JSON valide, sans texte hors JSON.",
-      },
-      { role: "user", content: user },
-    ],
-  });
+  const payload = await callOpenAIChatJSON(user);
+  const arr: Recipe[] = Array.isArray(payload?.recipes) ? payload.recipes : [];
 
-  let data: any = {};
-  try {
-    data = JSON.parse(completion.choices[0]?.message?.content || "{}");
-  } catch {
-    return sampleFallback();
-  }
-
-  const arr: Recipe[] = Array.isArray(data?.recipes) ? data.recipes : [];
-  // Nettoyage léger
+  // Nettoyage + garde-fous
   const seen = new Set<string>();
   const cleaned = arr
     .map((r) => ({
       ...r,
-      id: String(r.id || r.title || crypto.randomUUID())
+      id: String(r.id || r.title || uid())
         .trim()
         .toLowerCase()
         .replace(/[^a-z0-9-]+/g, "-"),
@@ -204,7 +229,6 @@ export default async function Page({
   const s = await getSession();
   const plan: Plan = (s?.plan as Plan) || "BASIC";
   const goals = normalizeGoals(s);
-
   const filter = searchParams?.f || "reco";
 
   const kcal = Number(searchParams?.kcal ?? "");
