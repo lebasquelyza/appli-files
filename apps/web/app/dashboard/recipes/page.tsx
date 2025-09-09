@@ -31,6 +31,12 @@ function parseCsv(value?: string | string[]): string[] {
 }
 function uid() { return "id-" + Math.random().toString(36).slice(2, 10); }
 
+// base64url helpers (compat Node 16/18)
+function b64urlEncode(str: string) {
+  const b64 = Buffer.from(str, "utf8").toString("base64");
+  return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
 async function callOpenAIChatJSON(userPrompt: string): Promise<any> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return {};
@@ -186,7 +192,7 @@ export default async function Page({
   if (hasKcalMax) qsParts.push(`kcalMax=${kcalMax}`);
   if (allergens.length) qsParts.push(`allergens=${encodeURIComponent(allergens.join(","))}`);
   if (diets.length) qsParts.push(`diets=${encodeURIComponent(diets.join(","))}`);
-  const detailQS = qsParts.length ? `?${qsParts.join("&")}` : "";
+  const detailQSBase = qsParts.length ? `?${qsParts.join("&")}` : "";
 
   return (
     <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
@@ -250,9 +256,12 @@ export default async function Page({
       {/* Résultats IA */}
       <Section title={filter === "reco" ? "Recommandé pour vous (IA)" : "Toutes vos recettes (IA)"}>
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
-          {(filter === "reco" ? available : available).map((r) => (
-            <RecipeCard key={r.id} r={r} detailQS={detailQS} />
-          ))}
+          {(filter === "reco" ? available : available).map((r) => {
+            const encoded = b64urlEncode(JSON.stringify(r));
+            const sep = detailQSBase ? "&" : "?";
+            const detailQS = `${detailQSBase}${sep}data=${encoded}`;
+            return <RecipeCard key={r.id} r={r} detailQS={detailQS} />;
+          })}
         </div>
       </Section>
 
