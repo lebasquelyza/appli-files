@@ -3,7 +3,7 @@ import { PageHeader, Section } from "@/components/ui/Page";
 export default function Page() {
   return (
     <>
-      <PageHeader title="Tarifs" subtitle="Basic, Plus, Premium" />
+      <PageHeader title="Abonnement" subtitle="Basic, Plus, Premium" />
       <Section title="Formules">
         <div className="grid sm:grid-cols-2 gap-6">
           <div className="card"><b>Basic</b><br/>Recettes + Minuteur</div>

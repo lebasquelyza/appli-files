@@ -13,7 +13,7 @@ export default function Topbar(){
         </Link>
         <nav className={open ? "menu open" : "menu"}>
           <Link href="/#features">Fonctionnalités</Link>
-          <Link href="/dashboard/pricing">Tarifs</Link>
+          <Link href="/dashboard/pricing">Abonnement</Link>
           <Link href="/dashboard">Dashboard</Link>
         </nav>
         <button className="burger" aria-label="Menu" onClick={()=>setOpen(v=>!v)}>☰</button>
