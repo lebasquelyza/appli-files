@@ -30,7 +30,6 @@ function parseCsv(value?: string | string[]): string[] {
 }
 function uid() { return "id-" + Math.random().toString(36).slice(2, 10); }
 function shuffle<T>(arr: T[]): T[] {
-  // Fisher–Yates
   const a = arr.slice();
   for (let i = a.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -77,7 +76,7 @@ function sampleFallback(): Recipe[] {
 }
 
 async function generateRecipes({
-  plan, goals = [], count = 8, kcalTarget, kcalMin, kcalMax, allergens = [], diets = [],
+  plan, goals = [], count = 10, kcalTarget, kcalMin, kcalMax, allergens = [], diets = [],
 }: {
   plan: Plan; goals?: string[]; count?: number;
   kcalTarget?: number; kcalMin?: number; kcalMax?: number;
@@ -147,7 +146,7 @@ async function generateRecipes({
     .filter((r) => {
       if (!r.id || seen.has(r.id)) return false;
       seen.add(r.id);
-      return Boolean(r.title) && r.ingredients.length >= 3 && r.steps.length >= 2;
+      return Boolean(r.title) && r.ingredients.length >= 3;
     });
 
   return cleaned.length ? cleaned : sampleFallback();
@@ -174,7 +173,7 @@ export default async function Page({
   const hasKcalMax = !isNaN(kcalMax) && kcalMax > 0;
 
   const aiRecipes = await generateRecipes({
-    plan, goals, count: 10,
+    plan, goals, count: 12,
     kcalTarget: hasKcalTarget ? kcal : undefined,
     kcalMin: hasKcalMin ? kcalMin : undefined,
     kcalMax: hasKcalMax ? kcalMax : undefined,
@@ -184,12 +183,11 @@ export default async function Page({
   const available = aiRecipes.filter((r) => isUnlocked(r, plan));
   const locked = aiRecipes.filter((r) => !isUnlocked(r, plan));
 
-  // Scoring par objectifs + mélange aléatoire
+  // Mélange aléatoire puis petit tri par pertinence aux objectifs
   const goalSet = new Set(goals);
   const score = (r: Recipe) => r.goals.reduce((n, g) => n + (goalSet.has(String(g).toLowerCase()) ? 1 : 0), 0);
-  const mixed = shuffle(available).sort((a, b) => score(b) - score(a)); // mélange puis trie léger par pertinence
-  const recommendedCount = 6;
-  const recommended = mixed.slice(0, recommendedCount);
+  const mixed = shuffle(available).sort((a, b) => score(b) - score(a));
+  const recommended = mixed.slice(0, 6); // plusieurs recettes aléatoires
 
   // QS pour conserver les filtres + bouton "Mélanger"
   const qsParts: string[] = [];
@@ -201,7 +199,7 @@ export default async function Page({
   const baseQS = qsParts.length ? `?${qsParts.join("&")}` : "";
   const mixHref = `${baseQS}${baseQS ? "&" : "?"}rnd=${Date.now()}`;
 
-  // Pour détailler la recette, on passe la data encodée (déjà supporté par [id]/page.tsx)
+  // Encodage base64url pour la page détail
   const encode = (r: Recipe) => {
     const b64 = Buffer.from(JSON.stringify(r), "utf8").toString("base64").replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
     return `${baseQS}${baseQS ? "&" : "?"}data=${b64}`;
@@ -281,23 +279,27 @@ export default async function Page({
         </form>
       </div>
 
-      {/* Recommandé (aléatoire) */}
+      {/* Recommandé (aléatoire) — ingrédients + kcal UNIQUEMENT */}
       <Section title="Recommandé pour vous (IA)">
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
           {recommended.map((r) => {
-            const encodedQS = encode(r);
-            return <RecipeCard key={r.id} r={r} detailQS={encodedQS} />;
+            const detailQS = (() => {
+              const b64 = Buffer.from(JSON.stringify(r), "utf8").toString("base64").replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+              return `${baseQS}${baseQS ? "&" : "?"}data=${b64}`;
+            })();
+            return <RecommendedCard key={r.id} r={r} detailQS={detailQS} />;
           })}
         </div>
       </Section>
 
-      {/* Optionnel : toutes les recettes accessibles */}
+      {/* Optionnel : toutes les recettes accessibles (vue complète) */}
       {filter !== "reco" && (
         <Section title="Toutes vos recettes (IA)">
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
             {available.map((r) => {
-              const encodedQS = encode(r);
-              return <RecipeCard key={r.id} r={r} detailQS={encodedQS} />;
+              const b64 = Buffer.from(JSON.stringify(r), "utf8").toString("base64").replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+              const detailQS = `${baseQS}${baseQS ? "&" : "?"}data=${b64}`;
+              return <RecipeCard key={r.id} r={r} detailQS={detailQS} />;
             })}
           </div>
         </Section>
@@ -317,6 +319,38 @@ export default async function Page({
   );
 }
 
+/** Carte "recommandé" simplifiée : Titre, kcal, Ingrédients (PAS d'étapes) */
+function RecommendedCard({ r, detailQS }: { r: Recipe; detailQS: string }) {
+  const shown = r.ingredients.slice(0, 8);
+  const more = Math.max(0, r.ingredients.length - shown.length);
+  return (
+    <article className="card" style={{ overflow: "hidden" }}>
+      <div className="flex items-center justify-between">
+        <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>{r.title}</h3>
+        <span className="badge">{r.minPlan}</span>
+      </div>
+
+      <div className="text-sm" style={{ marginTop: 10, display: "flex", gap: 12, flexWrap: "wrap" }}>
+        {typeof r.kcal === "number" && <span className="badge">{r.kcal} kcal</span>}
+        {/* on omet volontairement timeMin & tags ici */}
+      </div>
+
+      <div className="text-sm" style={{ marginTop: 10 }}>
+        <strong>Ingrédients</strong>
+        <ul style={{ margin: "6px 0 0 16px" }}>
+          {shown.map((i, idx) => <li key={idx}>{i}</li>)}
+          {more > 0 && <li>+ {more} autre(s)…</li>}
+        </ul>
+      </div>
+
+      <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+        <a className="btn btn-dash" href={`/dashboard/recipes/${r.id}${detailQS}`}>Voir la recette</a>
+      </div>
+    </article>
+  );
+}
+
+/** Carte complète (utilisée dans “Toutes vos recettes”) */
 function RecipeCard({ r, detailQS }: { r: Recipe; detailQS: string }) {
   return (
     <article className="card" style={{ overflow: "hidden" }}>
