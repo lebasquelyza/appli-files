@@ -2,7 +2,7 @@ import { PageHeader, Section } from "@/components/ui/Page";
 import { getSession } from "@/lib/session";
 
 export const runtime = "nodejs";
-export const dynamic = "force-dynamic"; // pas de SSG, change à chaque requête
+export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 type Plan = "BASIC" | "PLUS" | "PREMIUM";
@@ -32,25 +32,14 @@ function parseCsv(value?: string | string[]): string[] {
 }
 function uid() { return "id-" + Math.random().toString(36).slice(2, 10); }
 
-// --- shuffle avec seed (stable par affichage) ---
-function seededPRNG(seed: number) {
-  let s = seed >>> 0;
-  return () => {
-    // LCG
-    s = (s * 1664525 + 1013904223) >>> 0;
-    return s / 2 ** 32;
-  };
-}
+// --- random avec seed pour changer à chaque vue (&rnd=) ---
+function seededPRNG(seed: number) { let s = seed>>>0; return () => ((s=(s*1664525+1013904223)>>>0)/2**32); }
 function seededShuffle<T>(arr: T[], seed: number): T[] {
-  const rand = seededPRNG(seed);
-  const a = arr.slice();
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(rand() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
+  const rand = seededPRNG(seed); const a=arr.slice();
+  for (let i=a.length-1;i>0;i--){ const j=Math.floor(rand()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
   return a;
 }
-function pickRandomSeeded<T>(arr: T[], n: number, seed: number): T[] {
+function pickRandomSeeded<T>(arr: T[], n: number, seed: number) {
   return seededShuffle(arr, seed).slice(0, Math.max(0, Math.min(n, arr.length)));
 }
 
@@ -77,18 +66,85 @@ async function callOpenAIChatJSON(userPrompt: string): Promise<any> {
   try { return JSON.parse(data.choices?.[0]?.message?.content ?? "{}"); } catch { return {}; }
 }
 
-function sampleFallback(): Recipe[] {
-  return [{
-    id: "salade-quinoa",
-    title: "Salade de quinoa croquante",
-    subtitle: "Pois chiches, concombre, citron",
-    kcal: 520, timeMin: 15,
-    tags: ["végétarien","sans-gluten"],
-    goals: ["equilibre"],
-    minPlan: "BASIC",
-    ingredients: ["quinoa","pois chiches","concombre","citron","huile d'olive","sel","poivre"],
-    steps: ["Cuire le quinoa","Mélanger avec le reste","Assaisonner"],
-  }];
+/** ==== GRAND FALLBACK: 12 recettes variées ==== */
+function sampleFallback(count = 12): Recipe[] {
+  const samples: Recipe[] = [
+    {
+      id:"salade-quinoa", title:"Salade de quinoa croquante", subtitle:"Pois chiches, concombre, citron",
+      kcal:520, timeMin:15, tags:["végétarien","sans-gluten"], goals:["equilibre"], minPlan:"BASIC",
+      ingredients:["quinoa","pois chiches","concombre","citron","huile d'olive","sel","poivre","persil"],
+      steps:["Cuire le quinoa","Mélanger","Assaisonner"],
+    },
+    {
+      id:"bowl-poulet-riz", title:"Bowl poulet & riz complet", subtitle:"Avocat, maïs, yaourt grec",
+      kcal:640, timeMin:20, tags:["riche-protéines"], goals:["prise de masse","equilibre"], minPlan:"BASIC",
+      ingredients:["poulet","riz complet","avocat","maïs","yaourt grec","cumin","citron","sel","poivre"],
+      steps:["Cuire le riz","Griller le poulet","Assembler le bowl"],
+    },
+    {
+      id:"omelette-champignons", title:"Omelette aux champignons & fines herbes", subtitle:"Rapide du matin",
+      kcal:420, timeMin:10, tags:["rapide","sans-gluten"], goals:["equilibre"], minPlan:"BASIC",
+      ingredients:["œufs","champignons","ciboulette","beurre","sel","poivre","parmesan"],
+      steps:["Battre les œufs","Saisir champignons","Cuire l’omelette"],
+    },
+    {
+      id:"saumon-four", title:"Saumon au four & légumes rôtis", subtitle:"Carottes, brocoli, citron",
+      kcal:580, timeMin:25, tags:["omega-3","sans-gluten"], goals:["equilibre","santé"], minPlan:"PLUS",
+      ingredients:["saumon","brocoli","carottes","citron","huile d'olive","ail","sel","poivre"],
+      steps:["Préchauffer","Rôtir légumes","Cuire saumon"],
+    },
+    {
+      id:"curry-pois-chiches", title:"Curry de pois chiches coco", subtitle:"Vegan & réconfortant",
+      kcal:600, timeMin:30, tags:["vegan","sans-gluten"], goals:["equilibre"], minPlan:"BASIC",
+      ingredients:["pois chiches","lait de coco","tomates concassées","oignon","ail","curry","riz basmati","sel"],
+      steps:["Suer aromatiques","Ajouter sauces et pois chiches","Mijoter","Servir avec riz"],
+    },
+    {
+      id:"pates-completes-legumes", title:"Pâtes complètes aux légumes grillés", subtitle:"Courgette, poivron, feta",
+      kcal:680, timeMin:20, tags:["végétarien"], goals:["énergie","equilibre"], minPlan:"BASIC",
+      ingredients:["pâtes complètes","courgette","poivron","feta","huile d'olive","basilic","sel","poivre"],
+      steps:["Griller légumes","Cuire pâtes","Mélanger"],
+    },
+    {
+      id:"tofu-brocoli-wok", title:"Tofu sauté au brocoli (wok)", subtitle:"Sauce soja sésame",
+      kcal:530, timeMin:15, tags:["vegan","rapide"], goals:["sèche","equilibre"], minPlan:"BASIC",
+      ingredients:["tofu ferme","brocoli","sauce soja","ail","gingembre","graines de sésame","huile","maïzena"],
+      steps:["Saisir tofu","Wok brocoli","Lier sauce"],
+    },
+    {
+      id:"smoothie-bowl", title:"Smoothie bowl fruits rouges", subtitle:"Granola & chia",
+      kcal:450, timeMin:8, tags:["végétarien","petit-déj"], goals:["santé"], minPlan:"BASIC",
+      ingredients:["fruits rouges","banane","yaourt","lait","granola","graines de chia","miel"],
+      steps:["Mixer","Verser","Garnir"],
+    },
+    {
+      id:"chili-sin-carne", title:"Chili sin carne", subtitle:"Haricots rouges, maïs, paprika fumé",
+      kcal:610, timeMin:35, tags:["vegan"], goals:["equilibre"], minPlan:"BASIC",
+      ingredients:["haricots rouges","maïs","tomates concassées","oignon","ail","paprika fumé","cumin","riz"],
+      steps:["Suer","Mijoter","Servir avec riz"],
+    },
+    {
+      id:"wrap-thon-avocat", title:"Wrap thon & avocat", subtitle:"Citron & yaourt",
+      kcal:520, timeMin:10, tags:["rapide"], goals:["equilibre"], minPlan:"BASIC",
+      ingredients:["tortillas","thon","avocat","yaourt","citron","salade","sel","poivre"],
+      steps:["Mélanger garniture","Rouler","Déguster"],
+    },
+    {
+      id:"soupe-lentilles", title:"Soupe de lentilles corail", subtitle:"Carotte & cumin",
+      kcal:480, timeMin:25, tags:["végétarien","réchauffant"], goals:["santé"], minPlan:"BASIC",
+      ingredients:["lentilles corail","carotte","oignon","ail","bouillon","cumin","huile d'olive","citron"],
+      steps:["Suer","Cuire lentilles","Mixer partiellement"],
+    },
+    {
+      id:"shakshuka", title:"Shakshuka", subtitle:"Œufs pochés à la tomate",
+      kcal:560, timeMin:20, tags:["végétarien","sans-gluten"], goals:["equilibre"], minPlan:"BASIC",
+      ingredients:["œufs","tomates concassées","poivron","oignon","ail","paprika","cumin","persil"],
+      steps:["Suer","Mijoter","Pocher œufs"],
+    },
+  ];
+  // on mélange et on tronque au nombre demandé
+  const seed = Date.now();
+  return seededShuffle(samples, seed).slice(0, Math.min(count, samples.length));
 }
 
 async function generateRecipes({
@@ -132,6 +188,7 @@ async function generateRecipes({
     "Exige JSON STRICT, sans explication.",
   ].filter(Boolean).join("\n");
 
+  // 1) Tente l’IA
   const payload = await callOpenAIChatJSON(user);
   const arr: Recipe[] = Array.isArray(payload?.recipes) ? payload.recipes : [];
   const seen = new Set<string>();
@@ -153,7 +210,8 @@ async function generateRecipes({
       return Boolean(r.title) && r.ingredients.length >= 3;
     });
 
-  return cleaned.length ? cleaned : sampleFallback();
+  // 2) Si l’IA échoue → grand fallback multi-recettes
+  return cleaned.length ? cleaned : sampleFallback(count);
 }
 
 export default async function Page({
@@ -187,10 +245,10 @@ export default async function Page({
   const locked = aiRecipes.filter((r) => !isUnlocked(r, plan));
 
   // ----- aléatoire qui change à chaque affichage -----
-  const seed = Number(searchParams?.rnd) || Date.now(); // change si on ajoute &rnd=...
+  const seed = Number(searchParams?.rnd) || Date.now();
   const recommended = pickRandomSeeded(available, 6, seed);
 
-  // QS pour conserver les filtres + bouton "Mélanger"
+  // QS conservés + bouton “Mélanger”
   const qsParts: string[] = [];
   if (hasKcalTarget) qsParts.push(`kcal=${kcal}`);
   if (hasKcalMin) qsParts.push(`kcalMin=${kcalMin}`);
@@ -210,7 +268,7 @@ export default async function Page({
     <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
       <PageHeader title="Recettes personnalisées" subtitle="Générées par IA selon votre formule, objectifs et contraintes" />
 
-      {/* Panneau de contraintes */}
+      {/* Filtres */}
       <div className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
           <h2>Contraintes & filtres</h2>
@@ -251,7 +309,7 @@ export default async function Page({
         </form>
       </div>
 
-      {/* Recommandé (aléatoire) — affiche SEULEMENT ingrédients + kcal */}
+      {/* Recommandé — ingrédients + kcal seulement */}
       <Section title="Recommandé pour vous (IA)">
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
           {recommended.map((r) => {
