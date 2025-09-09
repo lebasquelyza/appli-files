@@ -2,6 +2,8 @@ import { PageHeader, Section } from "@/components/ui/Page";
 import { getSession } from "@/lib/session";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic"; // pas de SSG, change à chaque requête
+export const revalidate = 0;
 
 type Plan = "BASIC" | "PLUS" | "PREMIUM";
 type Recipe = {
@@ -29,13 +31,27 @@ function parseCsv(value?: string | string[]): string[] {
   return raw.split(/[,|]/).map((s) => s.trim().toLowerCase()).filter(Boolean);
 }
 function uid() { return "id-" + Math.random().toString(36).slice(2, 10); }
-function shuffle<T>(arr: T[]): T[] {
+
+// --- shuffle avec seed (stable par affichage) ---
+function seededPRNG(seed: number) {
+  let s = seed >>> 0;
+  return () => {
+    // LCG
+    s = (s * 1664525 + 1013904223) >>> 0;
+    return s / 2 ** 32;
+  };
+}
+function seededShuffle<T>(arr: T[], seed: number): T[] {
+  const rand = seededPRNG(seed);
   const a = arr.slice();
   for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor(rand() * (i + 1));
     [a[i], a[j]] = [a[j], a[i]];
   }
   return a;
+}
+function pickRandomSeeded<T>(arr: T[], n: number, seed: number): T[] {
+  return seededShuffle(arr, seed).slice(0, Math.max(0, Math.min(n, arr.length)));
 }
 
 // ---- OpenAI via fetch (pas de SDK) ----
@@ -76,7 +92,7 @@ function sampleFallback(): Recipe[] {
 }
 
 async function generateRecipes({
-  plan, goals = [], count = 10, kcalTarget, kcalMin, kcalMax, allergens = [], diets = [],
+  plan, goals = [], count = 16, kcalTarget, kcalMin, kcalMax, allergens = [], diets = [],
 }: {
   plan: Plan; goals?: string[]; count?: number;
   kcalTarget?: number; kcalMin?: number; kcalMax?: number;
@@ -112,19 +128,7 @@ async function generateRecipes({
     '- Renvoyer un objet JSON {"recipes": Recipe[]} conforme au schéma.',
     "",
     "SCHEMA (TypeScript):",
-    "Recipe = {",
-    "  id: string,",
-    "  title: string,",
-    "  subtitle?: string,",
-    "  kcal?: number,",
-    "  timeMin?: number,",
-    "  tags: string[],",
-    "  goals: string[],",
-    "  minPlan: 'BASIC'|'PLUS'|'PREMIUM',",
-    "  ingredients: string[],",
-    "  steps: string[]",
-    "}",
-    "",
+    "Recipe = { id: string, title: string, subtitle?: string, kcal?: number, timeMin?: number, tags: string[], goals: string[], minPlan: 'BASIC'|'PLUS'|'PREMIUM', ingredients: string[], steps: string[] }",
     "Exige JSON STRICT, sans explication.",
   ].filter(Boolean).join("\n");
 
@@ -160,7 +164,6 @@ export default async function Page({
   const s = await getSession();
   const plan: Plan = (s?.plan as Plan) || "BASIC";
   const goals = normalizeGoals(s);
-  const filter = searchParams?.f || "reco";
 
   const kcal = Number(searchParams?.kcal ?? "");
   const kcalMin = Number(searchParams?.kcalMin ?? "");
@@ -173,7 +176,7 @@ export default async function Page({
   const hasKcalMax = !isNaN(kcalMax) && kcalMax > 0;
 
   const aiRecipes = await generateRecipes({
-    plan, goals, count: 12,
+    plan, goals, count: 16,
     kcalTarget: hasKcalTarget ? kcal : undefined,
     kcalMin: hasKcalMin ? kcalMin : undefined,
     kcalMax: hasKcalMax ? kcalMax : undefined,
@@ -183,11 +186,9 @@ export default async function Page({
   const available = aiRecipes.filter((r) => isUnlocked(r, plan));
   const locked = aiRecipes.filter((r) => !isUnlocked(r, plan));
 
-  // Mélange aléatoire puis petit tri par pertinence aux objectifs
-  const goalSet = new Set(goals);
-  const score = (r: Recipe) => r.goals.reduce((n, g) => n + (goalSet.has(String(g).toLowerCase()) ? 1 : 0), 0);
-  const mixed = shuffle(available).sort((a, b) => score(b) - score(a));
-  const recommended = mixed.slice(0, 6); // plusieurs recettes aléatoires
+  // ----- aléatoire qui change à chaque affichage -----
+  const seed = Number(searchParams?.rnd) || Date.now(); // change si on ajoute &rnd=...
+  const recommended = pickRandomSeeded(available, 6, seed);
 
   // QS pour conserver les filtres + bouton "Mélanger"
   const qsParts: string[] = [];
@@ -199,7 +200,7 @@ export default async function Page({
   const baseQS = qsParts.length ? `?${qsParts.join("&")}` : "";
   const mixHref = `${baseQS}${baseQS ? "&" : "?"}rnd=${Date.now()}`;
 
-  // Encodage base64url pour la page détail
+  // Encodage base64url pour la page détail (déjà supporté par [id]/page.tsx)
   const encode = (r: Recipe) => {
     const b64 = Buffer.from(JSON.stringify(r), "utf8").toString("base64").replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
     return `${baseQS}${baseQS ? "&" : "?"}data=${b64}`;
@@ -207,24 +208,7 @@ export default async function Page({
 
   return (
     <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
-      <PageHeader
-        title="Recettes personnalisées"
-        subtitle="Générées par IA selon votre formule, objectifs et contraintes"
-      />
-
-      {/* CTA pour non-abonnés (BASIC) */}
-      {plan === "BASIC" && (
-        <div className="section" style={{ marginTop: 12, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-          <div>
-            <div className="badge" style={{ marginRight: 8 }}>BASIC</div>
-            <strong style={{ display: "block", marginTop: 6 }}>Débloquez les recettes 100% personnalisées</strong>
-            <div className="text-sm" style={{ color: "#6b7280" }}>
-              Accédez aux recettes adaptées finement à vos objectifs, allergies et préférences.
-            </div>
-          </div>
-          <a className="btn btn-dash" href="/dashboard/abonnement">Accéder aux recettes personnalisées</a>
-        </div>
-      )}
+      <PageHeader title="Recettes personnalisées" subtitle="Générées par IA selon votre formule, objectifs et contraintes" />
 
       {/* Panneau de contraintes */}
       <div className="section" style={{ marginTop: 12 }}>
@@ -232,7 +216,6 @@ export default async function Page({
           <h2>Contraintes & filtres</h2>
           <div className="text-sm" style={{ color: "#6b7280" }}>Ajustez et régénérez les suggestions</div>
         </div>
-
         <form method="GET" className="grid gap-6 lg:grid-cols-2">
           <div>
             <label className="label">Cible calories (kcal)</label>
@@ -249,27 +232,16 @@ export default async function Page({
               <input className="input" type="number" name="kcalMax" placeholder="ex: 700" defaultValue={hasKcalMax ? String(kcalMax) : ""} />
             </div>
           </div>
-
           <div>
             <label className="label">Allergènes à exclure (séparés par virgules)</label>
-            <input className="input" type="text" name="allergens" placeholder="arachide, lactose, gluten" defaultValue={(searchParams?.allergens ?? "") as string} />
+            <input className="input" type="text" name="allergens" placeholder="arachide, lactose, gluten" defaultValue={(allergens ?? []).join(", ")} />
           </div>
-
           <div>
             <label className="label">Régimes / préférences (séparés par virgules)</label>
-            <input className="input" type="text" name="diets" placeholder="vegan, sans-gluten, halal" defaultValue={(searchParams?.diets ?? "") as string} />
+            <input className="input" type="text" name="diets" placeholder="vegan, sans-gluten, halal" defaultValue={(diets ?? []).join(", ")} />
           </div>
-
           <div className="flex items-center justify-between lg:col-span-2">
-            <div>
-              <span className="text-sm" style={{ color: "#6b7280" }}>Votre formule : </span>
-              <span className="badge" style={{ marginLeft: 6 }}>{plan}</span>
-              {goals.length > 0 && (
-                <span className="text-sm" style={{ marginLeft: 10 }}>
-                  Objectifs: {goals.map((g) => <span key={g} className="badge" style={{ marginRight: 6 }}>{g}</span>)}
-                </span>
-              )}
-            </div>
+            <div className="text-sm" style={{ color: "#6b7280" }}>Votre formule : <span className="badge" style={{ marginLeft: 6 }}>{(s?.plan as Plan) || "BASIC"}</span></div>
             <div style={{ display: "flex", gap: 10 }}>
               <a href="/dashboard/recipes" className="btn btn-outline">Réinitialiser</a>
               <a className="btn btn-outline" href={`/dashboard/recipes${mixHref}`}>Mélanger</a>
@@ -279,31 +251,15 @@ export default async function Page({
         </form>
       </div>
 
-      {/* Recommandé (aléatoire) — ingrédients + kcal UNIQUEMENT */}
+      {/* Recommandé (aléatoire) — affiche SEULEMENT ingrédients + kcal */}
       <Section title="Recommandé pour vous (IA)">
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
           {recommended.map((r) => {
-            const detailQS = (() => {
-              const b64 = Buffer.from(JSON.stringify(r), "utf8").toString("base64").replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
-              return `${baseQS}${baseQS ? "&" : "?"}data=${b64}`;
-            })();
+            const detailQS = encode(r);
             return <RecommendedCard key={r.id} r={r} detailQS={detailQS} />;
           })}
         </div>
       </Section>
-
-      {/* Optionnel : toutes les recettes accessibles (vue complète) */}
-      {filter !== "reco" && (
-        <Section title="Toutes vos recettes (IA)">
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
-            {available.map((r) => {
-              const b64 = Buffer.from(JSON.stringify(r), "utf8").toString("base64").replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
-              const detailQS = `${baseQS}${baseQS ? "&" : "?"}data=${b64}`;
-              return <RecipeCard key={r.id} r={r} detailQS={detailQS} />;
-            })}
-          </div>
-        </Section>
-      )}
 
       {/* Verrouillées */}
       {locked.length > 0 && (
@@ -332,7 +288,6 @@ function RecommendedCard({ r, detailQS }: { r: Recipe; detailQS: string }) {
 
       <div className="text-sm" style={{ marginTop: 10, display: "flex", gap: 12, flexWrap: "wrap" }}>
         {typeof r.kcal === "number" && <span className="badge">{r.kcal} kcal</span>}
-        {/* on omet volontairement timeMin & tags ici */}
       </div>
 
       <div className="text-sm" style={{ marginTop: 10 }}>
@@ -345,37 +300,6 @@ function RecommendedCard({ r, detailQS }: { r: Recipe; detailQS: string }) {
 
       <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
         <a className="btn btn-dash" href={`/dashboard/recipes/${r.id}${detailQS}`}>Voir la recette</a>
-      </div>
-    </article>
-  );
-}
-
-/** Carte complète (utilisée dans “Toutes vos recettes”) */
-function RecipeCard({ r, detailQS }: { r: Recipe; detailQS: string }) {
-  return (
-    <article className="card" style={{ overflow: "hidden" }}>
-      <div className="flex items-center justify-between">
-        <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>{r.title}</h3>
-        <span className="badge">{r.minPlan}</span>
-      </div>
-      {r.subtitle && <div className="text-sm" style={{ color: "#6b7280", marginTop: 4 }}>{r.subtitle}</div>}
-      <div className="text-sm" style={{ marginTop: 10, display: "flex", gap: 12, flexWrap: "wrap" }}>
-        {typeof r.kcal === "number" && <span className="badge">{r.kcal} kcal</span>}
-        {typeof r.timeMin === "number" && <span className="badge">{r.timeMin} min</span>}
-        {r.tags.map((t) => <span key={t} className="badge">{t}</span>)}
-      </div>
-      <details style={{ marginTop: 10 }}>
-        <summary className="btn btn-outline">Détails</summary>
-        <div className="text-sm" style={{ marginTop: 10 }}>
-          <strong>Ingrédients</strong>
-          <ul style={{ margin: "6px 0 0 16px" }}>{r.ingredients.map((i, idx) => <li key={idx}>{i}</li>)}</ul>
-          <strong style={{ display: "block", marginTop: 10 }}>Étapes</strong>
-          <ol style={{ margin: "6px 0 0 16px" }}>{r.steps.map((s, idx) => <li key={idx}>{s}</li>)}</ol>
-        </div>
-      </details>
-      <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-        <a className="btn btn-dash" href={`/dashboard/recipes/${r.id}${detailQS}`}>Voir la recette</a>
-        <button className="btn btn-outline" type="button">Ajouter à mon plan</button>
       </div>
     </article>
   );
@@ -395,11 +319,8 @@ function LockedCard({ r, userPlan }: { r: Recipe; userPlan: Plan }) {
         <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>{r.title}</h3>
         <span className="badge">{r.minPlan}</span>
       </div>
-      {r.subtitle && <div className="text-sm" style={{ color: "#6b7280", marginTop: 4 }}>{r.subtitle}</div>}
       <div className="text-sm" style={{ marginTop: 10, display: "flex", gap: 12, flexWrap: "wrap" }}>
         {typeof r.kcal === "number" && <span className="badge">{r.kcal} kcal</span>}
-        {typeof r.timeMin === "number" && <span className="badge">{r.timeMin} min</span>}
-        {r.tags.map((t) => <span key={t} className="badge">{t}</span>)}
       </div>
       <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
         <button className="btn btn-outline" disabled>Verrouillé</button>
