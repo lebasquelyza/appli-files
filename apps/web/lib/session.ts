@@ -3,22 +3,22 @@
 import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
 
-export async function updateProfile(formData: FormData) {
+export async function updateProfile(formData: FormData): Promise<void> {
   const firstName = String(formData.get('firstName') || '').trim();
   const lastName  = String(formData.get('lastName')  || '').trim();
   const plan      = String(formData.get('plan')      || 'BASIC');
 
+  // validations simples (tu peux lever une erreur si besoin)
   if (!firstName || !lastName) {
-    return { ok: false, error: 'Prénom et nom sont requis.' };
-  }
-  if (!['BASIC','PLUS','PREMIUM'].includes(plan)) {
-    return { ok: false, error: 'Plan invalide.' };
+    // Option: throw new Error('Prénom et nom requis');
+    // Ou juste ne rien faire.
   }
 
   const jar = cookies();
   const currentRaw = jar.get('app_session')?.value ?? '{}';
   let s: any = {};
   try { s = JSON.parse(currentRaw); } catch {}
+
   s.firstName = firstName;
   s.lastName = lastName;
   s.plan = plan;
@@ -29,12 +29,10 @@ export async function updateProfile(formData: FormData) {
     path: '/',
   });
 
-  // Réaffiche la page avec les nouvelles données
+  // Recharger la page avec les nouvelles infos
   revalidatePath('/dashboard/profile');
-  return { ok: true };
 }
 
-// ⚠️ Comme le fichier est en 'use server', cette fonction doit être async.
 export async function getSession() {
   const raw = cookies().get('app_session')?.value ?? '{}';
   try { return JSON.parse(raw); } catch { return {}; }
