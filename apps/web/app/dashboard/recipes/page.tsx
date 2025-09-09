@@ -1,4 +1,3 @@
-// app/dashboard/recipes/page.tsx
 import { PageHeader, Section } from "@/components/ui/Page";
 import { getSession } from "@/lib/session";
 
@@ -30,13 +29,17 @@ function parseCsv(value?: string | string[]): string[] {
   return raw.split(/[,|]/).map((s) => s.trim().toLowerCase()).filter(Boolean);
 }
 function uid() { return "id-" + Math.random().toString(36).slice(2, 10); }
-
-// base64url helpers (compat Node 16/18)
-function b64urlEncode(str: string) {
-  const b64 = Buffer.from(str, "utf8").toString("base64");
-  return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+function shuffle<T>(arr: T[]): T[] {
+  // Fisher–Yates
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
 }
 
+// ---- OpenAI via fetch (pas de SDK) ----
 async function callOpenAIChatJSON(userPrompt: string): Promise<any> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return {};
@@ -153,7 +156,7 @@ async function generateRecipes({
 export default async function Page({
   searchParams,
 }: {
-  searchParams?: { f?: string; kcal?: string; kcalMin?: string; kcalMax?: string; allergens?: string; diets?: string; };
+  searchParams?: { f?: string; kcal?: string; kcalMin?: string; kcalMax?: string; allergens?: string; diets?: string; rnd?: string };
 }) {
   const s = await getSession();
   const plan: Plan = (s?.plan as Plan) || "BASIC";
@@ -171,7 +174,7 @@ export default async function Page({
   const hasKcalMax = !isNaN(kcalMax) && kcalMax > 0;
 
   const aiRecipes = await generateRecipes({
-    plan, goals, count: 8,
+    plan, goals, count: 10,
     kcalTarget: hasKcalTarget ? kcal : undefined,
     kcalMin: hasKcalMin ? kcalMin : undefined,
     kcalMax: hasKcalMax ? kcalMax : undefined,
@@ -181,18 +184,28 @@ export default async function Page({
   const available = aiRecipes.filter((r) => isUnlocked(r, plan));
   const locked = aiRecipes.filter((r) => !isUnlocked(r, plan));
 
+  // Scoring par objectifs + mélange aléatoire
   const goalSet = new Set(goals);
   const score = (r: Recipe) => r.goals.reduce((n, g) => n + (goalSet.has(String(g).toLowerCase()) ? 1 : 0), 0);
-  available.sort((a, b) => score(b) - score(a));
+  const mixed = shuffle(available).sort((a, b) => score(b) - score(a)); // mélange puis trie léger par pertinence
+  const recommendedCount = 6;
+  const recommended = mixed.slice(0, recommendedCount);
 
-  // Construit la query string pour la page détail
+  // QS pour conserver les filtres + bouton "Mélanger"
   const qsParts: string[] = [];
   if (hasKcalTarget) qsParts.push(`kcal=${kcal}`);
   if (hasKcalMin) qsParts.push(`kcalMin=${kcalMin}`);
   if (hasKcalMax) qsParts.push(`kcalMax=${kcalMax}`);
   if (allergens.length) qsParts.push(`allergens=${encodeURIComponent(allergens.join(","))}`);
   if (diets.length) qsParts.push(`diets=${encodeURIComponent(diets.join(","))}`);
-  const detailQSBase = qsParts.length ? `?${qsParts.join("&")}` : "";
+  const baseQS = qsParts.length ? `?${qsParts.join("&")}` : "";
+  const mixHref = `${baseQS}${baseQS ? "&" : "?"}rnd=${Date.now()}`;
+
+  // Pour détailler la recette, on passe la data encodée (déjà supporté par [id]/page.tsx)
+  const encode = (r: Recipe) => {
+    const b64 = Buffer.from(JSON.stringify(r), "utf8").toString("base64").replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+    return `${baseQS}${baseQS ? "&" : "?"}data=${b64}`;
+  };
 
   return (
     <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
@@ -200,6 +213,20 @@ export default async function Page({
         title="Recettes personnalisées"
         subtitle="Générées par IA selon votre formule, objectifs et contraintes"
       />
+
+      {/* CTA pour non-abonnés (BASIC) */}
+      {plan === "BASIC" && (
+        <div className="section" style={{ marginTop: 12, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <div>
+            <div className="badge" style={{ marginRight: 8 }}>BASIC</div>
+            <strong style={{ display: "block", marginTop: 6 }}>Débloquez les recettes 100% personnalisées</strong>
+            <div className="text-sm" style={{ color: "#6b7280" }}>
+              Accédez aux recettes adaptées finement à vos objectifs, allergies et préférences.
+            </div>
+          </div>
+          <a className="btn btn-dash" href="/dashboard/abonnement">Accéder aux recettes personnalisées</a>
+        </div>
+      )}
 
       {/* Panneau de contraintes */}
       <div className="section" style={{ marginTop: 12 }}>
@@ -247,24 +274,36 @@ export default async function Page({
             </div>
             <div style={{ display: "flex", gap: 10 }}>
               <a href="/dashboard/recipes" className="btn btn-outline">Réinitialiser</a>
+              <a className="btn btn-outline" href={`/dashboard/recipes${mixHref}`}>Mélanger</a>
               <button className="btn btn-dash" type="submit">Régénérer</button>
             </div>
           </div>
         </form>
       </div>
 
-      {/* Résultats IA */}
-      <Section title={filter === "reco" ? "Recommandé pour vous (IA)" : "Toutes vos recettes (IA)"}>
+      {/* Recommandé (aléatoire) */}
+      <Section title="Recommandé pour vous (IA)">
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
-          {(filter === "reco" ? available : available).map((r) => {
-            const encoded = b64urlEncode(JSON.stringify(r));
-            const sep = detailQSBase ? "&" : "?";
-            const detailQS = `${detailQSBase}${sep}data=${encoded}`;
-            return <RecipeCard key={r.id} r={r} detailQS={detailQS} />;
+          {recommended.map((r) => {
+            const encodedQS = encode(r);
+            return <RecipeCard key={r.id} r={r} detailQS={encodedQS} />;
           })}
         </div>
       </Section>
 
+      {/* Optionnel : toutes les recettes accessibles */}
+      {filter !== "reco" && (
+        <Section title="Toutes vos recettes (IA)">
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
+            {available.map((r) => {
+              const encodedQS = encode(r);
+              return <RecipeCard key={r.id} r={r} detailQS={encodedQS} />;
+            })}
+          </div>
+        </Section>
+      )}
+
+      {/* Verrouillées */}
       {locked.length > 0 && (
         <Section title="Verrouillées (IA)">
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
