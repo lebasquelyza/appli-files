@@ -11,51 +11,29 @@ export default function Page() {
       <Section title="Informations">
         {/* wrapper pour appliquer le style .section sans toucher à Section */}
         <div className="section" style={{ marginTop: 12 }}>
-          <form action={updateProfile} className="space-y-4" encType="multipart/form-data">
+          <form action={updateProfile} className="space-y-4">
             <div className="grid gap-6 lg:grid-cols-2">
+              {/* Prénom */}
               <div className="w-full">
-                <label className="label">Nom affiché</label>
-                <input name="name" className="input" defaultValue={s?.name || ""} />
+                <label className="label">Prénom</label>
+                <input name="firstName" className="input" defaultValue={(s as any)?.firstName || ""} placeholder="Jane" />
               </div>
 
+              {/* Nom de famille */}
               <div className="w-full">
-                <label className="label">Formule</label>
-                <select name="plan" className="input" defaultValue={s?.plan || "BASIC"}>
-                  <option value="BASIC">Basic</option>
-                  <option value="PLUS">Plus</option>
-                  <option value="PREMIUM">Premium</option>
-                </select>
+                <label className="label">Nom</label>
+                <input name="lastName" className="input" defaultValue={(s as any)?.lastName || ""} placeholder="Doe" />
+              </div>
+            </div>
+
+            {/* Abonnement en cours */}
+            <div className="card" style={{ marginTop: 8 }}>
+              <div className="section-head" style={{ marginBottom: 8 }}>
+                <h2>Abonnement</h2>
+                <span className="badge">Actif</span>
               </div>
 
-              {/* Photo: URL + capture/import mobile */}
-              <div className="lg:col-span-2 w-full">
-                <label className="label">Photo</label>
-
-                <div className="grid gap-6 sm:grid-cols-2">
-                  {/* URL */}
-                  <div className="card">
-                    <div className="text-sm" style={{ color: "#6b7280", marginBottom: 6 }}>Depuis une URL</div>
-                    <input name="image" className="input" defaultValue={s?.image || ""} placeholder="https://…" />
-                  </div>
-
-                  {/* Téléphone / appareil photo */}
-                  <div className="card">
-                    <div className="text-sm" style={{ color: "#6b7280", marginBottom: 8 }}>Depuis votre téléphone</div>
-                    <div className="flex items-center" style={{ gap: 12 }}>
-                      {/* Import depuis la pellicule/fichiers */}
-                      <input id="upload" type="file" name="photo" accept="image/*" style={{ display: "none" }} />
-                      <label htmlFor="upload" className="btn btn-outline">Importer</label>
-
-                      {/* Ouvrir la caméra (mobile) */}
-                      <input id="captureFile" type="file" name="camera" accept="image/*" capture="user" style={{ display: "none" }} />
-                      <label htmlFor="captureFile" className="btn btn-dash">Prendre une photo</label>
-                    </div>
-                    <p className="text-sm" style={{ color: "#6b7280", marginTop: 6 }}>
-                      Sur smartphone, « Prendre une photo » ouvre l’appareil photo. Sur ordinateur, un sélecteur de fichier s’ouvrira.
-                    </p>
-                  </div>
-                </div>
-              </div>
+              <SubscriptionSummary session={s} />
             </div>
 
             <div className="flex items-center justify-between" style={{ marginTop: 8 }}>
@@ -65,6 +43,40 @@ export default function Page() {
           </form>
         </div>
       </Section>
+    </div>
+  );
+}
+
+function SubscriptionSummary({ session }: { session: any }) {
+  const plan = session?.plan ?? "BASIC";
+  const nextChargeAt = session?.nextChargeAt || session?.subscription?.nextChargeAt || session?.billing?.nextChargeAt;
+  const expiresAt = session?.expiresAt || session?.subscription?.expiresAt || session?.billing?.periodEndsAt;
+
+  const fmt = (d?: string) => {
+    if (!d) return "—";
+    const dt = new Date(d);
+    if (isNaN(dt.getTime())) return "—";
+    return dt.toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" });
+  };
+
+  const planLabel = { BASIC: "Basic", PLUS: "Plus", PREMIUM: "Premium" }[plan as "BASIC" | "PLUS" | "PREMIUM"] || String(plan);
+
+  return (
+    <div className="grid gap-6 sm:grid-cols-2">
+      <div>
+        <div className="text-sm" style={{ color: "#6b7280" }}>Formule en cours</div>
+        <div className="h1 text-3xl" style={{ fontSize: 20, marginTop: 4 }}>{planLabel}</div>
+      </div>
+      <div className="grid gap-6 sm:grid-cols-2">
+        <div>
+          <div className="text-sm" style={{ color: "#6b7280" }}>Prochain prélèvement</div>
+          <div style={{ fontWeight: 700, marginTop: 4 }}>{fmt(nextChargeAt)}</div>
+        </div>
+        <div>
+          <div className="text-sm" style={{ color: "#6b7280" }}>Date d’expiration</div>
+          <div style={{ fontWeight: 700, marginTop: 4 }}>{fmt(expiresAt)}</div>
+        </div>
+      </div>
     </div>
   );
 }
