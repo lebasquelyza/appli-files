@@ -153,7 +153,6 @@ async function generateRecipes({
     "Exige JSON STRICT, sans explication.",
   ].filter(Boolean).join("\n");
 
-  // 1) Tente l’IA
   const payload = await callOpenAIChatJSON(user);
   const arr: Recipe[] = Array.isArray(payload?.recipes) ? payload.recipes : [];
   const seen = new Set<string>();
@@ -175,7 +174,6 @@ async function generateRecipes({
       return Boolean(r.title) && r.ingredients.length >= 3;
     });
 
-  // 2) Si l’IA échoue → fallback multi-recettes
   return cleaned.length ? cleaned : sampleFallback(count);
 }
 
@@ -193,11 +191,9 @@ async function applyFiltersAction(formData: FormData) {
   }
 
   if (plan === "BASIC") {
-    // Utilisateur BASIC : on l’envoie vers l’upgrade
     redirect("/dashboard/abonnement");
   }
 
-  // Sinon on reste sur la page avec les filtres appliqués (mode GET)
   const qs = params.toString();
   redirect(`/dashboard/recipes${qs ? `?${qs}` : ""}`);
 }
@@ -212,7 +208,7 @@ export default async function Page({
   const goals = normalizeGoals(s);
 
   const kcal = Number(searchParams?.kcal ?? "");
-  const kcalMin = Number(searchParams?.kcalMin ?? "");
+  the const kcalMin = Number(searchParams?.kcalMin ?? "");
   const kcalMax = Number(searchParams?.kcalMax ?? "");
   const allergens = parseCsv(searchParams?.allergens);
   const diets = parseCsv(searchParams?.diets);
@@ -230,7 +226,6 @@ export default async function Page({
   });
 
   const available = aiRecipes.filter((r) => isUnlocked(r, plan));
-  const locked = aiRecipes.filter((r) => !isUnlocked(r, plan));
 
   // ----- aléatoire pour “Recommandé” -----
   const seed = Number(searchParams?.rnd) || Date.now();
@@ -310,17 +305,6 @@ export default async function Page({
           })}
         </div>
       </Section>
-
-      {/* Verrouillées */}
-      {locked.length > 0 && (
-        <Section title="Verrouillées (IA)">
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
-            {locked.map((r) => (
-              <LockedCard key={r.id} r={r} userPlan={plan} />
-            ))}
-          </div>
-        </Section>
-      )}
     </div>
   );
 }
@@ -350,31 +334,6 @@ function RecommendedCard({ r, detailQS }: { r: Recipe; detailQS: string }) {
 
       <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
         <a className="btn btn-dash" href={`/dashboard/recipes/${r.id}${detailQS}`}>Voir la recette</a>
-      </div>
-    </article>
-  );
-}
-
-function LockedCard({ r, userPlan }: { r: Recipe; userPlan: Plan }) {
-  const targetPlan = r.minPlan;
-  const needUpgrade =
-    targetPlan === "PLUS" && userPlan === "BASIC" ? "PLUS"
-    : targetPlan === "PREMIUM" && userPlan !== "PREMIUM" ? "PREMIUM"
-    : targetPlan;
-
-  return (
-    <article className="card" style={{ position: "relative", overflow: "hidden", opacity: 0.9 }}>
-      <div style={{ position: "absolute", inset: 0, background: "linear-gradient(transparent, rgba(0,0,0,.04))" }} />
-      <div className="flex items-center justify-between">
-        <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>{r.title}</h3>
-        <span className="badge">{r.minPlan}</span>
-      </div>
-      <div className="text-sm" style={{ marginTop: 10, display: "flex", gap: 12, flexWrap: "wrap" }}>
-        {typeof r.kcal === "number" && <span className="badge">{r.kcal} kcal</span>}
-      </div>
-      <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-        <button className="btn btn-outline" disabled>Verrouillé</button>
-        <a className="btn btn-dash" href={"/dashboard/abonnement"}>Passer à {needUpgrade}</a>
       </div>
     </article>
   );
