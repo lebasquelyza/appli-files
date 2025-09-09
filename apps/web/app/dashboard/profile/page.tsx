@@ -1,12 +1,26 @@
 import { getSession, updateProfile } from "@/lib/session";
 import { PageHeader, Section } from "@/components/ui/Page";
 
-export default function Page() {
-  const s = getSession();
+export default async function Page({ searchParams }: { searchParams?: { ok?: string; error?: string } }) {
+  const s = await getSession();
+  const ok = searchParams?.ok === '1';
+  const errorMsg = searchParams?.error ? decodeURIComponent(String(searchParams.error)) : '';
 
   return (
     <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
       <PageHeader title="Mon profil" subtitle="Photo, identité et formule d’abonnement" />
+
+      {(ok || errorMsg) && (
+        <div className="card" role="status" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 }}>
+          <div>
+            <div className="text-sm" style={{ fontWeight: 800 }}>{ok ? 'Enregistré ✅' : 'Erreur ❌'}</div>
+            <div className="text-sm" style={{ color: '#6b7280' }}>
+              {ok ? 'Vos informations ont été mises à jour.' : errorMsg}
+            </div>
+          </div>
+          <a href="/dashboard/profile" className="btn btn-outline">Fermer</a>
+        </div>
+      )}
 
       <Section title="Informations">
         {/* wrapper pour appliquer le style .section sans toucher à Section */}
