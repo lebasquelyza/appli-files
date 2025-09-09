@@ -54,7 +54,7 @@ export default async function Page({
 
   // 🔒 Si l'utilisateur est BASIC, on envoie directement vers l'upgrade
   if (plan === "BASIC") {
-    redirect("/dashboard/abonnement");
+    redirect("/dashboard/tarifs");
   }
 
   // 1) On lit la recette encodée dans l’URL
@@ -87,7 +87,7 @@ export default async function Page({
         <p className="lead" style={{ marginBottom: 16 }}>
           Cette recette est réservée au plan {recipe.minPlan}.
         </p>
-        <a className="btn btn-dash" href="/dashboard/abonnement">Passer à {need}</a>
+        <a className="btn btn-dash" href="/dashboard/tarifs">Passer à {need}</a>
       </div>
     );
   }

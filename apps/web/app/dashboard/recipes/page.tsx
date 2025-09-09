@@ -193,7 +193,7 @@ async function applyFiltersAction(formData: FormData) {
   }
 
   if (plan === "BASIC") {
-    redirect("/dashboard/abonnement");
+    redirect("/dashboard/tarifs");
   }
 
   // Sinon on reste sur la page avec les filtres appliqués (mode GET)
