@@ -1,4 +1,3 @@
-// apps/web/app/dashboard/recipes/[id]/page.tsx
 import { getSession } from "@/lib/session";
 import { redirect } from "next/navigation";
 
@@ -52,13 +51,9 @@ export default async function Page({
 }) {
   const s = await getSession();
   const plan: Plan = (s?.plan as Plan) || "BASIC";
+  const isBasic = plan === "BASIC";
 
-  // 🔒 Si l'utilisateur est BASIC, on envoie directement vers l'upgrade
-  if (plan === "BASIC") {
-    redirect("/dashboard/abonnement");
-  }
-
-  // 1) On lit la recette encodée dans l’URL
+  // 1) Lire la recette encodée dans l’URL
   let recipe: Recipe | null = null;
   const dataParam = (searchParams?.data ?? "") as string;
   if (dataParam) {
@@ -79,7 +74,7 @@ export default async function Page({
     );
   }
 
-  // 2) Pour PLUS/PREMIUM : on garde le contrôle d’accès fin selon minPlan
+  // 2) Contrôle d’accès fin : si la recette dépasse le plan courant, upsell
   if (planRank(plan) < planRank(recipe.minPlan)) {
     const need = recipe.minPlan === "PREMIUM" ? "PREMIUM" : "PLUS";
     return (
@@ -97,6 +92,19 @@ export default async function Page({
     <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
       <h1 className="h1" style={{ marginBottom: 6 }}>{recipe.title}</h1>
       {recipe.subtitle && <p className="lead">{recipe.subtitle}</p>}
+
+      {/* Bandeau d’upsell visible pour BASIC mais sans bloquer la lecture si la recette est BASIC */}
+      {isBasic && (
+        <div className="card" style={{ marginTop: 12, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <div>
+            <strong>Fonctionnalités avancées</strong>
+            <div className="text-sm" style={{ color: "#6b7280" }}>
+              Passez à PLUS/PREMIUM pour ajouter au plan, voir des variantes, et générer des menus.
+            </div>
+          </div>
+          <a className="btn btn-dash" href="/dashboard/abonnement">Voir les offres</a>
+        </div>
+      )}
 
       <div className="section" style={{ marginTop: 12 }}>
         <div className="text-sm" style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -123,7 +131,10 @@ export default async function Page({
 
         <div style={{ marginTop: 16, display: "flex", gap: 10 }}>
           <a href="/dashboard/recipes" className="btn btn-outline">← Retour</a>
-          <button className="btn btn-dash" type="button">Ajouter à mon plan</button>
+          {/* En BASIC, on désactive l’ajout au plan */}
+          <button className="btn btn-dash" type="button" disabled={isBasic} title={isBasic ? "Passez à PLUS pour ajouter au plan" : undefined}>
+            Ajouter à mon plan
+          </button>
         </div>
       </div>
     </div>
