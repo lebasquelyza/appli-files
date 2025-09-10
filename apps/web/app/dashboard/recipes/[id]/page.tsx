@@ -21,21 +21,49 @@ type Recipe = {
 
 function planRank(p?: Plan) { return p === "PREMIUM" ? 3 : p === "PLUS" ? 2 : 1; }
 
-/* ---- b64url -> JSON (compat Node + Navigateur, sans import Buffer) ---- */
+/* ---- b64url -> JSON (Node + Browser) ---- */
 function b64urlToJson<T = any>(b64url: string): T | null {
   try {
     const pad = "=".repeat((4 - (b64url.length % 4)) % 4);
     const b64 = (b64url + pad).replace(/-/g, "+").replace(/_/g, "/");
-
     let json = "";
     if (typeof window === "undefined") {
-      // @ts-ignore Buffer global en Node
+      // @ts-ignore Buffer dispo côté Node
       json = Buffer.from(b64, "base64").toString("utf8");
     } else {
       json = decodeURIComponent(escape(atob(b64)));
     }
     return JSON.parse(json);
   } catch { return null; }
+}
+
+/* ---- Normalise pour éviter toutes erreurs au rendu ---- */
+function normalizeRecipe(raw: any, forcedId: string): Recipe | null {
+  const title = String(raw?.title ?? "").trim();
+  if (!title) return null;
+
+  const minPlan = (["BASIC","PLUS","PREMIUM"].includes(raw?.minPlan) ? raw.minPlan : "BASIC") as Plan;
+
+  const ingredients = Array.isArray(raw?.ingredients)
+    ? raw.ingredients.map((x: any) => String(x))
+    : [];
+
+  const steps = Array.isArray(raw?.steps)
+    ? raw.steps.map((x: any) => String(x))
+    : [];
+
+  return {
+    id: forcedId,
+    title,
+    subtitle: raw?.subtitle ? String(raw.subtitle).trim() : undefined,
+    kcal: typeof raw?.kcal === "number" ? raw.kcal : undefined,
+    timeMin: typeof raw?.timeMin === "number" ? raw.timeMin : undefined,
+    tags: Array.isArray(raw?.tags) ? raw.tags.map((t: any) => String(t).trim()) : [],
+    goals: Array.isArray(raw?.goals) ? raw.goals.map((g: any) => String(g).trim()) : [],
+    minPlan,
+    ingredients,
+    steps,
+  };
 }
 
 export default async function Page({
@@ -48,10 +76,10 @@ export default async function Page({
   const s: any = await getSession().catch(() => ({}));
   const plan: Plan = (s?.plan as Plan) || "BASIC";
 
-  // Recette transmise par la liste
-  const r = searchParams?.data ? b64urlToJson<Recipe>(searchParams.data) : null;
+  const rRaw = searchParams?.data ? b64urlToJson<any>(searchParams.data) : null;
+  const r = rRaw ? normalizeRecipe(rRaw, params.id) : null;
 
-  if (!r || !r.title) {
+  if (!r) {
     return (
       <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
         <div className="section" style={{ marginTop: 12 }}>
@@ -63,7 +91,6 @@ export default async function Page({
     );
   }
 
-  // BASIC peut voir les recettes BASIC ; sinon proposer upgrade
   if (planRank(plan) < planRank(r.minPlan)) {
     const need = r.minPlan === "PREMIUM" ? "PREMIUM" : "PLUS";
     return (
@@ -79,7 +106,9 @@ export default async function Page({
     );
   }
 
-  // Détail recette
+  const ing = Array.isArray(r.ingredients) ? r.ingredients : [];
+  const steps = Array.isArray(r.steps) ? r.steps : [];
+
   return (
     <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
       <div className="page-header">
@@ -97,18 +126,26 @@ export default async function Page({
       <div className="grid gap-6 lg:grid-cols-2">
         <article className="card">
           <h3 style={{ marginTop: 0 }}>Ingrédients</h3>
-          <ul style={{ marginTop: 6, paddingLeft: 18 }}>
-            {r.ingredients.map((i, k) => <li key={k}>{i}</li>)}
-          </ul>
+          {ing.length ? (
+            <ul style={{ marginTop: 6, paddingLeft: 18 }}>
+              {ing.map((i, k) => <li key={k}>{i}</li>)}
+            </ul>
+          ) : (
+            <p className="text-sm" style={{ color: "#6b7280" }}>Pas d’ingrédients détaillés pour cette suggestion.</p>
+          )}
         </article>
 
         <article className="card">
           <h3 style={{ marginTop: 0 }}>Préparation</h3>
-          <ol style={{ marginTop: 6, paddingLeft: 18 }}>
-            {r.steps.length
-              ? r.steps.map((s, k) => <li key={k}>{s}</li>)
-              : <li>Étapes à générer selon vos préférences.</li>}
-          </ol>
+          {steps.length ? (
+            <ol style={{ marginTop: 6, paddingLeft: 18 }}>
+              {steps.map((s, k) => <li key={k}>{s}</li>)}
+            </ol>
+          ) : (
+            <p className="text-sm" style={{ color: "#6b7280" }}>
+              Étapes non fournies. Passez à PLUS/PREMIUM pour des instructions générées.
+            </p>
+          )}
         </article>
       </div>
 
