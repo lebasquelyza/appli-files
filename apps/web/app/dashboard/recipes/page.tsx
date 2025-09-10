@@ -204,7 +204,10 @@ async function applyFiltersAction(formData: FormData): Promise<void> {
     const val = (formData.get(f) ?? "").toString().trim();
     if (val) params.set(f, val);
   }
+<<<<<<< HEAD
   // Ajoute un rnd pour fixer le seed (évite tout décalage d'hydratation)
+=======
+>>>>>>> 1ba341f (fix(recipes): restaurer accès /dashboard/recipes (page complète))
   params.set("rnd", String(Date.now()));
 
   if (plan === "BASIC") redirect("/dashboard/abonnement");
@@ -241,11 +244,17 @@ export default async function Page({
   });
 
   const available = aiRecipes.filter((r) => isUnlocked(r, plan));
+<<<<<<< HEAD
   // seed stable par défaut (pas de Date.now() ici) ; rnd vient de l'URL
   const seed = Number(searchParams?.rnd ?? "0") || 123456789;
   const recommended = pickRandomSeeded(available, 6, seed);
 
   // QS gardés (pour Voir la recette)
+=======
+  const seed = Number(searchParams?.rnd ?? "0") || 123456789;
+  const recommended = pickRandomSeeded(available, 6, seed);
+
+>>>>>>> 1ba341f (fix(recipes): restaurer accès /dashboard/recipes (page complète))
   const qsParts: string[] = [];
   if (hasKcalTarget) qsParts.push(`kcal=${kcal}`);
   if (hasKcalMin) qsParts.push(`kcalMin=${kcalMin}`);
