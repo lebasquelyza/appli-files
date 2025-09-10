@@ -1,5 +1,7 @@
 // apps/web/app/dashboard/recipes/[id]/page.tsx
 import { getSession } from "@/lib/session";
+import { Buffer } from "node:buffer";
+import { gunzipSync } from "node:zlib";
 
 export const runtime = "nodejs";
 
@@ -19,11 +21,11 @@ type Recipe = {
 
 function planRank(p?: Plan) { return p === "PREMIUM" ? 3 : p === "PLUS" ? 2 : 1; }
 
-// base64url decode (compat Node 16/18)
-function b64urlDecode(str: string) {
+// base64url -> Buffer
+function b64urlToBuffer(str: string) {
   const pad = str.length % 4 ? "=".repeat(4 - (str.length % 4)) : "";
   const b64 = str.replace(/-/g, "+").replace(/_/g, "/") + pad;
-  return Buffer.from(b64, "base64").toString("utf8");
+  return Buffer.from(b64, "base64");
 }
 
 function sanitizeRecipe(r: any, forcedId: string): Recipe | null {
@@ -39,7 +41,6 @@ function sanitizeRecipe(r: any, forcedId: string): Recipe | null {
     ingredients: Array.isArray(r?.ingredients) ? r.ingredients.map((i: any) => String(i)) : [],
     steps: Array.isArray(r?.steps) ? r.steps.map((s: any) => String(s)) : [],
   };
-  // 3 ingrédients & 3 étapes minimum
   if (!rec.title || rec.ingredients.length < 3 || rec.steps.length < 3) return null;
   return rec;
 }
@@ -54,16 +55,15 @@ export default async function Page({
   const plan: Plan = (s?.plan as Plan) || "BASIC";
   const isBasic = plan === "BASIC";
 
-  // 1) Lire la recette encodée dans l’URL
+  // 1) Lire la recette encodée & compressée dans l’URL
   let recipe: Recipe | null = null;
   const dataParam = (searchParams?.data ?? "") as string;
   if (dataParam) {
     try {
-      // Décodage URL résilient
       let urlDecoded = dataParam;
       try { urlDecoded = decodeURIComponent(urlDecoded); } catch {}
-      // Base64url → JSON
-      const json = b64urlDecode(urlDecoded);
+      const buf = b64urlToBuffer(urlDecoded);
+      const json = gunzipSync(buf).toString("utf8"); // décompression gzip
       const obj = JSON.parse(json);
       recipe = sanitizeRecipe(obj, params.id);
     } catch {
@@ -95,7 +95,7 @@ export default async function Page({
     );
   }
 
-  // Lecture (BASIC en lecture seule si minPlan = BASIC)
+  // Lecture (BASIC = lecture seule si minPlan = BASIC)
   return (
     <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
       <h1 className="h1" style={{ marginBottom: 6 }}>{recipe.title}</h1>
