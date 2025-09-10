@@ -1,6 +1,5 @@
 // apps/web/app/dashboard/recipes/[id]/page.tsx
 import { getSession } from "@/lib/session";
-import { redirect } from "next/navigation";
 
 export const runtime = "nodejs";
 
@@ -40,7 +39,8 @@ function sanitizeRecipe(r: any, forcedId: string): Recipe | null {
     ingredients: Array.isArray(r?.ingredients) ? r.ingredients.map((i: any) => String(i)) : [],
     steps: Array.isArray(r?.steps) ? r.steps.map((s: any) => String(s)) : [],
   };
-  if (!rec.title || rec.ingredients.length < 3 || rec.steps.length < 2) return null;
+  // ✅ 3 ingrédients & 3 étapes minimum
+  if (!rec.title || rec.ingredients.length < 3 || rec.steps.length < 3) return null;
   return rec;
 }
 
@@ -59,10 +59,14 @@ export default async function Page({
   const dataParam = (searchParams?.data ?? "") as string;
   if (dataParam) {
     try {
-      const json = b64urlDecode(dataParam);
+      // ✅ Décodage URL avant base64url
+      const urlDecoded = decodeURIComponent(dataParam);
+      const json = b64urlDecode(urlDecoded);
       const obj = JSON.parse(json);
       recipe = sanitizeRecipe(obj, params.id);
-    } catch { /* noop */ }
+    } catch {
+      /* noop */
+    }
   }
 
   if (!recipe) {
