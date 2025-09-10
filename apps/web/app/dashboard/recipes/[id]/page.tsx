@@ -48,7 +48,7 @@ export default async function Page({
   const s: any = await getSession().catch(() => ({}));
   const plan: Plan = (s?.plan as Plan) || "BASIC";
 
-  // Récupère la recette transmise par la liste
+  // Recette transmise par la liste
   const r = searchParams?.data ? b64urlToJson<Recipe>(searchParams.data) : null;
 
   if (!r || !r.title) {
@@ -63,7 +63,7 @@ export default async function Page({
     );
   }
 
-  // BASIC peut voir les recettes BASIC, sinon on propose l’upgrade
+  // BASIC peut voir les recettes BASIC ; sinon proposer upgrade
   if (planRank(plan) < planRank(r.minPlan)) {
     const need = r.minPlan === "PREMIUM" ? "PREMIUM" : "PLUS";
     return (
@@ -79,7 +79,7 @@ export default async function Page({
     );
   }
 
-  // Détail
+  // Détail recette
   return (
     <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
       <div className="page-header">
