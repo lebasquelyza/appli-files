@@ -226,7 +226,7 @@ export default async function Page({
     allergens, diets,
   });
 
-  // ✅ Défense en profondeur : on ne retient que les recettes valides
+  // ✅ Défense en profondeur
   const available = aiRecipes.filter(
     (r) => isUnlocked(r, plan) && r.title && r.ingredients?.length >= 3 && r.steps?.length >= 3
   );
@@ -249,7 +249,7 @@ export default async function Page({
       .replace(/\+/g, "-")
       .replace(/\//g, "_")
       .replace(/=+$/, "");
-    // ✅ Encodage URL pour éviter les exceptions côté client
+    // ✅ Encodage URL (évite les exceptions client)
     const safe = encodeURIComponent(b64);
     return `${baseQS}${baseQS ? "&" : "?"}data=${safe}`;
   };
@@ -325,8 +325,8 @@ export default async function Page({
   );
 }
 
-function RecommendedCard({ r, detailQS, userPlan }: { r: Recipe; detailQS: string; userPlan: Plan; }) {
-  // Toujours ouvrir la page détail ; le paywall est géré côté page détail
+function RecommendedCard({ r, detailQS }: { r: Recipe; detailQS: string; userPlan: Plan; }) {
+  // Toujours ouvrir la page détail ; paywall géré côté détail
   const href = `/dashboard/recipes/${r.id}${detailQS}`;
   const shown = r.ingredients.slice(0, 8);
   const more = Math.max(0, r.ingredients.length - shown.length);
