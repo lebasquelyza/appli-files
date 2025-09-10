@@ -1,4 +1,3 @@
-// apps/web/app/dashboard/recipes/page.tsx
 import { PageHeader, Section } from "@/components/ui/Page";
 import { getSession } from "@/lib/session";
 import { redirect } from "next/navigation";
@@ -21,6 +20,7 @@ type Recipe = {
   steps: string[];
 };
 
+/* ---------------- Utils ---------------- */
 function planRank(p?: Plan) { return p === "PREMIUM" ? 3 : p === "PLUS" ? 2 : 1; }
 function isUnlocked(r: Recipe, userPlan: Plan) { return planRank(userPlan) >= planRank(r.minPlan); }
 function normalizeGoals(s: any): string[] {
@@ -34,6 +34,7 @@ function parseCsv(value?: string | string[]): string[] {
 }
 function uid() { return "id-" + Math.random().toString(36).slice(2, 10); }
 
+/* --- random avec seed --- */
 function seededPRNG(seed: number) { let s = seed >>> 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 2 ** 32); }
 function seededShuffle<T>(arr: T[], seed: number): T[] {
   const rand = seededPRNG(seed); const a = arr.slice();
@@ -44,7 +45,7 @@ function pickRandomSeeded<T>(arr: T[], n: number, seed: number) {
   return seededShuffle(arr, seed).slice(0, Math.max(0, Math.min(n, arr.length)));
 }
 
-/* ---- base64url JSON (Node + Browser) ---- */
+/* ---- base64url JSON (Node + Browser, sans import node:buffer) ---- */
 function encodeB64UrlJson(data: any): string {
   const json = JSON.stringify(data);
   if (typeof window === "undefined") {
@@ -191,6 +192,7 @@ async function generateRecipes({
   return cleaned.length ? cleaned : sampleFallback(count);
 }
 
+/** ---- Server Action: applique filtres; si BASIC => abonnement, et fixe un seed par URL ---- */
 async function applyFiltersAction(formData: FormData): Promise<void> {
   "use server";
   const s = await getSession();
@@ -202,15 +204,15 @@ async function applyFiltersAction(formData: FormData): Promise<void> {
     const val = (formData.get(f) ?? "").toString().trim();
     if (val) params.set(f, val);
   }
+  // Ajoute un rnd pour fixer le seed (évite tout décalage d'hydratation)
+  params.set("rnd", String(Date.now()));
 
-  if (plan === "BASIC") {
-    redirect("/dashboard/abonnement");
-  }
+  if (plan === "BASIC") redirect("/dashboard/abonnement");
 
-  const qs = params.toString();
-  redirect(`/dashboard/recipes${qs ? `?${qs}` : ""}`);
+  redirect(`/dashboard/recipes?${params.toString()}`);
 }
 
+/* ---------------- Page ---------------- */
 export default async function Page({
   searchParams,
 }: {
@@ -239,9 +241,11 @@ export default async function Page({
   });
 
   const available = aiRecipes.filter((r) => isUnlocked(r, plan));
-  const seed = Number(searchParams?.rnd) || Date.now();
+  // seed stable par défaut (pas de Date.now() ici) ; rnd vient de l'URL
+  const seed = Number(searchParams?.rnd ?? "0") || 123456789;
   const recommended = pickRandomSeeded(available, 6, seed);
 
+  // QS gardés (pour Voir la recette)
   const qsParts: string[] = [];
   if (hasKcalTarget) qsParts.push(`kcal=${kcal}`);
   if (hasKcalMin) qsParts.push(`kcalMin=${kcalMin}`);
@@ -269,6 +273,7 @@ export default async function Page({
         </div>
       )}
 
+      {/* Filtres */}
       <div className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
           <h2>Contraintes & filtres</h2>
@@ -305,6 +310,7 @@ export default async function Page({
               Votre formule : <span className="badge" style={{ marginLeft: 6 }}>{plan}</span>
             </div>
             <div style={{ display: "flex", gap: 10 }}>
+              {/* lien simple : seed par défaut stable */}
               <a href="/dashboard/recipes" className="btn btn-outline" style={{ color: "#111" }}>
                 Réinitialiser
               </a>
@@ -314,6 +320,7 @@ export default async function Page({
         </form>
       </div>
 
+      {/* Recommandé */}
       <Section title="Recommandé pour vous (IA)">
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
           {recommended.map((r) => {
@@ -332,8 +339,9 @@ function RecommendedCard({ r, detailQS, userPlan }: { r: Recipe; detailQS: strin
       ? "/dashboard/abonnement"
       : `/dashboard/recipes/${r.id}${detailQS}`;
 
-  const shown = (Array.isArray(r.ingredients) ? r.ingredients : []).slice(0, 8);
-  const more = Math.max(0, (Array.isArray(r.ingredients) ? r.ingredients.length : 0) - shown.length);
+  const ing = Array.isArray(r.ingredients) ? r.ingredients : [];
+  const shown = ing.slice(0, 8);
+  const more = Math.max(0, ing.length - shown.length);
 
   return (
     <article className="card" style={{ overflow: "hidden" }}>
