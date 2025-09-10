@@ -1,7 +1,5 @@
 // apps/web/app/dashboard/recipes/[id]/page.tsx
 import { getSession } from "@/lib/session";
-import { redirect } from "next/navigation";
-import { Buffer } from "node:buffer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,12 +21,19 @@ type Recipe = {
 
 function planRank(p?: Plan) { return p === "PREMIUM" ? 3 : p === "PLUS" ? 2 : 1; }
 
-// base64url -> JSON
+/* ---- b64url -> JSON (compat Node + Navigateur, sans import Buffer) ---- */
 function b64urlToJson<T = any>(b64url: string): T | null {
   try {
     const pad = "=".repeat((4 - (b64url.length % 4)) % 4);
     const b64 = (b64url + pad).replace(/-/g, "+").replace(/_/g, "/");
-    const json = Buffer.from(b64, "base64").toString("utf8");
+
+    let json = "";
+    if (typeof window === "undefined") {
+      // @ts-ignore Buffer global en Node
+      json = Buffer.from(b64, "base64").toString("utf8");
+    } else {
+      json = decodeURIComponent(escape(atob(b64)));
+    }
     return JSON.parse(json);
   } catch { return null; }
 }
@@ -43,7 +48,7 @@ export default async function Page({
   const s: any = await getSession().catch(() => ({}));
   const plan: Plan = (s?.plan as Plan) || "BASIC";
 
-  // On récupère la recette depuis ?data= encodé par la liste
+  // Récupère la recette transmise par la liste
   const r = searchParams?.data ? b64urlToJson<Recipe>(searchParams.data) : null;
 
   if (!r || !r.title) {
@@ -58,7 +63,7 @@ export default async function Page({
     );
   }
 
-  // Si l'utilisateur n'a pas le plan requis pour cette recette
+  // BASIC peut voir les recettes BASIC, sinon on propose l’upgrade
   if (planRank(plan) < planRank(r.minPlan)) {
     const need = r.minPlan === "PREMIUM" ? "PREMIUM" : "PLUS";
     return (
@@ -74,7 +79,7 @@ export default async function Page({
     );
   }
 
-  // Rendu de la page détail (OK pour BASIC si recette BASIC)
+  // Détail
   return (
     <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
       <div className="page-header">
