@@ -39,7 +39,7 @@ function sanitizeRecipe(r: any, forcedId: string): Recipe | null {
     ingredients: Array.isArray(r?.ingredients) ? r.ingredients.map((i: any) => String(i)) : [],
     steps: Array.isArray(r?.steps) ? r.steps.map((s: any) => String(s)) : [],
   };
-  // ✅ 3 ingrédients & 3 étapes minimum
+  // 3 ingrédients & 3 étapes minimum
   if (!rec.title || rec.ingredients.length < 3 || rec.steps.length < 3) return null;
   return rec;
 }
@@ -54,15 +54,15 @@ export default async function Page({
   const plan: Plan = (s?.plan as Plan) || "BASIC";
   const isBasic = plan === "BASIC";
 
-  // 1) On lit la recette encodée dans l’URL
+  // 1) Lire la recette encodée dans l’URL
   let recipe: Recipe | null = null;
   const dataParam = (searchParams?.data ?? "") as string;
   if (dataParam) {
     try {
-      // ✅ Décodage URL sécurisé (ne jette pas si déjà décodé)
+      // Décodage URL résilient
       let urlDecoded = dataParam;
       try { urlDecoded = decodeURIComponent(urlDecoded); } catch {}
-      // ✅ Base64url → JSON
+      // Base64url → JSON
       const json = b64urlDecode(urlDecoded);
       const obj = JSON.parse(json);
       recipe = sanitizeRecipe(obj, params.id);
@@ -95,7 +95,7 @@ export default async function Page({
     );
   }
 
-  // ✅ En BASIC, lecture seule si la recette est BASIC
+  // Lecture (BASIC en lecture seule si minPlan = BASIC)
   return (
     <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
       <h1 className="h1" style={{ marginBottom: 6 }}>{recipe.title}</h1>
