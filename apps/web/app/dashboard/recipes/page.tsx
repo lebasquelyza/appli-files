@@ -2,9 +2,7 @@
 import { PageHeader, Section } from "@/components/ui/Page";
 import { getSession } from "@/lib/session";
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import { Buffer } from "node:buffer";
-import { gzipSync } from "node:zlib";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,6 +22,7 @@ type Recipe = {
   steps: string[];
 };
 
+/* ---------------- Utils ---------------- */
 function planRank(p?: Plan) { return p === "PREMIUM" ? 3 : p === "PLUS" ? 2 : 1; }
 function isUnlocked(r: Recipe, userPlan: Plan) { return planRank(userPlan) >= planRank(r.minPlan); }
 function normalizeGoals(s: any): string[] {
@@ -37,6 +36,7 @@ function parseCsv(value?: string | string[]): string[] {
 }
 function uid() { return "id-" + Math.random().toString(36).slice(2, 10); }
 
+/* --- random avec seed pour variété à chaque vue --- */
 function seededPRNG(seed: number) { let s = seed >>> 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 2 ** 32); }
 function seededShuffle<T>(arr: T[], seed: number): T[] {
   const rand = seededPRNG(seed); const a = arr.slice();
@@ -47,14 +47,21 @@ function pickRandomSeeded<T>(arr: T[], n: number, seed: number) {
   return seededShuffle(arr, seed).slice(0, Math.max(0, Math.min(n, arr.length)));
 }
 
-// ---- Appel OpenAI robuste via fetch ----
+/* ---- Appel OpenAI robuste via fetch (aucun SDK requis) ---- */
 async function callOpenAIChatJSON(userPrompt: string): Promise<any> {
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return {};
+  if (!apiKey) {
+    console.error("[AI] OPENAI_API_KEY manquant");
+    return { _debug: "NO_API_KEY" };
+  }
+
   try {
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify({
         model: "gpt-4o-mini",
         temperature: 0.7,
@@ -66,12 +73,32 @@ async function callOpenAIChatJSON(userPrompt: string): Promise<any> {
       }),
       cache: "no-store",
     });
-    if (!res.ok) return {};
-    const data = await res.json();
-    return JSON.parse(data?.choices?.[0]?.message?.content ?? "{}");
-  } catch { return {}; }
+
+    const raw = await res.text();
+    if (!res.ok) {
+      console.error("[AI] HTTP", res.status, raw);
+      return { _debug: `HTTP_${res.status}` };
+    }
+
+    let data: any = {};
+    try { data = JSON.parse(raw); } catch (e) {
+      console.error("[AI] Réponse OpenAI non JSON", e, raw);
+      return { _debug: "PARSE_OPENAI_JSON_FAIL" };
+    }
+
+    const content = data?.choices?.[0]?.message?.content ?? "{}";
+    try { return JSON.parse(content); }
+    catch (e) {
+      console.error("[AI] Contenu non JSON", e, content);
+      return { _debug: "PARSE_CONTENT_JSON_FAIL" };
+    }
+  } catch (e) {
+    console.error("[AI] fetch failed", e);
+    return { _debug: "FETCH_FAIL" };
+  }
 }
 
+/* ==== FALLBACK multi-recettes ==== */
 function sampleFallback(count = 12): Recipe[] {
   const samples: Recipe[] = [
     { id:"salade-quinoa", title:"Salade de quinoa croquante", subtitle:"Pois chiches, concombre, citron",
@@ -173,7 +200,7 @@ async function generateRecipes({
     .filter((r) => {
       if (!r.id || seen.has(r.id)) return false;
       seen.add(r.id);
-      return Boolean(r.title) && r.ingredients.length >= 3 && r.steps.length >= 3;
+      return Boolean(r.title) && r.ingredients.length >= 3;
     });
 
   return cleaned.length ? cleaned : sampleFallback(count);
@@ -200,6 +227,7 @@ async function applyFiltersAction(formData: FormData): Promise<void> {
   redirect(`/dashboard/recipes${qs ? `?${qs}` : ""}`);
 }
 
+/* ---------------- Page ---------------- */
 export default async function Page({
   searchParams,
 }: {
@@ -227,14 +255,11 @@ export default async function Page({
     allergens, diets,
   });
 
-  // Recettes valides uniquement
-  const available = aiRecipes.filter(
-    (r) => isUnlocked(r, plan) && r.title && r.ingredients?.length >= 3 && r.steps?.length >= 3
-  );
-
+  const available = aiRecipes.filter((r) => isUnlocked(r, plan));
   const seed = Number(searchParams?.rnd) || Date.now();
   const recommended = pickRandomSeeded(available, 6, seed);
 
+  // QS conservés (pour Voir la recette si non BASIC ou recette BASIC)
   const qsParts: string[] = [];
   if (hasKcalTarget) qsParts.push(`kcal=${kcal}`);
   if (hasKcalMin) qsParts.push(`kcalMin=${kcalMin}`);
@@ -243,13 +268,13 @@ export default async function Page({
   if (diets.length) qsParts.push(`diets=${encodeURIComponent(diets.join(","))}`);
   const baseQS = qsParts.length ? `?${qsParts.join("&")}` : "";
 
-  // --- ENCODAGE COMPACT (gzip + base64url + encodeURIComponent) ---
+  // Encodage base64url pour la page détail
   const encode = (r: Recipe) => {
-    const raw = Buffer.from(JSON.stringify(r), "utf8");
-    const gz = gzipSync(raw); // compresse fortement le payload
-    const b64 = gz.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/,"");
-    const safe = encodeURIComponent(b64);
-    return `${baseQS}${baseQS ? "&" : "?"}data=${safe}`;
+    const b64 = Buffer
+      .from(JSON.stringify(r), "utf8")
+      .toString("base64")
+      .replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+    return `${baseQS}${baseQS ? "&" : "?"}data=${b64}`;
   };
 
   return (
@@ -259,13 +284,14 @@ export default async function Page({
       {plan === "BASIC" && (
         <div className="card" style={{ marginTop: 12, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <div>
-            <strong>Débloquez les recettes détaillées</strong>
-            <div className="text-sm" style={{ color: "#6b7280" }}>Passez à PLUS ou PREMIUM pour accéder aux étapes et plans repas.</div>
+            <strong>Débloquez les recettes PLUS & PREMIUM</strong>
+            <div className="text-sm" style={{ color: "#6b7280" }}>Passez à PLUS ou PREMIUM pour accéder à toutes les étapes et aux plans repas.</div>
           </div>
           <a className="btn btn-dash" href="/dashboard/abonnement">Gérer mon abonnement</a>
         </div>
       )}
 
+      {/* Panneau de filtres */}
       <div className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
           <h2>Contraintes & filtres</h2>
@@ -311,25 +337,36 @@ export default async function Page({
         </form>
       </div>
 
+      {/* Recommandé — ingrédients + kcal seulement */}
       <Section title="Recommandé pour vous (IA)">
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
           {recommended.map((r) => {
             const detailQS = encode(r);
-            return <RecommendedCard key={r.id} r={r} detailQS={detailQS} />;
+            return <RecommendedCard key={r.id} r={r} detailQS={detailQS} userPlan={plan} />;
           })}
-          {recommended.length === 0 && (
-            <div className="text-sm" style={{ color: "#6b7280" }}>
-              Aucune recette disponible pour ces filtres. Essayez d’assouplir les contraintes.
-            </div>
-          )}
         </div>
       </Section>
     </div>
   );
 }
 
-function RecommendedCard({ r, detailQS }: { r: Recipe; detailQS: string; }) {
-  const href = `/dashboard/recipes/${r.id}${detailQS}`;
+/** Carte "recommandé" : BASIC peut ouvrir les recettes BASIC.
+ *  BASIC + recette non BASIC -> abonnement.
+ */
+function RecommendedCard({
+  r,
+  detailQS,
+  userPlan,
+}: {
+  r: Recipe;
+  detailQS: string;
+  userPlan: Plan;
+}) {
+  const href =
+    userPlan === "BASIC" && r.minPlan !== "BASIC"
+      ? "/dashboard/abonnement"
+      : `/dashboard/recipes/${r.id}${detailQS}`;
+
   const shown = r.ingredients.slice(0, 8);
   const more = Math.max(0, r.ingredients.length - shown.length);
 
@@ -339,9 +376,11 @@ function RecommendedCard({ r, detailQS }: { r: Recipe; detailQS: string; }) {
         <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>{r.title}</h3>
         <span className="badge">{r.minPlan}</span>
       </div>
+
       <div className="text-sm" style={{ marginTop: 10, display: "flex", gap: 12, flexWrap: "wrap" }}>
         {typeof r.kcal === "number" && <span className="badge">{r.kcal} kcal</span>}
       </div>
+
       <div className="text-sm" style={{ marginTop: 10 }}>
         <strong>Ingrédients</strong>
         <ul style={{ margin: "6px 0 0 16px" }}>
@@ -349,10 +388,9 @@ function RecommendedCard({ r, detailQS }: { r: Recipe; detailQS: string; }) {
           {more > 0 && <li>+ {more} autre(s)…</li>}
         </ul>
       </div>
+
       <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-        <Link className="btn btn-dash" href={href} prefetch={false}>
-          Voir la recette
-        </Link>
+        <a className="btn btn-dash" href={href}>Voir la recette</a>
       </div>
     </article>
   );
