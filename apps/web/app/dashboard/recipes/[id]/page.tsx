@@ -59,13 +59,15 @@ export default async function Page({
   const dataParam = (searchParams?.data ?? "") as string;
   if (dataParam) {
     try {
-      // ✅ Décodage URL avant base64url
-      const urlDecoded = decodeURIComponent(dataParam);
+      // ✅ Décodage URL sécurisé (ne jette pas si déjà décodé)
+      let urlDecoded = dataParam;
+      try { urlDecoded = decodeURIComponent(urlDecoded); } catch {}
+      // ✅ Base64url → JSON
       const json = b64urlDecode(urlDecoded);
       const obj = JSON.parse(json);
       recipe = sanitizeRecipe(obj, params.id);
     } catch {
-      /* noop */
+      recipe = null;
     }
   }
 
@@ -93,7 +95,7 @@ export default async function Page({
     );
   }
 
-  // ✅ En BASIC, on autorise la lecture d’une recette BASIC (lecture seule)
+  // ✅ En BASIC, lecture seule si la recette est BASIC
   return (
     <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
       <h1 className="h1" style={{ marginBottom: 6 }}>{recipe.title}</h1>
