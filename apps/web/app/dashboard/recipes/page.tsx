@@ -2,7 +2,6 @@
 import { PageHeader, Section } from "@/components/ui/Page";
 import { getSession } from "@/lib/session";
 import { redirect } from "next/navigation";
-import { Buffer } from "node:buffer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -45,6 +44,21 @@ function seededShuffle<T>(arr: T[], seed: number): T[] {
 }
 function pickRandomSeeded<T>(arr: T[], n: number, seed: number) {
   return seededShuffle(arr, seed).slice(0, Math.max(0, Math.min(n, arr.length)));
+}
+
+/* ---- Helpers base64url compatibles Node + Browser (pas d'import Buffer) ---- */
+function encodeB64UrlJson(data: any): string {
+  const json = JSON.stringify(data);
+  if (typeof window === "undefined") {
+    // Node.js
+    // @ts-ignore Buffer global en Node
+    return Buffer.from(json, "utf8").toString("base64")
+      .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/,"");
+  } else {
+    // Navigateur
+    const b64 = btoa(unescape(encodeURIComponent(json)));
+    return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/,"");
+  }
 }
 
 /* ---- Appel OpenAI robuste via fetch (aucun SDK requis) ---- */
@@ -259,7 +273,7 @@ export default async function Page({
   const seed = Number(searchParams?.rnd) || Date.now();
   const recommended = pickRandomSeeded(available, 6, seed);
 
-  // QS conservés (pour Voir la recette si non BASIC ou recette BASIC)
+  // QS conservés (pour Voir la recette)
   const qsParts: string[] = [];
   if (hasKcalTarget) qsParts.push(`kcal=${kcal}`);
   if (hasKcalMin) qsParts.push(`kcalMin=${kcalMin}`);
@@ -268,13 +282,10 @@ export default async function Page({
   if (diets.length) qsParts.push(`diets=${encodeURIComponent(diets.join(","))}`);
   const baseQS = qsParts.length ? `?${qsParts.join("&")}` : "";
 
-  // Encodage base64url pour la page détail
+  // Encodage base64url pour la page détail (compat Node/Browser)
   const encode = (r: Recipe) => {
-    const b64 = Buffer
-      .from(JSON.stringify(r), "utf8")
-      .toString("base64")
-      .replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
-    return `${baseQS}${baseQS ? "&" : "?"}data=${b64}`;
+    const b64url = encodeB64UrlJson(r);
+    return `${baseQS}${baseQS ? "&" : "?"}data=${b64url}`;
   };
 
   return (
