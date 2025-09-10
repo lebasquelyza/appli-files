@@ -21,7 +21,6 @@ type Recipe = {
   steps: string[];
 };
 
-/* ---------------- Utils ---------------- */
 function planRank(p?: Plan) { return p === "PREMIUM" ? 3 : p === "PLUS" ? 2 : 1; }
 function isUnlocked(r: Recipe, userPlan: Plan) { return planRank(userPlan) >= planRank(r.minPlan); }
 function normalizeGoals(s: any): string[] {
@@ -35,7 +34,6 @@ function parseCsv(value?: string | string[]): string[] {
 }
 function uid() { return "id-" + Math.random().toString(36).slice(2, 10); }
 
-/* --- random avec seed pour variété à chaque vue --- */
 function seededPRNG(seed: number) { let s = seed >>> 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 2 ** 32); }
 function seededShuffle<T>(arr: T[], seed: number): T[] {
   const rand = seededPRNG(seed); const a = arr.slice();
@@ -46,11 +44,11 @@ function pickRandomSeeded<T>(arr: T[], n: number, seed: number) {
   return seededShuffle(arr, seed).slice(0, Math.max(0, Math.min(n, arr.length)));
 }
 
-/* ---- base64url JSON (compat Node + navigateur, sans import Buffer) ---- */
+/* ---- base64url JSON (Node + Browser) ---- */
 function encodeB64UrlJson(data: any): string {
   const json = JSON.stringify(data);
   if (typeof window === "undefined") {
-    // @ts-ignore Buffer global en Node
+    // @ts-ignore Buffer dispo côté Node
     return Buffer.from(json, "utf8").toString("base64")
       .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/,"");
   } else {
@@ -59,11 +57,10 @@ function encodeB64UrlJson(data: any): string {
   }
 }
 
-/* ---- Appel OpenAI via fetch (fallback local si pas de clé) ---- */
+/* ---- Appel OpenAI via fetch (fallback si pas de clé) ---- */
 async function callOpenAIChatJSON(userPrompt: string): Promise<any> {
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) { console.error("[AI] OPENAI_API_KEY manquant"); return {}; }
-
+  if (!apiKey) return {};
   try {
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -79,19 +76,14 @@ async function callOpenAIChatJSON(userPrompt: string): Promise<any> {
       }),
       cache: "no-store",
     });
-
-    const raw = await res.text();
-    if (!res.ok) { console.error("[AI] HTTP", res.status, raw); return {}; }
-
-    let data: any = {};
-    try { data = JSON.parse(raw); } catch { return {}; }
-
-    const content = data?.choices?.[0]?.message?.content ?? "{}";
-    try { return JSON.parse(content); } catch { return {}; }
+    if (!res.ok) return {};
+    const data = await res.json();
+    try { return JSON.parse(data?.choices?.[0]?.message?.content ?? "{}"); }
+    catch { return {}; }
   } catch { return {}; }
 }
 
-/* ==== FALLBACK multi-recettes ==== */
+/* ---- Fallback local ---- */
 function sampleFallback(count = 12): Recipe[] {
   const samples: Recipe[] = [
     { id:"salade-quinoa", title:"Salade de quinoa croquante", subtitle:"Pois chiches, concombre, citron",
@@ -199,7 +191,6 @@ async function generateRecipes({
   return cleaned.length ? cleaned : sampleFallback(count);
 }
 
-/** ---- Server Action: applique filtres; si BASIC => abonnement ---- */
 async function applyFiltersAction(formData: FormData): Promise<void> {
   "use server";
   const s = await getSession();
@@ -220,7 +211,6 @@ async function applyFiltersAction(formData: FormData): Promise<void> {
   redirect(`/dashboard/recipes${qs ? `?${qs}` : ""}`);
 }
 
-/* ---------------- Page ---------------- */
 export default async function Page({
   searchParams,
 }: {
@@ -252,7 +242,6 @@ export default async function Page({
   const seed = Number(searchParams?.rnd) || Date.now();
   const recommended = pickRandomSeeded(available, 6, seed);
 
-  // QS conservés (pour Voir la recette)
   const qsParts: string[] = [];
   if (hasKcalTarget) qsParts.push(`kcal=${kcal}`);
   if (hasKcalMin) qsParts.push(`kcalMin=${kcalMin}`);
@@ -261,7 +250,6 @@ export default async function Page({
   if (diets.length) qsParts.push(`diets=${encodeURIComponent(diets.join(","))}`);
   const baseQS = qsParts.length ? `?${qsParts.join("&")}` : "";
 
-  // Encodage base64url pour la page détail
   const encode = (r: Recipe) => {
     const b64url = encodeB64UrlJson(r);
     return `${baseQS}${baseQS ? "&" : "?"}data=${b64url}`;
@@ -281,7 +269,6 @@ export default async function Page({
         </div>
       )}
 
-      {/* Panneau de filtres */}
       <div className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
           <h2>Contraintes & filtres</h2>
@@ -327,7 +314,6 @@ export default async function Page({
         </form>
       </div>
 
-      {/* Recommandé — ingrédients + kcal seulement */}
       <Section title="Recommandé pour vous (IA)">
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
           {recommended.map((r) => {
@@ -340,25 +326,14 @@ export default async function Page({
   );
 }
 
-/** Carte "recommandé" : BASIC peut ouvrir les recettes BASIC.
- *  BASIC + recette non BASIC -> abonnement.
- */
-function RecommendedCard({
-  r,
-  detailQS,
-  userPlan,
-}: {
-  r: Recipe;
-  detailQS: string;
-  userPlan: Plan;
-}) {
+function RecommendedCard({ r, detailQS, userPlan }: { r: Recipe; detailQS: string; userPlan: Plan; }) {
   const href =
     userPlan === "BASIC" && r.minPlan !== "BASIC"
       ? "/dashboard/abonnement"
       : `/dashboard/recipes/${r.id}${detailQS}`;
 
-  const shown = r.ingredients.slice(0, 8);
-  const more = Math.max(0, r.ingredients.length - shown.length);
+  const shown = (Array.isArray(r.ingredients) ? r.ingredients : []).slice(0, 8);
+  const more = Math.max(0, (Array.isArray(r.ingredients) ? r.ingredients.length : 0) - shown.length);
 
   return (
     <article className="card" style={{ overflow: "hidden" }}>
@@ -366,11 +341,9 @@ function RecommendedCard({
         <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>{r.title}</h3>
         <span className="badge">{r.minPlan}</span>
       </div>
-
       <div className="text-sm" style={{ marginTop: 10, display: "flex", gap: 12, flexWrap: "wrap" }}>
         {typeof r.kcal === "number" && <span className="badge">{r.kcal} kcal</span>}
       </div>
-
       <div className="text-sm" style={{ marginTop: 10 }}>
         <strong>Ingrédients</strong>
         <ul style={{ margin: "6px 0 0 16px" }}>
@@ -378,7 +351,6 @@ function RecommendedCard({
           {more > 0 && <li>+ {more} autre(s)…</li>}
         </ul>
       </div>
-
       <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
         <a className="btn btn-dash" href={href}>Voir la recette</a>
       </div>
