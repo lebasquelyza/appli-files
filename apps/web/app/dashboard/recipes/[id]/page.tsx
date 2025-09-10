@@ -1,3 +1,4 @@
+// apps/web/app/dashboard/recipes/[id]/page.tsx
 import { getSession } from "@/lib/session";
 import { redirect } from "next/navigation";
 
@@ -53,7 +54,7 @@ export default async function Page({
   const plan: Plan = (s?.plan as Plan) || "BASIC";
   const isBasic = plan === "BASIC";
 
-  // 1) Lire la recette encodée dans l’URL
+  // 1) On lit la recette encodée dans l’URL
   let recipe: Recipe | null = null;
   const dataParam = (searchParams?.data ?? "") as string;
   if (dataParam) {
@@ -74,7 +75,7 @@ export default async function Page({
     );
   }
 
-  // 2) Contrôle d’accès fin : si la recette dépasse le plan courant, upsell
+  // 2) Contrôle d’accès fin : si la recette dépasse le plan courant, upsell + blocage
   if (planRank(plan) < planRank(recipe.minPlan)) {
     const need = recipe.minPlan === "PREMIUM" ? "PREMIUM" : "PLUS";
     return (
@@ -88,12 +89,12 @@ export default async function Page({
     );
   }
 
+  // ✅ En BASIC, on autorise la lecture d’une recette BASIC (lecture seule)
   return (
     <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
       <h1 className="h1" style={{ marginBottom: 6 }}>{recipe.title}</h1>
       {recipe.subtitle && <p className="lead">{recipe.subtitle}</p>}
 
-      {/* Bandeau d’upsell visible pour BASIC mais sans bloquer la lecture si la recette est BASIC */}
       {isBasic && (
         <div className="card" style={{ marginTop: 12, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <div>
@@ -131,8 +132,12 @@ export default async function Page({
 
         <div style={{ marginTop: 16, display: "flex", gap: 10 }}>
           <a href="/dashboard/recipes" className="btn btn-outline">← Retour</a>
-          {/* En BASIC, on désactive l’ajout au plan */}
-          <button className="btn btn-dash" type="button" disabled={isBasic} title={isBasic ? "Passez à PLUS pour ajouter au plan" : undefined}>
+          <button
+            className="btn btn-dash"
+            type="button"
+            disabled={isBasic}
+            title={isBasic ? "Passez à PLUS pour ajouter au plan" : undefined}
+          >
             Ajouter à mon plan
           </button>
         </div>
