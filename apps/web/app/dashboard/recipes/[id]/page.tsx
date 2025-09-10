@@ -1,3 +1,4 @@
+// apps/web/app/dashboard/recipes/[id]/page.tsx
 import { getSession } from "@/lib/session";
 import { redirect } from "next/navigation";
 
