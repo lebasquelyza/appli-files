@@ -315,7 +315,8 @@ export default async function Page({
 }
 
 function RecommendedCard({ r, detailQS, userPlan }: { r: Recipe; detailQS: string; userPlan: Plan; }) {
-  const href = userPlan === "BASIC" ? "/dashboard/abonnement" : `/dashboard/recipes/${r.id}${detailQS}`;
+  // 🔧 Correction: on pointe toujours vers la page détail (le paywall est géré sur la page détail)
+  const href = `/dashboard/recipes/${r.id}${detailQS}`;
   const shown = r.ingredients.slice(0, 8);
   const more = Math.max(0, r.ingredients.length - shown.length);
 
