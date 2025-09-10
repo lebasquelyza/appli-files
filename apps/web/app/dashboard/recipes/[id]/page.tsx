@@ -22,24 +22,47 @@ function planRank(p?: Plan) {
   return p === "PREMIUM" ? 3 : p === "PLUS" ? 2 : 1;
 }
 
-/* ---- b64url -> JSON (Node + Browser) ---- */
+/* ---- base64url JSON (Node + Browser, sans escape/unescape) ---- */
+function encodeB64UrlJson(data: any): string {
+  const json = JSON.stringify(data);
+  if (typeof window === "undefined") {
+    // Node
+    // @ts-ignore Buffer dispo côté Node
+    return Buffer.from(json, "utf8").toString("base64")
+      .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/,"");
+  } else {
+    // Browser
+    const enc = new TextEncoder().encode(json);
+    let b64 = "";
+    // convert bytes->binary string pour btoa
+    let bin = "";
+    for (let i = 0; i < enc.length; i++) bin += String.fromCharCode(enc[i]);
+    b64 = btoa(bin);
+    return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/,"");
+  }
+}
+
 function b64urlToJson<T = any>(b64url: string): T | null {
   try {
     const pad = "=".repeat((4 - (b64url.length % 4)) % 4);
     const b64 = (b64url + pad).replace(/-/g, "+").replace(/_/g, "/");
-    let json = "";
     if (typeof window === "undefined") {
+      // Node
       // @ts-ignore Buffer dispo côté Node
-      json = Buffer.from(b64, "base64").toString("utf8");
+      const json = Buffer.from(b64, "base64").toString("utf8");
+      return JSON.parse(json);
     } else {
-      json = decodeURIComponent(escape(atob(b64)));
+      // Browser
+      const bin = atob(b64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      const json = new TextDecoder().decode(bytes);
+      return JSON.parse(json);
     }
-    return JSON.parse(json);
   } catch {
     return null;
   }
 }
-
 /* ---- Normalise le JSON pour éviter tout crash au rendu ---- */
 function normalizeRecipe(raw: any, forcedId: string): Recipe | null {
   const title = String(raw?.title ?? "").trim();
