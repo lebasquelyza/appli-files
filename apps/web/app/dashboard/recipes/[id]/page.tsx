@@ -1,4 +1,3 @@
-// apps/web/app/dashboard/recipes/[id]/page.tsx
 import { getSession } from "@/lib/session";
 
 export const runtime = "nodejs";
@@ -37,21 +36,13 @@ function b64urlToJson<T = any>(b64url: string): T | null {
   } catch { return null; }
 }
 
-/* ---- Normalise pour éviter toutes erreurs au rendu ---- */
+/* ---- Normalise le JSON pour éviter tout crash au rendu ---- */
 function normalizeRecipe(raw: any, forcedId: string): Recipe | null {
   const title = String(raw?.title ?? "").trim();
   if (!title) return null;
-
   const minPlan = (["BASIC","PLUS","PREMIUM"].includes(raw?.minPlan) ? raw.minPlan : "BASIC") as Plan;
-
-  const ingredients = Array.isArray(raw?.ingredients)
-    ? raw.ingredients.map((x: any) => String(x))
-    : [];
-
-  const steps = Array.isArray(raw?.steps)
-    ? raw.steps.map((x: any) => String(x))
-    : [];
-
+  const ingredients = Array.isArray(raw?.ingredients) ? raw.ingredients.map((x: any) => String(x)) : [];
+  const steps = Array.isArray(raw?.steps) ? raw.steps.map((x: any) => String(x)) : [];
   return {
     id: forcedId,
     title,
@@ -76,8 +67,8 @@ export default async function Page({
   const s: any = await getSession().catch(() => ({}));
   const plan: Plan = (s?.plan as Plan) || "BASIC";
 
-  const rRaw = searchParams?.data ? b64urlToJson<any>(searchParams.data) : null;
-  const r = rRaw ? normalizeRecipe(rRaw, params.id) : null;
+  const raw = searchParams?.data ? b64urlToJson<any>(searchParams.data) : null;
+  const r = raw ? normalizeRecipe(raw, params.id) : null;
 
   if (!r) {
     return (
@@ -91,6 +82,7 @@ export default async function Page({
     );
   }
 
+  // BASIC peut voir les recettes BASIC ; sinon propose l’upgrade
   if (planRank(plan) < planRank(r.minPlan)) {
     const need = r.minPlan === "PREMIUM" ? "PREMIUM" : "PLUS";
     return (
