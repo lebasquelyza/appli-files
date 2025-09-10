@@ -171,7 +171,8 @@ async function generateRecipes({
     .filter((r) => {
       if (!r.id || seen.has(r.id)) return false;
       seen.add(r.id);
-      return Boolean(r.title) && r.ingredients.length >= 3;
+      // ✅ 3 ingrédients & 3 étapes minimum
+      return Boolean(r.title) && r.ingredients.length >= 3 && r.steps.length >= 3;
     });
 
   return cleaned.length ? cleaned : sampleFallback(count);
@@ -225,7 +226,11 @@ export default async function Page({
     allergens, diets,
   });
 
-  const available = aiRecipes.filter((r) => isUnlocked(r, plan));
+  // ✅ Défense en profondeur : on ne retient que les recettes valides
+  const available = aiRecipes.filter(
+    (r) => isUnlocked(r, plan) && r.title && r.ingredients?.length >= 3 && r.steps?.length >= 3
+  );
+
   const seed = Number(searchParams?.rnd) || Date.now();
   const recommended = pickRandomSeeded(available, 6, seed);
 
@@ -238,9 +243,15 @@ export default async function Page({
   const baseQS = qsParts.length ? `?${qsParts.join("&")}` : "";
 
   const encode = (r: Recipe) => {
-    const b64 = Buffer.from(JSON.stringify(r), "utf8")
-      .toString("base64").replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
-    return `${baseQS}${baseQS ? "&" : "?"}data=${b64}`;
+    const raw = JSON.stringify(r);
+    const b64 = Buffer.from(raw, "utf8")
+      .toString("base64")
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/, "");
+    // ✅ Encodage URL pour éviter les exceptions côté client
+    const safe = encodeURIComponent(b64);
+    return `${baseQS}${baseQS ? "&" : "?"}data=${safe}`;
   };
 
   return (
@@ -314,8 +325,8 @@ export default async function Page({
   );
 }
 
-function RecommendedCard({ r, detailQS }: { r: Recipe; detailQS: string; userPlan: Plan; }) {
-  // ✅ Toujours ouvrir la page détail ; le paywall est géré côté page détail
+function RecommendedCard({ r, detailQS, userPlan }: { r: Recipe; detailQS: string; userPlan: Plan; }) {
+  // Toujours ouvrir la page détail ; le paywall est géré côté page détail
   const href = `/dashboard/recipes/${r.id}${detailQS}`;
   const shown = r.ingredients.slice(0, 8);
   const more = Math.max(0, r.ingredients.length - shown.length);
