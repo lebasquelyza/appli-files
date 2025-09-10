@@ -2,6 +2,7 @@
 import { PageHeader, Section } from "@/components/ui/Page";
 import { getSession } from "@/lib/session";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { Buffer } from "node:buffer";
 
 export const runtime = "nodejs";
@@ -171,7 +172,7 @@ async function generateRecipes({
     .filter((r) => {
       if (!r.id || seen.has(r.id)) return false;
       seen.add(r.id);
-      // ✅ 3 ingrédients & 3 étapes minimum
+      // 3 ingrédients & 3 étapes minimum
       return Boolean(r.title) && r.ingredients.length >= 3 && r.steps.length >= 3;
     });
 
@@ -226,7 +227,7 @@ export default async function Page({
     allergens, diets,
   });
 
-  // ✅ Défense en profondeur
+  // Défense en profondeur : recettes valides uniquement
   const available = aiRecipes.filter(
     (r) => isUnlocked(r, plan) && r.title && r.ingredients?.length >= 3 && r.steps?.length >= 3
   );
@@ -249,7 +250,7 @@ export default async function Page({
       .replace(/\+/g, "-")
       .replace(/\//g, "_")
       .replace(/=+$/, "");
-    // ✅ Encodage URL (évite les exceptions client)
+    // Encodage URL pour éviter les exceptions client
     const safe = encodeURIComponent(b64);
     return `${baseQS}${baseQS ? "&" : "?"}data=${safe}`;
   };
@@ -317,15 +318,20 @@ export default async function Page({
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
           {recommended.map((r) => {
             const detailQS = encode(r);
-            return <RecommendedCard key={r.id} r={r} detailQS={detailQS} userPlan={plan} />;
+            return <RecommendedCard key={r.id} r={r} detailQS={detailQS} />;
           })}
+          {recommended.length === 0 && (
+            <div className="text-sm" style={{ color: "#6b7280" }}>
+              Aucune recette disponible pour ces filtres. Essayez d’assouplir les contraintes.
+            </div>
+          )}
         </div>
       </Section>
     </div>
   );
 }
 
-function RecommendedCard({ r, detailQS }: { r: Recipe; detailQS: string; userPlan: Plan; }) {
+function RecommendedCard({ r, detailQS }: { r: Recipe; detailQS: string; }) {
   // Toujours ouvrir la page détail ; paywall géré côté détail
   const href = `/dashboard/recipes/${r.id}${detailQS}`;
   const shown = r.ingredients.slice(0, 8);
@@ -348,7 +354,15 @@ function RecommendedCard({ r, detailQS }: { r: Recipe; detailQS: string; userPla
         </ul>
       </div>
       <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-        <a className="btn btn-dash" href={href}>Voir la recette</a>
+        <Link
+          className="btn btn-dash"
+          href={href}
+          prefetch={false}
+          style={{ pointerEvents: "auto" }}
+          {...(process.env.NODE_ENV !== "production" ? { onClick: () => console.log("Go to:", href) } : {})}
+        >
+          Voir la recette
+        </Link>
       </div>
     </article>
   );
