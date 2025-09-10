@@ -147,7 +147,7 @@ function sampleFallback(count = 12): Recipe[] {
       kcal:560, timeMin:20, tags:["végétarien","sans-gluten"], goals:["equilibre"], minPlan:"BASIC",
       ingredients:["œufs","tomates concassées","poivron","oignon","ail","paprika","cumin","persil"], steps:["A","B","C"] },
   ];
-  const seed = 123456789();
+  const seed = 123456789;
  return seededShuffle(samples, seed).slice(0, Math.min(count, samples.length));
 }
 
