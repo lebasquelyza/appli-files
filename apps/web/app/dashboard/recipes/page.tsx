@@ -46,36 +46,28 @@ function pickRandomSeeded<T>(arr: T[], n: number, seed: number) {
   return seededShuffle(arr, seed).slice(0, Math.max(0, Math.min(n, arr.length)));
 }
 
-/* ---- Helpers base64url compatibles Node + Browser (pas d'import Buffer) ---- */
+/* ---- base64url JSON (compat Node + navigateur, sans import Buffer) ---- */
 function encodeB64UrlJson(data: any): string {
   const json = JSON.stringify(data);
   if (typeof window === "undefined") {
-    // Node.js
     // @ts-ignore Buffer global en Node
     return Buffer.from(json, "utf8").toString("base64")
       .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/,"");
   } else {
-    // Navigateur
     const b64 = btoa(unescape(encodeURIComponent(json)));
     return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/,"");
   }
 }
 
-/* ---- Appel OpenAI robuste via fetch (aucun SDK requis) ---- */
+/* ---- Appel OpenAI via fetch (fallback local si pas de clé) ---- */
 async function callOpenAIChatJSON(userPrompt: string): Promise<any> {
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    console.error("[AI] OPENAI_API_KEY manquant");
-    return { _debug: "NO_API_KEY" };
-  }
+  if (!apiKey) { console.error("[AI] OPENAI_API_KEY manquant"); return {}; }
 
   try {
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model: "gpt-4o-mini",
         temperature: 0.7,
@@ -89,27 +81,14 @@ async function callOpenAIChatJSON(userPrompt: string): Promise<any> {
     });
 
     const raw = await res.text();
-    if (!res.ok) {
-      console.error("[AI] HTTP", res.status, raw);
-      return { _debug: `HTTP_${res.status}` };
-    }
+    if (!res.ok) { console.error("[AI] HTTP", res.status, raw); return {}; }
 
     let data: any = {};
-    try { data = JSON.parse(raw); } catch (e) {
-      console.error("[AI] Réponse OpenAI non JSON", e, raw);
-      return { _debug: "PARSE_OPENAI_JSON_FAIL" };
-    }
+    try { data = JSON.parse(raw); } catch { return {}; }
 
     const content = data?.choices?.[0]?.message?.content ?? "{}";
-    try { return JSON.parse(content); }
-    catch (e) {
-      console.error("[AI] Contenu non JSON", e, content);
-      return { _debug: "PARSE_CONTENT_JSON_FAIL" };
-    }
-  } catch (e) {
-    console.error("[AI] fetch failed", e);
-    return { _debug: "FETCH_FAIL" };
-  }
+    try { return JSON.parse(content); } catch { return {}; }
+  } catch { return {}; }
 }
 
 /* ==== FALLBACK multi-recettes ==== */
@@ -282,7 +261,7 @@ export default async function Page({
   if (diets.length) qsParts.push(`diets=${encodeURIComponent(diets.join(","))}`);
   const baseQS = qsParts.length ? `?${qsParts.join("&")}` : "";
 
-  // Encodage base64url pour la page détail (compat Node/Browser)
+  // Encodage base64url pour la page détail
   const encode = (r: Recipe) => {
     const b64url = encodeB64UrlJson(r);
     return `${baseQS}${baseQS ? "&" : "?"}data=${b64url}`;
