@@ -4,6 +4,7 @@ import { getSession } from "@/lib/session";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Buffer } from "node:buffer";
+import { gzipSync } from "node:zlib";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -172,7 +173,6 @@ async function generateRecipes({
     .filter((r) => {
       if (!r.id || seen.has(r.id)) return false;
       seen.add(r.id);
-      // 3 ingrédients & 3 étapes minimum
       return Boolean(r.title) && r.ingredients.length >= 3 && r.steps.length >= 3;
     });
 
@@ -227,7 +227,7 @@ export default async function Page({
     allergens, diets,
   });
 
-  // Défense en profondeur : recettes valides uniquement
+  // Recettes valides uniquement
   const available = aiRecipes.filter(
     (r) => isUnlocked(r, plan) && r.title && r.ingredients?.length >= 3 && r.steps?.length >= 3
   );
@@ -243,14 +243,11 @@ export default async function Page({
   if (diets.length) qsParts.push(`diets=${encodeURIComponent(diets.join(","))}`);
   const baseQS = qsParts.length ? `?${qsParts.join("&")}` : "";
 
+  // --- ENCODAGE COMPACT (gzip + base64url + encodeURIComponent) ---
   const encode = (r: Recipe) => {
-    const raw = JSON.stringify(r);
-    const b64 = Buffer.from(raw, "utf8")
-      .toString("base64")
-      .replace(/\+/g, "-")
-      .replace(/\//g, "_")
-      .replace(/=+$/, "");
-    // Encodage URL pour éviter les exceptions client
+    const raw = Buffer.from(JSON.stringify(r), "utf8");
+    const gz = gzipSync(raw); // compresse fortement le payload
+    const b64 = gz.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/,"");
     const safe = encodeURIComponent(b64);
     return `${baseQS}${baseQS ? "&" : "?"}data=${safe}`;
   };
@@ -332,7 +329,6 @@ export default async function Page({
 }
 
 function RecommendedCard({ r, detailQS }: { r: Recipe; detailQS: string; }) {
-  // Toujours ouvrir la page détail ; paywall géré côté détail
   const href = `/dashboard/recipes/${r.id}${detailQS}`;
   const shown = r.ingredients.slice(0, 8);
   const more = Math.max(0, r.ingredients.length - shown.length);
@@ -354,13 +350,7 @@ function RecommendedCard({ r, detailQS }: { r: Recipe; detailQS: string; }) {
         </ul>
       </div>
       <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-        <Link
-          className="btn btn-dash"
-          href={href}
-          prefetch={false}
-          style={{ pointerEvents: "auto" }}
-          {...(process.env.NODE_ENV !== "production" ? { onClick: () => console.log("Go to:", href) } : {})}
-        >
+        <Link className="btn btn-dash" href={href} prefetch={false}>
           Voir la recette
         </Link>
       </div>
