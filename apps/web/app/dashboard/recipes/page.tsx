@@ -45,22 +45,18 @@ function pickRandomSeeded<T>(arr: T[], n: number, seed: number) {
   return seededShuffle(arr, seed).slice(0, Math.max(0, Math.min(n, arr.length)));
 }
 
-/* ---- base64url JSON (Node + Browser, sans escape/unescape) ---- */
+/* ---- base64url JSON (Node + Browser) ---- */
 function encodeB64UrlJson(data: any): string {
   const json = JSON.stringify(data);
   if (typeof window === "undefined") {
-    // Node
     // @ts-ignore Buffer dispo côté Node
     return Buffer.from(json, "utf8").toString("base64")
       .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/,"");
   } else {
-    // Browser
-    const enc = new TextEncoder().encode(json);
-    let b64 = "";
-    // convert bytes->binary string pour btoa
+    const bytes = new TextEncoder().encode(json);
     let bin = "";
-    for (let i = 0; i < enc.length; i++) bin += String.fromCharCode(enc[i]);
-    b64 = btoa(bin);
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    const b64 = btoa(bin);
     return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/,"");
   }
 }
@@ -70,12 +66,10 @@ function b64urlToJson<T = any>(b64url: string): T | null {
     const pad = "=".repeat((4 - (b64url.length % 4)) % 4);
     const b64 = (b64url + pad).replace(/-/g, "+").replace(/_/g, "/");
     if (typeof window === "undefined") {
-      // Node
       // @ts-ignore Buffer dispo côté Node
       const json = Buffer.from(b64, "base64").toString("utf8");
       return JSON.parse(json);
     } else {
-      // Browser
       const bin = atob(b64);
       const bytes = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
@@ -83,7 +77,7 @@ function b64urlToJson<T = any>(b64url: string): T | null {
       return JSON.parse(json);
     }
   } catch {
-    return null;
+    return null; // => affichera "Recette introuvable" plutôt que planter
   }
 }
 
