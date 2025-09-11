@@ -6,26 +6,50 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 type KcalStore = Record<string, number>; // "YYYY-MM-DD" -> kcal
+type NotesStore = Record<string, string>; // "YYYY-MM-DD" -> note (texte)
 
 /* ---------- Utils ---------- */
 const TZ = "Europe/Paris";
 function todayISO(tz = TZ) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date());
 }
-function parseStore(raw?: string): KcalStore {
+
+function parseKcalStore(raw?: string): KcalStore {
   try {
     const data = JSON.parse(raw || "{}");
-    if (data && typeof data === "object") return data as KcalStore;
+    if (data && typeof data === "object") {
+      const out: KcalStore = {};
+      for (const [k, v] of Object.entries<any>(data)) {
+        const n = Number(v);
+        if (Number.isFinite(n)) out[k] = n;
+      }
+      return out;
+    }
   } catch {}
   return {};
 }
-function pruneStore(store: KcalStore, keepDays = 60) {
-  const keys = Object.keys(store).sort();
-  const toDrop = Math.max(0, keys.length - keepDays);
-  for (let i = 0; i < toDrop; i++) delete store[keys[i]];
+
+function parseNotesStore(raw?: string): NotesStore {
+  try {
+    const data = JSON.parse(raw || "{}");
+    if (data && typeof data === "object") {
+      const out: NotesStore = {};
+      for (const [k, v] of Object.entries<any>(data)) {
+        if (v != null) out[k] = String(v);
+      }
+      return out;
+    }
+  } catch {}
+  return {};
 }
 
-/* ---------- Server action ---------- */
+function pruneStore(store: Record<string, unknown>, keepDays = 60) {
+  const keys = Object.keys(store).sort(); // "YYYY-MM-DD"
+  const toDrop = Math.max(0, keys.length - keepDays);
+  for (let i = 0; i < toDrop; i++) delete (store as any)[keys[i]];
+}
+
+/* ---------- Server action: enregistre kcal ---------- */
 async function saveCalories(formData: FormData) {
   "use server";
   const date = String(formData.get("date") || todayISO());
@@ -36,20 +60,22 @@ async function saveCalories(formData: FormData) {
   if (!Number.isFinite(kcal) || kcal < 0 || kcal > 50000) redirect("/dashboard/calories?err=bad_kcal");
 
   const jar = cookies();
-  const store = parseStore(jar.get("app.kcals")?.value);
+  const store = parseKcalStore(jar.get("app.kcals")?.value);
 
+  // on cumule au jour
   store[date] = (store[date] || 0) + Math.round(kcal);
   pruneStore(store, 60);
 
   jar.set("app.kcals", JSON.stringify(store), {
-    path: "/", sameSite: "lax", maxAge: 60*60*24*365, httpOnly: false,
+    path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365, httpOnly: false,
   });
 
   if (note) {
-    const notes = parseStore(jar.get("app.kcals.notes")?.value);
-    notes[date] = note;
+    const notes = parseNotesStore(jar.get("app.kcals.notes")?.value);
+    notes[date] = note; // <-- string dans un store string ✅
+    pruneStore(notes, 60);
     jar.set("app.kcals.notes", JSON.stringify(notes), {
-      path: "/", sameSite: "lax", maxAge: 60*60*24*365, httpOnly: false,
+      path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365, httpOnly: false,
     });
   }
 
@@ -59,12 +85,13 @@ async function saveCalories(formData: FormData) {
 /* ---------- Page ---------- */
 export default async function Page({ searchParams }: { searchParams?: { saved?: string; err?: string } }) {
   const jar = cookies();
-  const store = parseStore(jar.get("app.kcals")?.value);
-  const notes = parseStore(jar.get("app.kcals.notes")?.value);
+  const store = parseKcalStore(jar.get("app.kcals")?.value);
+  const notes = parseNotesStore(jar.get("app.kcals.notes")?.value);
 
   const today = todayISO();
   const todayKcal = store[today] || 0;
 
+  // Vue 14 jours
   const days: { date: string; kcal: number; note?: string }[] = [];
   for (let i = 13; i >= 0; i--) {
     const d = new Date();
