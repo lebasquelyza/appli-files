@@ -477,4 +477,30 @@ export default async function Page({
 
 function Card({ r, detailQS }: { r: Recipe; detailQS: string; }) {
   const href = `/dashboard/recipes/${r.id}${detailQS}`;
-  const ing = Arra
+  const ing = Array.isArray(r.ingredients) ? r.ingredients : [];
+  const shown = ing.slice(0, 8);
+  const more = Math.max(0, ing.length - shown.length);
+
+  return (
+    <article className="card" style={{ overflow: "hidden" }}>
+      <div className="flex items-center justify-between">
+        <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>{r.title}</h3>
+        <span className="badge">{r.minPlan}</span>
+      </div>
+      <div className="text-sm" style={{ marginTop: 10, display: "flex", gap: 12, flexWrap: "wrap" }}>
+        {typeof r.kcal === "number" && <span className="badge">{r.kcal} kcal</span>}
+        {typeof r.timeMin === "number" && <span className="badge">{r.timeMin} min</span>}
+      </div>
+      <div className="text-sm" style={{ marginTop: 10 }}>
+        <strong>Ingrédients</strong>
+        <ul style={{ margin: "6px 0 0 16px" }}>
+          {shown.map((i, idx) => <li key={idx}>{i}</li>)}
+          {more > 0 && <li>+ {more} autre(s)…</li>}
+        </ul>
+      </div>
+      <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+        <a className="btn btn-dash" href={href}>Voir la recette</a>
+      </div>
+    </article>
+  );
+}
