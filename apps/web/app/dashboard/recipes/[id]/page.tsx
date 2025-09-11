@@ -1,10 +1,9 @@
-import { getSession } from "@/lib/session";
-
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 type Plan = "BASIC" | "PLUS" | "PREMIUM";
+type Rework = { ingredient: string; tips: string[] };
 type Recipe = {
   id: string;
   title: string;
@@ -16,9 +15,8 @@ type Recipe = {
   minPlan: Plan;
   ingredients: string[];
   steps: string[];
+  rework?: Rework[];
 };
-
-function planRank(p?: Plan) { return p === "PREMIUM" ? 3 : p === "PLUS" ? 2 : 1; }
 
 /* ---- b64url -> JSON (Node + Browser) ---- */
 function b64urlToJson<T = any>(b64url: string): T | null {
@@ -30,19 +28,25 @@ function b64urlToJson<T = any>(b64url: string): T | null {
       // @ts-ignore Buffer dispo côté Node
       json = Buffer.from(b64, "base64").toString("utf8");
     } else {
-      json = decodeURIComponent(escape(atob(b64)));
+      const bin = atob(b64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      json = new TextDecoder().decode(bytes);
     }
     return JSON.parse(json);
   } catch { return null; }
 }
 
-/* ---- Normalise le JSON pour éviter tout crash au rendu ---- */
-function normalizeRecipe(raw: any, forcedId: string): Recipe | null {
+/* ---- Normalise ---- */
+function normalizeRecipe(raw: any, forcedId: string) {
   const title = String(raw?.title ?? "").trim();
   if (!title) return null;
-  const minPlan = (["BASIC","PLUS","PREMIUM"].includes(raw?.minPlan) ? raw.minPlan : "BASIC") as Plan;
-  const ingredients = Array.isArray(raw?.ingredients) ? raw.ingredients.map((x: any) => String(x)) : [];
-  const steps = Array.isArray(raw?.steps) ? raw.steps.map((x: any) => String(x)) : [];
+  const arrRework: Rework[] = Array.isArray(raw?.rework)
+    ? raw.rework.map((x: any) => ({
+        ingredient: String(x?.ingredient || "").toLowerCase(),
+        tips: Array.isArray(x?.tips) ? x.tips.map((t: any) => String(t)) : []
+      }))
+    : [];
   return {
     id: forcedId,
     title,
@@ -51,10 +55,11 @@ function normalizeRecipe(raw: any, forcedId: string): Recipe | null {
     timeMin: typeof raw?.timeMin === "number" ? raw.timeMin : undefined,
     tags: Array.isArray(raw?.tags) ? raw.tags.map((t: any) => String(t).trim()) : [],
     goals: Array.isArray(raw?.goals) ? raw.goals.map((g: any) => String(g).trim()) : [],
-    minPlan,
-    ingredients,
-    steps,
-  };
+    minPlan: (["BASIC","PLUS","PREMIUM"].includes(raw?.minPlan) ? raw.minPlan : "BASIC") as Plan,
+    ingredients: Array.isArray(raw?.ingredients) ? raw.ingredients.map((x: any) => String(x)) : [],
+    steps: Array.isArray(raw?.steps) ? raw.steps.map((x: any) => String(x)) : [],
+    rework: arrRework,
+  } as Recipe;
 }
 
 export default async function Page({
@@ -64,9 +69,6 @@ export default async function Page({
   params: { id: string };
   searchParams?: { data?: string };
 }) {
-  const s: any = await getSession().catch(() => ({}));
-  const plan: Plan = (s?.plan as Plan) || "BASIC";
-
   const raw = searchParams?.data ? b64urlToJson<any>(searchParams.data) : null;
   const r = raw ? normalizeRecipe(raw, params.id) : null;
 
@@ -75,24 +77,8 @@ export default async function Page({
       <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
         <div className="section" style={{ marginTop: 12 }}>
           <h2 style={{ marginTop: 0 }}>Recette introuvable</h2>
-          <p>Impossible d’afficher cette recette. Ouvrez-la depuis la liste.</p>
+          <p>Ouvrez la fiche depuis la liste des recettes.</p>
           <a href="/dashboard/recipes" className="btn btn-dash">← Retour aux recettes</a>
-        </div>
-      </div>
-    );
-  }
-
-  // BASIC peut voir les recettes BASIC ; sinon propose l’upgrade
-  if (planRank(plan) < planRank(r.minPlan)) {
-    const need = r.minPlan === "PREMIUM" ? "PREMIUM" : "PLUS";
-    return (
-      <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
-        <div className="section" style={{ marginTop: 12 }}>
-          <h2 style={{ marginTop: 0 }}>{r.title}</h2>
-          <p className="lead" style={{ marginBottom: 16 }}>
-            Cette recette est réservée au plan <strong>{r.minPlan}</strong>.
-          </p>
-          <a className="btn btn-dash" href="/dashboard/abonnement">Passer à {need}</a>
         </div>
       </div>
     );
@@ -100,6 +86,7 @@ export default async function Page({
 
   const ing = Array.isArray(r.ingredients) ? r.ingredients : [];
   const steps = Array.isArray(r.steps) ? r.steps : [];
+  const hasRework = Array.isArray(r.rework) && r.rework.length > 0;
 
   return (
     <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
@@ -123,7 +110,7 @@ export default async function Page({
               {ing.map((i, k) => <li key={k}>{i}</li>)}
             </ul>
           ) : (
-            <p className="text-sm" style={{ color: "#6b7280" }}>Pas d’ingrédients détaillés pour cette suggestion.</p>
+            <p className="text-sm" style={{ color: "#6b7280" }}>Pas d’ingrédients détaillés.</p>
           )}
         </article>
 
@@ -134,12 +121,30 @@ export default async function Page({
               {steps.map((s, k) => <li key={k}>{s}</li>)}
             </ol>
           ) : (
-            <p className="text-sm" style={{ color: "#6b7280" }}>
-              Étapes non fournies. Passez à PLUS/PREMIUM pour des instructions générées.
-            </p>
+            <p className="text-sm" style={{ color: "#6b7280" }}>Pas d’étapes détaillées.</p>
           )}
         </article>
       </div>
+
+      {/* Re-travailler */}
+      {hasRework && (
+        <article className="card" style={{ marginTop: 12 }}>
+          <h3 style={{ marginTop: 0 }}>Re-travailler les aliments non aimés</h3>
+          <p className="text-sm" style={{ color:"#6b7280", marginTop: -4 }}>
+            On garde le produit et on propose d’autres façons de le cuisiner :
+          </p>
+          <div className="grid sm:grid-cols-2 gap-4">
+            {r.rework!.map((rw, idx) => (
+              <div key={idx} className="text-sm">
+                <strong style={{ textTransform:"capitalize" }}>{rw.ingredient}</strong>
+                <ul style={{ margin: "6px 0 0 18px" }}>
+                  {rw.tips.map((t, k) => <li key={k}>{t}</li>)}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </article>
+      )}
 
       <div style={{ marginTop: 16 }}>
         <a className="btn btn-outline" href="/dashboard/recipes">← Retour</a>
