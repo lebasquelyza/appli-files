@@ -415,7 +415,7 @@ export default async function Page({
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
           {healthyPick.map((r) => {
             const detailQS = encode(r);
-            return <Card key={r.id} r={r} detailQS={detailQS} userPlan={plan} />;
+            return <Card key={r.id} r={r} detailQS={detailQS} />;
           })}
         </div>
       </section>
@@ -430,7 +430,7 @@ export default async function Page({
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
               {personalizedPick.map((r) => {
                 const detailQS = encode(r);
-                return <Card key={r.id} r={r} detailQS={detailQS} userPlan={plan} />;
+                return <Card key={r.id} r={r} detailQS={detailQS} />;
               })}
             </div>
           ) : (
