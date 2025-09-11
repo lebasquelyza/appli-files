@@ -17,11 +17,11 @@ const items = [
   { href: "/dashboard/settings", label: "Réglages" },
 ];
 
-export default function Sidebar(){
+ export default function Sidebar(){
   const pathname = usePathname();
   return (
-    <nav aria-label="Dashboard" style={{padding:10}}>
-      <div className="brand" style={{gap:10, padding:"10px 8px"}}>
+    <nav aria-label="Dashboard" style={{ padding:10, position:"relative", zIndex: 10 }}>
+     {  <div className="brand" style={{gap:10, padding:"10px 8px"}}>
         <span className="mark" />
         <b>Files</b>
       </div>
