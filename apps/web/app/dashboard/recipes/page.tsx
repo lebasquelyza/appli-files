@@ -18,7 +18,7 @@ type Recipe = {
   minPlan: Plan;
   ingredients: string[];
   steps: string[];
-  rework?: Rework[]; // suggestions "re-travailler"
+  rework?: Rework[];
 };
 
 /* ---------------- Utils ---------------- */
@@ -74,7 +74,7 @@ const REWORK_TIPS: Record<string, string[]> = {
     "Émietté façon “œufs brouillés”"
   ],
   "poivron": [
-    "Confit au four puis pelé",
+    "Confit au feu doux puis pelé",
     "En coulis doux dans une sauce",
     "Grillé et servi froid (salade)"
   ],
@@ -149,13 +149,15 @@ function personalize({
     if (hasMax) filtered = filtered.filter(r => (r.kcal || 0) <= (kcalMax as number));
   }
 
-  // 3) "re-travailler" les dislikes (on NE supprime PAS, on ajoute des tips)
+  // 3) "re-travailler" les dislikes (ne pas supprimer la recette)
   const dislikesSet = new Set(dislikes);
-  const personalized = filtered.map(r => {
+  const personalized: Recipe[] = filtered.map<Recipe>(r => {
     const ingLower = r.ingredients.map(i => i.toLowerCase());
     const hits = [...dislikesSet].filter(d => ingLower.includes(d));
-    if (!hits.length) return { ...r, minPlan: plan === "PREMIUM" ? "PREMIUM" : "PLUS" as Plan };
-
+    const minPlan: Plan = (plan === "PREMIUM" ? "PREMIUM" : "PLUS");
+    if (!hits.length) {
+      return { ...r, minPlan };
+    }
     const tips: Rework[] = hits.map(h => ({
       ingredient: h,
       tips: REWORK_TIPS[h] ?? [
@@ -164,8 +166,7 @@ function personalize({
         "Hacher/mixer pour adoucir la texture"
       ]
     }));
-
-    return { ...r, minPlan: plan === "PREMIUM" ? "PREMIUM" : "PLUS", rework: tips };
+    return { ...r, minPlan, rework: tips };
   });
 
   // un petit shuffle stable pour varier
@@ -188,7 +189,6 @@ async function applyFiltersAction(formData: FormData): Promise<void> {
   params.set("rnd", String(Date.now()));
 
   if (plan === "BASIC") redirect("/dashboard/abonnement");
-
   redirect(`/dashboard/recipes?${params.toString()}`);
 }
 
@@ -223,7 +223,7 @@ export default async function Page({
         kcalMin: hasKcalMin ? kcalMin : undefined,
         kcalMax: hasKcalMax ? kcalMax : undefined,
         allergens, dislikes, plan,
-      }).map(r => ({ ...r, minPlan: plan })); // tag visible
+      }).map<Recipe>(r => ({ ...r, minPlan: plan })); // afficher le tag du plan courant
 
   // choisir quelques cartes à mettre en avant
   const seed = Number(searchParams?.rnd ?? "0") || 123456789;
