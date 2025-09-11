@@ -11,34 +11,42 @@ const items = [
   { href: "/dashboard/recipes", label: "Recettes" },
   { href: "/dashboard/notifications", label: "Notifications" },
   { href: "/dashboard/connect", label: "Connecte tes données" },
-  { href: "/dashboard/abonnement", label: "Abonnement" }, // <— la virgule était manquante ici
+  { href: "/dashboard/abonnement", label: "Abonnement" },
   { href: "/dashboard/bmi", label: "IMC" },
   { href: "/dashboard/music", label: "Musique" },
   { href: "/dashboard/settings", label: "Réglages" },
 ];
 
- export default function Sidebar(){
+export default function Sidebar() {
   const pathname = usePathname();
   return (
-    <nav aria-label="Dashboard" style={{ padding:10, position:"relative", zIndex: 10 }}>
-     {  <div className="brand" style={{gap:10, padding:"10px 8px"}}>
+    <nav aria-label="Dashboard" style={{ padding: 10, position: "relative", zIndex: 10000, pointerEvents: "auto" }}>
+      <div className="brand" style={{ gap: 10, padding: "10px 8px" }}>
         <span className="mark" />
         <b>Files</b>
       </div>
-      <ul style={{listStyle:"none", padding:0, margin:0}}>
-        {items.map((it)=>{
+      <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+        {items.map((it) => {
           const active = pathname === it.href || pathname.startsWith(it.href + "/");
           return (
             <li key={it.href}>
               <Link
                 href={it.href}
+                // log temporaire pour diagnostiquer si le clic arrive bien
+                onClick={it.href === "/dashboard/recipes" ? () => console.log("CLICK /dashboard/recipes") : undefined}
+                aria-current={active ? "page" : undefined}
                 style={{
-                  display:"block", padding:"10px 12px", borderRadius:10, margin:"4px 6px",
-                  fontWeight:600, textDecoration:"none",
+                  display: "block",
+                  padding: "10px 12px",
+                  borderRadius: 10,
+                  margin: "4px 6px",
+                  fontWeight: 600,
+                  textDecoration: "none",
                   background: active ? "linear-gradient(135deg,var(--brand),var(--brand2))" : "transparent",
                   border: active ? "1px solid rgba(22,163,74,.25)" : "1px solid transparent",
                   boxShadow: active ? "var(--shadow)" : "none",
-                  color: active ? "#fff" : "#111"
+                  color: active ? "#fff" : "#111",
+                  cursor: "pointer",
                 }}
               >
                 {it.label}
