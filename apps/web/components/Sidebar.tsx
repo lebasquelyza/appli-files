@@ -10,7 +10,7 @@ const items = [
   { href: "/dashboard/recipes", label: "Recettes" },
   { href: "/dashboard/notifications", label: "Notifications" },
   { href: "/dashboard/connect", label: "Connecte tes données" },
-  { href: "/dashboard/pricing", label: "Abonnement" },
+  { href: "/dashboard/pricing", label: "Abonnement" }
   { href: "/dashboard/bmi", label: "IMC" },
   { href: "/dashboard/music", label: "Musique" },
   { href: "/dashboard/settings", label: "Réglages" }
@@ -26,7 +26,7 @@ export default function Sidebar(){
       </div>
       <ul style={{listStyle:"none", padding:0, margin:0}}>
         {items.map(it=>{
-          const active = pathname === it.href;
+         const active = pathname === it.href || pathname.startsWith(it.href + "/");
           return (
             <li key={it.href}>
               <Link
