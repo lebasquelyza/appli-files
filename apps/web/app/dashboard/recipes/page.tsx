@@ -56,48 +56,16 @@ function encodeB64UrlJson(data: any): string {
   }
 }
 
-/* ---- dictionnaire "re-travailler" ---- */
+/* ---- dictionnaire "re-travailler" (fallback) ---- */
 const REWORK_TIPS: Record<string, string[]> = {
-  "brocoli": [
-    "Rôti au four avec parmesan et citron",
-    "Sauté wok sauce soja-sésame",
-    "Mixé en velouté avec crème légère"
-  ],
-  "saumon": [
-    "Mariné (miso/soja) puis grillé",
-    "Papillote citron-aneth",
-    "En rillettes yaourt grec + citron"
-  ],
-  "tofu": [
-    "Pressé puis mariné, snacké à feu vif",
-    "Panure maïzena + sauce aigre-douce",
-    "Émietté façon “œufs brouillés”"
-  ],
-  "poivron": [
-    "Confit au feu doux puis pelé",
-    "En coulis doux dans une sauce",
-    "Grillé et servi froid (salade)"
-  ],
-  "champignons": [
-    "Poêlés très chauds, déglacés au vinaigre",
-    "Hachés fin dans une bolognaise",
-    "Rôtis entiers avec herbes"
-  ],
-  "courgette": [
-    "Tagliatelles à la poêle, ail-citron",
-    "Gratin ricotta/menthe",
-    "Râpée dans des galettes"
-  ],
-  "épinards": [
-    "Sautés minute avec ail et pignons",
-    "Mixés en pesto doux",
-    "Fondue à la crème légère"
-  ],
-  "lentilles": [
-    "Dal coco doux",
-    "Salade tiède moutarde/échalote",
-    "Soupe mixée carotte-cumin"
-  ],
+  "brocoli": ["Rôti au four parmesan-citron", "Wok soja-sésame", "Velouté crème légère"],
+  "saumon": ["Mariné miso/soja", "Papillote citron-aneth", "Rillettes au yaourt"],
+  "tofu": ["Mariné puis snacké", "Panure maïzena + sauce douce", "Émietté façon brouillade"],
+  "poivron": ["Confit puis pelé", "Coulis doux", "Grillé salade"],
+  "champignons": ["Poêlés très chauds", "Hachés en bolo", "Rôtis entiers"],
+  "courgette": ["Tagliatelles ail-citron", "Gratin ricotta-menthe", "Galettes râpées"],
+  "épinards": ["Sautés minute", "Pesto doux", "Fondue légère"],
+  "lentilles": ["Dal coco", "Salade tiède", "Soupe carotte-cumin"],
 };
 
 /* ---- base healthy (dispo pour tous) ---- */
@@ -122,23 +90,146 @@ const HEALTHY_BASE: Recipe[] = [
     ingredients:["tofu ferme","brocoli","sauce soja","ail","gingembre","graines de sésame","huile","maïzena"], steps:["Saisir, lier, napper"] },
 ];
 
-/* ---- personnalisation pour PLUS/PREMIUM ---- */
-function personalize({
+/* ========= Mode IA pour PLUS/PREMIUM ========= */
+async function generateAIRecipes({
+  plan,
+  kcal, kcalMin, kcalMax,
+  allergens, dislikes,
+  count = 12,
+}: {
+  plan: Plan;
+  kcal?: number; kcalMin?: number; kcalMax?: number;
+  allergens: string[]; dislikes: string[];
+  count?: number;
+}): Promise<Recipe[]> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return []; // fallback si pas de clé
+
+  const constraints: string[] = [];
+  if (typeof kcal === "number" && !isNaN(kcal) && kcal > 0) {
+    constraints.push(`- Viser ~${kcal} kcal par recette (±10%).`);
+  } else {
+    const hasMin = typeof kcalMin === "number" && !isNaN(kcalMin) && kcalMin > 0;
+    const hasMax = typeof kcalMax === "number" && !isNaN(kcalMax) && kcalMax > 0;
+    if (hasMin && hasMax) constraints.push(`- Respecter une plage ${kcalMin}-${kcalMax} kcal.`);
+    else if (hasMin) constraints.push(`- Minimum ${kcalMin} kcal.`);
+    else if (hasMax) constraints.push(`- Maximum ${kcalMax} kcal.`);
+  }
+  if (allergens.length) constraints.push(`- Exclure strictement: ${allergens.join(", ")}.`);
+  if (dislikes.length) constraints.push(`- Si un ingrédient non-aimé apparaît, ne pas le supprimer: proposer une section "rework" avec 2-3 façons de le cuisiner autrement.`);
+
+  const prompt =
+`Tu es un chef-nutritionniste. Renvoie UNIQUEMENT du JSON valide (pas de texte).
+Utilisateur:
+- Plan: ${plan}
+- Allergènes/Intolérances: ${allergens.join(", ") || "aucun"}
+- Aliments non aimés (à re-travailler): ${dislikes.join(", ") || "aucun"}
+- Nombre de recettes: ${count}
+
+Contraintes:
+${constraints.join("\n")}
+
+Schéma TypeScript (exemple):
+Recipe = {
+  id: string, title: string, subtitle?: string,
+  kcal?: number, timeMin?: number, tags: string[],
+  goals: string[], minPlan: "BASIC" | "PLUS" | "PREMIUM",
+  ingredients: string[], steps: string[],
+  rework?: { ingredient: string, tips: string[] }[]
+}
+
+Règles:
+- minPlan = "${plan}" pour toutes les recettes.
+- Variété: végétarien/vegan/protéiné/rapide/sans-gluten...
+- Ingrédients simples du quotidien.
+- steps = 3–6 étapes courtes.
+- Renvoyer {"recipes": Recipe[]}.`;
+
+  try {
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        temperature: 0.7,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: "Tu parles français et tu réponds en JSON strict." },
+          { role: "user", content: prompt },
+        ],
+      }),
+      cache: "no-store",
+    });
+
+    if (!res.ok) return [];
+    const data = await res.json();
+    let payload: any = {};
+    try { payload = JSON.parse(data?.choices?.[0]?.message?.content ?? "{}"); } catch {}
+
+    const arr: any[] = Array.isArray(payload?.recipes) ? payload.recipes : [];
+    const seen = new Set<string>();
+    const clean: Recipe[] = arr.map((raw) => {
+      const title = String(raw?.title ?? "").trim();
+      const id = String(raw?.id || title || Math.random().toString(36).slice(2)).trim()
+        .toLowerCase().replace(/[^a-z0-9-]+/g, "-");
+      const ingr = Array.isArray(raw?.ingredients) ? raw.ingredients.map((x: any) => String(x)) : [];
+      const steps = Array.isArray(raw?.steps) ? raw.steps.map((x: any) => String(x)) : [];
+      const rework: Rework[] | undefined = Array.isArray(raw?.rework)
+        ? raw.rework.map((x: any) => ({
+            ingredient: String(x?.ingredient || "").toLowerCase(),
+            tips: Array.isArray(x?.tips) ? x.tips.map((t: any) => String(t)) : []
+          }))
+        : undefined;
+      const minPlan: Plan = (plan === "PREMIUM" ? "PREMIUM" : "PLUS");
+
+      return {
+        id, title,
+        subtitle: raw?.subtitle ? String(raw.subtitle) : undefined,
+        kcal: typeof raw?.kcal === "number" ? raw.kcal : undefined,
+        timeMin: typeof raw?.timeMin === "number" ? raw.timeMin : undefined,
+        tags: Array.isArray(raw?.tags) ? raw.tags.map((t: any) => String(t)) : [],
+        goals: Array.isArray(raw?.goals) ? raw.goals.map((g: any) => String(g)) : [],
+        minPlan,
+        ingredients: ingr,
+        steps,
+        rework,
+      } as Recipe;
+    }).filter((r) => {
+      if (!r.title) return false;
+      if (seen.has(r.id)) return false;
+      seen.add(r.id);
+      // sécurité: exclure les allergènes demandés
+      const ingLow = r.ingredients.map(i => i.toLowerCase());
+      if (allergens.some(a => ingLow.includes(a))) return false;
+      // si dislikes mais pas de rework, injecter un rework de secours
+      const hits = dislikes.filter(d => ingLow.includes(d));
+      if (hits.length && (!r.rework || !r.rework.length)) {
+        r.rework = hits.map(h => ({ ingredient: h, tips: REWORK_TIPS[h] ?? ["Changer la cuisson", "Assaisonnement différent", "Mixer/hacher pour texture"] }));
+      }
+      return true;
+    });
+
+    return clean;
+  } catch {
+    return [];
+  }
+}
+
+/* ---- fallback “personnalisation simple” si IA indisponible ---- */
+function personalizeFallback({
   base, kcal, kcalMin, kcalMax, allergens, dislikes, plan,
 }: {
   base: Recipe[];
   kcal?: number; kcalMin?: number; kcalMax?: number;
-  allergens: string[];
-  dislikes: string[];
-  plan: Plan;
+  allergens: string[]; dislikes: string[]; plan: Plan;
 }): Recipe[] {
-  // 1) filtre allergènes (exclusion stricte)
   let filtered = base.filter(r => {
     const ing = r.ingredients.map(i => i.toLowerCase());
     return !allergens.some(a => ing.includes(a));
   });
-
-  // 2) filtre calories (range ou target ±10%)
   if (typeof kcal === "number" && !isNaN(kcal) && kcal > 0) {
     const tol = Math.round(kcal * 0.1);
     filtered = filtered.filter(r => typeof r.kcal === "number" && Math.abs((r.kcal || 0) - kcal) <= tol);
@@ -148,30 +239,16 @@ function personalize({
     if (hasMin) filtered = filtered.filter(r => (r.kcal || 0) >= (kcalMin as number));
     if (hasMax) filtered = filtered.filter(r => (r.kcal || 0) <= (kcalMax as number));
   }
-
-  // 3) "re-travailler" les dislikes (ne pas supprimer la recette)
   const dislikesSet = new Set(dislikes);
-  const personalized: Recipe[] = filtered.map<Recipe>(r => {
+  const out: Recipe[] = filtered.map<Recipe>(r => {
     const ingLower = r.ingredients.map(i => i.toLowerCase());
     const hits = [...dislikesSet].filter(d => ingLower.includes(d));
     const minPlan: Plan = (plan === "PREMIUM" ? "PREMIUM" : "PLUS");
-    if (!hits.length) {
-      return { ...r, minPlan };
-    }
-    const tips: Rework[] = hits.map(h => ({
-      ingredient: h,
-      tips: REWORK_TIPS[h] ?? [
-        "Changer de technique de cuisson (rôti/grillé/vapeur)",
-        "Assaisonner différemment (acidité/herbes/épices)",
-        "Hacher/mixer pour adoucir la texture"
-      ]
-    }));
+    if (!hits.length) return { ...r, minPlan };
+    const tips: Rework[] = hits.map(h => ({ ingredient: h, tips: REWORK_TIPS[h] ?? ["Changer la cuisson", "Assaisonnement différent", "Mixer/hacher pour texture"] }));
     return { ...r, minPlan, rework: tips };
   });
-
-  // un petit shuffle stable pour varier
-  const seed = 987654321;
-  return seededShuffle(personalized, seed);
+  return out;
 }
 
 /** ---- Server Action: appliquer filtres ; BASIC => abonnement ---- */
@@ -214,16 +291,28 @@ export default async function Page({
   // bloc healthy commun
   const healthy = HEALTHY_BASE;
 
-  // bloc personnalisé (réservé PLUS/PREMIUM)
-  const personalized = plan === "BASIC"
-    ? []
-    : personalize({
-        base: HEALTHY_BASE,
-        kcal: hasKcalTarget ? kcal : undefined,
-        kcalMin: hasKcalMin ? kcalMin : undefined,
-        kcalMax: hasKcalMax ? kcalMax : undefined,
-        allergens, dislikes, plan,
-      }).map<Recipe>(r => ({ ...r, minPlan: plan })); // afficher le tag du plan courant
+  // bloc IA (réservé PLUS/PREMIUM)
+  let personalized: Recipe[] = [];
+  if (plan !== "BASIC") {
+    const ai = await generateAIRecipes({
+      plan,
+      kcal: hasKcalTarget ? kcal : undefined,
+      kcalMin: hasKcalMin ? kcalMin : undefined,
+      kcalMax: hasKcalMax ? kcalMax : undefined,
+      allergens, dislikes,
+      count: 16,
+    });
+
+    personalized = ai.length
+      ? ai
+      : personalizeFallback({
+          base: HEALTHY_BASE,
+          kcal: hasKcalTarget ? kcal : undefined,
+          kcalMin: hasKcalMin ? kcalMin : undefined,
+          kcalMax: hasKcalMax ? kcalMax : undefined,
+          allergens, dislikes, plan,
+        });
+  }
 
   // choisir quelques cartes à mettre en avant
   const seed = Number(searchParams?.rnd ?? "0") || 123456789;
@@ -251,7 +340,7 @@ export default async function Page({
       <div className="page-header">
         <div>
           <h1 className="h1">Recettes</h1>
-          <p className="lead">Healthy pour tous. Personnalisation selon calories, allergies & aliments non aimés pour PLUS/PREMIUM.</p>
+          <p className="lead">Healthy pour tous. Pour PLUS/PREMIUM, l’IA adapte aux calories, allergies et aliments à re-travailler.</p>
         </div>
         <div className="text-sm">
           Votre formule : <span className="badge" style={{ marginLeft: 6 }}>{plan}</span>
@@ -262,8 +351,8 @@ export default async function Page({
       {plan === "BASIC" && (
         <div className="card" style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:12 }}>
           <div>
-            <strong>Débloquez la personnalisation</strong>
-            <div className="text-sm" style={{ color:"#6b7280" }}>Filtre calories, exclusions allergènes, “re-travailler” les aliments non aimés.</div>
+            <strong>Débloquez la personnalisation IA</strong>
+            <div className="text-sm" style={{ color:"#6b7280" }}>Filtre calories, exclusions allergènes & “re-travailler” les aliments non aimés.</div>
           </div>
           <a className="btn btn-dash" href="/dashboard/abonnement">Passer à PLUS</a>
         </div>
@@ -331,11 +420,11 @@ export default async function Page({
         </div>
       </section>
 
-      {/* Personnalisées */}
+      {/* Personnalisées IA */}
       {plan !== "BASIC" && (
         <section className="section" style={{ marginTop: 12 }}>
           <div className="section-head" style={{ marginBottom: 8 }}>
-            <h2>Recettes personnalisées ({plan})</h2>
+            <h2>Recettes personnalisées (IA)</h2>
           </div>
           {personalizedPick.length ? (
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
@@ -346,7 +435,8 @@ export default async function Page({
             </div>
           ) : (
             <div className="card text-sm" style={{ color:"#6b7280" }}>
-              Aucune recette correspondant exactement à vos filtres. Essayez d’élargir la plage calorique ou de réduire les exclusions.
+              Aucune recette correspondant exactement à vos filtres pour le moment.
+              Essayez d’élargir la plage calorique ou de réduire les exclusions.
             </div>
           )}
         </section>
@@ -355,7 +445,7 @@ export default async function Page({
   );
 }
 
-function Card({ r, detailQS, userPlan }: { r: Recipe; detailQS: string; userPlan: Plan; }) {
+function Card({ r, detailQS }: { r: Recipe; detailQS: string; }) {
   const href = `/dashboard/recipes/${r.id}${detailQS}`;
   const ing = Array.isArray(r.ingredients) ? r.ingredients : [];
   const shown = ing.slice(0, 8);
