@@ -1,4 +1,5 @@
 "use client";
+
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -10,10 +11,10 @@ const items = [
   { href: "/dashboard/recipes", label: "Recettes" },
   { href: "/dashboard/notifications", label: "Notifications" },
   { href: "/dashboard/connect", label: "Connecte tes données" },
-  { href: "/dashboard/abonnement", label: "Abonnement" }
+  { href: "/dashboard/abonnement", label: "Abonnement" }, // <— la virgule était manquante ici
   { href: "/dashboard/bmi", label: "IMC" },
   { href: "/dashboard/music", label: "Musique" },
-  { href: "/dashboard/settings", label: "Réglages" }
+  { href: "/dashboard/settings", label: "Réglages" },
 ];
 
 export default function Sidebar(){
@@ -25,8 +26,8 @@ export default function Sidebar(){
         <b>Files</b>
       </div>
       <ul style={{listStyle:"none", padding:0, margin:0}}>
-        {items.map(it=>{
-         const active = pathname === it.href || pathname.startsWith(it.href + "/");
+        {items.map((it)=>{
+          const active = pathname === it.href || pathname.startsWith(it.href + "/");
           return (
             <li key={it.href}>
               <Link
