@@ -39,7 +39,7 @@ function b64urlToJson<T = any>(b64url: string): T | null {
   } catch { return null; }
 }
 
-/* ---- Normalise le JSON pour éviter tout crash au rendu ---- */
+/* ---- Normalise le JSON ---- */
 function normalizeRecipe(raw: any, forcedId: string): Recipe | null {
   const title = String(raw?.title ?? "").trim();
   if (!title) return null;
@@ -85,7 +85,6 @@ export default async function Page({
     );
   }
 
-  // BASIC peut voir les recettes BASIC ; sinon propose l’upgrade
   if (planRank(plan) < planRank(r.minPlan)) {
     const need = r.minPlan === "PREMIUM" ? "PREMIUM" : "PLUS";
     return (
