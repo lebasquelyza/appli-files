@@ -1,8 +1,12 @@
+import { redirect } from "next/navigation";
+import { getSession } from "@/lib/session";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 type Plan = "BASIC" | "PLUS" | "PREMIUM";
+type Rework = { ingredient: string; tips: string[] };
 type Recipe = {
   id: string;
   title: string;
@@ -14,7 +18,16 @@ type Recipe = {
   minPlan: Plan;
   ingredients: string[];
   steps: string[];
+  rework?: Rework[]; // suggestions "re-travailler"
 };
+
+/* ---------------- Utils ---------------- */
+function planRank(p?: Plan) { return p === "PREMIUM" ? 3 : p === "PLUS" ? 2 : 1; }
+function isUnlocked(r: Recipe, userPlan: Plan) { return planRank(userPlan) >= planRank(r.minPlan); }
+function parseCsv(value?: string | string[]): string[] {
+  const raw = Array.isArray(value) ? value.join(",") : value ?? "";
+  return raw.split(/[,|]/).map((s) => s.trim().toLowerCase()).filter(Boolean);
+}
 
 /* --- random déterministe --- */
 function seededPRNG(seed: number) { let s = seed >>> 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 2 ** 32); }
@@ -23,12 +36,15 @@ function seededShuffle<T>(arr: T[], seed: number): T[] {
   for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
   return a;
 }
+function pickRandomSeeded<T>(arr: T[], n: number, seed: number): T[] {
+  return seededShuffle(arr, seed).slice(0, Math.max(0, Math.min(n, arr.length)));
+}
 
 /* ---- base64url JSON (Node + Browser safe) ---- */
 function encodeB64UrlJson(data: any): string {
   const json = JSON.stringify(data);
   if (typeof window === "undefined") {
-    // @ts-ignore Buffer dispo côté Node
+    // @ts-ignore Buffer côté Node
     return Buffer.from(json, "utf8").toString("base64")
       .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/,"");
   } else {
@@ -40,69 +56,331 @@ function encodeB64UrlJson(data: any): string {
   }
 }
 
-/* ---- Fallback statique ---- */
-function sampleRecipes(count = 12): Recipe[] {
-  const samples: Recipe[] = [
-    { id:"salade-quinoa", title:"Salade de quinoa croquante", subtitle:"Pois chiches, concombre, citron",
-      kcal:520, timeMin:15, tags:["végétarien","sans-gluten"], goals:["equilibre"], minPlan:"BASIC",
-      ingredients:["quinoa","pois chiches","concombre","citron","huile d'olive","sel","poivre","persil"], steps:["1. Rincer le quinoa","2. Couper les légumes","3. Assaisonner"] },
-    { id:"bowl-poulet-riz", title:"Bowl poulet & riz complet", subtitle:"Avocat, maïs, yaourt grec",
-      kcal:640, timeMin:20, tags:["riche-protéines"], goals:["prise de masse","equilibre"], minPlan:"BASIC",
-      ingredients:["poulet","riz complet","avocat","maïs","yaourt grec","cumin","citron","sel","poivre"], steps:["1. Cuire le riz","2. Saisir le poulet","3. Assembler"] },
-    { id:"omelette-champignons", title:"Omelette champignons & fines herbes", subtitle:"Rapide du matin",
-      kcal:420, timeMin:10, tags:["rapide","sans-gluten"], goals:["equilibre"], minPlan:"BASIC",
-      ingredients:["œufs","champignons","ciboulette","beurre","sel","poivre","parmesan"], steps:["1. Battre les œufs","2. Cuire","3. Plier"] },
-    { id:"saumon-four", title:"Saumon au four & légumes rôtis", subtitle:"Carottes, brocoli, citron",
-      kcal:580, timeMin:25, tags:["omega-3","sans-gluten"], goals:["equilibre","santé"], minPlan:"BASIC",
-      ingredients:["saumon","brocoli","carottes","citron","huile d'olive","ail","sel","poivre"], steps:["1. Préchauffer","2. Rôtir","3. Servir"] },
-  ];
-  const seed = 123456789;
-  return seededShuffle(samples, seed).slice(0, Math.min(count, samples.length));
+/* ---- dictionnaire "re-travailler" ---- */
+const REWORK_TIPS: Record<string, string[]> = {
+  "brocoli": [
+    "Rôti au four avec parmesan et citron",
+    "Sauté wok sauce soja-sésame",
+    "Mixé en velouté avec crème légère"
+  ],
+  "saumon": [
+    "Mariné (miso/soja) puis grillé",
+    "Papillote citron-aneth",
+    "En rillettes yaourt grec + citron"
+  ],
+  "tofu": [
+    "Pressé puis mariné, snacké à feu vif",
+    "Panure maïzena + sauce aigre-douce",
+    "Émietté façon “œufs brouillés”"
+  ],
+  "poivron": [
+    "Confit au four puis pelé",
+    "En coulis doux dans une sauce",
+    "Grillé et servi froid (salade)"
+  ],
+  "champignons": [
+    "Poêlés très chauds, déglacés au vinaigre",
+    "Hachés fin dans une bolognaise",
+    "Rôtis entiers avec herbes"
+  ],
+  "courgette": [
+    "Tagliatelles à la poêle, ail-citron",
+    "Gratin ricotta/menthe",
+    "Râpée dans des galettes"
+  ],
+  "épinards": [
+    "Sautés minute avec ail et pignons",
+    "Mixés en pesto doux",
+    "Fondue à la crème légère"
+  ],
+  "lentilles": [
+    "Dal coco doux",
+    "Salade tiède moutarde/échalote",
+    "Soupe mixée carotte-cumin"
+  ],
+};
+
+/* ---- base healthy (dispo pour tous) ---- */
+const HEALTHY_BASE: Recipe[] = [
+  { id:"salade-quinoa", title:"Salade de quinoa croquante", subtitle:"Pois chiches, concombre, citron",
+    kcal:520, timeMin:15, tags:["végétarien","sans-gluten"], goals:["equilibre"], minPlan:"BASIC",
+    ingredients:["quinoa","pois chiches","concombre","citron","huile d'olive","sel","poivre","persil"], steps:["Rincer, cuire, assaisonner"] },
+  { id:"bowl-poulet-riz", title:"Bowl poulet & riz complet", subtitle:"Avocat, maïs, yaourt grec",
+    kcal:640, timeMin:20, tags:["protéiné"], goals:["prise de masse","equilibre"], minPlan:"BASIC",
+    ingredients:["poulet","riz complet","avocat","maïs","yaourt grec","cumin","citron","sel","poivre"], steps:["Cuire riz, saisir poulet, assembler"] },
+  { id:"omelette-herbes", title:"Omelette champignons & fines herbes", subtitle:"Rapide du matin",
+    kcal:420, timeMin:10, tags:["rapide","sans-gluten"], goals:["equilibre"], minPlan:"BASIC",
+    ingredients:["œufs","champignons","ciboulette","beurre","sel","poivre","parmesan"], steps:["Battre, cuire, plier"] },
+  { id:"saumon-four", title:"Saumon au four & légumes rôtis", subtitle:"Carottes, brocoli, citron",
+    kcal:580, timeMin:25, tags:["omega-3","sans-gluten"], goals:["equilibre","santé"], minPlan:"BASIC",
+    ingredients:["saumon","brocoli","carottes","citron","huile d'olive","ail","sel","poivre"], steps:["Préchauffer, rôtir, servir"] },
+  { id:"curry-chiche", title:"Curry de pois chiches coco", subtitle:"Vegan & réconfortant",
+    kcal:600, timeMin:30, tags:["vegan","sans-gluten"], goals:["equilibre"], minPlan:"BASIC",
+    ingredients:["pois chiches","lait de coco","tomates concassées","oignon","ail","curry","riz basmati","sel"], steps:["Suer, mijoter, servir"] },
+  { id:"tofu-brocoli-wok", title:"Tofu sauté au brocoli (wok)", subtitle:"Sauce soja-sésame",
+    kcal:530, timeMin:15, tags:["vegan","rapide"], goals:["sèche","equilibre"], minPlan:"BASIC",
+    ingredients:["tofu ferme","brocoli","sauce soja","ail","gingembre","graines de sésame","huile","maïzena"], steps:["Saisir, lier, napper"] },
+];
+
+/* ---- personnalisation pour PLUS/PREMIUM ---- */
+function personalize({
+  base, kcal, kcalMin, kcalMax, allergens, dislikes, plan,
+}: {
+  base: Recipe[];
+  kcal?: number; kcalMin?: number; kcalMax?: number;
+  allergens: string[];
+  dislikes: string[];
+  plan: Plan;
+}): Recipe[] {
+  // 1) filtre allergènes (exclusion stricte)
+  let filtered = base.filter(r => {
+    const ing = r.ingredients.map(i => i.toLowerCase());
+    return !allergens.some(a => ing.includes(a));
+  });
+
+  // 2) filtre calories (range ou target ±10%)
+  if (typeof kcal === "number" && !isNaN(kcal) && kcal > 0) {
+    const tol = Math.round(kcal * 0.1);
+    filtered = filtered.filter(r => typeof r.kcal === "number" && Math.abs((r.kcal || 0) - kcal) <= tol);
+  } else {
+    const hasMin = typeof kcalMin === "number" && !isNaN(kcalMin) && kcalMin > 0;
+    const hasMax = typeof kcalMax === "number" && !isNaN(kcalMax) && kcalMax > 0;
+    if (hasMin) filtered = filtered.filter(r => (r.kcal || 0) >= (kcalMin as number));
+    if (hasMax) filtered = filtered.filter(r => (r.kcal || 0) <= (kcalMax as number));
+  }
+
+  // 3) "re-travailler" les dislikes (on NE supprime PAS, on ajoute des tips)
+  const dislikesSet = new Set(dislikes);
+  const personalized = filtered.map(r => {
+    const ingLower = r.ingredients.map(i => i.toLowerCase());
+    const hits = [...dislikesSet].filter(d => ingLower.includes(d));
+    if (!hits.length) return { ...r, minPlan: plan === "PREMIUM" ? "PREMIUM" : "PLUS" as Plan };
+
+    const tips: Rework[] = hits.map(h => ({
+      ingredient: h,
+      tips: REWORK_TIPS[h] ?? [
+        "Changer de technique de cuisson (rôti/grillé/vapeur)",
+        "Assaisonner différemment (acidité/herbes/épices)",
+        "Hacher/mixer pour adoucir la texture"
+      ]
+    }));
+
+    return { ...r, minPlan: plan === "PREMIUM" ? "PREMIUM" : "PLUS", rework: tips };
+  });
+
+  // un petit shuffle stable pour varier
+  const seed = 987654321;
+  return seededShuffle(personalized, seed);
 }
 
-export default async function Page() {
-  const recipes = sampleRecipes(8);
+/** ---- Server Action: appliquer filtres ; BASIC => abonnement ---- */
+async function applyFiltersAction(formData: FormData): Promise<void> {
+  "use server";
+  const s: any = await getSession().catch(() => ({}));
+  const plan: Plan = (s?.plan as Plan) || "BASIC";
+
+  const params = new URLSearchParams();
+  const fields = ["kcal","kcalMin","kcalMax","allergens","dislikes"] as const;
+  for (const f of fields) {
+    const val = (formData.get(f) ?? "").toString().trim();
+    if (val) params.set(f, val);
+  }
+  params.set("rnd", String(Date.now()));
+
+  if (plan === "BASIC") redirect("/dashboard/abonnement");
+
+  redirect(`/dashboard/recipes?${params.toString()}`);
+}
+
+/* ---------------- Page ---------------- */
+export default async function Page({
+  searchParams,
+}: {
+  searchParams?: { kcal?: string; kcalMin?: string; kcalMax?: string; allergens?: string; dislikes?: string; rnd?: string };
+}) {
+  const s: any = await getSession().catch(() => ({}));
+  const plan: Plan = (s?.plan as Plan) || "BASIC";
+
+  const kcal = Number(searchParams?.kcal ?? "");
+  const kcalMin = Number(searchParams?.kcalMin ?? "");
+  const kcalMax = Number(searchParams?.kcalMax ?? "");
+  const allergens = parseCsv(searchParams?.allergens);
+  const dislikes = parseCsv(searchParams?.dislikes);
+
+  const hasKcalTarget = !isNaN(kcal) && kcal > 0;
+  const hasKcalMin = !isNaN(kcalMin) && kcalMin > 0;
+  const hasKcalMax = !isNaN(kcalMax) && kcalMax > 0;
+
+  // bloc healthy commun
+  const healthy = HEALTHY_BASE;
+
+  // bloc personnalisé (réservé PLUS/PREMIUM)
+  const personalized = plan === "BASIC"
+    ? []
+    : personalize({
+        base: HEALTHY_BASE,
+        kcal: hasKcalTarget ? kcal : undefined,
+        kcalMin: hasKcalMin ? kcalMin : undefined,
+        kcalMax: hasKcalMax ? kcalMax : undefined,
+        allergens, dislikes, plan,
+      }).map(r => ({ ...r, minPlan: plan })); // tag visible
+
+  // choisir quelques cartes à mettre en avant
+  const seed = Number(searchParams?.rnd ?? "0") || 123456789;
+  const healthyPick = pickRandomSeeded(healthy, 4, seed);
+  const personalizedPick = pickRandomSeeded(personalized, 6, seed);
+
+  // QS gardés (pour Voir la recette)
+  const qsParts: string[] = [];
+  if (hasKcalTarget) qsParts.push(`kcal=${kcal}`);
+  if (hasKcalMin) qsParts.push(`kcalMin=${kcalMin}`);
+  if (hasKcalMax) qsParts.push(`kcalMax=${kcalMax}`);
+  if (allergens.length) qsParts.push(`allergens=${encodeURIComponent(allergens.join(","))}`);
+  if (dislikes.length) qsParts.push(`dislikes=${encodeURIComponent(dislikes.join(","))}`);
+  const baseQS = qsParts.length ? `?${qsParts.join("&")}` : "";
 
   const encode = (r: Recipe) => {
     const b64url = encodeB64UrlJson(r);
-    return `?data=${b64url}`;
+    return `${baseQS}${baseQS ? "&" : "?"}data=${b64url}`;
   };
 
+  const disabled = plan === "BASIC";
+
   return (
-    <div className="container" style={{ padding: 24 }}>
+    <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
       <div className="page-header">
-        <h1 className="h1" style={{ margin: 0 }}>Recettes</h1>
-        <p className="lead" style={{ marginTop: 6, color: "#6b7280" }}>
-          Version clean, sans dépendances — cliquez pour voir une fiche recette.
-        </p>
+        <div>
+          <h1 className="h1">Recettes</h1>
+          <p className="lead">Healthy pour tous. Personnalisation selon calories, allergies & aliments non aimés pour PLUS/PREMIUM.</p>
+        </div>
+        <div className="text-sm">
+          Votre formule : <span className="badge" style={{ marginLeft: 6 }}>{plan}</span>
+        </div>
       </div>
 
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2" style={{ marginTop: 16 }}>
-        {recipes.map((r) => {
-          const detailQS = encode(r);
-          return (
-            <article key={r.id} className="card" style={{ overflow: "hidden" }}>
-              <div className="flex items-center justify-between">
-                <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>{r.title}</h3>
-                {typeof r.kcal === "number" && <span className="badge">{r.kcal} kcal</span>}
-              </div>
-              {r.subtitle && <p className="text-sm" style={{ color: "#6b7280", marginTop: 4 }}>{r.subtitle}</p>}
+      {/* CTA upgrade pour BASIC */}
+      {plan === "BASIC" && (
+        <div className="card" style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:12 }}>
+          <div>
+            <strong>Débloquez la personnalisation</strong>
+            <div className="text-sm" style={{ color:"#6b7280" }}>Filtre calories, exclusions allergènes, “re-travailler” les aliments non aimés.</div>
+          </div>
+          <a className="btn btn-dash" href="/dashboard/abonnement">Passer à PLUS</a>
+        </div>
+      )}
 
-              <div className="text-sm" style={{ marginTop: 8 }}>
-                <strong>Ingrédients</strong>
-                <ul style={{ margin: "6px 0 0 16px" }}>
-                  {r.ingredients.slice(0, 6).map((i, idx) => <li key={idx}>{i}</li>)}
-                  {r.ingredients.length > 6 && <li>+ {r.ingredients.length - 6} autre(s)…</li>}
-                </ul>
-              </div>
+      {/* Filtres */}
+      <div className="section" style={{ marginTop: 12 }}>
+        <div className="section-head" style={{ marginBottom: 8 }}>
+          <h2>Contraintes & filtres {disabled && <span className="badge">Réservé PLUS/PREMIUM</span>}</h2>
+        </div>
 
-              <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-                <a className="btn btn-dash" href={`/dashboard/recipes/${r.id}${detailQS}`}>Voir la recette</a>
+        <form action={applyFiltersAction} className="grid gap-6 lg:grid-cols-2" >
+          <fieldset disabled={disabled} style={{ display:"contents" }}>
+            <div>
+              <label className="label">Cible calories (kcal)</label>
+              <input className="input" type="number" name="kcal" placeholder="ex: 600" defaultValue={hasKcalTarget ? String(kcal) : ""} />
+            </div>
+            <div className="grid gap-6 sm:grid-cols-2">
+              <div>
+                <label className="label">Min kcal</label>
+                <input className="input" type="number" name="kcalMin" placeholder="ex: 450" defaultValue={hasKcalMin ? String(kcalMin) : ""} />
               </div>
-            </article>
-          );
-        })}
+              <div>
+                <label className="label">Max kcal</label>
+                <input className="input" type="number" name="kcalMax" placeholder="ex: 700" defaultValue={hasKcalMax ? String(kcalMax) : ""} />
+              </div>
+            </div>
+
+            <div>
+              <label className="label">Allergènes / intolérances (séparés par virgules)</label>
+              <input className="input" type="text" name="allergens" placeholder="arachide, lactose, gluten" defaultValue={allergens.join(", ")} />
+            </div>
+
+            <div>
+              <label className="label">Aliments non aimés (re-travailler)</label>
+              <input className="input" type="text" name="dislikes" placeholder="brocoli, saumon, tofu..." defaultValue={dislikes.join(", ")} />
+              <div className="text-xs" style={{ color:"#6b7280", marginTop:4 }}>
+                On les garde, mais on propose une autre façon de les cuisiner.
+              </div>
+            </div>
+          </fieldset>
+
+          <div className="flex items-center justify-between lg:col-span-2">
+            <div className="text-sm" style={{ color: "#6b7280" }}>
+              {disabled ? "Passez à PLUS pour activer les filtres." : "Ajustez les filtres puis régénérez."}
+            </div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <a href="/dashboard/recipes" className="btn btn-outline" style={{ color: "#111" }}>
+                Réinitialiser
+              </a>
+              <button className="btn btn-dash" type="submit" disabled={disabled}>Régénérer</button>
+            </div>
+          </div>
+        </form>
       </div>
+
+      {/* Healthy pour tous */}
+      <section className="section" style={{ marginTop: 12 }}>
+        <div className="section-head" style={{ marginBottom: 8 }}><h2>Healthy (pour tous)</h2></div>
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
+          {healthyPick.map((r) => {
+            const detailQS = encode(r);
+            return <Card key={r.id} r={r} detailQS={detailQS} userPlan={plan} />;
+          })}
+        </div>
+      </section>
+
+      {/* Personnalisées */}
+      {plan !== "BASIC" && (
+        <section className="section" style={{ marginTop: 12 }}>
+          <div className="section-head" style={{ marginBottom: 8 }}>
+            <h2>Recettes personnalisées ({plan})</h2>
+          </div>
+          {personalizedPick.length ? (
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
+              {personalizedPick.map((r) => {
+                const detailQS = encode(r);
+                return <Card key={r.id} r={r} detailQS={detailQS} userPlan={plan} />;
+              })}
+            </div>
+          ) : (
+            <div className="card text-sm" style={{ color:"#6b7280" }}>
+              Aucune recette correspondant exactement à vos filtres. Essayez d’élargir la plage calorique ou de réduire les exclusions.
+            </div>
+          )}
+        </section>
+      )}
     </div>
+  );
+}
+
+function Card({ r, detailQS, userPlan }: { r: Recipe; detailQS: string; userPlan: Plan; }) {
+  const href = `/dashboard/recipes/${r.id}${detailQS}`;
+  const ing = Array.isArray(r.ingredients) ? r.ingredients : [];
+  const shown = ing.slice(0, 8);
+  const more = Math.max(0, ing.length - shown.length);
+
+  return (
+    <article className="card" style={{ overflow: "hidden" }}>
+      <div className="flex items-center justify-between">
+        <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>{r.title}</h3>
+        <span className="badge">{r.minPlan}</span>
+      </div>
+      <div className="text-sm" style={{ marginTop: 10, display: "flex", gap: 12, flexWrap: "wrap" }}>
+        {typeof r.kcal === "number" && <span className="badge">{r.kcal} kcal</span>}
+        {typeof r.timeMin === "number" && <span className="badge">{r.timeMin} min</span>}
+      </div>
+      <div className="text-sm" style={{ marginTop: 10 }}>
+        <strong>Ingrédients</strong>
+        <ul style={{ margin: "6px 0 0 16px" }}>
+          {shown.map((i, idx) => <li key={idx}>{i}</li>)}
+          {more > 0 && <li>+ {more} autre(s)…</li>}
+        </ul>
+      </div>
+      <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+        <a className="btn btn-dash" href={href}>Voir la recette</a>
+      </div>
+    </article>
   );
 }
