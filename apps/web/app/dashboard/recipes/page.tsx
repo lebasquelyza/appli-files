@@ -204,11 +204,6 @@ Règles:
       // sécurité: exclure les allergènes demandés
       const ingLow = r.ingredients.map(i => i.toLowerCase());
       if (allergens.some(a => ingLow.includes(a))) return false;
-      // si dislikes mais pas de rework, injecter un rework de secours
-      const hits = dislikes.filter(d => ingLow.includes(d));
-      if (hits.length && (!r.rework || !r.rework.length)) {
-        r.rework = hits.map(h => ({ ingredient: h, tips: REWORK_TIPS[h] ?? ["Changer la cuisson", "Assaisonnement différent", "Mixer/hacher pour texture"] }));
-      }
       return true;
     });
 
@@ -231,7 +226,8 @@ function personalizeFallback({
     return !allergens.some(a => ing.includes(a));
   });
   if (typeof kcal === "number" && !isNaN(kcal) && kcal > 0) {
-    const tol = Math.round(kcal * 0.1);
+    // tolérance plus souple: ±15% avec plancher 75 kcal
+    const tol = Math.max(75, Math.round(kcal * 0.15));
     filtered = filtered.filter(r => typeof r.kcal === "number" && Math.abs((r.kcal || 0) - kcal) <= tol);
   } else {
     const hasMin = typeof kcalMin === "number" && !isNaN(kcalMin) && kcalMin > 0;
@@ -314,6 +310,24 @@ export default async function Page({
         });
   }
 
+  // Si vide, relâcher la contrainte calories (on garde allergènes)
+  let relaxedNote: string | null = null;
+  if (plan !== "BASIC" && personalized.length === 0) {
+    const relaxed = personalizeFallback({
+      base: HEALTHY_BASE,
+      // calories ignorées ici :
+      allergens, dislikes, plan,
+    });
+    if (relaxed.length) {
+      personalized = relaxed;
+      relaxedNote = "Ajustement automatique : contrainte calories relâchée (allergènes respectés).";
+    } else {
+      // Dernier filet de sécurité : proposer la base healthy taggée au plan
+      personalized = HEALTHY_BASE.map(r => ({ ...r, minPlan: plan }));
+      relaxedNote = "Ajustement automatique : suggestions healthy compatibles avec vos contraintes.";
+    }
+  }
+
   // choisir quelques cartes à mettre en avant
   const seed = Number(searchParams?.rnd ?? "0") || 123456789;
   const healthyPick = pickRandomSeeded(healthy, 4, seed);
@@ -341,6 +355,15 @@ export default async function Page({
         <div>
           <h1 className="h1">Recettes</h1>
           <p className="lead">Healthy pour tous. Pour PLUS/PREMIUM, l’IA adapte aux calories, allergies et aliments à re-travailler.</p>
+          {/* Récap filtres actifs */}
+          <div className="text-xs" style={{color:"#6b7280", marginTop:8}}>
+            Filtres actifs — 
+            {hasKcalTarget && <> cible: ~{kcal} kcal</>}
+            {!hasKcalTarget && (hasKcalMin || hasKcalMax) && <> plage: {hasKcalMin? kcalMin:"…"}–{hasKcalMax? kcalMax:"…"} kcal</>}
+            {allergens.length ? <> · allergènes: {allergens.join(", ")}</> : null}
+            {dislikes.length ? <> · non aimés: {dislikes.join(", ")}</> : null}
+            {(!hasKcalTarget && !hasKcalMin && !hasKcalMax && !allergens.length && !dislikes.length) && " aucun"}
+          </div>
         </div>
         <div className="text-sm">
           Votre formule : <span className="badge" style={{ marginLeft: 6 }}>{plan}</span>
@@ -426,6 +449,13 @@ export default async function Page({
           <div className="section-head" style={{ marginBottom: 8 }}>
             <h2>Recettes personnalisées (IA)</h2>
           </div>
+
+          {relaxedNote && (
+            <div className="text-xs" style={{ color:"#6b7280", marginBottom:8 }}>
+              {relaxedNote}
+            </div>
+          )}
+
           {personalizedPick.length ? (
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
               {personalizedPick.map((r) => {
@@ -447,30 +477,4 @@ export default async function Page({
 
 function Card({ r, detailQS }: { r: Recipe; detailQS: string; }) {
   const href = `/dashboard/recipes/${r.id}${detailQS}`;
-  const ing = Array.isArray(r.ingredients) ? r.ingredients : [];
-  const shown = ing.slice(0, 8);
-  const more = Math.max(0, ing.length - shown.length);
-
-  return (
-    <article className="card" style={{ overflow: "hidden" }}>
-      <div className="flex items-center justify-between">
-        <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>{r.title}</h3>
-        <span className="badge">{r.minPlan}</span>
-      </div>
-      <div className="text-sm" style={{ marginTop: 10, display: "flex", gap: 12, flexWrap: "wrap" }}>
-        {typeof r.kcal === "number" && <span className="badge">{r.kcal} kcal</span>}
-        {typeof r.timeMin === "number" && <span className="badge">{r.timeMin} min</span>}
-      </div>
-      <div className="text-sm" style={{ marginTop: 10 }}>
-        <strong>Ingrédients</strong>
-        <ul style={{ margin: "6px 0 0 16px" }}>
-          {shown.map((i, idx) => <li key={idx}>{i}</li>)}
-          {more > 0 && <li>+ {more} autre(s)…</li>}
-        </ul>
-      </div>
-      <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-        <a className="btn btn-dash" href={href}>Voir la recette</a>
-      </div>
-    </article>
-  );
-}
+  const ing = Arra
