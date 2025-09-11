@@ -18,25 +18,9 @@ type Recipe = {
   steps: string[];
 };
 
-function planRank(p?: Plan) {
-  return p === "PREMIUM" ? 3 : p === "PLUS" ? 2 : 1;
-}
-/* ---- base64url JSON (Node + Browser) ---- */
-function encodeB64UrlJson(data: any): string {
-  const json = JSON.stringify(data);
-  if (typeof window === "undefined") {
-    // @ts-ignore Buffer dispo côté Node
-    return Buffer.from(json, "utf8").toString("base64")
-      .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/,"");
-  } else {
-    const bytes = new TextEncoder().encode(json);
-    let bin = "";
-    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-    const b64 = btoa(bin);
-    return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/,"");
-  }
-}
+function planRank(p?: Plan) { return p === "PREMIUM" ? 3 : p === "PLUS" ? 2 : 1; }
 
+/* ---- b64url -> JSON (Node + Browser, safe) ---- */
 function b64urlToJson<T = any>(b64url: string): T | null {
   try {
     const pad = "=".repeat((4 - (b64url.length % 4)) % 4);
@@ -52,24 +36,16 @@ function b64urlToJson<T = any>(b64url: string): T | null {
       const json = new TextDecoder().decode(bytes);
       return JSON.parse(json);
     }
-  } catch {
-    return null; // => affichera "Recette introuvable" plutôt que planter
-  }
+  } catch { return null; }
 }
 
 /* ---- Normalise le JSON pour éviter tout crash au rendu ---- */
 function normalizeRecipe(raw: any, forcedId: string): Recipe | null {
   const title = String(raw?.title ?? "").trim();
   if (!title) return null;
-  const minPlan = (["BASIC", "PLUS", "PREMIUM"].includes(raw?.minPlan)
-    ? raw.minPlan
-    : "BASIC") as Plan;
-  const ingredients = Array.isArray(raw?.ingredients)
-    ? raw.ingredients.map((x: any) => String(x))
-    : [];
-  const steps = Array.isArray(raw?.steps)
-    ? raw.steps.map((x: any) => String(x))
-    : [];
+  const minPlan = (["BASIC","PLUS","PREMIUM"].includes(raw?.minPlan) ? raw.minPlan : "BASIC") as Plan;
+  const ingredients = Array.isArray(raw?.ingredients) ? raw.ingredients.map((x: any) => String(x)) : [];
+  const steps = Array.isArray(raw?.steps) ? raw.steps.map((x: any) => String(x)) : [];
   return {
     id: forcedId,
     title,
@@ -103,9 +79,7 @@ export default async function Page({
         <div className="section" style={{ marginTop: 12 }}>
           <h2 style={{ marginTop: 0 }}>Recette introuvable</h2>
           <p>Impossible d’afficher cette recette. Ouvrez-la depuis la liste.</p>
-          <a href="/dashboard/recipes" className="btn btn-dash">
-            ← Retour aux recettes
-          </a>
+          <a href="/dashboard/recipes" className="btn btn-dash">← Retour aux recettes</a>
         </div>
       </div>
     );
@@ -121,9 +95,7 @@ export default async function Page({
           <p className="lead" style={{ marginBottom: 16 }}>
             Cette recette est réservée au plan <strong>{r.minPlan}</strong>.
           </p>
-          <a className="btn btn-dash" href="/dashboard/abonnement">
-            Passer à {need}
-          </a>
+          <a className="btn btn-dash" href="/dashboard/abonnement">Passer à {need}</a>
         </div>
       </div>
     );
@@ -139,10 +111,7 @@ export default async function Page({
           <h1 className="h1">{r.title}</h1>
           {r.subtitle && <p className="lead">{r.subtitle}</p>}
         </div>
-        <div
-          className="text-sm"
-          style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
-        >
+        <div className="text-sm" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {typeof r.kcal === "number" && <span className="badge">{r.kcal} kcal</span>}
           {typeof r.timeMin === "number" && <span className="badge">{r.timeMin} min</span>}
           <span className="badge">{r.minPlan}</span>
@@ -154,14 +123,10 @@ export default async function Page({
           <h3 style={{ marginTop: 0 }}>Ingrédients</h3>
           {ing.length ? (
             <ul style={{ marginTop: 6, paddingLeft: 18 }}>
-              {ing.map((i, k) => (
-                <li key={k}>{i}</li>
-              ))}
+              {ing.map((i, k) => <li key={k}>{i}</li>)}
             </ul>
           ) : (
-            <p className="text-sm" style={{ color: "#6b7280" }}>
-              Pas d’ingrédients détaillés pour cette suggestion.
-            </p>
+            <p className="text-sm" style={{ color: "#6b7280" }}>Pas d’ingrédients détaillés pour cette suggestion.</p>
           )}
         </article>
 
@@ -169,9 +134,7 @@ export default async function Page({
           <h3 style={{ marginTop: 0 }}>Préparation</h3>
           {steps.length ? (
             <ol style={{ marginTop: 6, paddingLeft: 18 }}>
-              {steps.map((s, k) => (
-                <li key={k}>{s}</li>
-              ))}
+              {steps.map((s, k) => <li key={k}>{s}</li>)}
             </ol>
           ) : (
             <p className="text-sm" style={{ color: "#6b7280" }}>
@@ -182,9 +145,7 @@ export default async function Page({
       </div>
 
       <div style={{ marginTop: 16 }}>
-        <a className="btn btn-outline" href="/dashboard/recipes">
-          ← Retour
-        </a>
+        <a className="btn btn-outline" href="/dashboard/recipes">← Retour</a>
       </div>
     </div>
   );
