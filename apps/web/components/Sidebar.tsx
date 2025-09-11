@@ -1,5 +1,4 @@
 "use client";
-
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -9,10 +8,9 @@ const items = [
   { href: "/dashboard/progress", label: "Mes progrès" },
   { href: "/dashboard/corrector", label: "Files te corrige" },
   { href: "/dashboard/recipes", label: "Recettes" },
-  { href: "/dashboard/calories", label: "Calories" },
   { href: "/dashboard/notifications", label: "Notifications" },
   { href: "/dashboard/connect", label: "Connecte tes données" },
-  { href: "/dashboard/abonnement", label: "Abonnement" },
+  { href: "/dashboard/pricing", label: "Abonnement" },
   { href: "/dashboard/bmi", label: "IMC" },
   { href: "/dashboard/music", label: "Musique" },
   { href: "/dashboard/settings", label: "Réglages" }
