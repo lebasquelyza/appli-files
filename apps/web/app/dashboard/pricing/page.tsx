@@ -20,9 +20,9 @@ type PlanCard = {
 };
 
 const PLANS: PlanCard[] = [
-  { code:"BASIC", title:"Basic", priceEUR:9.90,  tagline:"Recettes + Minuteur",
+  { code:"BASIC",   title:"Basic",   priceEUR: 9.90, tagline:"Recettes + Minuteur",
     features:["Recettes générales","Minuteur d’exercices","Support par email"], cta:"Choisir Basic" },
-  { code:"PLUS", title:"Plus", priceEUR:19.90, tagline:"Basic + Personnalisation",
+  { code:"PLUS",    title:"Plus",    priceEUR:19.90, tagline:"Basic + Personnalisation",
     features:["Recettes personnalisées (IA)","Filtres avancés (allergènes, régimes)","Historique & favoris"], cta:"Choisir Plus", recommended:true },
   { code:"PREMIUM", title:"Premium", priceEUR:39.90, tagline:"Plus + IA correction",
     features:["Plans repas hebdo IA","Correction vidéo des exercices","Priorité support"], cta:"Choisir Premium" },
@@ -93,29 +93,21 @@ export default async function Page({ searchParams }: { searchParams?: { success?
 
   return (
     <div className="container" style={{ paddingTop:24, paddingBottom:32 }}>
-     <header className="page-header" style={{ marginBottom:18 }}>
-  <div>
-    
-    {/* Titre normal (≈20px) */}
-    <h1 style={{ margin:0, fontSize:20, lineHeight:1.3, fontWeight:800 }}>
-      Tarifs & Abonnements
-    </h1>
-    {/* Sous-titre plus petit (≈14px) */}
-    <p style={{ margin:"6px 0 0", fontSize:14, lineHeight:1.5, color:"#374151" }}>
-      Choisissez la formule qui vous convient et activez Coaching+ si besoin.
-    </p>
-    {/* Note encore plus discrète (≈12px) */}
-    <div style={{ marginTop:6, fontSize:12, lineHeight:1.5, color:"#6b7280" }}>
-      Les changements s’appliquent immédiatement dans l’app (démo&nbsp;: sans paiement réel).
-    </div>
-  </div>
-
-  {/* Même taille que le reste pour le plan actuel */}
-  <div style={{ fontSize:16, fontWeight:600 }}>
-    Plan actuel : <span className="badge" style={{ marginLeft:6 }}>{plan}</span>
-  </div>
-</header>
-
+      {/* Bandeau compact en haut (même design que les sections) */}
+      <section className="section" style={{ marginTop: 0 }}>
+        <div className="card" style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:12 }}>
+          <div>
+            <h2 style={{ margin:0, fontSize:18, fontWeight:800 }}>Tarifs & Abonnements</h2>
+            <div className="text-sm" style={{ marginTop:6, color:"#6b7280" }}>
+              Choisissez la formule qui vous convient et activez Coaching+ si besoin.<br/>
+              Les changements s’appliquent immédiatement dans l’app (démo&nbsp;: sans paiement réel).
+            </div>
+          </div>
+          <div style={{ fontSize:16, fontWeight:600 }}>
+            Plan actuel : <span className="badge" style={{ marginLeft:6 }}>{plan}</span>
+          </div>
+        </div>
+      </section>
 
       {/* Alerts */}
       {!!searchParams?.success && (
@@ -183,6 +175,7 @@ export default async function Page({ searchParams }: { searchParams?: { success?
                   minHeight: 320
                 }}
               >
+                {/* Rubans */}
                 <div style={{ position:"absolute", top:12, right:12, display:"flex", gap:8 }}>
                   {p.recommended && <span className="badge">Recommandé</span>}
                   {isCurrent && <span className="badge">Actif</span>}
@@ -195,14 +188,17 @@ export default async function Page({ searchParams }: { searchParams?: { success?
                   </div>
                   <div className="text-sm" style={{ color:"#6b7280", marginTop:4 }}>{p.tagline}</div>
 
+                  {/* Prix très visible */}
                   <div style={{ fontSize:30, fontWeight:900, marginTop:10, letterSpacing:0.2 }}>
                     {eur(p.priceEUR)}
                   </div>
 
+                  {/* Features */}
                   <ul style={{ marginTop:10, paddingLeft:18, lineHeight:1.7 }}>
                     {p.features.map((f) => <li key={f}>{f}</li>)}
                   </ul>
 
+                  {/* Option Coaching+ */}
                   <div style={{ marginTop:12 }}>
                     <label className="label" style={{ display:"block", fontWeight:700, marginBottom:6 }}>Option Coaching+</label>
                     <select
@@ -222,6 +218,7 @@ export default async function Page({ searchParams }: { searchParams?: { success?
                   </div>
                 </div>
 
+                {/* CTA */}
                 <form id={`form-${p.code}`} action={choosePlanAction} style={{ marginTop:16 }}>
                   <input type="hidden" name="plan" value={p.code} />
                   <button className="btn btn-dash" type="submit" style={{ width:"100%", padding:"10px 12px", fontWeight:800 }}>
