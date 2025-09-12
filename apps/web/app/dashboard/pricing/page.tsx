@@ -102,7 +102,7 @@ export default async function Page({ searchParams }: { searchParams?: { success?
             Les changements s’appliquent immédiatement dans l’app (démo&nbsp;: sans paiement réel).
           </div>
         </div>
-        <div className="text-sm">
+        <div style={{ fontSize: 16, fontWeight: 600 }}>
           Plan actuel : <span className="badge" style={{ marginLeft: 6 }}>{plan}</span>
         </div>
       </header>
