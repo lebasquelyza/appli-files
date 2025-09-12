@@ -12,7 +12,7 @@ type Plan = "BASIC" | "PLUS" | "PREMIUM";
 type PlanCard = {
   code: Plan;
   title: string;
-  priceEUR: number;   // affichage via eur()
+  priceEUR: number;
   tagline: string;
   features: string[];
   cta: string;
@@ -102,6 +102,7 @@ export default async function Page({ searchParams }: { searchParams?: { success?
             Les changements s’appliquent immédiatement dans l’app (démo&nbsp;: sans paiement réel).
           </div>
         </div>
+        {/* ICI : même taille que le reste */}
         <div style={{ fontSize: 16, fontWeight: 600 }}>
           Plan actuel : <span className="badge" style={{ marginLeft: 6 }}>{plan}</span>
         </div>
@@ -173,7 +174,6 @@ export default async function Page({ searchParams }: { searchParams?: { success?
                   minHeight: 320
                 }}
               >
-                {/* Rubans */}
                 <div style={{ position:"absolute", top:12, right:12, display:"flex", gap:8 }}>
                   {p.recommended && <span className="badge">Recommandé</span>}
                   {isCurrent && <span className="badge">Actif</span>}
@@ -186,17 +186,14 @@ export default async function Page({ searchParams }: { searchParams?: { success?
                   </div>
                   <div className="text-sm" style={{ color:"#6b7280", marginTop:4 }}>{p.tagline}</div>
 
-                  {/* Prix très visible */}
                   <div style={{ fontSize:30, fontWeight:900, marginTop:10, letterSpacing:0.2 }}>
                     {eur(p.priceEUR)}
                   </div>
 
-                  {/* Features */}
                   <ul style={{ marginTop:10, paddingLeft:18, lineHeight:1.7 }}>
                     {p.features.map((f) => <li key={f}>{f}</li>)}
                   </ul>
 
-                  {/* Option Coaching+ */}
                   <div style={{ marginTop:12 }}>
                     <label className="label" style={{ display:"block", fontWeight:700, marginBottom:6 }}>Option Coaching+</label>
                     <select
@@ -216,7 +213,6 @@ export default async function Page({ searchParams }: { searchParams?: { success?
                   </div>
                 </div>
 
-                {/* CTA */}
                 <form id={`form-${p.code}`} action={choosePlanAction} style={{ marginTop:16 }}>
                   <input type="hidden" name="plan" value={p.code} />
                   <button className="btn btn-dash" type="submit" style={{ width:"100%", padding:"10px 12px", fontWeight:800 }}>
