@@ -67,7 +67,6 @@ function toYMD(d: Date) {
   return `${y}-${m}-${da}`;
 }
 function parseYMDLocal(s: string) {
-  // Parse "YYYY-MM-DD" en local
   const [y, m, d] = s.split("-").map(Number);
   return new Date(y, (m || 1) - 1, d || 1);
 }
@@ -164,7 +163,6 @@ export default async function Page({ searchParams }: { searchParams?: { success?
   const stepsThisWeek = store.entries
     .filter(e => e.type === "steps")
     .filter(e => {
-      // e.date est "YYYY-MM-DD"
       const d = parseYMDLocal(e.date);
       return d >= monday && d <= sunday;
     })
@@ -193,7 +191,7 @@ export default async function Page({ searchParams }: { searchParams?: { success?
               Enregistrez vos pas, vos charges (kg) et votre poids. Vos entrées sont stockées en local (cookie).
             </div>
           </div>
-          <a href="/dashboard" className="btn btn-outline">← Retour</a>
+          <a href="/dashboard" className="btn btn-outline" style={{ color: "#111" }}>← Retour</a>
         </div>
       </section>
 
@@ -264,7 +262,7 @@ export default async function Page({ searchParams }: { searchParams?: { success?
         </form>
       </section>
 
-      {/* ====== NOUVELLE SECTION : Steps semaine en cours ====== */}
+      {/* Steps semaine en cours */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
           <h2 style={{ margin: 0 }}>Pas — semaine en cours</h2>
@@ -287,7 +285,7 @@ export default async function Page({ searchParams }: { searchParams?: { success?
         </article>
       </section>
 
-      {/* Résumé dernier point par type */}
+      {/* Dernières valeurs */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
           <h2 style={{ margin: 0 }}>Dernières valeurs</h2>
@@ -377,7 +375,9 @@ export default async function Page({ searchParams }: { searchParams?: { success?
 
                 <form action={deleteEntryAction} style={{ marginTop: 4 }}>
                   <input type="hidden" name="id" value={e.id} />
-                  <button className="btn btn-outline" type="submit">Supprimer</button>
+                  <button className="btn btn-outline" type="submit" style={{ color: "#111" }}>
+                    Supprimer
+                  </button>
                 </form>
               </article>
             ))}
