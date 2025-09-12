@@ -93,7 +93,7 @@ export default async function Page({ searchParams }: { searchParams?: { success?
 
   return (
     <div className="container" style={{ paddingTop:24, paddingBottom:32 }}>
-      {/* Bandeau compact en haut (même design que les sections) */}
+      {/* Bandeau compact en haut */}
       <section className="section" style={{ marginTop: 0 }}>
         <div className="card" style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:12 }}>
           <div>
@@ -183,8 +183,8 @@ export default async function Page({ searchParams }: { searchParams?: { success?
 
                 <div>
                   <div className="flex items-center justify-between">
+                    {/* Titre à gauche seulement, PAS de badge code à droite */}
                     <h3 style={{ margin:0, fontSize:18, fontWeight:800 }}>{p.title}</h3>
-                    <span className="badge">{p.code}</span>
                   </div>
                   <div className="text-sm" style={{ color:"#6b7280", marginTop:4 }}>{p.tagline}</div>
 
