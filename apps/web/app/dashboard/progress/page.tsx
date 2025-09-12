@@ -47,6 +47,31 @@ function uid() {
   return "id-" + Math.random().toString(36).slice(2, 10);
 }
 
+/* ====== Helpers "semaine en cours" (lundi → dimanche) ====== */
+function startOfWeekMonday(d: Date) {
+  const ld = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const day = ld.getDay(); // 0=Dim..6=Sam
+  const diffSinceMonday = (day + 6) % 7; // Lundi=0, Dimanche=6
+  ld.setDate(ld.getDate() - diffSinceMonday);
+  return ld;
+}
+function endOfWeekFromMonday(monday: Date) {
+  const s = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate());
+  s.setDate(s.getDate() + 6);
+  return s;
+}
+function toYMD(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const da = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${da}`;
+}
+function parseYMDLocal(s: string) {
+  // Parse "YYYY-MM-DD" en local
+  const [y, m, d] = s.split("-").map(Number);
+  return new Date(y, (m || 1) - 1, d || 1);
+}
+
 /** ------ Server Actions ------ */
 async function addProgressAction(formData: FormData) {
   "use server";
@@ -116,7 +141,7 @@ export default async function Page({ searchParams }: { searchParams?: { success?
   // Dernières entrées triées par createdAt desc
   const recent = [...store.entries].sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || "")).slice(0, 12);
 
-  // Dernières valeurs par type
+  // Dernières valeurs par type (naïf)
   const lastByType: Record<EntryType, ProgressEntry | undefined> = {
     steps: store.entries.find(e => e.type === "steps"),
     load: store.entries.find(e => e.type === "load"),
@@ -129,6 +154,33 @@ export default async function Page({ searchParams }: { searchParams?: { success?
   const mm = String(today.getMonth() + 1).padStart(2, "0");
   const dd = String(today.getDate()).padStart(2, "0");
   const defaultDate = `${yyyy}-${mm}-${dd}`;
+
+  // ====== Calcul "Pas — semaine en cours" ======
+  const monday = startOfWeekMonday(today);
+  const sunday = endOfWeekFromMonday(monday);
+  const mondayYMD = toYMD(monday);
+  const sundayYMD = toYMD(sunday);
+
+  const stepsThisWeek = store.entries
+    .filter(e => e.type === "steps")
+    .filter(e => {
+      // e.date est "YYYY-MM-DD"
+      const d = parseYMDLocal(e.date);
+      return d >= monday && d <= sunday;
+    })
+    .reduce((sum, e) => sum + (Number(e.value) || 0), 0);
+
+  const daysCovered = new Set(
+    store.entries
+      .filter(e => e.type === "steps")
+      .filter(e => {
+        const d = parseYMDLocal(e.date);
+        return d >= monday && d <= sunday;
+      })
+      .map(e => e.date)
+  ).size;
+
+  const avgPerDay = daysCovered > 0 ? Math.round(stepsThisWeek / daysCovered) : 0;
 
   return (
     <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
@@ -210,6 +262,29 @@ export default async function Page({ searchParams }: { searchParams?: { success?
             <button className="btn btn-dash" type="submit">Enregistrer</button>
           </div>
         </form>
+      </section>
+
+      {/* ====== NOUVELLE SECTION : Steps semaine en cours ====== */}
+      <section className="section" style={{ marginTop: 12 }}>
+        <div className="section-head" style={{ marginBottom: 8 }}>
+          <h2 style={{ margin: 0 }}>Pas — semaine en cours</h2>
+        </div>
+        <article className="card" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <div>
+            <div className="text-sm" style={{ color: "#6b7280" }}>
+              Du <b>{fmtDate(mondayYMD)}</b> au <b>{fmtDate(sundayYMD)}</b>
+            </div>
+            <div style={{ fontSize: 28, fontWeight: 900, marginTop: 6 }}>
+              {stepsThisWeek.toLocaleString("fr-FR")} pas
+            </div>
+            <div className="text-sm" style={{ color: "#6b7280", marginTop: 4 }}>
+              Moyenne sur {daysCovered || 0} jour(s) saisi(s) : <b>{avgPerDay.toLocaleString("fr-FR")} pas/jour</b>
+            </div>
+          </div>
+          <div className="text-sm" style={{ color: "#6b7280" }}>
+            Semaine = lundi → dimanche (locale FR)
+          </div>
+        </article>
       </section>
 
       {/* Résumé dernier point par type */}
