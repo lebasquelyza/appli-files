@@ -93,20 +93,29 @@ export default async function Page({ searchParams }: { searchParams?: { success?
 
   return (
     <div className="container" style={{ paddingTop:24, paddingBottom:32 }}>
-      {/* Header */}
-      <header className="page-header" style={{ marginBottom:18 }}>
-        <div>
-          <h1 className="h1" style={{ marginBottom:6 }}>Tarifs & Abonnements</h1>
-          <p className="lead" style={{ margin:0 }}>Choisissez la formule qui vous convient et activez Coaching+ si besoin.</p>
-          <div className="text-xs" style={{color:"#6b7280", marginTop:6}}>
-            Les changements s’appliquent immédiatement dans l’app (démo&nbsp;: sans paiement réel).
-          </div>
-        </div>
-        {/* ICI : même taille que le reste */}
-        <div style={{ fontSize: 16, fontWeight: 600 }}>
-          Plan actuel : <span className="badge" style={{ marginLeft: 6 }}>{plan}</span>
-        </div>
-      </header>
+     <header className="page-header" style={{ marginBottom:18 }}>
+  <div>
+    
+    {/* Titre normal (≈20px) */}
+    <h1 style={{ margin:0, fontSize:20, lineHeight:1.3, fontWeight:800 }}>
+      Tarifs & Abonnements
+    </h1>
+    {/* Sous-titre plus petit (≈14px) */}
+    <p style={{ margin:"6px 0 0", fontSize:14, lineHeight:1.5, color:"#374151" }}>
+      Choisissez la formule qui vous convient et activez Coaching+ si besoin.
+    </p>
+    {/* Note encore plus discrète (≈12px) */}
+    <div style={{ marginTop:6, fontSize:12, lineHeight:1.5, color:"#6b7280" }}>
+      Les changements s’appliquent immédiatement dans l’app (démo&nbsp;: sans paiement réel).
+    </div>
+  </div>
+
+  {/* Même taille que le reste pour le plan actuel */}
+  <div style={{ fontSize:16, fontWeight:600 }}>
+    Plan actuel : <span className="badge" style={{ marginLeft:6 }}>{plan}</span>
+  </div>
+</header>
+
 
       {/* Alerts */}
       {!!searchParams?.success && (
