@@ -140,7 +140,9 @@ export default async function Page() {
               Gérer mon offre, options et IA.
             </p>
             <div style={{ marginTop:10 }}>
-              <a className="btn btn-outline" href="/dashboard/pricing">Voir les offres</a>
+              <a className="btn btn-outline" href="/dashboard/pricing" style={{ color: "#111" }}>
+                Voir les offres
+              </a>
             </div>
           </article>
 
@@ -151,7 +153,9 @@ export default async function Page() {
             </div>
             <div style={{ fontSize:22, fontWeight:900, marginTop:6 }}>{kcalsToday.toLocaleString("fr-FR")} kcal</div>
             <div style={{ marginTop:10 }}>
-              <a className="btn btn-outline" href="/dashboard/calories">Enregistrer</a>
+              <a className="btn btn-outline" href="/dashboard/calories" style={{ color: "#111" }}>
+                Enregistrer
+              </a>
             </div>
           </article>
 
@@ -162,13 +166,15 @@ export default async function Page() {
             </div>
             <div style={{ fontSize:22, fontWeight:900, marginTop:6 }}>{stepsThisWeek.toLocaleString("fr-FR")} pas</div>
             <div style={{ marginTop:10 }}>
-              <a className="btn btn-outline" href="/dashboard/progress">Ajouter des pas</a>
+              <a className="btn btn-outline" href="/dashboard/progress" style={{ color: "#111" }}>
+                Ajouter des pas
+              </a>
             </div>
           </article>
 
           <article className="card">
             <div className="flex items-center justify-between">
-              <h3 style={{ margin:0, fontSize:16, fontWeight:800 }}>Derniers mesures</h3>
+              <h3 style={{ margin:0, fontSize:16, fontWeight:800 }}>Dernières mesures</h3>
               <span className="badge">Suivi</span>
             </div>
             <ul style={{ margin:"6px 0 0 16px" }}>
@@ -176,7 +182,9 @@ export default async function Page() {
               <li>Charge: <b>{lastLoad ? `${lastLoad.value} kg${lastLoad.reps ? ` × ${lastLoad.reps}` : ""}` : "—"}</b> {lastLoad && <span className="text-sm" style={{ color:"#6b7280" }}>({fmtDate(lastLoad.date)})</span>}</li>
             </ul>
             <div style={{ marginTop:10 }}>
-              <a className="btn btn-outline" href="/dashboard/progress">Mettre à jour</a>
+              <a className="btn btn-outline" href="/dashboard/progress" style={{ color: "#111" }}>
+                Mettre à jour
+              </a>
             </div>
           </article>
         </div>
@@ -188,7 +196,9 @@ export default async function Page() {
           {quick.map((t) => (
             <li key={t} className="card" style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10 }}>
               <span>{t}</span>
-              <a className="btn btn-outline" href="/dashboard/muscu">Lancer</a>
+              <a className="btn btn-outline" href="/dashboard/muscu" style={{ color: "#111" }}>
+                Lancer
+              </a>
             </li>
           ))}
         </ul>
@@ -200,7 +210,9 @@ export default async function Page() {
           {ideas.map(r => (
             <article key={r.id} className="card" style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10 }}>
               <span>{r.label}</span>
-              <a className="btn btn-outline" href="/dashboard/recipes">Voir</a>
+              <a className="btn btn-outline" href="/dashboard/recipes" style={{ color: "#111" }}>
+                Voir
+              </a>
             </article>
           ))}
         </div>
