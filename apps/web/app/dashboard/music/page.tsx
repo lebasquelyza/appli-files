@@ -54,28 +54,6 @@ export default function MusicPage() {
     makeNote(1760.0,  now + 0.20, 0.20); // A6
   };
 
-  // Débloque l'audio automatiquement à la 1ère interaction (aucun bouton ajouté)
-  useEffect(() => {
-    const onFirstInteraction = async () => {
-      try {
-        await ensureAudioCtx();
-        setAudioReady(true);
-      } finally {
-        window.removeEventListener("click", onFirstInteraction);
-        window.removeEventListener("touchstart", onFirstInteraction);
-        window.removeEventListener("keydown", onFirstInteraction);
-      }
-    };
-    window.addEventListener("click", onFirstInteraction, { passive: true });
-    window.addEventListener("touchstart", onFirstInteraction, { passive: true });
-    window.addEventListener("keydown", onFirstInteraction);
-    return () => {
-      window.removeEventListener("click", onFirstInteraction);
-      window.removeEventListener("touchstart", onFirstInteraction);
-      window.removeEventListener("keydown", onFirstInteraction);
-    };
-  }, []);
-
   // Observe le DOM du Timer :
   // - "arme" le bip dès qu'on voit >0s (donc un minuteur a été lancé)
   // - déclenche un seul chime à 0s si le minuteur a été lancé
