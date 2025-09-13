@@ -1,8 +1,7 @@
 "use client";
 import { useSession, signIn, signOut } from "next-auth/react";
 import dynamic from "next/dynamic";
-
-// ✅ AJOUTS MINIMAUX
+// ✅ AJOUTS
 import { useEffect, useRef } from "react";
 
 const SpotifyPlayer = dynamic(() => import("@/components/SpotifyPlayer"), { ssr: false });
@@ -11,53 +10,81 @@ const Timer = dynamic(() => import("@/components/Timer"), { ssr: false });
 export default function MusicPage() {
   const { data: session, status } = useSession();
 
-  // ✅ AJOUTS : refs pour surveiller le Timer et jouer le son UNIQUEMENT à la fin
+  // ✅ Refs pour gérer le son UNIQUEMENT à la fin du minuteur
   const timerHostRef = useRef<HTMLDivElement | null>(null);
-  const lastSecRef = useRef<number | null>(null);  // dernière valeur (en s)
-  const countingDownRef = useRef(false);           // a réellement commencé à décrémenter
-  const hasBeepedRef = useRef(false);              // éviter double son
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const audioUnlockedRef = useRef(false);     // devient true après un geste DANS le Timer
+  const lastSecRef = useRef<number | null>(null);
+  const countingDownRef = useRef(false);      // vraie décrémentation observée
+  const hasBeepedRef = useRef(false);         // éviter double son
 
-  // Parse le texte du Timer en secondes (supporte "30s" et "MM:SS")
+  // Déverrouille l’audio (sans jouer de son)
+  const ensureAudioCtx = async () => {
+    const Ctx = (window.AudioContext || (window as any).webkitAudioContext);
+    if (!audioCtxRef.current) audioCtxRef.current = new Ctx();
+    if (audioCtxRef.current.state === "suspended") await audioCtxRef.current.resume();
+    return audioCtxRef.current;
+  };
+
+  // Son “exercice fini” (double chime bref)
+  const playFinishChime = async () => {
+    try {
+      const ctx = await ensureAudioCtx();
+      const makeNote = (freq: number, start: number, dur = 0.18) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "triangle";
+        osc.frequency.value = freq;
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        gain.gain.setValueAtTime(0.0001, start);
+        gain.gain.linearRampToValueAtTime(0.75, start + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.001, start + dur);
+        osc.start(start);
+        osc.stop(start + dur + 0.05);
+      };
+      const now = ctx.currentTime;
+      makeNote(1318.51, now + 0.00, 0.18); // E6
+      makeNote(1760.0,  now + 0.20, 0.20); // A6
+    } catch {
+      /* ignore */
+    }
+  };
+
+  // Parse le texte du Timer en secondes ("30s" ou "MM:SS")
   const parseSeconds = (txt: string): number | null => {
-    const mS = txt.match(/(\d+)\s*s\b/); // "30s"
+    const mS = txt.match(/(\d+)\s*s\b/);
     if (mS) return parseInt(mS[1], 10);
-    const mMS = txt.match(/\b(\d{1,2}):(\d{2})\b/); // "MM:SS"
+    const mMS = txt.match(/\b(\d{1,2}):(\d{2})\b/);
     if (mMS) return parseInt(mMS[1], 10) * 60 + parseInt(mMS[2], 10);
     return null;
   };
 
-  // 🔔 Son “exercice fini” — créé et joué *uniquement* à 0s
-  const playFinishChime = async () => {
-    // ⚠️ L’AudioContext n’est créé qu’ici (à la fin)
-    const Ctx = (window.AudioContext || (window as any).webkitAudioContext);
-    const ctx: AudioContext = new Ctx();
+  // 1) Déverrouiller l’audio uniquement sur interaction DANS le Timer
+  useEffect(() => {
+    const host = timerHostRef.current;
+    if (!host) return;
 
-    const makeNote = (freq: number, start: number, dur = 0.18) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = "triangle";         // chime clair/agréable
-      osc.frequency.value = freq;
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-
-      gain.gain.setValueAtTime(0.0001, start);
-      gain.gain.linearRampToValueAtTime(0.7, start + 0.015);
-      gain.gain.exponentialRampToValueAtTime(0.001, start + dur);
-
-      osc.start(start);
-      osc.stop(start + dur + 0.05);
+    const unlock = async () => {
+      if (audioUnlockedRef.current) return;
+      try {
+        await ensureAudioCtx();
+        audioUnlockedRef.current = true; // audio autorisé, mais on ne joue rien ici
+      } catch {}
     };
 
-    const now = ctx.currentTime;
-    // petite double note “fini”
-    makeNote(1318.51, now + 0.00, 0.18); // E6
-    makeNote(1760.0,  now + 0.20, 0.20); // A6
-  };
+    host.addEventListener("click", unlock);
+    host.addEventListener("touchstart", unlock, { passive: true });
+    host.addEventListener("keydown", unlock);
 
-  // Observe le Timer :
-  // - attend une vraie décrémentation (ex: 30→29) pour activer countingDown
-  // - déclenche le son *une seule fois* quand on atteint 0s
-  // - se réarme si un nouveau cycle repart (>0)
+    return () => {
+      host.removeEventListener("click", unlock);
+      host.removeEventListener("touchstart", unlock);
+      host.removeEventListener("keydown", unlock);
+    };
+  }, []);
+
+  // 2) Observer le Timer: détecter vraie descente puis jouer à 0s (une seule fois)
   useEffect(() => {
     const host = timerHostRef.current;
     if (!host) return;
@@ -74,22 +101,23 @@ export default function MusicPage() {
 
       const last = lastSecRef.current;
 
-      // vraie descente détectée (minuteur effectivement en cours)
+      // vraie décrémentation (ex: 30 -> 29) => le minuteur est bien lancé
       if (last != null && curr < last && curr > 0) {
         countingDownRef.current = true;
-        hasBeepedRef.current = false; // prêt à biper à 0
+        hasBeepedRef.current = false;
       }
 
-      // jouer le son uniquement à la fin, si on a bien compté à rebours
-      if (countingDownRef.current && !hasBeepedRef.current && curr === 0) {
+      // jouer UNIQUEMENT à 0s si:
+      // - le minuteur a décrémenté
+      // - l’audio a été déverrouillé par un geste dans le Timer
+      if (countingDownRef.current && !hasBeepedRef.current && curr === 0 && audioUnlockedRef.current) {
         hasBeepedRef.current = true;
         countingDownRef.current = false;
         void playFinishChime();
       }
 
-      // si ça repart (>0) après une fin, on se réarme pour un nouveau cycle
+      // si un nouveau cycle repart (>0), on se réarme
       if (curr > 0 && hasBeepedRef.current) {
-        // on attendra à nouveau une vraie décrémentation
         countingDownRef.current = false;
       }
 
@@ -99,7 +127,6 @@ export default function MusicPage() {
     obs.observe(host, { subtree: true, childList: true, characterData: true });
     return () => obs.disconnect();
   }, []);
-  // ✅ FIN AJOUTS
 
   if (status === "loading") return <main className="p-6">Chargement…</main>;
 
@@ -114,7 +141,7 @@ export default function MusicPage() {
         )}
       </div>
 
-      {/* Minuteur (espacé) — simplement wrappé pour l’observer */}
+      {/* Minuteur (espacé) — simplement wrappé pour l’observer et déverrouiller l’audio */}
       <div ref={timerHostRef}>
         <Timer />
       </div>
