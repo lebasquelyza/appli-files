@@ -5,15 +5,15 @@ import { useSession } from "next-auth/react";
 declare global {
   interface Window {
     onSpotifyWebPlaybackSDKReady?: () => void;
-    Spotify: any;
-    __sp_player?: Spotify.Player | null;
+    Spotify?: any;               // optionnel
+    __sp_player?: any | null;    // ⬅️ plus de Spotify.Player ici
     __sp_deviceId?: string | null;
   }
 }
 
 type NowPlaying = { name: string; artists: string; image: string | null };
 
-// --- Web API helper (utilise directement le token de session) ---
+// --- Web API helper ---
 async function spFetch<T = any>(token: string, path: string, init: RequestInit = {}): Promise<T | null> {
   const res = await fetch(`https://api.spotify.com/v1${path}`, {
     ...init,
@@ -43,7 +43,7 @@ export default function SpotifyPlayer() {
   const [deviceName, setDeviceName] = useState<string | null>(null);
 
   function readState(state: any) {
-    if (!state) return; // on laisse le polling REST s'occuper du visuel
+    if (!state) return;
     setPaused(state.paused);
     const t = state.track_window?.current_track;
     if (!t) return;
@@ -66,20 +66,17 @@ export default function SpotifyPlayer() {
       setDeviceName(data?.device?.name ?? null);
       if (name) setNow({ name, artists: artists ?? "", image });
       else setNow(null);
-    } catch {
-      // pas grave : on garde l'affichage courant
-    }
+    } catch {}
   }
 
   function initPlayer() {
     if (!token || !window.Spotify) return;
 
-    // 🔁 Réutiliser un singleton pour que la musique survive aux navigations
+    // 🔁 Réutiliser un singleton pour laisser la musique continuer entre pages
     if (window.__sp_player) {
       playerRef.current = window.__sp_player;
       if (window.__sp_deviceId) setDeviceId(window.__sp_deviceId);
       setReady(true);
-      // Sync REST pour afficher ce qui joue (même autre device)
       void refreshFromRest();
       return;
     }
@@ -94,8 +91,6 @@ export default function SpotifyPlayer() {
       window.__sp_deviceId = device_id;
       setDeviceId(device_id);
       setReady(true);
-      // Pas de transfer auto -> la musique peut continuer ailleurs.
-      // On synchronise l'UI avec le REST:
       void refreshFromRest();
       player.getCurrentState().then(readState).catch(() => {});
     });
@@ -130,13 +125,11 @@ export default function SpotifyPlayer() {
       window.onSpotifyWebPlaybackSDKReady = () => startInit();
     }
 
-    // ⚠️ Pas de disconnect à l'unmount -> la musique continue
-    return () => {
-      // rien
-    };
+    // Pas de disconnect à l'unmount -> la musique continue
+    return () => {};
   }, [status, token]);
 
-  // Poll léger pour rester sync si lecture change ailleurs (mobile/app)
+  // Poll léger pour rester sync si lecture change ailleurs
   useEffect(() => {
     if (!token) return;
     void refreshFromRest();
@@ -151,41 +144,24 @@ export default function SpotifyPlayer() {
   }, [token]);
 
   // === Actions ===
-  // Transférer le contrôle vers le Web Player sans couper la musique
   const controlHere = async () => {
     setErr(null);
     if (!deviceId || !token) { setErr("Player non prêt (deviceId/token)"); return; }
     try {
-      // équivalent de ton /api/spotify/transfer, mais direct REST ici
       await spFetch(token, "/me/player", {
         method: "PUT",
         body: JSON.stringify({ device_ids: [deviceId], play: true }),
       });
-      // On rafraîchit l'état affiché
       setTimeout(() => { void refreshFromRest(); }, 700);
     } catch (e: any) {
       setErr(e?.message ?? "Transfer error");
     }
   };
 
-  const start = async () => {
-    // garde ton bouton “Lancer la musique” si tu veux démarrer ici directement
-    await controlHere();
-  };
-
-  const toggle = async () => {
-    try { await playerRef.current?.togglePlay(); } catch {}
-    // petit refresh REST pour caler l'UI si toggle vient d'ailleurs
-    setTimeout(() => { void refreshFromRest(); }, 500);
-  };
-  const next = async () => {
-    try { await playerRef.current?.nextTrack(); } catch {}
-    setTimeout(() => { void refreshFromRest(); }, 500);
-  };
-  const prev = async () => {
-    try { await playerRef.current?.previousTrack(); } catch {}
-    setTimeout(() => { void refreshFromRest(); }, 500);
-  };
+  const start = async () => { await controlHere(); };
+  const toggle = async () => { try { await playerRef.current?.togglePlay(); } catch {} setTimeout(() => { void refreshFromRest(); }, 500); };
+  const next = async () => { try { await playerRef.current?.nextTrack(); } catch {} setTimeout(() => { void refreshFromRest(); }, 500); };
+  const prev = async () => { try { await playerRef.current?.previousTrack(); } catch {} setTimeout(() => { void refreshFromRest(); }, 500); };
 
   if (status !== "authenticated") return null;
 
@@ -253,7 +229,6 @@ export default function SpotifyPlayer() {
       {/* Contrôle du device Web */}
       <div className="flex flex-wrap gap-4">
         <button disabled={!ready} onClick={start} className="btn-dash">Lancer la musique</button>
-        {/* S'affiche si on n'est pas déjà sur ce device */}
         {!deviceName?.toLowerCase?.().includes("appli files web player") && deviceId && (
           <button disabled={!ready} onClick={controlHere} className="btn-dash">📲 Contrôler ici</button>
         )}
