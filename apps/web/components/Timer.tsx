@@ -14,21 +14,48 @@ export default function Timer() {
   const initialRef = useRef<number>(60);
   const intervalRef = useRef<number | null>(null);
 
-  // Bip court à la fin
-  function beep(duration = 250, frequency = 900, volume = 0.25) {
+  // ====== AUDIO ======
+  const audioCtxRef = useRef<AudioContext | null>(null);
+
+  async function ensureAudioCtx() {
     try {
       const Ctx: any = (window as any).AudioContext || (window as any).webkitAudioContext;
-      const ctx = new Ctx();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = "sine";
-      osc.frequency.value = frequency;
-      gain.gain.value = volume;
-      osc.connect(gain); gain.connect(ctx.destination);
-      osc.start();
-      setTimeout(() => { osc.stop(); ctx.close(); }, duration);
-    } catch {}
+      if (!audioCtxRef.current) audioCtxRef.current = new Ctx();
+      if (audioCtxRef.current.state === "suspended") await audioCtxRef.current.resume();
+    } catch { /* ignore */ }
+    return audioCtxRef.current;
   }
+
+  // Chime de fin (double note claire, brève)
+  async function playFinishChime() {
+    try {
+      const ctx = await ensureAudioCtx();
+      if (!ctx) return;
+
+      const makeNote = (freq: number, start: number, dur = 0.18) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "triangle";
+        osc.frequency.value = freq;
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        // enveloppe courte et audible
+        gain.gain.setValueAtTime(0.0001, start);
+        gain.gain.linearRampToValueAtTime(0.85, start + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.001, start + dur);
+
+        osc.start(start);
+        osc.stop(start + dur + 0.05);
+      };
+
+      const now = ctx.currentTime;
+      // E6 puis A6 : effet “exercice terminé”
+      makeNote(1318.51, now + 0.00, 0.18);
+      makeNote(1760.00, now + 0.20, 0.20);
+    } catch { /* ignore */ }
+  }
+  // ====================
 
   // Recalcule le total quand on modifie minutes/secondes (si à l'arrêt)
   useEffect(() => {
@@ -45,8 +72,9 @@ export default function Timer() {
     intervalRef.current = window.setInterval(() => {
       setSecondsLeft((s) => {
         if (s <= 1) {
-          beep();
+          // stop & son de fin
           if (intervalRef.current) { window.clearInterval(intervalRef.current); intervalRef.current = null; }
+          void playFinishChime();
           return 0;
         }
         return s - 1;
@@ -58,8 +86,25 @@ export default function Timer() {
     };
   }, [running]);
 
-  const toggle = () => setRunning((r) => !r);
-  const reset  = () => { setRunning(false); setSecondsLeft(initialRef.current); };
+  // ▶️ Démarrer / ⏸️ Pause
+  const toggle = async () => {
+    if (running) {
+      // PAUSE : on arrête juste l’intervalle, on NE réinitialise PAS secondsLeft
+      setRunning(false);
+      return;
+    }
+    // START/RESUME : on (ré)utilise le même AudioContext pour autoriser le son ensuite
+    await ensureAudioCtx();
+    if (secondsLeft > 0) setRunning(true);
+  };
+
+  // 🔄 Réinitialiser (remet à la valeur initiale choisie)
+  const reset  = async () => {
+    setRunning(false);
+    setSecondsLeft(initialRef.current);
+    // Optionnel : préparer l'audio après un reset si l'utilisateur clique
+    await ensureAudioCtx();
+  };
 
   // Presets utilitaires
   function applyPreset(total:number){
