@@ -2,33 +2,87 @@
 import { useEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 
-declare global { interface Window { onSpotifyWebPlaybackSDKReady?: () => void; Spotify: any; } }
+declare global {
+  interface Window {
+    onSpotifyWebPlaybackSDKReady?: () => void;
+    Spotify: any;
+    __sp_player?: Spotify.Player | null;
+    __sp_deviceId?: string | null;
+  }
+}
 
-type NowPlaying = { name: string; artists: string; image: string | null; };
+type NowPlaying = { name: string; artists: string; image: string | null };
+
+// --- Web API helper (utilise directement le token de session) ---
+async function spFetch<T = any>(token: string, path: string, init: RequestInit = {}): Promise<T | null> {
+  const res = await fetch(`https://api.spotify.com/v1${path}`, {
+    ...init,
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json",
+      ...(init.headers || {}),
+    },
+  });
+  if (res.status === 204) return null;
+  if (!res.ok) throw new Error(`Spotify API ${res.status} ${path}`);
+  return res.json();
+}
 
 export default function SpotifyPlayer() {
   const { data: session, status } = useSession();
+  const token = (session as any)?.accessToken as string | undefined;
+
   const playerRef = useRef<any>(null);
+  const pollRef = useRef<number | null>(null);
+
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [paused, setPaused] = useState(true);
   const [now, setNow] = useState<NowPlaying | null>(null);
+  const [deviceName, setDeviceName] = useState<string | null>(null);
 
   function readState(state: any) {
-    if (!state) { setNow(null); return; }
+    if (!state) return; // on laisse le polling REST s'occuper du visuel
     setPaused(state.paused);
     const t = state.track_window?.current_track;
-    if (!t) { setNow(null); return; }
+    if (!t) return;
     const name = t.name as string;
     const artists = (t.artists || []).map((a: any) => a.name).join(", ");
     const image = t.album?.images?.[0]?.url || null;
     setNow({ name, artists, image });
   }
 
+  async function refreshFromRest() {
+    if (!token) return;
+    try {
+      const data = await spFetch<any>(token, "/me/player");
+      const is_playing = !!data?.is_playing;
+      const item = data?.item;
+      const name = item?.name as string | undefined;
+      const artists = item?.artists?.map((a: any) => a.name).join(", ");
+      const image = item?.album?.images?.[0]?.url || null;
+      setPaused(!is_playing);
+      setDeviceName(data?.device?.name ?? null);
+      if (name) setNow({ name, artists: artists ?? "", image });
+      else setNow(null);
+    } catch {
+      // pas grave : on garde l'affichage courant
+    }
+  }
+
   function initPlayer() {
-    const token = (session as any)?.accessToken as string;
     if (!token || !window.Spotify) return;
+
+    // 🔁 Réutiliser un singleton pour que la musique survive aux navigations
+    if (window.__sp_player) {
+      playerRef.current = window.__sp_player;
+      if (window.__sp_deviceId) setDeviceId(window.__sp_deviceId);
+      setReady(true);
+      // Sync REST pour afficher ce qui joue (même autre device)
+      void refreshFromRest();
+      return;
+    }
 
     const player = new window.Spotify.Player({
       name: "Appli Files Web Player",
@@ -37,8 +91,12 @@ export default function SpotifyPlayer() {
     });
 
     player.addListener("ready", ({ device_id }: any) => {
+      window.__sp_deviceId = device_id;
       setDeviceId(device_id);
       setReady(true);
+      // Pas de transfer auto -> la musique peut continuer ailleurs.
+      // On synchronise l'UI avec le REST:
+      void refreshFromRest();
       player.getCurrentState().then(readState).catch(() => {});
     });
     player.addListener("not_ready", () => setReady(false));
@@ -47,47 +105,87 @@ export default function SpotifyPlayer() {
     player.addListener("account_error", ({ message }: any) => setErr(message));
     player.addListener("player_state_changed", (state: any) => readState(state));
 
+    window.__sp_player = player;
     playerRef.current = player;
     player.connect();
   }
 
+  // Charger SDK + init
   useEffect(() => {
-    if (status !== "authenticated") return;
+    if (status !== "authenticated" || !token) return;
     setErr(null);
-    if (window.Spotify) { initPlayer(); return; }
-    if (!document.getElementById("spotify-player-sdk")) {
-      const s = document.createElement("script");
-      s.id = "spotify-player-sdk"; s.src = "https://sdk.scdn.co/spotify-player.js"; s.async = true;
-      document.body.appendChild(s);
+
+    const startInit = () => initPlayer();
+
+    if (window.Spotify) {
+      startInit();
+    } else {
+      if (!document.getElementById("spotify-player-sdk")) {
+        const s = document.createElement("script");
+        s.id = "spotify-player-sdk";
+        s.src = "https://sdk.scdn.co/spotify-player.js";
+        s.async = true;
+        document.body.appendChild(s);
+      }
+      window.onSpotifyWebPlaybackSDKReady = () => startInit();
     }
-    window.onSpotifyWebPlaybackSDKReady = () => initPlayer();
-  }, [status, session]);
 
-  async function start() {
+    // ⚠️ Pas de disconnect à l'unmount -> la musique continue
+    return () => {
+      // rien
+    };
+  }, [status, token]);
+
+  // Poll léger pour rester sync si lecture change ailleurs (mobile/app)
+  useEffect(() => {
+    if (!token) return;
+    void refreshFromRest();
+    pollRef.current = window.setInterval(() => { void refreshFromRest(); }, 6000);
+    const onVis = () => { if (!document.hidden) void refreshFromRest(); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      if (pollRef.current) window.clearInterval(pollRef.current);
+      pollRef.current = null;
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [token]);
+
+  // === Actions ===
+  // Transférer le contrôle vers le Web Player sans couper la musique
+  const controlHere = async () => {
     setErr(null);
-    try { await playerRef.current?.activateElement?.(); } catch {}
-    if (!deviceId) { setErr("Player non prêt (deviceId manquant)"); return; }
+    if (!deviceId || !token) { setErr("Player non prêt (deviceId/token)"); return; }
+    try {
+      // équivalent de ton /api/spotify/transfer, mais direct REST ici
+      await spFetch(token, "/me/player", {
+        method: "PUT",
+        body: JSON.stringify({ device_ids: [deviceId], play: true }),
+      });
+      // On rafraîchit l'état affiché
+      setTimeout(() => { void refreshFromRest(); }, 700);
+    } catch (e: any) {
+      setErr(e?.message ?? "Transfer error");
+    }
+  };
 
-    let r = await fetch("/api/spotify/transfer", {
-      method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ device_id: deviceId, play: true }),
-    });
-    if (!r.ok) { const j = await r.json().catch(() => ({}));
-      setErr(j?.error?.message || j?.error || `Transfer HTTP ${r.status}`); return; }
+  const start = async () => {
+    // garde ton bouton “Lancer la musique” si tu veux démarrer ici directement
+    await controlHere();
+  };
 
-    r = await fetch("/api/spotify/play", {
-      method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ device_id: deviceId }),
-    });
-    if (!r.ok) { const j = await r.json().catch(() => ({}));
-      setErr(j?.error?.reason || j?.error?.message || j?.error || `Play HTTP ${r.status}`); return; }
-
-    setTimeout(() => playerRef.current?.getCurrentState().then(readState).catch(() => {}), 700);
-  }
-
-  const toggle = async () => { try { await playerRef.current?.togglePlay(); } catch {} };
-  const next = async () => { try { await playerRef.current?.nextTrack(); } catch {} };
-  const prev = async () => { try { await playerRef.current?.previousTrack(); } catch {} };
+  const toggle = async () => {
+    try { await playerRef.current?.togglePlay(); } catch {}
+    // petit refresh REST pour caler l'UI si toggle vient d'ailleurs
+    setTimeout(() => { void refreshFromRest(); }, 500);
+  };
+  const next = async () => {
+    try { await playerRef.current?.nextTrack(); } catch {}
+    setTimeout(() => { void refreshFromRest(); }, 500);
+  };
+  const prev = async () => {
+    try { await playerRef.current?.previousTrack(); } catch {}
+    setTimeout(() => { void refreshFromRest(); }, 500);
+  };
 
   if (status !== "authenticated") return null;
 
@@ -120,6 +218,11 @@ export default function SpotifyPlayer() {
           <div className="truncate" style={{color:"var(--muted)", fontSize:".95rem"}}>
             {now?.artists || (paused ? "En pause" : "Prêt")}
           </div>
+          {deviceName && (
+            <div className="text-xs" style={{color:"var(--muted)"}}>
+              Appareil : {deviceName}
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-3">
@@ -147,9 +250,13 @@ export default function SpotifyPlayer() {
         </div>
       </div>
 
-      {/* Lancer sur ce device */}
+      {/* Contrôle du device Web */}
       <div className="flex flex-wrap gap-4">
         <button disabled={!ready} onClick={start} className="btn-dash">Lancer la musique</button>
+        {/* S'affiche si on n'est pas déjà sur ce device */}
+        {!deviceName?.toLowerCase?.().includes("appli files web player") && deviceId && (
+          <button disabled={!ready} onClick={controlHere} className="btn-dash">📲 Contrôler ici</button>
+        )}
       </div>
     </section>
   );
