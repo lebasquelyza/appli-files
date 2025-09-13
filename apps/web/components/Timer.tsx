@@ -14,46 +14,57 @@ export default function Timer() {
   const initialRef = useRef<number>(60);
   const intervalRef = useRef<number | null>(null);
 
-  // ====== AUDIO ======
+  // ====== AUDIO (typesafe) ======
   const audioCtxRef = useRef<AudioContext | null>(null);
 
-  async function ensureAudioCtx() {
+  async function ensureAudioCtx(): Promise<AudioContext | null> {
     try {
+      // En environnement Next, cette page est "use client", mais on reste prudent:
+      if (typeof window === "undefined") return null;
+
+      // webkitAudioContext n'est pas typé par TS -> on caste en any
       const Ctx: any = (window as any).AudioContext || (window as any).webkitAudioContext;
-      if (!audioCtxRef.current) audioCtxRef.current = new Ctx();
-      if (audioCtxRef.current.state === "suspended") await audioCtxRef.current.resume();
-    } catch { /* ignore */ }
-    return audioCtxRef.current;
+      if (!Ctx) return null;
+
+      let ctx: AudioContext | null = audioCtxRef.current;
+      if (!ctx) {
+        ctx = new Ctx() as AudioContext;
+        audioCtxRef.current = ctx;
+      }
+      if (ctx.state === "suspended") {
+        await ctx.resume();
+      }
+      return ctx;
+    } catch {
+      return null;
+    }
   }
 
-  // Chime de fin (double note claire, brève)
   async function playFinishChime() {
-    try {
-      const ctx = await ensureAudioCtx();
-      if (!ctx) return;
+    const ctx = await ensureAudioCtx();
+    if (!ctx) return;
 
-      const makeNote = (freq: number, start: number, dur = 0.18) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = "triangle";
-        osc.frequency.value = freq;
-        osc.connect(gain);
-        gain.connect(ctx.destination);
+    const makeNote = (freq: number, start: number, dur = 0.18) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "triangle";
+      osc.frequency.value = freq;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
 
-        // enveloppe courte et audible
-        gain.gain.setValueAtTime(0.0001, start);
-        gain.gain.linearRampToValueAtTime(0.85, start + 0.015);
-        gain.gain.exponentialRampToValueAtTime(0.001, start + dur);
+      // enveloppe courte et audible
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.linearRampToValueAtTime(0.85, start + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + dur);
 
-        osc.start(start);
-        osc.stop(start + dur + 0.05);
-      };
+      osc.start(start);
+      osc.stop(start + dur + 0.05);
+    };
 
-      const now = ctx.currentTime;
-      // E6 puis A6 : effet “exercice terminé”
-      makeNote(1318.51, now + 0.00, 0.18);
-      makeNote(1760.00, now + 0.20, 0.20);
-    } catch { /* ignore */ }
+    const now = ctx.currentTime;
+    // double chime “exercice fini”
+    makeNote(1318.51, now + 0.00, 0.18); // E6
+    makeNote(1760.00, now + 0.20, 0.20); // A6
   }
   // ====================
 
@@ -86,14 +97,14 @@ export default function Timer() {
     };
   }, [running]);
 
-  // ▶️ Démarrer / ⏸️ Pause
+  // ▶️ Démarrer / ⏸️ Pause  (pause n'efface rien)
   const toggle = async () => {
     if (running) {
       // PAUSE : on arrête juste l’intervalle, on NE réinitialise PAS secondsLeft
       setRunning(false);
       return;
     }
-    // START/RESUME : on (ré)utilise le même AudioContext pour autoriser le son ensuite
+    // START/RESUME : on s'assure que l'audio sera autorisé à jouer à la fin
     await ensureAudioCtx();
     if (secondsLeft > 0) setRunning(true);
   };
@@ -102,7 +113,7 @@ export default function Timer() {
   const reset  = async () => {
     setRunning(false);
     setSecondsLeft(initialRef.current);
-    // Optionnel : préparer l'audio après un reset si l'utilisateur clique
+    // Prépare l'audio à la prochaine fin si l'utilisateur relance
     await ensureAudioCtx();
   };
 
