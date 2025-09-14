@@ -227,12 +227,12 @@ export default function SpotifyPlayer() {
       </div>
 
       {/* Contrôle du device Web */}
-      <div className="flex flex-wrap gap-4">
-        <button disabled={!ready} onClick={start} className="btn-dash">Lancer la musique</button>
-        {!deviceName?.toLowerCase?.().includes("appli files web player") && deviceId && (
-          <button disabled={!ready} onClick={controlHere} className="btn-dash">📲 Contrôler ici</button>
-        )}
-      </div>
+      {/* Lancer la musique */}
+<div className="flex flex-wrap gap-4">
+  <button disabled={!ready} onClick={start} className="btn-dash">
+    Lancer la musique
+  </button>
+</div>
     </section>
   );
 }
