@@ -1,10 +1,6 @@
-import { useState } from "react";
 import { PageHeader, Section } from "@/components/ui/Page";
 
 export default function Page() {
-  // (optionnel) état local, prêt à brancher plus tard
-  const [remindersOn] = useState(false);
-
   return (
     <>
       <PageHeader
@@ -22,7 +18,7 @@ export default function Page() {
             </p>
           </div>
 
-          {/* Grille principale */}
+          {/* Grille */}
           <div className="grid gap-6 md:grid-cols-2">
             {/* Rappels de progression */}
             <div className="card space-y-4">
@@ -33,28 +29,26 @@ export default function Page() {
                 </p>
               </div>
 
-              {/* Switch (placeholder, désactivé pour l’instant) */}
+              {/* Faux switch statique (pas d’interaction côté serveur) */}
               <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  disabled
-                  className="relative inline-flex h-8 w-[60px] cursor-not-allowed items-center rounded-full px-1"
+                <div
+                  className="relative inline-flex h-8 w-[60px] rounded-full px-1"
                   title="Bientôt disponible"
                   style={{
                     background: "rgba(0,0,0,.08)",
                     border: "1px solid rgba(0,0,0,.10)",
+                    cursor: "not-allowed",
                   }}
                 >
                   <span
                     className="inline-block h-6 w-6 rounded-full"
                     style={{
-                      transform: remindersOn ? "translateX(28px)" : "translateX(0)",
+                      transform: "translateX(0)",
                       background: "var(--bg)",
                       boxShadow: "var(--shadow)",
-                      transition: "transform .2s ease",
                     }}
                   />
-                </button>
+                </div>
                 <span className="text-xs" style={{ color: "var(--muted)" }}>
                   Bientôt
                 </span>
