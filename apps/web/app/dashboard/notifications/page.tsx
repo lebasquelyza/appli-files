@@ -1,6 +1,10 @@
+import { useState } from "react";
 import { PageHeader, Section } from "@/components/ui/Page";
 
 export default function Page() {
+  // (optionnel) état local, prêt à brancher plus tard
+  const [remindersOn] = useState(false);
+
   return (
     <>
       <PageHeader
@@ -13,14 +17,14 @@ export default function Page() {
           {/* Intro */}
           <div className="card">
             <p className="text-sm" style={{ color: "var(--muted)" }}>
-              Configure tes rappels pour rester motivé·e. Les envois par email
-              et les messages personnalisés arrivent bientôt.
+              Configure tes rappels pour rester motivé·e. Les envois par email et les
+              messages personnalisés arrivent bientôt.
             </p>
           </div>
 
-          {/* Grille de contenu */}
+          {/* Grille principale */}
           <div className="grid gap-6 md:grid-cols-2">
-            {/* Carte: Rappels de progression */}
+            {/* Rappels de progression */}
             <div className="card space-y-4">
               <div className="space-y-1.5">
                 <h3 className="font-semibold">Rappels de progression</h3>
@@ -29,7 +33,7 @@ export default function Page() {
                 </p>
               </div>
 
-              {/* Switch placeholder (désactivé pour l’instant) */}
+              {/* Switch (placeholder, désactivé pour l’instant) */}
               <div className="flex items-center gap-3">
                 <button
                   type="button"
@@ -44,9 +48,10 @@ export default function Page() {
                   <span
                     className="inline-block h-6 w-6 rounded-full"
                     style={{
-                      transform: "translateX(0)",
+                      transform: remindersOn ? "translateX(28px)" : "translateX(0)",
                       background: "var(--bg)",
                       boxShadow: "var(--shadow)",
+                      transition: "transform .2s ease",
                     }}
                   />
                 </button>
@@ -60,9 +65,10 @@ export default function Page() {
               </p>
             </div>
 
-            {/* Carte: Aperçu d’un message */}
+            {/* Aperçu d’un message */}
             <div className="card space-y-4">
               <h3 className="font-semibold">Aperçu d’un message</h3>
+
               <div
                 className="rounded-xl p-4"
                 style={{
@@ -71,8 +77,8 @@ export default function Page() {
                 }}
               >
                 <p className="text-sm leading-relaxed">
-                  👋 Coucou ! Petit rappel motivation : 10 minutes de plus et tu
-                  fais une super différence. Tu t’y remets maintenant ?
+                  👋 Coucou ! Petit rappel motivation : 10 minutes de plus et tu fais
+                  une super différence. Tu t’y remets maintenant ?
                 </p>
               </div>
 
@@ -93,7 +99,7 @@ export default function Page() {
             </div>
           </div>
 
-          {/* Carte: Messages personnalisés */}
+          {/* Messages personnalisés */}
           <div className="card space-y-2">
             <h3 className="font-semibold">Messages personnalisés</h3>
             <p className="text-sm" style={{ color: "var(--muted)" }}>
@@ -102,14 +108,12 @@ export default function Page() {
             </p>
           </div>
 
-          {/* CTA aligné au design */}
+          {/* CTA */}
           <div className="card flex items-center justify-between gap-4">
             <p className="text-sm" style={{ color: "var(--muted)" }}>
               Tu veux être notifié·e quand ces options arrivent ?
             </p>
-            <button type="button" className="btn-dash">
-              Me prévenir
-            </button>
+            <button type="button" className="btn-dash">Me prévenir</button>
           </div>
         </div>
       </Section>
