@@ -14,12 +14,12 @@ type Workout = {
   title: string;
   type: WorkoutType;
   status: WorkoutStatus;
-  date: string; // YYYY-MM-DD (prévu)
+  date: string;        // YYYY-MM-DD (prévu)
   plannedMin?: number; // durée prévue
-  startedAt?: string; // ISO quand démarrée
-  endedAt?: string; // ISO quand terminée
+  startedAt?: string;  // ISO quand démarrée
+  endedAt?: string;    // ISO quand terminée
   note?: string;
-  createdAt: string; // ISO
+  createdAt: string;   // ISO
 };
 
 type Store = { sessions: Workout[] };
@@ -94,7 +94,7 @@ function typeBadgeClass(t: WorkoutType) {
   }
 }
 
-// ===== Server Actions =====
+// ===== Server Actions (non exportées) =====
 async function addSessionAction(formData: FormData) {
   "use server";
   const title = (formData.get("title") || "").toString().trim();
@@ -124,10 +124,7 @@ async function addSessionAction(formData: FormData) {
   const next: Store = { sessions: [w, ...store.sessions].slice(0, 300) };
 
   jar.set("app_sessions", JSON.stringify(next), {
-    path: "/",
-    sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 365,
-    httpOnly: false,
+    path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365, httpOnly: false,
   });
 
   redirect("/dashboard/profile?success=1");
@@ -142,17 +139,14 @@ async function completeSessionAction(formData: FormData) {
   const store = parseStore(jar.get("app_sessions")?.value);
 
   const nowISO = new Date().toISOString();
-  const sessions = store.sessions.map((s) => {
+  const sessions = store.sessions.map(s => {
     if (s.id !== id) return s;
     const started = s.startedAt || nowISO;
     return { ...s, status: "done" as WorkoutStatus, startedAt: started, endedAt: nowISO };
   });
 
   jar.set("app_sessions", JSON.stringify({ sessions }), {
-    path: "/",
-    sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 365,
-    httpOnly: false,
+    path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365, httpOnly: false,
   });
 
   redirect("/dashboard/profile?done=1");
@@ -165,13 +159,10 @@ async function deleteSessionAction(formData: FormData) {
 
   const jar = cookies();
   const store = parseStore(jar.get("app_sessions")?.value);
-  const sessions = store.sessions.filter((s) => s.id !== id);
+  const sessions = store.sessions.filter(s => s.id !== id);
 
   jar.set("app_sessions", JSON.stringify({ sessions }), {
-    path: "/",
-    sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 365,
-    httpOnly: false,
+    path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365, httpOnly: false,
   });
 
   redirect("/dashboard/profile?deleted=1");
@@ -187,11 +178,11 @@ export default async function Page({
   const store = parseStore(jar.get("app_sessions")?.value);
 
   const active = store.sessions
-    .filter((s) => s.status === "active")
+    .filter(s => s.status === "active")
     .sort((a, b) => (b.startedAt || b.createdAt || "").localeCompare(a.startedAt || a.createdAt || ""));
 
   const past = store.sessions
-    .filter((s) => s.status === "done")
+    .filter(s => s.status === "done")
     .sort((a, b) => (b.endedAt || "").localeCompare(a.endedAt || ""));
 
   const defaultDate = toYMD();
@@ -361,4 +352,37 @@ export default async function Page({
               const mins = minutesBetween(s.startedAt, s.endedAt);
               return (
                 <article key={s.id} className="group rounded-2xl border bg-white/60 p-5 shadow-sm transition hover:shadow-md backdrop-blur dark:bg-black/40">
-                  <div className="flex items-start justify
+                  <div className="flex items-start justify-between gap-3">
+                    <strong className="text-base">{s.title}</strong>
+                    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>
+                      {s.type}
+                    </span>
+                  </div>
+
+                  <div className="mt-2 text-sm text-muted-foreground">
+                    Le <b className="text-foreground">{fmtDateISO(s.endedAt)}</b>
+                    {mins ? ` · ${mins} min` : ""}
+                    {s.plannedMin ? ` (prévu ${s.plannedMin} min)` : ""}
+                    {s.note ? (
+                      <>
+                        <br />
+                        Note : <i>{s.note}</i>
+                      </>
+                    ) : null}
+                  </div>
+
+                  <div className="mt-4 flex gap-2">
+                    <form action={deleteSessionAction}>
+                      <input type="hidden" name="id" value={s.id} />
+                      <button className="btn btn-outline" type="submit">Supprimer</button>
+                    </form>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
