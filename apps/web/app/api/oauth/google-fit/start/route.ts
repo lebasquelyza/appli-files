@@ -15,7 +15,8 @@ const SCOPES = [
 export async function GET() {
   const jar = cookies();
   const clientId = process.env.GOOGLE_FIT_CLIENT_ID!;
-  const base = process.env.APP_BASE_URL!;
+  // ⚠️ Normalise la base (retire tout slash final)
+  const base = (process.env.APP_BASE_URL || "").replace(/\/+$/, "");
   const redirectUri = `${base}/api/oauth/google-fit/callback`;
 
   // PKCE
@@ -32,6 +33,9 @@ export async function GET() {
 
   jar.set("gf_state", state, { path: "/", httpOnly: true, sameSite: "lax", secure: true, maxAge: 300 });
   jar.set("gf_verifier", codeVerifier, { path: "/", httpOnly: true, sameSite: "lax", secure: true, maxAge: 300 });
+
+  // 🔎 Log (apparaitra dans les logs Netlify)
+  console.log("[GF] redirect_uri =", redirectUri);
 
   const url = new URL(AUTH_URL);
   url.searchParams.set("client_id", clientId);
