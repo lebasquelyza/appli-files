@@ -289,151 +289,211 @@ export default async function Page({
         </div>
       </section>
 
-      {/* Pas — semaine en cours */}
-      <section className="mt-8">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-base font-semibold tracking-tight">Pas — semaine en cours</h2>
-          <span className="text-xs text-muted-foreground">Semaine = lundi → dimanche</span>
-        </div>
+      {/* === BLOC BLANC PROGRÈS === */}
+<section className="mt-8">
+  <div
+    className="rounded-2xl border p-5 shadow-sm"
+    style={{ background: "#fff" }}
+  >
+    {/* Pas — semaine en cours */}
+    <div className="mb-6">
+      <div
+        className="section-head"
+        style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}
+      >
+        <h2 style={{ margin: 0 }}>Pas — semaine en cours</h2>
+        <span className="text-xs" style={{ color: "#6b7280" }}>Semaine = lundi → dimanche</span>
+      </div>
 
-        <article className="rounded-2xl border bg-white/60 p-5 shadow-sm backdrop-blur dark:bg-black/40">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <div className="text-sm text-muted-foreground">
-                Du <b className="text-foreground">{fmtDate(mondayYMD)}</b> au <b className="text-foreground">{fmtDate(sundayYMD)}</b>
-              </div>
-              {hasWeekData ? (
-                <div className="mt-3 grid gap-3 sm:grid-cols-3">
-                  <div className="rounded-xl border bg-white/60 p-4 text-center dark:bg-black/40">
-                    <div className="text-sm text-muted-foreground">Total</div>
-                    <div className="text-2xl font-extrabold">{stepsThisWeek.toLocaleString("fr-FR")}</div>
-                    <div className="text-xs text-muted-foreground">pas</div>
-                  </div>
-                  <div className="rounded-xl border bg-white/60 p-4 text-center dark:bg-black/40">
-                    <div className="text-sm text-muted-foreground">Jours saisis</div>
-                    <div className="text-2xl font-extrabold">{daysCovered}</div>
-                    <div className="text-xs text-muted-foreground">sur 7</div>
-                  </div>
-                  <div className="rounded-xl border bg-white/60 p-4 text-center dark:bg-black/40">
-                    <div className="text-sm text-muted-foreground">Moyenne / jour</div>
-                    <div className="text-2xl font-extrabold">{avgPerDay.toLocaleString("fr-FR")}</div>
-                    <div className="text-xs text-muted-foreground">pas/jour</div>
-                  </div>
-                </div>
-              ) : (
-                <div className="mt-3 text-sm text-muted-foreground">
-                  Aucune donnée saisie pour cette semaine. Ajoutez une entrée ci‑dessus pour voir vos stats.
-                </div>
-              )}
-            </div>
-            <div className="text-xs text-muted-foreground">Semaine locale FR</div>
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", justifyContent: "space-between", gap: 12 }}>
+        {/* Groupe gauche : dates + contenu */}
+        <div style={{ minWidth: 260 }}>
+          <div className="text-sm" style={{ color: "#6b7280" }}>
+            Du <b>{fmtDate(mondayYMD)}</b> au <b>{fmtDate(sundayYMD)}</b>
           </div>
-        </article>
-      </section>
 
-      {/* Dernières valeurs */}
-      <section className="mt-8">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-base font-semibold tracking-tight">Dernières valeurs</h2>
-        </div>
-        <div className="grid gap-6 lg:grid-cols-3">
-          <article className="rounded-2xl border bg-white/60 p-5 shadow-sm backdrop-blur dark:bg-black/40">
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-semibold">Pas</h3>
-              <span className="badge">Steps</span>
-            </div>
-            {lastByType.steps ? (
-              <div className="mt-2">
-                <div className="text-2xl font-extrabold">{lastByType.steps.value.toLocaleString("fr-FR")} pas</div>
-                <div className="text-sm text-muted-foreground">{fmtDate(lastByType.steps.date)}</div>
-              </div>
-            ) : (
-              <div className="mt-2 text-sm text-muted-foreground">Aucune donnée.</div>
-            )}
-          </article>
-
-          <article className="rounded-2xl border bg-white/60 p-5 shadow-sm backdrop-blur dark:bg-black/40">
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-semibold">Charges</h3>
-              <span className="badge">Load</span>
-            </div>
-            {lastByType.load ? (
-              <div className="mt-2">
-                <div className="text-2xl font-extrabold">
-                  {lastByType.load.value} kg{lastByType.load.reps ? ` × ${lastByType.load.reps}` : ""}
+          {stepsThisWeek > 0 && daysCovered > 0 ? (
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                gap: 12,
+                marginTop: 12,
+              }}
+            >
+              {/* Total */}
+              <div className="rounded-xl border" style={{ padding: 12, background: "#fff" }}>
+                <div className="text-sm" style={{ color: "#6b7280" }}>Total</div>
+                <div style={{ fontSize: 22, fontWeight: 900, lineHeight: 1.2 }}>
+                  {stepsThisWeek.toLocaleString("fr-FR")}
                 </div>
-                <div className="text-sm text-muted-foreground">{fmtDate(lastByType.load.date)}</div>
+                <div className="text-xs" style={{ color: "#6b7280" }}>pas</div>
               </div>
-            ) : (
-              <div className="mt-2 text-sm text-muted-foreground">Aucune donnée.</div>
-            )}
-          </article>
 
-          <article className="rounded-2xl border bg-white/60 p-5 shadow-sm backdrop-blur dark:bg-black/40">
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-semibold">Poids</h3>
-              <span className="badge">Weight</span>
-            </div>
-            {lastByType.weight ? (
-              <div className="mt-2">
-                <div className="text-2xl font-extrabold">{lastByType.weight.value} kg</div>
-                <div className="text-sm text-muted-foreground">{fmtDate(lastByType.weight.date)}</div>
-              </div>
-            ) : (
-              <div className="mt-2 text-sm text-muted-foreground">Aucune donnée.</div>
-            )}
-          </article>
-        </div>
-      </section>
-
-      {/* Entrées récentes */}
-      <section className="mt-8">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-base font-semibold tracking-tight">Entrées récentes</h2>
-        </div>
-
-        {recent.length === 0 ? (
-          <div className="rounded-2xl border bg-white/60 p-5 text-sm text-muted-foreground shadow-sm backdrop-blur dark:bg-black/40">
-            Pas encore de données — commencez en ajoutant une entrée ci‑dessus.
-          </div>
-        ) : (
-          <div className="grid gap-3">
-            {recent.map((e) => (
-              <article
-                key={e.id}
-                className="group flex items-start justify-between gap-4 rounded-2xl border bg-white/60 p-4 shadow-sm backdrop-blur transition hover:shadow-md dark:bg-black/40"
-              >
-                <div className="flex min-w-0 items-start gap-3">
-                  <span className={`mt-0.5 inline-flex shrink-0 items-center rounded-full px-2.5 py-1 text-xs font-medium ${entryBadgeClass(e.type)}`}>
-                    {e.type === "steps" && "Pas"}
-                    {e.type === "load" && "Charges"}
-                    {e.type === "weight" && "Poids"}
-                  </span>
-                  <div className="min-w-0">
-                    <div className="truncate text-sm text-muted-foreground">{fmtDate(e.date)}</div>
-                    <div className="text-[15px] font-semibold">
-                      {e.type === "steps" && `${e.value.toLocaleString("fr-FR")} pas`}
-                      {e.type === "load" && `${e.value} kg${e.reps ? ` × ${e.reps}` : ""}`}
-                      {e.type === "weight" && `${e.value} kg`}
-                    </div>
-                    {e.note && <div className="mt-0.5 text-sm text-muted-foreground">{e.note}</div>}
-                  </div>
+              {/* Jours saisis */}
+              <div className="rounded-xl border" style={{ padding: 12, background: "#fff" }}>
+                <div className="text-sm" style={{ color: "#6b7280" }}>Jours saisis</div>
+                <div style={{ fontSize: 22, fontWeight: 900, lineHeight: 1.2 }}>
+                  {daysCovered}
                 </div>
+                <div className="text-xs" style={{ color: "#6b7280" }}>sur 7</div>
+              </div>
 
-                <form action={deleteEntryAction} className="shrink-0">
-                  <input type="hidden" name="id" value={e.id} />
-                  <button
-                    className="inline-flex items-center rounded-md border px-2.5 py-1 text-xs font-medium hover:bg-gray-100 dark:hover:bg-gray-800"
-                    type="submit"
-                  >
-                    Supprimer
-                  </button>
-                </form>
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
+              {/* Moyenne */}
+              <div className="rounded-xl border" style={{ padding: 12, background: "#fff" }}>
+                <div className="text-sm" style={{ color: "#6b7280" }}>Moyenne / jour</div>
+                <div style={{ fontSize: 22, fontWeight: 900, lineHeight: 1.2 }}>
+                  {avgPerDay.toLocaleString("fr-FR")}
+                </div>
+                <div className="text-xs" style={{ color: "#6b7280" }}>pas/jour</div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-sm" style={{ color: "#6b7280", marginTop: 10 }}>
+              Aucune donnée saisie pour cette semaine. Ajoutez une entrée ci-dessus pour voir vos stats.
+            </div>
+          )}
+        </div>
+
+        {/* Légende droite */}
+        <div className="text-xs" style={{ color: "#6b7280" }}>Semaine locale FR</div>
+      </div>
     </div>
-  );
-}
+
+    {/* Séparateur */}
+    <hr style={{ borderColor: "rgba(0,0,0,.08)", margin: "16px 0" }} />
+
+    {/* Dernières valeurs */}
+    <div className="mb-6">
+      <h2 style={{ margin: 0, marginBottom: 8 }}>Dernières valeurs</h2>
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* Pas */}
+        <div className="rounded-xl border" style={{ padding: 16, background: "#fff" }}>
+          <div className="flex items-center justify-between">
+            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>Pas</h3>
+            <span className="badge">Steps</span>
+          </div>
+          {lastByType.steps ? (
+            <div style={{ marginTop: 8 }}>
+              <div style={{ fontSize: 22, fontWeight: 900 }}>{lastByType.steps.value.toLocaleString("fr-FR")} pas</div>
+              <div className="text-sm" style={{ color: "#6b7280" }}>{fmtDate(lastByType.steps.date)}</div>
+            </div>
+          ) : (
+            <div className="text-sm" style={{ color: "#6b7280", marginTop: 6 }}>Aucune donnée.</div>
+          )}
+        </div>
+
+        {/* Charges */}
+        <div className="rounded-xl border" style={{ padding: 16, background: "#fff" }}>
+          <div className="flex items-center justify-between">
+            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>Charges</h3>
+            <span className="badge">Load</span>
+          </div>
+          {lastByType.load ? (
+            <div style={{ marginTop: 8 }}>
+              <div style={{ fontSize: 22, fontWeight: 900 }}>
+                {lastByType.load.value} kg{lastByType.load.reps ? ` × ${lastByType.load.reps}` : ""}
+              </div>
+              <div className="text-sm" style={{ color: "#6b7280" }}>{fmtDate(lastByType.load.date)}</div>
+            </div>
+          ) : (
+            <div className="text-sm" style={{ color: "#6b7280", marginTop: 6 }}>Aucune donnée.</div>
+          )}
+        </div>
+
+        {/* Poids */}
+        <div className="rounded-xl border" style={{ padding: 16, background: "#fff" }}>
+          <div className="flex items-center justify-between">
+            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>Poids</h3>
+            <span className="badge">Weight</span>
+          </div>
+          {lastByType.weight ? (
+            <div style={{ marginTop: 8 }}>
+              <div style={{ fontSize: 22, fontWeight: 900 }}>{lastByType.weight.value} kg</div>
+              <div className="text-sm" style={{ color: "#6b7280" }}>{fmtDate(lastByType.weight.date)}</div>
+            </div>
+          ) : (
+            <div className="text-sm" style={{ color: "#6b7280", marginTop: 6 }}>Aucune donnée.</div>
+          )}
+        </div>
+      </div>
+    </div>
+
+    {/* Séparateur */}
+    <hr style={{ borderColor: "rgba(0,0,0,.08)", margin: "16px 0" }} />
+
+    {/* Entrées récentes */}
+    <div>
+      <h2 style={{ margin: 0, marginBottom: 8 }}>Entrées récentes</h2>
+
+      {recent.length === 0 ? (
+        <div
+          className="rounded-xl border"
+          style={{ padding: 16, background: "#fff", color: "#6b7280", fontSize: 14 }}
+        >
+          Pas encore de données — commencez en ajoutant une entrée ci-dessus.
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {recent.map((e) => (
+            <div
+              key={e.id}
+              className="rounded-xl border"
+              style={{
+                background: "#fff",
+                padding: 12,
+                display: "flex",
+                alignItems: "flex-start",
+                justifyContent: "space-between",
+                gap: 12,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 10, minWidth: 0 }}>
+                <span
+                  className="inline-flex items-center rounded-full px-2.5 py-1 text-xs"
+                  style={{
+                    border: "1px solid rgba(0,0,0,.12)",
+                    background: "rgba(0,0,0,.03)",
+                    whiteSpace: "nowrap",
+                    flexShrink: 0,
+                  }}
+                >
+                  {e.type === "steps" && "Pas"}
+                  {e.type === "load" && "Charges"}
+                  {e.type === "weight" && "Poids"}
+                </span>
+
+                <div style={{ minWidth: 0 }}>
+                  <div className="text-sm" style={{ color: "#6b7280" }}>
+                    {fmtDate(e.date)}
+                  </div>
+                  <div style={{ fontSize: 15, fontWeight: 700 }}>
+                    {e.type === "steps" && `${e.value.toLocaleString("fr-FR")} pas`}
+                    {e.type === "load" && `${e.value} kg${e.reps ? ` × ${e.reps}` : ""}`}
+                    {e.type === "weight" && `${e.value} kg`}
+                  </div>
+                  {e.note && (
+                    <div className="text-sm" style={{ color: "#6b7280", marginTop: 2 }}>
+                      {e.note}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <form action={deleteEntryAction} style={{ flexShrink: 0 }}>
+                <input type="hidden" name="id" value={e.id} />
+                <button
+                  type="submit"
+                  className="inline-flex items-center rounded-md border px-2.5 py-1 text-xs"
+                  style={{ borderColor: "rgba(0,0,0,.15)" }}
+                >
+                  Supprimer
+                </button>
+              </form>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  </div>
+</section>
