@@ -95,7 +95,7 @@ function typeBadgeClass(t: WorkoutType) {
 }
 
 // ===== Server Actions =====
-export async function addSessionAction(formData: FormData) {
+async function addSessionAction(formData: FormData) {
   "use server";
   const title = (formData.get("title") || "").toString().trim();
   const type = (formData.get("type") || "muscu").toString() as WorkoutType;
@@ -133,7 +133,7 @@ export async function addSessionAction(formData: FormData) {
   redirect("/dashboard/profile?success=1");
 }
 
-export async function completeSessionAction(formData: FormData) {
+async function completeSessionAction(formData: FormData) {
   "use server";
   const id = (formData.get("id") || "").toString();
   if (!id) redirect("/dashboard/profile");
@@ -158,7 +158,7 @@ export async function completeSessionAction(formData: FormData) {
   redirect("/dashboard/profile?done=1");
 }
 
-export async function deleteSessionAction(formData: FormData) {
+async function deleteSessionAction(formData: FormData) {
   "use server";
   const id = (formData.get("id") || "").toString();
   if (!id) redirect("/dashboard/profile");
@@ -361,37 +361,4 @@ export default async function Page({
               const mins = minutesBetween(s.startedAt, s.endedAt);
               return (
                 <article key={s.id} className="group rounded-2xl border bg-white/60 p-5 shadow-sm transition hover:shadow-md backdrop-blur dark:bg-black/40">
-                  <div className="flex items-start justify-between gap-3">
-                    <strong className="text-base">{s.title}</strong>
-                    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>
-                      {s.type}
-                    </span>
-                  </div>
-
-                  <div className="mt-2 text-sm text-muted-foreground">
-                    Le <b className="text-foreground">{fmtDateISO(s.endedAt)}</b>
-                    {mins ? ` · ${mins} min` : ""}
-                    {s.plannedMin ? ` (prévu ${s.plannedMin} min)` : ""}
-                    {s.note ? (
-                      <>
-                        <br />
-                        Note : <i>{s.note}</i>
-                      </>
-                    ) : null}
-                  </div>
-
-                  <div className="mt-4 flex gap-2">
-                    <form action={deleteSessionAction}>
-                      <input type="hidden" name="id" value={s.id} />
-                      <button className="btn btn-outline" type="submit">Supprimer</button>
-                    </form>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        )}
-      </section>
-    </div>
-  );
-}
+                  <div className="flex items-start justify
