@@ -1,6 +1,8 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { PageHeader, Section } from "@/components/ui/Page";
+import { fetchRecentActivities, fmtKm, fmtPaceOrSpeed, fmtDate } from "@/lib/strava";
+
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,6 +39,41 @@ const INTEGRATIONS: Integration[] = [
   { id: "fitbit",      name: "Fitbit",      subtitle: "Capteurs & sommeil",   status: "coming-soon", icon: "💠", connectHref: "/api/oauth/fitbit/start" },
   { id: "withings",    name: "Withings",    subtitle: "Balances & santé",     status: "coming-soon", icon: "⚖️", connectHref: "/api/oauth/withings/start" },
 ];
+
+{/* Dernières performances Strava */}
+{cookies().get("conn_strava")?.value === "1" && (
+  <Section title="Dernières performances (Strava)">
+    {/** On récupère côté serveur (RSC) */}
+    {await (async () => {
+      const acts = await fetchRecentActivities(6);
+      if (!acts.length) {
+        return (
+          <div className="card text-sm" style={{ color: "var(--muted)" }}>
+            Aucune activité récente trouvée (ou accès non autorisé).
+          </div>
+        );
+      }
+      return (
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {acts.map(a => (
+            <article key={a.id} className="card" style={{ display:"flex", flexDirection:"column", gap:8 }}>
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold" style={{ margin: 0 }}>{a.name || a.type}</h3>
+                <span className="badge">{a.type}</span>
+              </div>
+              <div className="text-sm" style={{ color: "var(--muted)" }}>{fmtDate(a.start_date_local)}</div>
+              <div className="text-sm" style={{ display:"flex", gap:12, flexWrap:"wrap" }}>
+                <span className="badge">{fmtKm(a.distance)}</span>
+                <span className="badge">{fmtPaceOrSpeed(a)}</span>
+                {a.total_elevation_gain ? <span className="badge">{Math.round(a.total_elevation_gain)} m D+</span> : null}
+              </div>
+            </article>
+          ))}
+        </div>
+      );
+    })()}
+  </Section>
+)}
 
 /* ---------- Server Action : abonnement à l’alerte intégrations ---------- */
 async function subscribeAction(formData: FormData) {
