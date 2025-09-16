@@ -1,22 +1,20 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import JSZip from "jszip";
-import { XMLParser } from "fast-xml-parser";
+// ⛔️ NE PAS importer jszip / fast-xml-parser ici en statique
 
 export const runtime = "nodejs";
 
 type AppleWorkout = {
   type: string;            // ex: HKWorkoutActivityTypeRunning
-  start: string;           // ISO local string d’Apple (ex: 2025-09-14 08:12:00 +0200)
+  start: string;           // ISO
   end: string;
-  duration?: number;       // minutes si disponible
-  distanceKm?: number;     // km si disponible
-  energyKcal?: number;     // kcal si disponible
+  duration?: number;       // minutes
+  distanceKm?: number;     // km
+  energyKcal?: number;     // kcal
 };
 
 function parseAppleDate(s: string): string {
-  // Apple export: "2025-09-14 08:12:00 +0200" -> ISO
-  // On remplace espace par 'T' et garde le décalage
+  // "2025-09-14 08:12:00 +0200" -> ISO
   try {
     const iso = s.replace(" ", "T").replace(" ", "");
     const d = new Date(iso);
@@ -27,6 +25,12 @@ function parseAppleDate(s: string): string {
 
 export async function POST(req: Request) {
   try {
+    // ✅ imports dynamiques (bundlés uniquement pour cette route, et résolus au runtime)
+    const [{ default: JSZip }, { XMLParser }] = await Promise.all([
+      import("jszip"),
+      import("fast-xml-parser"),
+    ]);
+
     const form = await req.formData();
     const file = form.get("file") as File | null;
     if (!file) {
@@ -52,7 +56,7 @@ export async function POST(req: Request) {
     });
     const data = parser.parse(xmlText);
 
-    // Le chemin standard : HealthData.Workout est un tableau d’objets avec des attributs
+    // HealthData.Workout (tableau d’objets avec attributs)
     const raw = data?.HealthData?.Workout;
     const workouts = Array.isArray(raw) ? raw : raw ? [raw] : [];
 
@@ -76,14 +80,12 @@ export async function POST(req: Request) {
       };
 
       if (!isNaN(duration)) {
-        out.duration = durationUnit.startsWith("min") ? duration : duration; // certains exports mettent "min"
+        out.duration = durationUnit.startsWith("min") ? duration : duration;
       }
       if (!isNaN(dist)) {
-        // Apple met souvent "km" ; si "mi" convertis en km
         out.distanceKm = distUnit === "mi" ? dist * 1.60934 : dist;
       }
       if (!isNaN(energy)) {
-        // souvient "kcal"
         out.energyKcal = energy;
       }
       return out;
@@ -92,7 +94,7 @@ export async function POST(req: Request) {
     // Trier par date de début desc
     items.sort((a, b) => (b.start || "").localeCompare(a.start || ""));
 
-    // On garde 6 dernières (payload minimal pour tenir en cookie)
+    // Garder 6 dernières
     const recent = items.slice(0, 6);
 
     const jar = cookies();
@@ -104,7 +106,7 @@ export async function POST(req: Request) {
       maxAge: 60 * 60 * 24 * 7, // 7 jours
     });
 
-    // Petit flag UX pour activer la section
+    // Flag UX
     jar.set("conn_apple_health", "1", {
       path: "/",
       httpOnly: false,
