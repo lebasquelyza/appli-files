@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import { PageHeader, Section } from "@/components/ui/Page";
 import { fetchRecentActivities, fmtKm, fmtPaceOrSpeed, fmtDate } from "@/lib/strava";
 
-
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -40,41 +39,6 @@ const INTEGRATIONS: Integration[] = [
   { id: "withings",    name: "Withings",    subtitle: "Balances & santé",     status: "coming-soon", icon: "⚖️", connectHref: "/api/oauth/withings/start" },
 ];
 
-{/* Dernières performances Strava */}
-{cookies().get("conn_strava")?.value === "1" && (
-  <Section title="Dernières performances (Strava)">
-    {/** On récupère côté serveur (RSC) */}
-    {await (async () => {
-      const acts = await fetchRecentActivities(6);
-      if (!acts.length) {
-        return (
-          <div className="card text-sm" style={{ color: "var(--muted)" }}>
-            Aucune activité récente trouvée (ou accès non autorisé).
-          </div>
-        );
-      }
-      return (
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {acts.map(a => (
-            <article key={a.id} className="card" style={{ display:"flex", flexDirection:"column", gap:8 }}>
-              <div className="flex items-center justify-between">
-                <h3 className="font-semibold" style={{ margin: 0 }}>{a.name || a.type}</h3>
-                <span className="badge">{a.type}</span>
-              </div>
-              <div className="text-sm" style={{ color: "var(--muted)" }}>{fmtDate(a.start_date_local)}</div>
-              <div className="text-sm" style={{ display:"flex", gap:12, flexWrap:"wrap" }}>
-                <span className="badge">{fmtKm(a.distance)}</span>
-                <span className="badge">{fmtPaceOrSpeed(a)}</span>
-                {a.total_elevation_gain ? <span className="badge">{Math.round(a.total_elevation_gain)} m D+</span> : null}
-              </div>
-            </article>
-          ))}
-        </div>
-      );
-    })()}
-  </Section>
-)}
-
 /* ---------- Server Action : abonnement à l’alerte intégrations ---------- */
 async function subscribeAction(formData: FormData) {
   "use server";
@@ -96,6 +60,7 @@ export default async function Page(props: {
   const searchParams = props?.searchParams ?? {};
   const jar = cookies();
   const isSubscribed = jar.get("app_notify_integrations")?.value === "1";
+  const isStravaConnected = jar.get("conn_strava")?.value === "1";
 
   return (
     <>
@@ -172,7 +137,6 @@ export default async function Page(props: {
                 <div className="flex gap-2">
                   {it.status === "available" ? (
                     isConnected ? (
-                      // POST simple vers l'endpoint de déconnexion (pas d'inline action)
                       <form method="POST" action={it.disconnectPath || "/api/oauth/strava/disconnect"}>
                         <button className="btn btn-outline" type="submit" style={{ color: "#111" }}>
                           Déconnecter
@@ -198,6 +162,41 @@ export default async function Page(props: {
         </div>
       </Section>
 
+      {/* Dernières performances Strava */}
+      {isStravaConnected && (
+        <Section title="Dernières performances (Strava)">
+          {/** On récupère côté serveur (RSC) */}
+          {await (async () => {
+            const acts = await fetchRecentActivities(6);
+            if (!acts.length) {
+              return (
+                <div className="card text-sm" style={{ color: "var(--muted)" }}>
+                  Aucune activité récente trouvée (ou accès non autorisé).
+                </div>
+              );
+            }
+            return (
+              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                {acts.map((a) => (
+                  <article key={a.id} className="card" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-semibold" style={{ margin: 0 }}>{a.name || a.type}</h3>
+                      <span className="badge">{a.type}</span>
+                    </div>
+                    <div className="text-sm" style={{ color: "var(--muted)" }}>{fmtDate(a.start_date_local)}</div>
+                    <div className="text-sm" style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                      <span className="badge">{fmtKm(a.distance)}</span>
+                      <span className="badge">{fmtPaceOrSpeed(a)}</span>
+                      {a.total_elevation_gain ? <span className="badge">{Math.round(a.total_elevation_gain)} m D+</span> : null}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            );
+          })()}
+        </Section>
+      )}
+
       {/* Alerte de dispo */}
       <Section title="Recevoir une alerte">
         <div className="card" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
@@ -208,7 +207,7 @@ export default async function Page(props: {
             </div>
           </div>
 
-        <form action={subscribeAction} className="flex items-center gap-2">
+          <form action={subscribeAction} className="flex items-center gap-2">
             <input type="hidden" name="want" value={isSubscribed ? "0" : "1"} />
             {isSubscribed ? (
               <button className="btn btn-outline" type="submit" style={{ color: "#111" }}>
