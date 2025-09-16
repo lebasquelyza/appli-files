@@ -1,0 +1,18 @@
+{
+  "settings.general.title": "Settings",
+  "settings.general.subtitle": "Application Preferences",
+  "settings.general.intro": "Configure language, theme, and date/time format. Changes apply immediately and are saved on this device.",
+  "settings.language": "Language",
+  "settings.theme": "Theme",
+  "settings.theme.light": "Light",
+  "settings.theme.dark": "Dark",
+  "settings.theme.system": "Auto",
+  "settings.dateTime": "Date & Time format",
+  "settings.date": "Date",
+  "settings.time": "Time",
+  "settings.preview": "Preview",
+  "settings.accessibility": "Privacy & Cookies",
+  "settings.actions.reset": "Reset",
+  "settings.actions.saved": "Settings saved ✅",
+  "settings.actions.autoSave": "Changes are saved automatically"
+}

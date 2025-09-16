@@ -1,0 +1,18 @@
+{
+  "settings.general.title": "Réglages",
+  "settings.general.subtitle": "Préférences de l’application",
+  "settings.general.intro": "Configure la langue, le thème, et le format date/heure. Les changements sont appliqués immédiatement et mémorisés sur cet appareil.",
+  "settings.language": "Langue",
+  "settings.theme": "Thème",
+  "settings.theme.light": "Clair",
+  "settings.theme.dark": "Sombre",
+  "settings.theme.system": "Auto",
+  "settings.dateTime": "Format date & heure",
+  "settings.date": "Date",
+  "settings.time": "Heure",
+  "settings.preview": "Aperçu",
+  "settings.accessibility": "Confidentialité & Cookies",
+  "settings.actions.reset": "Réinitialiser",
+  "settings.actions.saved": "Réglages enregistrés ✅",
+  "settings.actions.autoSave": "Les changements sont enregistrés automatiquement"
+}
