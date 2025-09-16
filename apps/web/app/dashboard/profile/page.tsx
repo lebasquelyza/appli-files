@@ -199,12 +199,14 @@ export default async function Page({
                 Gérez vos séances et gardez un historique clair de votre entraînement.
               </p>
             </div>
-          <a href="/dashboard" className="btn btn-outline text-black">
+         <a
+  href="/dashboard"
+  className="btn btn-outline"
+  style={{ color: "black" }}
+>
   ← Retour
 </a>
-
-
-          </div>
+   </div>
        </div>
       </section>
 
