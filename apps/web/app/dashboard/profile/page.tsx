@@ -94,7 +94,7 @@ function typeBadgeClass(t: WorkoutType) {
   }
 }
 
-// ===== Server Actions (non exportées) =====
+/* ===== Server Actions (non exportées) ===== */
 async function addSessionAction(formData: FormData) {
   "use server";
   const title = (formData.get("title") || "").toString().trim();
@@ -168,7 +168,7 @@ async function deleteSessionAction(formData: FormData) {
   redirect("/dashboard/profile?deleted=1");
 }
 
-// ===== Page =====
+/* ===== Page ===== */
 export default async function Page({
   searchParams,
 }: {
@@ -188,59 +188,53 @@ export default async function Page({
   const defaultDate = toYMD();
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8 lg:px-6">
-      {/* Header */}
-      <section className="mb-6">
-        <div className="rounded-2xl border bg-white/60 p-5 shadow-sm backdrop-blur dark:bg-black/40">
-          <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
-            <div>
-              <h1 className="text-xl font-extrabold tracking-tight">Mon profil</h1>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Gérez vos séances et gardez un historique clair de votre entraînement.
-              </p>
-            </div>
-      <a
-  href="/dashboard"
-  className="inline-flex items-center rounded-md border border-gray-300 px-2.5 py-1.5 text-sm font-medium !text-black dark:!text-white hover:bg-gray-100 dark:hover:bg-gray-800"
->
-  ← Retour
-</a>
-
-   </div>
-       </div>
-      </section>
+    <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
+      {/* Header (même design que Recettes) */}
+      <div className="page-header">
+        <div>
+          <h1 className="h1">Mon profil</h1>
+          <p className="lead">Gérez vos séances et gardez un historique clair de votre entraînement.</p>
+        </div>
+        <a
+          href="/dashboard"
+          className="btn btn-outline"
+          style={{ color: "#111", padding: "6px 10px", lineHeight: 1.2 }}
+        >
+          ← Retour
+        </a>
+      </div>
 
       {/* Alerts */}
       <div className="space-y-3">
         {!!searchParams?.success && (
-          <div className="rounded-xl border border-emerald-300/60 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200">
+          <div className="card" style={{ border: "1px solid rgba(16,185,129,.35)", background: "rgba(16,185,129,.08)", fontWeight: 600 }}>
             ✓ Séance ajoutée.
           </div>
         )}
         {!!searchParams?.done && (
-          <div className="rounded-xl border border-sky-300/60 bg-sky-50 px-4 py-3 text-sm font-medium text-sky-800 dark:bg-sky-950/30 dark:text-sky-200">
+          <div className="card" style={{ border: "1px solid rgba(59,130,246,.35)", background: "rgba(59,130,246,.08)", fontWeight: 600 }}>
             ✓ Séance terminée.
           </div>
         )}
         {!!searchParams?.deleted && (
-          <div className="rounded-xl border border-rose-300/60 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-800 dark:bg-rose-950/30 dark:text-rose-200">
+          <div className="card" style={{ border: "1px solid rgba(239,68,68,.35)", background: "rgba(239,68,68,.08)", fontWeight: 600 }}>
             Séance supprimée.
           </div>
         )}
         {!!searchParams?.error && (
-          <div className="rounded-xl border border-rose-300/60 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-800 dark:bg-rose-950/30 dark:text-rose-200">
+          <div className="card" style={{ border: "1px solid rgba(239,68,68,.35)", background: "rgba(239,68,68,.08)", fontWeight: 600 }}>
             ⚠️ Erreur : {searchParams.error}
           </div>
         )}
       </div>
 
-      {/* Ajouter une séance */}
-      <section className="mt-6">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-base font-semibold tracking-tight">Ajouter une séance</h2>
+      {/* Ajouter une séance (section) */}
+      <div className="section" style={{ marginTop: 12 }}>
+        <div className="section-head" style={{ marginBottom: 8 }}>
+          <h2>Ajouter une séance</h2>
         </div>
 
-        <div className="rounded-2xl border bg-white/60 p-5 shadow-sm backdrop-blur dark:bg-black/40">
+        <div className="card">
           <form action={addSessionAction} className="grid gap-6 lg:grid-cols-3">
             <div className="lg:col-span-2">
               <label className="label">Titre</label>
@@ -279,21 +273,21 @@ export default async function Page({
             </div>
 
             <input type="hidden" name="startNow" value="1" />
-            <div className="lg:col-span-3 flex justify-end gap-3">
+            <div className="lg:col-span-3" style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
               <button className="btn btn-dash" type="submit">Démarrer maintenant</button>
             </div>
           </form>
         </div>
-      </section>
+      </div>
 
       {/* Mes séances en cours */}
-      <section className="mt-8">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-base font-semibold tracking-tight">Mes séances en cours</h2>
+      <section className="section" style={{ marginTop: 12 }}>
+        <div className="section-head" style={{ marginBottom: 8 }}>
+          <h2>Mes séances en cours</h2>
         </div>
 
         {active.length === 0 ? (
-          <div className="rounded-2xl border bg-white/60 p-5 text-sm text-muted-foreground shadow-sm backdrop-blur dark:bg-black/40">
+          <div className="card text-sm" style={{ color: "#6b7280" }}>
             <div className="flex items-center gap-3">
               <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted">💤</span>
               <span>Aucune séance en cours.</span>
@@ -304,29 +298,29 @@ export default async function Page({
             {active.map((s) => {
               const dur = minutesBetween(s.startedAt, new Date().toISOString());
               return (
-                <article key={s.id} className="group rounded-2xl border bg-white/60 p-5 shadow-sm transition hover:shadow-md backdrop-blur dark:bg-black/40">
+                <article key={s.id} className="card" style={{ transition: "box-shadow .2s" }}>
                   <div className="flex items-start justify-between gap-3">
-                    <strong className="text-base">{s.title}</strong>
+                    <strong style={{ fontSize: 16 }}>{s.title}</strong>
                     <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>
                       {s.type}
                     </span>
                   </div>
-                  <div className="mt-2 text-sm text-muted-foreground">
-                    Prévu le <b className="text-foreground">{fmtDateYMD(s.date)}</b>
+                  <div className="text-sm" style={{ color: "#6b7280", marginTop: 8 }}>
+                    Prévu le <b style={{ color: "inherit" }}>{fmtDateYMD(s.date)}</b>
                     {s.plannedMin ? ` · ${s.plannedMin} min prévues` : ""}
                     <br />
-                    Démarrée : <b className="text-foreground">{fmtDateISO(s.startedAt || s.createdAt)}</b>
+                    Démarrée : <b style={{ color: "inherit" }}>{fmtDateISO(s.startedAt || s.createdAt)}</b>
                     {dur ? ` · ${dur} min` : ""}
                   </div>
 
-                  <div className="mt-4 flex gap-2">
+                  <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
                     <form action={completeSessionAction}>
                       <input type="hidden" name="id" value={s.id} />
                       <button className="btn btn-dash" type="submit">Marquer terminé</button>
                     </form>
                     <form action={deleteSessionAction}>
                       <input type="hidden" name="id" value={s.id} />
-                      <button className="btn btn-outline" type="submit">Supprimer</button>
+                      <button className="btn btn-outline" type="submit" style={{ color: "#111" }}>Supprimer</button>
                     </form>
                   </div>
                 </article>
@@ -337,16 +331,14 @@ export default async function Page({
       </section>
 
       {/* Mes séances passées */}
-      <section className="mt-8">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-base font-semibold tracking-tight">Mes séances passées</h2>
-          {past.length > 12 && (
-            <span className="text-xs text-muted-foreground">Affichage des 12 dernières</span>
-          )}
+      <section className="section" style={{ marginTop: 12 }}>
+        <div className="section-head" style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <h2>Mes séances passées</h2>
+          {past.length > 12 && <span className="text-xs" style={{ color: "#6b7280" }}>Affichage des 12 dernières</span>}
         </div>
 
         {past.length === 0 ? (
-          <div className="rounded-2xl border bg-white/60 p-5 text-sm text-muted-foreground shadow-sm backdrop-blur dark:bg-black/40">
+          <div className="card text-sm" style={{ color: "#6b7280" }}>
             <div className="flex items-center gap-3">
               <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted">🗓️</span>
               <span>Aucune séance terminée pour l’instant.</span>
@@ -357,16 +349,16 @@ export default async function Page({
             {past.slice(0, 12).map((s) => {
               const mins = minutesBetween(s.startedAt, s.endedAt);
               return (
-                <article key={s.id} className="group rounded-2xl border bg-white/60 p-5 shadow-sm transition hover:shadow-md backdrop-blur dark:bg-black/40">
+                <article key={s.id} className="card" style={{ transition: "box-shadow .2s" }}>
                   <div className="flex items-start justify-between gap-3">
-                    <strong className="text-base">{s.title}</strong>
+                    <strong style={{ fontSize: 16 }}>{s.title}</strong>
                     <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>
                       {s.type}
                     </span>
                   </div>
 
-                  <div className="mt-2 text-sm text-muted-foreground">
-                    Le <b className="text-foreground">{fmtDateISO(s.endedAt)}</b>
+                  <div className="text-sm" style={{ color: "#6b7280", marginTop: 8 }}>
+                    Le <b style={{ color: "inherit" }}>{fmtDateISO(s.endedAt)}</b>
                     {mins ? ` · ${mins} min` : ""}
                     {s.plannedMin ? ` (prévu ${s.plannedMin} min)` : ""}
                     {s.note ? (
@@ -377,10 +369,10 @@ export default async function Page({
                     ) : null}
                   </div>
 
-                  <div className="mt-4 flex gap-2">
+                  <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
                     <form action={deleteSessionAction}>
                       <input type="hidden" name="id" value={s.id} />
-                      <button className="btn btn-outline" type="submit">Supprimer</button>
+                      <button className="btn btn-outline" type="submit" style={{ color: "#111" }}>Supprimer</button>
                     </form>
                   </div>
                 </article>
