@@ -26,7 +26,7 @@ export default function Sidebar(){
       </div>
       <ul style={{listStyle:"none", padding:0, margin:0}}>
         {items.map(it=>{
-          const active = pathname === it.href;
+          const active = pathname === it.href || pathname.startsWith(it.href + "/");
           return (
             <li key={it.href}>
               <Link
