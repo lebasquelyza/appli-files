@@ -10,6 +10,12 @@ import {
   fmtDuration,
   fmtKm as fmtKmApple,
 } from "@/lib/apple";
+import {
+  fetchGfRecentActivities,
+  readGfRecentFromCookie,
+  fmtKm as fmtKmGf,
+  fmtDate as fmtDateGf,
+} from "@/lib/google-fit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,11 +49,22 @@ const INTEGRATIONS: Integration[] = [
   // Apple Santé disponible (import export.zip)
   { id: "apple-health", name: "Apple Santé", subtitle: "iPhone / Apple Watch", status: "available", icon: "" },
 
+  // Google Fit désormais disponible (OAuth)
+  {
+    id: "google-fit",
+    name: "Google Fit",
+    subtitle: "Android / WearOS",
+    status: "available",
+    icon: "🤖",
+    connectHref: "/api/oauth/google-fit/start",
+    disconnectPath: "/api/oauth/google-fit/disconnect",
+    cookieFlag: "conn_google_fit",
+  },
+
   // À venir
-  { id: "google-fit",  name: "Google Fit",  subtitle: "Android / WearOS",     status: "coming-soon", icon: "🤖", connectHref: "/api/oauth/google-fit/start" },
-  { id: "garmin",      name: "Garmin",      subtitle: "Montres GPS",          status: "coming-soon", icon: "⌚️", connectHref: "/api/oauth/garmin/start" },
-  { id: "fitbit",      name: "Fitbit",      subtitle: "Capteurs & sommeil",   status: "coming-soon", icon: "💠", connectHref: "/api/oauth/fitbit/start" },
-  { id: "withings",    name: "Withings",    subtitle: "Balances & santé",     status: "coming-soon", icon: "⚖️", connectHref: "/api/oauth/withings/start" },
+  { id: "garmin",   name: "Garmin",   subtitle: "Montres GPS",        status: "coming-soon", icon: "⌚️", connectHref: "/api/oauth/garmin/start" },
+  { id: "fitbit",   name: "Fitbit",   subtitle: "Capteurs & sommeil", status: "coming-soon", icon: "💠", connectHref: "/api/oauth/fitbit/start" },
+  { id: "withings", name: "Withings", subtitle: "Balances & santé",    status: "coming-soon", icon: "⚖️", connectHref: "/api/oauth/withings/start" },
 ];
 
 /* ---------- Server Action : abonnement à l’alerte intégrations ---------- */
@@ -73,6 +90,7 @@ export default async function Page(props: {
   const isSubscribed = jar.get("app_notify_integrations")?.value === "1";
   const isStravaConnected = jar.get("conn_strava")?.value === "1";
   const isAppleConnected = jar.get("conn_apple_health")?.value === "1";
+  const isGoogleFitConnected = jar.get("conn_google_fit")?.value === "1";
 
   return (
     <>
@@ -146,6 +164,10 @@ export default async function Page(props: {
                       : <>Connexion sécurisée via OAuth pour lire tes activités.</>
                   ) : it.id === "apple-health" ? (
                     <>Importe ton <b>export.zip</b> pour afficher tes activités (pas d’OAuth Apple sur le Web).</>
+                  ) : it.id === "google-fit" ? (
+                    isConnected
+                      ? <>Compte Google Fit relié. Les sessions récentes peuvent être lues (lecture seule).</>
+                      : <>Connexion sécurisée via OAuth pour lire tes sessions Google Fit.</>
                   ) : (
                     <>Bientôt : connexion sécurisée via OAuth. Tes données restent sous ton contrôle.</>
                   )}
@@ -180,8 +202,30 @@ export default async function Page(props: {
                     <a className="btn-dash" href="#apple-import">Importer export.zip</a>
                   )}
 
-                  {/* Par défaut : à venir */}
-                  {it.id !== "strava" && it.id !== "apple-health" && (
+                  {/* Google Fit */}
+                  {it.id === "google-fit" && (
+                    it.status === "available" ? (
+                      isConnected ? (
+                        <form method="POST" action={it.disconnectPath || "/api/oauth/google-fit/disconnect"}>
+                          <button className="btn btn-outline" type="submit" style={{ color: "#111" }}>
+                            Déconnecter
+                          </button>
+                        </form>
+                      ) : (
+                        <a className="btn-dash" href={it.connectHref}>Connecter</a>
+                      )
+                    ) : (
+                      <>
+                        <button className="btn-dash" type="button" disabled title="Bientôt disponible">Connecter</button>
+                        <button className="btn btn-outline" type="button" disabled title="Bientôt disponible" style={{ color: "#111" }}>
+                          En savoir plus
+                        </button>
+                      </>
+                    )
+                  )}
+
+                  {/* Par défaut (autres à venir) */}
+                  {!(it.id === "strava" || it.id === "apple-health" || it.id === "google-fit") && (
                     <>
                       <button className="btn-dash" type="button" disabled title="Bientôt disponible">Connecter</button>
                       <button className="btn btn-outline" type="button" disabled title="Bientôt disponible" style={{ color: "#111" }}>
@@ -199,7 +243,6 @@ export default async function Page(props: {
       {/* Dernières performances Strava */}
       {isStravaConnected && (
         <Section title="Dernières performances (Strava)">
-          {/** On récupère côté serveur (RSC) */}
           {await (async () => {
             const acts = await fetchRecentActivities(6);
             if (!acts.length) {
@@ -250,7 +293,7 @@ export default async function Page(props: {
             method="POST"
             action="/api/apple-health/import"
             encType="multipart/form-data"
-            className="flex items-center gap-2"
+            className="flex items-center gap:2"
           >
             <input type="file" name="file" accept=".zip" required className="text-sm" />
             <button className="btn-dash" type="submit">Importer</button>
@@ -273,32 +316,51 @@ export default async function Page(props: {
             return (
               <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
                 {acts.map((a, idx) => (
-                  <article
-                    key={idx}
-                    className="card"
-                    style={{ display: "flex", flexDirection: "column", gap: 8 }}
-                  >
+                  <article key={idx} className="card" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                     <div className="flex items-center justify-between">
-                      <h3 className="font-semibold" style={{ margin: 0 }}>
-                        {fmtAppleType(a.type)}
-                      </h3>
+                      <h3 className="font-semibold" style={{ margin: 0 }}>{fmtAppleType(a.type)}</h3>
                       <span className="badge">Apple</span>
                     </div>
-
-                    <div className="text-sm" style={{ color: "var(--muted)" }}>
-                      {fmtAppleDate(a.start)}
-                    </div>
-
+                    <div className="text-sm" style={{ color: "var(--muted)" }}>{fmtAppleDate(a.start)}</div>
                     <div className="text-sm" style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-                      {fmtKmApple(a.distanceKm) && (
-                        <span className="badge">{fmtKmApple(a.distanceKm)}</span>
-                      )}
-                      {fmtDuration(a.duration) && (
-                        <span className="badge">{fmtDuration(a.duration)}</span>
-                      )}
-                      {a.energyKcal ? (
-                        <span className="badge">{Math.round(a.energyKcal)} kcal</span>
-                      ) : null}
+                      {fmtKmApple(a.distanceKm) && <span className="badge">{fmtKmApple(a.distanceKm)}</span>}
+                      {fmtDuration(a.duration) && <span className="badge">{fmtDuration(a.duration)}</span>}
+                      {a.energyKcal ? <span className="badge">{Math.round(a.energyKcal)} kcal</span> : null}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            );
+          })()}
+        </Section>
+      )}
+
+      {/* Dernières performances Google Fit */}
+      {isGoogleFitConnected && (
+        <Section title="Dernières performances (Google Fit)">
+          {await (async () => {
+            const acts = await fetchGfRecentActivities(14);
+            const list = acts.length ? acts : readGfRecentFromCookie(); // petit fallback
+            if (!list.length) {
+              return (
+                <div className="card text-sm" style={{ color: "var(--muted)" }}>
+                  Aucune session récente (ou autorisations insuffisantes).
+                </div>
+              );
+            }
+            return (
+              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                {list.map((a) => (
+                  <article key={a.id} className="card" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-semibold" style={{ margin: 0 }}>{a.name || a.type || "Session"}</h3>
+                      <span className="badge">Google Fit</span>
+                    </div>
+                    <div className="text-sm" style={{ color: "var(--muted)" }}>{fmtDateGf(a.start)}</div>
+                    <div className="text-sm" style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                      {a.distanceKm ? <span className="badge">{fmtKmGf(a.distanceKm)}</span> : null}
+                      {a.steps ? <span className="badge">{a.steps.toLocaleString("fr-FR")} pas</span> : null}
+                      {a.caloriesKcal ? <span className="badge">{a.caloriesKcal} kcal</span> : null}
                     </div>
                   </article>
                 ))}
