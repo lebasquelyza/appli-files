@@ -16,6 +16,10 @@ export async function GET(req: Request) {
     return NextResponse.redirect(new URL("/dashboard/connect?error=google-fit-oauth", req.url), { status: 302 });
   }
 
+  // ⚠️ Même normalisation que dans /start
+  const base = (process.env.APP_BASE_URL || "").replace(/\/+$/, "");
+  const redirectUri = `${base}/api/oauth/google-fit/callback`;
+
   const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -25,7 +29,7 @@ export async function GET(req: Request) {
       code,
       code_verifier: verifier,
       grant_type: "authorization_code",
-      redirect_uri: `${process.env.APP_BASE_URL!}/api/oauth/google-fit/callback`,
+      redirect_uri: redirectUri,
     }),
     cache: "no-store",
   });
@@ -38,7 +42,6 @@ export async function GET(req: Request) {
     access_token: string; refresh_token?: string; expires_in: number; token_type: string;
   };
 
-  // Stockage minimal en cookies (démo) — préférer un DB en prod
   const now = Math.floor(Date.now() / 1000);
   const expiresAt = now + (payload.expires_in || 3500);
 
