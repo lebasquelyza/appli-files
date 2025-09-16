@@ -199,9 +199,10 @@ export default async function Page({
                 Gérez vos séances et gardez un historique clair de votre entraînement.
               </p>
             </div>
-          <a href="/dashboard" className="btn btn-outline text-black dark:text-white">
+          <a href="/dashboard" className="btn btn-outline text-black">
   ← Retour
 </a>
+
 
           </div>
        </div>
