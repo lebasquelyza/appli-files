@@ -68,6 +68,17 @@ function parseYMDLocal(s: string) {
   return new Date(y, (m || 1) - 1, d || 1);
 }
 
+function entryBadgeClass(t: EntryType) {
+  switch (t) {
+    case "steps":
+      return "bg-sky-50 text-sky-700 ring-1 ring-sky-200";
+    case "load":
+      return "bg-amber-50 text-amber-700 ring-1 ring-amber-200";
+    case "weight":
+      return "bg-violet-50 text-violet-700 ring-1 ring-violet-200";
+  }
+}
+
 /** ------ Server Actions ------ */
 async function addProgressAction(formData: FormData) {
   "use server";
@@ -182,6 +193,7 @@ export default async function Page({
   ).size;
 
   const avgPerDay = daysCovered > 0 ? Math.round(stepsThisWeek / daysCovered) : 0;
+  const hasWeekData = stepsThisWeek > 0 && daysCovered > 0;
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 lg:px-6">
@@ -277,26 +289,44 @@ export default async function Page({
         </div>
       </section>
 
-      {/* Steps semaine en cours */}
+      {/* Pas — semaine en cours */}
       <section className="mt-8">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-base font-semibold tracking-tight">Pas — semaine en cours</h2>
           <span className="text-xs text-muted-foreground">Semaine = lundi → dimanche</span>
         </div>
+
         <article className="rounded-2xl border bg-white/60 p-5 shadow-sm backdrop-blur dark:bg-black/40">
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <div className="text-sm text-muted-foreground">
                 Du <b className="text-foreground">{fmtDate(mondayYMD)}</b> au <b className="text-foreground">{fmtDate(sundayYMD)}</b>
               </div>
-              <div className="mt-1 text-3xl font-extrabold">
-                {stepsThisWeek.toLocaleString("fr-FR")} pas
-              </div>
-              <div className="mt-1 text-sm text-muted-foreground">
-                Moyenne sur {daysCovered || 0} jour(s) saisi(s) : <b className="text-foreground">{avgPerDay.toLocaleString("fr-FR")} pas/jour</b>
-              </div>
+              {hasWeekData ? (
+                <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-xl border bg-white/60 p-4 text-center dark:bg-black/40">
+                    <div className="text-sm text-muted-foreground">Total</div>
+                    <div className="text-2xl font-extrabold">{stepsThisWeek.toLocaleString("fr-FR")}</div>
+                    <div className="text-xs text-muted-foreground">pas</div>
+                  </div>
+                  <div className="rounded-xl border bg-white/60 p-4 text-center dark:bg-black/40">
+                    <div className="text-sm text-muted-foreground">Jours saisis</div>
+                    <div className="text-2xl font-extrabold">{daysCovered}</div>
+                    <div className="text-xs text-muted-foreground">sur 7</div>
+                  </div>
+                  <div className="rounded-xl border bg-white/60 p-4 text-center dark:bg-black/40">
+                    <div className="text-sm text-muted-foreground">Moyenne / jour</div>
+                    <div className="text-2xl font-extrabold">{avgPerDay.toLocaleString("fr-FR")}</div>
+                    <div className="text-xs text-muted-foreground">pas/jour</div>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-3 text-sm text-muted-foreground">
+                  Aucune donnée saisie pour cette semaine. Ajoutez une entrée ci‑dessus pour voir vos stats.
+                </div>
+              )}
             </div>
-            <div className="text-sm text-muted-foreground">Semaine locale FR</div>
+            <div className="text-xs text-muted-foreground">Semaine locale FR</div>
           </div>
         </article>
       </section>
@@ -356,7 +386,7 @@ export default async function Page({
         </div>
       </section>
 
-      {/* Historique */}
+      {/* Entrées récentes */}
       <section className="mt-8">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-base font-semibold tracking-tight">Entrées récentes</h2>
@@ -367,29 +397,37 @@ export default async function Page({
             Pas encore de données — commencez en ajoutant une entrée ci‑dessus.
           </div>
         ) : (
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-3">
             {recent.map((e) => (
-              <article key={e.id} className="group rounded-2xl border bg-white/60 p-5 shadow-sm backdrop-blur transition hover:shadow-md dark:bg-black/40">
-                <div className="flex items-center justify-between">
-                  <strong className="text-base">
+              <article
+                key={e.id}
+                className="group flex items-start justify-between gap-4 rounded-2xl border bg-white/60 p-4 shadow-sm backdrop-blur transition hover:shadow-md dark:bg-black/40"
+              >
+                <div className="flex min-w-0 items-start gap-3">
+                  <span className={`mt-0.5 inline-flex shrink-0 items-center rounded-full px-2.5 py-1 text-xs font-medium ${entryBadgeClass(e.type)}`}>
                     {e.type === "steps" && "Pas"}
                     {e.type === "load" && "Charges"}
                     {e.type === "weight" && "Poids"}
-                  </strong>
-                  <span className="badge">{fmtDate(e.date)}</span>
+                  </span>
+                  <div className="min-w-0">
+                    <div className="truncate text-sm text-muted-foreground">{fmtDate(e.date)}</div>
+                    <div className="text-[15px] font-semibold">
+                      {e.type === "steps" && `${e.value.toLocaleString("fr-FR")} pas`}
+                      {e.type === "load" && `${e.value} kg${e.reps ? ` × ${e.reps}` : ""}`}
+                      {e.type === "weight" && `${e.value} kg`}
+                    </div>
+                    {e.note && <div className="mt-0.5 text-sm text-muted-foreground">{e.note}</div>}
+                  </div>
                 </div>
 
-                <div className="mt-2 text-lg font-extrabold">
-                  {e.type === "steps" && `${e.value.toLocaleString("fr-FR")} pas`}
-                  {e.type === "load" && `${e.value} kg${e.reps ? ` × ${e.reps}` : ""}`}
-                  {e.type === "weight" && `${e.value} kg`}
-                </div>
-
-                {e.note && <div className="mt-1 text-sm text-muted-foreground">{e.note}</div>}
-
-                <form action={deleteEntryAction} className="mt-3">
+                <form action={deleteEntryAction} className="shrink-0">
                   <input type="hidden" name="id" value={e.id} />
-                  <button className="btn btn-outline" type="submit">Supprimer</button>
+                  <button
+                    className="inline-flex items-center rounded-md border px-2.5 py-1 text-xs font-medium hover:bg-gray-100 dark:hover:bg-gray-800"
+                    type="submit"
+                  >
+                    Supprimer
+                  </button>
                 </form>
               </article>
             ))}
