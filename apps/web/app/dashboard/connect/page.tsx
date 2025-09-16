@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { PageHeader, Section } from "@/components/ui/Page";
+
 import { fetchRecentActivities, fmtKm, fmtPaceOrSpeed, fmtDate } from "@/lib/strava";
 import {
   readAppleRecent,
@@ -9,8 +10,6 @@ import {
   fmtDuration,
   fmtKm as fmtKmApple,
 } from "@/lib/apple";
-
-
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,7 +40,10 @@ const INTEGRATIONS: Integration[] = [
     cookieFlag: "conn_strava",
     cookieName: "conn_strava_name",
   },
- { id: "apple-health", name: "Apple Santé", subtitle: "iPhone / Apple Watch", status: "available", icon: "" },
+  // Apple Santé disponible (import export.zip)
+  { id: "apple-health", name: "Apple Santé", subtitle: "iPhone / Apple Watch", status: "available", icon: "" },
+
+  // À venir
   { id: "google-fit",  name: "Google Fit",  subtitle: "Android / WearOS",     status: "coming-soon", icon: "🤖", connectHref: "/api/oauth/google-fit/start" },
   { id: "garmin",      name: "Garmin",      subtitle: "Montres GPS",          status: "coming-soon", icon: "⌚️", connectHref: "/api/oauth/garmin/start" },
   { id: "fitbit",      name: "Fitbit",      subtitle: "Capteurs & sommeil",   status: "coming-soon", icon: "💠", connectHref: "/api/oauth/fitbit/start" },
@@ -70,6 +72,7 @@ export default async function Page(props: {
   const jar = cookies();
   const isSubscribed = jar.get("app_notify_integrations")?.value === "1";
   const isStravaConnected = jar.get("conn_strava")?.value === "1";
+  const isAppleConnected = jar.get("conn_apple_health")?.value === "1";
 
   return (
     <>
@@ -135,30 +138,52 @@ export default async function Page(props: {
                   <span className="badge">{isConnected ? "Connecté" : it.status === "available" ? "Disponible" : "À venir"}</span>
                 </div>
 
+                {/* Description par intégration */}
                 <p className="text-sm" style={{ color: "var(--muted)" }}>
-                  {it.id === "strava"
-                    ? (isConnected
-                        ? <>Compte relié{nameSuffix}. Les activités récentes pourront être importées.</>
-                        : <>Connexion sécurisée via OAuth pour lire tes activités.</>)
-                    : <>Bientôt : connexion sécurisée via OAuth. Tes données restent sous ton contrôle.</>}
+                  {it.id === "strava" ? (
+                    isConnected
+                      ? <>Compte relié{nameSuffix}. Les activités récentes pourront être importées.</>
+                      : <>Connexion sécurisée via OAuth pour lire tes activités.</>
+                  ) : it.id === "apple-health" ? (
+                    <>Importe ton <b>export.zip</b> pour afficher tes activités (pas d’OAuth Apple sur le Web).</>
+                  ) : (
+                    <>Bientôt : connexion sécurisée via OAuth. Tes données restent sous ton contrôle.</>
+                  )}
                 </p>
 
+                {/* Actions par intégration */}
                 <div className="flex gap-2">
-                  {it.status === "available" ? (
-                    isConnected ? (
-                      <form method="POST" action={it.disconnectPath || "/api/oauth/strava/disconnect"}>
-                        <button className="btn btn-outline" type="submit" style={{ color: "#111" }}>
-                          Déconnecter
-                        </button>
-                      </form>
+                  {/* Strava */}
+                  {it.id === "strava" && (
+                    it.status === "available" ? (
+                      isConnected ? (
+                        <form method="POST" action={it.disconnectPath || "/api/oauth/strava/disconnect"}>
+                          <button className="btn btn-outline" type="submit" style={{ color: "#111" }}>
+                            Déconnecter
+                          </button>
+                        </form>
+                      ) : (
+                        <a className="btn-dash" href={it.connectHref}>Connecter</a>
+                      )
                     ) : (
-                      <a className="btn-dash" href={it.connectHref}>Connecter</a>
+                      <>
+                        <button className="btn-dash" type="button" disabled title="Bientôt disponible">Connecter</button>
+                        <button className="btn btn-outline" type="button" disabled title="Bientôt disponible" style={{ color: "#111" }}>
+                          En savoir plus
+                        </button>
+                      </>
                     )
-                  ) : (
+                  )}
+
+                  {/* Apple Santé */}
+                  {it.id === "apple-health" && (
+                    <a className="btn-dash" href="#apple-import">Importer export.zip</a>
+                  )}
+
+                  {/* Par défaut : à venir */}
+                  {it.id !== "strava" && it.id !== "apple-health" && (
                     <>
-                      <button className="btn-dash" type="button" disabled title="Bientôt disponible">
-                        Connecter
-                      </button>
+                      <button className="btn-dash" type="button" disabled title="Bientôt disponible">Connecter</button>
                       <button className="btn btn-outline" type="button" disabled title="Bientôt disponible" style={{ color: "#111" }}>
                         En savoir plus
                       </button>
@@ -206,82 +231,82 @@ export default async function Page(props: {
         </Section>
       )}
 
-   {/* Importer depuis Apple Santé */}
-<Section title="Importer depuis Apple Santé (export.zip)">
-  <div
-    className="card"
-    style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}
-  >
-    <div>
-      <strong>Importer un export Apple Santé</strong>
-      <div className="text-sm" style={{ color: "var(--muted)" }}>
-        Sur iPhone : Santé → Profil → <b>Exporter toutes les données</b> → partage le <b>export.zip</b>,
-        puis importe-le ici.
-      </div>
-    </div>
-
-    <form
-      method="POST"
-      action="/api/apple-health/import"
-      encType="multipart/form-data"
-      className="flex items-center gap-2"
-    >
-      <input type="file" name="file" accept=".zip" required className="text-sm" />
-      <button className="btn-dash" type="submit">Importer</button>
-    </form>
-  </div>
-</Section>
-
-{/* Dernières performances Apple Santé */}
-{cookies().get("conn_apple_health")?.value === "1" && (
-  <Section title="Dernières performances (Apple Santé)">
-    {(() => {
-      const acts = readAppleRecent();
-      if (!acts.length) {
-        return (
-          <div className="card text-sm" style={{ color: "var(--muted)" }}>
-            Aucune activité trouvée dans l’export.
+      {/* Importer depuis Apple Santé */}
+      <Section title="Importer depuis Apple Santé (export.zip)">
+        <div
+          id="apple-import"
+          className="card"
+          style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}
+        >
+          <div>
+            <strong>Importer un export Apple Santé</strong>
+            <div className="text-sm" style={{ color: "var(--muted)" }}>
+              Sur iPhone : Santé → Profil → <b>Exporter toutes les données</b> → partage le <b>export.zip</b>,
+              puis importe-le ici.
+            </div>
           </div>
-        );
-      }
-      return (
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {acts.map((a, idx) => (
-            <article
-              key={idx}
-              className="card"
-              style={{ display: "flex", flexDirection: "column", gap: 8 }}
-            >
-              <div className="flex items-center justify-between">
-                <h3 className="font-semibold" style={{ margin: 0 }}>
-                  {fmtAppleType(a.type)}
-                </h3>
-                <span className="badge">Apple</span>
-              </div>
 
-              <div className="text-sm" style={{ color: "var(--muted)" }}>
-                {fmtAppleDate(a.start)}
-              </div>
-
-              <div className="text-sm" style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-                {fmtKmApple(a.distanceKm) && (
-                  <span className="badge">{fmtKmApple(a.distanceKm)}</span>
-                )}
-                {fmtDuration(a.duration) && (
-                  <span className="badge">{fmtDuration(a.duration)}</span>
-                )}
-                {a.energyKcal ? (
-                  <span className="badge">{Math.round(a.energyKcal)} kcal</span>
-                ) : null}
-              </div>
-            </article>
-          ))}
+          <form
+            method="POST"
+            action="/api/apple-health/import"
+            encType="multipart/form-data"
+            className="flex items-center gap-2"
+          >
+            <input type="file" name="file" accept=".zip" required className="text-sm" />
+            <button className="btn-dash" type="submit">Importer</button>
+          </form>
         </div>
-      );
-    })()}
-  </Section>
-)}
+      </Section>
 
+      {/* Dernières performances Apple Santé */}
+      {isAppleConnected && (
+        <Section title="Dernières performances (Apple Santé)">
+          {(() => {
+            const acts = readAppleRecent();
+            if (!acts.length) {
+              return (
+                <div className="card text-sm" style={{ color: "var(--muted)" }}>
+                  Aucune activité trouvée dans l’export.
+                </div>
+              );
+            }
+            return (
+              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                {acts.map((a, idx) => (
+                  <article
+                    key={idx}
+                    className="card"
+                    style={{ display: "flex", flexDirection: "column", gap: 8 }}
+                  >
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-semibold" style={{ margin: 0 }}>
+                        {fmtAppleType(a.type)}
+                      </h3>
+                      <span className="badge">Apple</span>
+                    </div>
+
+                    <div className="text-sm" style={{ color: "var(--muted)" }}>
+                      {fmtAppleDate(a.start)}
+                    </div>
+
+                    <div className="text-sm" style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                      {fmtKmApple(a.distanceKm) && (
+                        <span className="badge">{fmtKmApple(a.distanceKm)}</span>
+                      )}
+                      {fmtDuration(a.duration) && (
+                        <span className="badge">{fmtDuration(a.duration)}</span>
+                      )}
+                      {a.energyKcal ? (
+                        <span className="badge">{Math.round(a.energyKcal)} kcal</span>
+                      ) : null}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            );
+          })()}
+        </Section>
+      )}
 
       {/* Alerte de dispo */}
       <Section title="Recevoir une alerte">
