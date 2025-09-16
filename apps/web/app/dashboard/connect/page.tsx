@@ -91,60 +91,65 @@ export default async function Page({ searchParams }: { searchParams?: { subscrib
 
       {/* Intégrations */}
       <Section title="Intégrations">
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {INTEGRATIONS.map((it) => {
-            const isConnected = it.cookieFlag ? jar.get(it.cookieFlag)?.value === "1" : false;
-            const connName = it.cookieName ? jar.get(it.cookieName)?.value : undefined;
+  <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+    {INTEGRATIONS.map((it) => {
+      const isConnected = it.cookieFlag ? jar.get(it.cookieFlag)?.value === "1" : false;
+      const connName = it.cookieName ? jar.get(it.cookieName)?.value : undefined;
 
-            return (
-              <article key={it.id} className="card" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                <div className="flex items-start justify-between gap: 3">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span aria-hidden>{it.icon ?? "🔗"}</span>
-                      <h3 className="font-semibold" style={{ margin: 0 }}>{it.name}</h3>
-                    </div>
-                    {it.subtitle && (
-                      <div className="text-sm" style={{ color: "var(--muted)", marginTop: 4 }}>{it.subtitle}</div>
-                    )}
-                  </div>
-                  <span className="badge">{isConnected ? "Connecté" : it.status === "available" ? "Disponible" : "À venir"}</span>
-                </div>
+      return (
+        <article key={it.id} className="card" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <span aria-hidden>{it.icon ?? "🔗"}</span>
+                <h3 className="font-semibold" style={{ margin: 0 }}>{it.name}</h3>
+              </div>
+              {it.subtitle && (
+                <div className="text-sm" style={{ color: "var(--muted)", marginTop: 4 }}>{it.subtitle}</div>
+              )}
+            </div>
+            <span className="badge">{isConnected ? "Connecté" : it.status === "available" ? "Disponible" : "À venir"}</span>
+          </div>
 
-                <p className="text-sm" style={{ color: "var(--muted)" }}>
-                  {it.id === "strava"
-                    ? (isConnected
-                        ? <>Compte relié{connName ? <> : <b>{connName}</b></> : null}. Les activités récentes pourront être importées.</>
-                        : <>Connexion sécurisée via OAuth pour lire tes activités.</>)
-                    : <>Bientôt : connexion sécurisée via OAuth. Tes données restent sous ton contrôle.</>
-                  }
-                </p>
+          <p className="text-sm" style={{ color: "var(--muted)" }}>
+            {it.id === "strava"
+              ? (isConnected
+                  ? <>Compte relié{connName ? <> : <b>{connName}</b></> : null}. Les activités récentes pourront être importées.</>
+                  : <>Connexion sécurisée via OAuth pour lire tes activités.</>)
+              : <>Bientôt : connexion sécurisée via OAuth. Tes données restent sous ton contrôle.</>
+            }
+          </p>
 
-                <div className="flex gap-2">
-                  {it.status === "available" ? (
-                    isConnected ? (
-                      <form action={async () => { "use server"; redirect(it.disconnectPath || "/api/oauth/strava/disconnect"); }}>
-                        <button className="btn btn-outline" type="submit" style={{ color: "#111" }}>Déconnecter</button>
-                      </form>
-                    ) : (
-                      <a className="btn-dash" href={it.connectHref}>Connecter</a>
-                    )
-                  ) : (
-                    <>
-                      <a className="btn-dash" href={it.connectHref} aria-disabled="true" onClick={(e) => e.preventDefault()} title="Bientôt disponible">Connecter</a>
-                      <button className="btn btn-outline" type="button" disabled title="Bientôt disponible" style={{ color: "#111" }}>
-                        En savoir plus
-                      </button>
-                    </>
-                  )}
-                </div>
-              </article>
-            );
-          })}
-        </div>
-      </Section>
+          <div className="flex gap-2">
+            {it.status === "available" ? (
+              isConnected ? (
+                // ✅ plus d'inline server action : on poste vers l'API disconnect
+                <form method="POST" action={it.disconnectPath || "/api/oauth/strava/disconnect"}>
+                  <button className="btn btn-outline" type="submit" style={{ color: "#111" }}>
+                    Déconnecter
+                  </button>
+                </form>
+              ) : (
+                <a className="btn-dash" href={it.connectHref}>Connecter</a>
+              )
+            ) : (
+              <>
+                <a className="btn-dash" href={it.connectHref} aria-disabled="true" onClick={(e) => e.preventDefault()} title="Bientôt disponible">
+                  Connecter
+                </a>
+                <button className="btn btn-outline" type="button" disabled title="Bientôt disponible" style={{ color: "#111" }}>
+                  En savoir plus
+                </button>
+              </>
+            )}
+          </div>
+        </article>
+      );
+    })}
+  </div>
+</Section>
 
-      {/* Alerte de dispo */}
+   {/* Alerte de dispo */}
       <Section title="Recevoir une alerte">
         <div className="card" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <div>
