@@ -20,7 +20,6 @@ type Integration = {
 };
 
 const INTEGRATIONS: Integration[] = [
-  // Live
   {
     id: "strava",
     name: "Strava",
@@ -32,13 +31,11 @@ const INTEGRATIONS: Integration[] = [
     cookieFlag: "conn_strava",
     cookieName: "conn_strava_name",
   },
-
-  // Placeholders (à venir)
   { id: "apple-health", name: "Apple Santé", subtitle: "iPhone / Apple Watch", status: "coming-soon", icon: "", connectHref: "/api/oauth/apple-health/start" },
-  { id: "google-fit", name: "Google Fit", subtitle: "Android / WearOS", status: "coming-soon", icon: "🤖", connectHref: "/api/oauth/google-fit/start" },
-  { id: "garmin", name: "Garmin", subtitle: "Montres GPS", status: "coming-soon", icon: "⌚️", connectHref: "/api/oauth/garmin/start" },
-  { id: "fitbit", name: "Fitbit", subtitle: "Capteurs & sommeil", status: "coming-soon", icon: "💠", connectHref: "/api/oauth/fitbit/start" },
-  { id: "withings", name: "Withings", subtitle: "Balances & santé", status: "coming-soon", icon: "⚖️", connectHref: "/api/oauth/withings/start" },
+  { id: "google-fit",  name: "Google Fit",  subtitle: "Android / WearOS",     status: "coming-soon", icon: "🤖", connectHref: "/api/oauth/google-fit/start" },
+  { id: "garmin",      name: "Garmin",      subtitle: "Montres GPS",          status: "coming-soon", icon: "⌚️", connectHref: "/api/oauth/garmin/start" },
+  { id: "fitbit",      name: "Fitbit",      subtitle: "Capteurs & sommeil",   status: "coming-soon", icon: "💠", connectHref: "/api/oauth/fitbit/start" },
+  { id: "withings",    name: "Withings",    subtitle: "Balances & santé",     status: "coming-soon", icon: "⚖️", connectHref: "/api/oauth/withings/start" },
 ];
 
 /* ---------- Server Action : abonnement à l’alerte intégrations ---------- */
@@ -110,10 +107,10 @@ export default async function Page(props: {
           {INTEGRATIONS.map((it) => {
             const isConnected = it.cookieFlag ? jar.get(it.cookieFlag)?.value === "1" : false;
             const connName = it.cookieName ? jar.get(it.cookieName)?.value : undefined;
+            const nameSuffix = connName ? ` : ${connName}` : "";
 
             return (
               <article key={it.id} className="card" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {/* ⚠️ correction: gap-3 (et non 'gap: 3') */}
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="flex items-center gap-2">
@@ -130,7 +127,7 @@ export default async function Page(props: {
                 <p className="text-sm" style={{ color: "var(--muted)" }}>
                   {it.id === "strava"
                     ? (isConnected
-                        ? <>Compte relié{connName ? <> : <b>{connName}</b></> : null}. Les activités récentes pourront être importées.</>
+                        ? <>Compte relié{nameSuffix}. Les activités récentes pourront être importées.</>
                         : <>Connexion sécurisée via OAuth pour lire tes activités.</>)
                     : <>Bientôt : connexion sécurisée via OAuth. Tes données restent sous ton contrôle.</>}
                 </p>
@@ -138,7 +135,7 @@ export default async function Page(props: {
                 <div className="flex gap-2">
                   {it.status === "available" ? (
                     isConnected ? (
-                      // ✅ plus d'inline server action : simple POST vers l'API disconnect
+                      // POST simple vers l'endpoint de déconnexion (pas d'inline action)
                       <form method="POST" action={it.disconnectPath || "/api/oauth/strava/disconnect"}>
                         <button className="btn btn-outline" type="submit" style={{ color: "#111" }}>
                           Déconnecter
@@ -149,15 +146,9 @@ export default async function Page(props: {
                     )
                   ) : (
                     <>
-                      <a
-                        className="btn-dash"
-                        href={it.connectHref}
-                        aria-disabled="true"
-                        onClick={(e) => e.preventDefault()}
-                        title="Bientôt disponible"
-                      >
+                      <button className="btn-dash" type="button" disabled title="Bientôt disponible">
                         Connecter
-                      </a>
+                      </button>
                       <button className="btn btn-outline" type="button" disabled title="Bientôt disponible" style={{ color: "#111" }}>
                         En savoir plus
                       </button>
@@ -180,7 +171,7 @@ export default async function Page(props: {
             </div>
           </div>
 
-          <form action={subscribeAction} className="flex items-center gap-2">
+        <form action={subscribeAction} className="flex items-center gap-2">
             <input type="hidden" name="want" value={isSubscribed ? "0" : "1"} />
             {isSubscribed ? (
               <button className="btn btn-outline" type="submit" style={{ color: "#111" }}>
@@ -195,4 +186,3 @@ export default async function Page(props: {
     </>
   );
 }
-
