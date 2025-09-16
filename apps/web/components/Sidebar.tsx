@@ -9,7 +9,6 @@ const items = [
   { href: "/dashboard/corrector", label: "Files te corrige" },
   { href: "/dashboard/recipes", label: "Recettes" },
   { href: "/dashboard/calories", label: "Calories" },
-  { href: "/dashboard/notifications", label: "Notifications" },
   { href: "/dashboard/connect", label: "Connecte tes données" },
   { href: "/dashboard/pricing", label: "Abonnement" },
   { href: "/dashboard/bmi", label: "IMC" },
