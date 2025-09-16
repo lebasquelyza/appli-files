@@ -2,6 +2,8 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { PageHeader, Section } from "@/components/ui/Page";
 import { fetchRecentActivities, fmtKm, fmtPaceOrSpeed, fmtDate } from "@/lib/strava";
+import { readAppleRecent, fmtAppleType, fmtAppleDate, fmtDuration, fmtKm as fmtKmApple } from "@/lib/apple";
+
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -196,6 +198,55 @@ export default async function Page(props: {
           })()}
         </Section>
       )}
+
+      {/* Import Apple Santé */}
+<Section title="Importer depuis Apple Santé (export.zip)">
+  <div className="card" style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
+    <div>
+      <strong>Importer un export Apple Santé</strong>
+      <div className="text-sm" style={{ color:"var(--muted)" }}>
+        Sur iPhone : Santé → Profil → Exporter toutes les données → partage le <b>export.zip</b>, puis importe-le ici.
+      </div>
+    </div>
+    <form method="POST" action="/api/apple-health/import" encType="multipart/form-data" className="flex items-center gap-2">
+      <input type="file" name="file" accept=".zip" required className="text-sm" />
+      <button className="btn-dash" type="submit">Importer</button>
+    </form>
+  </div>
+</Section>
+{cookies().get("conn_apple_health")?.value === "1" && (
+  <Section title="Dernières performances (Apple Santé)">
+    {(() => {
+      const acts = readAppleRecent();
+      if (!acts.length) {
+        return (
+          <div className="card text-sm" style={{ color:"var(--muted)" }}>
+            Aucune activité trouvée dans l’export.
+          </div>
+        );
+      }
+      return (
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {acts.map((a, idx) => (
+            <article key={idx} className="card" style={{ display:"flex", flexDirection:"column", gap:8 }}>
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold" style={{ margin: 0 }}>{fmtAppleType(a.type)}</h3>
+                <span className="badge">Apple</span>
+              </div>
+              <div className="text-sm" style={{ color:"var(--muted)" }}>{fmtAppleDate(a.start)}</div>
+              <div className="text-sm" style={{ display:"flex", gap:12, flexWrap:"wrap" }}>
+                {fmtKmApple(a.distanceKm) && <span className="badge">{fmtKmApple(a.distanceKm)}</span>}
+                {fmtDuration(a.duration) && <span className="badge">{fmtDuration(a.duration)}</span>}
+                {a.energyKcal ? <span className="badge">{Math.round(a.energyKcal)} kcal</span> : null}
+              </div>
+            </article>
+          ))}
+        </div>
+      );
+    })()}
+  </Section>
+)}
+
 
       {/* Alerte de dispo */}
       <Section title="Recevoir une alerte">
