@@ -22,4 +22,11 @@
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
   "exclude": ["node_modules"]
+  {
+  "dependencies": {
+    "framer-motion": "^10.18.0",
+    "lucide-react": "^0.452.0"
+  }
+}
+
 }
