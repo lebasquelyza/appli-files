@@ -24,91 +24,115 @@ export async function POST(req: NextRequest) {
   try {
     const ctype = (req.headers.get("content-type") || "").toLowerCase();
 
-    // 1) flux JSON attendu: { fileUrl?: string, feeling?: string, frames: string[] (dataURL/base64), timestamps: number[] }
+    // On attend du JSON: { frames: base64[], timestamps: number[], feeling?: string, fileUrl?: string }
     if (!ctype.includes("application/json")) {
-      return bad(415, "Envoie JSON { frames: base64[], timestamps: number[], feeling?: string, fileUrl?: string }");
+      return bad(
+        415,
+        "Envoie JSON { frames: base64[], timestamps: number[], feeling?: string, fileUrl?: string }"
+      );
     }
 
     const body = await req.json();
+
     const frames: string[] = Array.isArray(body.frames) ? body.frames : [];
     const timestamps: number[] = Array.isArray(body.timestamps) ? body.timestamps : [];
     const feeling: string = typeof body.feeling === "string" ? body.feeling : "";
     const fileUrl: string | undefined = typeof body.fileUrl === "string" ? body.fileUrl : undefined;
 
     if (!frames.length) return bad(400, "Aucune frame fournie.");
-    if (!process.env.OPENAI_API_KEY) return bad(500, "OPENAI_API_KEY manquante.");
 
-    // 2) Construit le prompt + messages multimodaux
+    // ✅ Utilise OPEN_API_KEY en priorité, puis OPENAI_API_KEY en fallback
+    const apiKey =
+      process.env.OPEN_API_KEY ||
+      process.env.OPENAI_API_KEY ||
+      "";
+
+    if (!apiKey) {
+      return bad(500, "Clé OpenAI manquante (OPEN_API_KEY ou OPENAI_API_KEY).");
+    }
+    if (!apiKey.startsWith("sk-")) {
+      return bad(500, "Clé OpenAI invalide (doit commencer par 'sk-').");
+    }
+
+    // Construit le message multimodal pour la vision
     const userParts: any[] = [
       {
         type: "text",
         text:
-          "Analyse ces images extraites d'une vidéo d'entraînement. " +
-          "1) Détecte l'exercice (ex: tractions, squat, pompe, SDT, bench, row, dips, hip thrust, overhead press, etc.). " +
-          "2) Donne les muscles principaux réellement sollicités pour CET EXERCICE. " +
-          "3) Génère 3-6 'cues' (consignes) concrets, adaptés à la posture visible. " +
-          "4) Si tu repères des défauts (genou rentrant, balancement, amplitude partielle, perte de gainage…), donne des conseils précis. " +
-          "5) Utilise le ressenti si pertinent. " +
-          "Réponds en JSON strict, champ par champ, conforme au schéma: " +
-          "{exercise, confidence, overall, muscles[], cues[], extras[], timeline[{time,label,detail?}]}. " +
-          "Ne mets pas de texte hors JSON.",
+          "Analyse ces images extraites d'une vidéo d'entraînement." +
+          "\n1) Détecte l'exercice (ex: tractions, squat, pompe, SDT, bench, row, dips, hip thrust, overhead press, etc.)." +
+          "\n2) Donne les muscles principaux réellement sollicités pour CET EXERCICE." +
+          "\n3) Génère 3–6 'cues' (consignes) concrets, adaptés à la posture visible." +
+          "\n4) Si tu repères des défauts (genou rentrant, balancement, amplitude partielle, perte de gainage…), donne des conseils précis." +
+          "\n5) Utilise le ressenti si pertinent." +
+          "\nRéponds en JSON strict, sans texte hors JSON, conforme au schéma: " +
+          `{"exercise":string,"confidence":number,"overall":string,"muscles":string[],"cues":string[],"extras":string[],"timeline":[{"time":number,"label":string,"detail"?:string}]}`,
       },
     ];
 
-    // Ajoute le feeling et l’URL si présents
-    if (feeling) {
-      userParts.push({ type: "text", text: `Ressenti athlète: ${feeling}` });
-    }
-    if (fileUrl) {
-      userParts.push({ type: "text", text: `URL vidéo (réf): ${fileUrl}` });
-    }
+    if (feeling) userParts.push({ type: "text", text: `Ressenti athlète: ${feeling}` });
+    if (fileUrl) userParts.push({ type: "text", text: `URL vidéo (réf): ${fileUrl}` });
 
-    // Ajoute les frames (images base64)
-    frames.forEach((dataUrl: string, i: number) => {
+    // Limite de prudence: on n’envoie pas plus de 8 frames
+    const maxFrames = Math.min(frames.length, 8);
+
+    for (let i = 0; i < maxFrames; i++) {
+      const dataUrl = frames[i];
+      // data:image/jpeg;base64,XXXX
+      const base64 = typeof dataUrl === "string" && dataUrl.includes(",")
+        ? dataUrl.split(",")[1]
+        : dataUrl;
+
       userParts.push({
         type: "input_image",
         image_data: {
-          data: dataUrl.split(",")[1], // retire le prefix "data:image/jpeg;base64,"
+          data: base64,
           mime_type: "image/jpeg",
         },
       });
+
       if (typeof timestamps[i] === "number") {
         userParts.push({ type: "text", text: `timestamp: ${timestamps[i]}s` });
       }
-    });
+    }
 
-    // 3) Appel OpenAI Responses API (vision)
-    // Remplace "gpt-4o-mini" par le modèle visuel dispo dans ton compte si besoin
+    // Appel OpenAI Responses API (vision)
     const resp = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
         input: [{ role: "user", content: userParts }],
         temperature: 0.3,
-        // On peut forcer un format JSON strict (si dispo dans ton compte):
-        response_format: { type: "json_object" },
+        response_format: { type: "json_object" }, // demande un JSON strict
       }),
     });
 
     if (!resp.ok) {
       const txt = await resp.text().catch(() => "");
+      if (resp.status === 401) {
+        return bad(500, `OpenAI 401: clé invalide côté serveur. Détail: ${txt}`);
+      }
       return bad(500, `OpenAI error ${resp.status}: ${txt}`);
     }
-    const json = await resp.json();
 
-    // La réponse textuelle est dans output_text (Responses API)
-    const text = json?.output_text || json?.content?.[0]?.text || "";
+    const json = await resp.json();
+    const text: string =
+      json?.output_text ||
+      json?.content?.[0]?.text ||
+      json?.choices?.[0]?.message?.content ||
+      "";
+
     if (!text) return bad(500, "Réponse vide du modèle.");
 
     let parsed: AIAnalysis | null = null;
     try {
       parsed = JSON.parse(text);
     } catch {
-      // fallback: tente d'extraire du JSON brut (si le modèle a renvoyé du bruit)
+      // fallback: tente d'extraire un JSON terminal
       const m = text.match(/\{[\s\S]*\}$/);
       if (m) {
         parsed = JSON.parse(m[0]);
@@ -116,7 +140,7 @@ export async function POST(req: NextRequest) {
     }
     if (!parsed) return bad(500, "Impossible de parser la réponse JSON.");
 
-    // Petites garanties de type
+    // Garanties de champs
     parsed.muscles ||= [];
     parsed.cues ||= [];
     parsed.extras ||= [];
@@ -128,3 +152,4 @@ export async function POST(req: NextRequest) {
     return bad(500, e?.message || "Erreur interne");
   }
 }
+
