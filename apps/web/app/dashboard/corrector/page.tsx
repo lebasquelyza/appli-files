@@ -310,7 +310,10 @@ function VideoRecorder({ onRecorded }: { onRecorded: (file: File) => void }) {
         await videoRef.current.play();
         setHasStream(true);
       }
-      const mr = new MediaRecorder(stream, { mimeType: getBestMimeType() });
+      const mr = new MediaRecorder(stream, {
+  mimeType: getBestMimeType(),
+  videoBitsPerSecond: 350_000,
+});
       mediaRecorderRef.current = mr;
       chunksRef.current = [];
       mr.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunksRef.current.push(e.data); };
