@@ -1,20 +1,8 @@
 import { NextResponse } from "next/server";
-import * as Admin from "@/lib/supabaseAdmin"; // compatible avec getSupabaseAdmin OU supabaseAdmin
+import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-function resolveAdmin() {
-  // Si ton module exporte getSupabaseAdmin() (version lazy)
-  if ((Admin as any).getSupabaseAdmin) {
-    return (Admin as any).getSupabaseAdmin();
-  }
-  // Sinon, il exporte probablement un client déjà instancié: supabaseAdmin
-  if ((Admin as any).supabaseAdmin) {
-    return (Admin as any).supabaseAdmin;
-  }
-  throw new Error("Impossible de résoudre le client admin Supabase: ni getSupabaseAdmin ni supabaseAdmin exportés.");
-}
 
 export async function GET() {
   try {
@@ -27,7 +15,7 @@ export async function GET() {
       return NextResponse.json({ ok: false, step: "env", url, anon, service }, { status: 500 });
     }
 
-    const admin = resolveAdmin(); // fonctionne pour les deux implémentations
+    const admin = getSupabaseAdmin();
     const { data, error } = await admin
       .storage
       .from("videos")
