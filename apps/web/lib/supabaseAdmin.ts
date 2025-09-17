@@ -1,3 +1,4 @@
+// apps/web/lib/supabaseAdmin.ts
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
 let _client: SupabaseClient | null = null;
