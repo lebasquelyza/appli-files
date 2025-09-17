@@ -10,7 +10,9 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { supabase } from "@/lib/supabase";
+
+// ✅ plus besoin du client Supabase pour l’analyse
+// import { supabase } from "@/lib/supabase";
 
 function Spinner({ className = "" }: { className?: string }) {
   return (
@@ -23,7 +25,13 @@ function Spinner({ className = "" }: { className?: string }) {
 
 interface AnalysisPoint { time: number; label: string; detail?: string; }
 interface AIAnalysis {
-  overall: string; muscles: string[]; cues: string[]; extras?: string[]; timeline: AnalysisPoint[];
+  exercise?: string;
+  confidence?: number;
+  overall: string;
+  muscles: string[];
+  cues: string[];
+  extras?: string[];
+  timeline: AnalysisPoint[];
 }
 
 export default function Page() {
@@ -49,99 +57,44 @@ function CoachAnalyzer() {
   const [analysis, setAnalysis] = useState<AIAnalysis | null>(null);
   const [progress, setProgress] = useState(0);
 
-  // 🔎 debug UI
-  const [status, setStatus] = useState<string>("");
-  const [errorMsg, setErrorMsg] = useState<string>("");
-
   const handleUpload = (file: File) => {
     const url = URL.createObjectURL(file);
     setBlobUrl(url);
     setFileName(file.name);
     setFile(file);
     setAnalysis(null);
-    setErrorMsg("");
-    setStatus("");
   };
 
+  // 🔎 Nouvelle analyse: on capture 6 images clés localement puis on appelle /api/analyze
   const onAnalyze = async () => {
-    if (!file) return;
+    if (!file || !blobUrl) return;
     setIsAnalyzing(true);
     setProgress(10);
-    setStatus("1/4: demande d’URL d’upload signée…");
-    setErrorMsg("");
 
     try {
-      // 1) Demander au serveur une URL d'upload signée
-      const resSign = await fetch("/api/storage/sign-upload", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          filename: file.name,
-          contentType: file.type || "application/octet-stream",
-        }),
-      });
-
-      if (!resSign.ok) {
-        const txt = await resSign.text().catch(() => "");
-        throw new Error(`sign-upload: HTTP ${resSign.status} ${txt}`);
-      }
-      const { path, token } = await resSign.json();
-      if (!path || !token) throw new Error("sign-upload: réponse invalide (pas de path/token)");
-      setProgress(35);
-      setStatus("2/4: upload vers Supabase Storage…");
-
-      // 2) Upload vers Supabase via token signé
-      const { error: upErr } = await supabase
-        .storage
-        .from("videos")
-        .uploadToSignedUrl(
-          path,
-          token,
-          file,
-          { contentType: file.type || "application/octet-stream" }
-        );
-
-      if (upErr) {
-        throw new Error(`uploadToSignedUrl: ${upErr.message || "erreur inconnue"}`);
-      }
-      setProgress(60);
-      setStatus("3/4: génération d’URL de lecture signée…");
-
-      // 3) URL de lecture signée
-      const resRead = await fetch("/api/storage/sign-read", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ path, expiresIn: 60 * 60 }), // 1h
-      });
-      if (!resRead.ok) {
-        const txt = await resRead.text().catch(() => "");
-        throw new Error(`sign-read: HTTP ${resRead.status} ${txt}`);
-      }
-      const { url: fileUrl } = await resRead.json();
-      if (!fileUrl) throw new Error("sign-read: réponse invalide (pas d’url)");
-      setProgress(80);
-      setStatus("4/4: appel de l’IA…");
+      // 1) Capturer quelques frames de la vidéo côté client
+      const { frames, timestamps } = await captureFramesFromVideo(blobUrl, { count: 6, maxDur: 20 });
+      setProgress(55);
       void fakeProgress(setProgress);
 
-      // 4) Appel IA
+      // 2) Appel IA : on envoie juste frames + timestamps + feeling
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ fileUrl, feeling }),
+        body: JSON.stringify({ frames, timestamps, feeling }),
       });
+
       if (!res.ok) {
         const txt = await res.text().catch(() => "");
-        throw new Error(`analyze: HTTP ${res.status} ${txt}`);
+        throw new Error(`Analyse: HTTP ${res.status}${txt ? " — " + txt : ""}`);
       }
 
       const data: AIAnalysis = await res.json();
       setAnalysis(data);
       setProgress(100);
-      setStatus("Terminé ✅");
     } catch (e: any) {
       console.error(e);
-      setErrorMsg(e?.message || String(e));
-      alert(`Erreur: ${e?.message || e}`);
+      alert(`Erreur pendant l'analyse: ${e?.message ?? e}`);
     } finally {
       setIsAnalyzing(false);
     }
@@ -151,7 +104,6 @@ function CoachAnalyzer() {
     if (blobUrl) URL.revokeObjectURL(blobUrl);
     setBlobUrl(null); setFileName(null); setFile(null);
     setAnalysis(null); setFeeling(""); setProgress(0);
-    setStatus(""); setErrorMsg("");
   };
 
   return (
@@ -190,23 +142,26 @@ function CoachAnalyzer() {
       <Card className="lg:col-span-1">
         <CardHeader><CardTitle className="flex items-center gap-2">🎙️ Ressenti du client</CardTitle></CardHeader>
         <CardContent className="space-y-3">
-          <Textarea placeholder="Dis-nous comment tu te sens (douleurs, fatigue, où tu as senti l'effort, RPE, etc.)."
-            value={feeling} onChange={(e) => setFeeling(e.target.value)} className="min-h-[140px]" />
+          <Textarea
+            placeholder="Dis-nous comment tu te sens (douleurs, fatigue, où tu as senti l'effort, RPE, etc.)."
+            value={feeling}
+            onChange={(e) => setFeeling(e.target.value)}
+            className="min-h-[140px]"
+          />
           <div className="flex items-center gap-2">
             <Button disabled={!blobUrl || isAnalyzing} onClick={onAnalyze}>
               {isAnalyzing ? <Spinner className="mr-2" /> : <span className="mr-2">✨</span>}
-              {isAnalyzing ? "Analyse en cours" : "Lancer l'analyse IA"}
+              {isAnalyzing ? "Chargement…" : "Lancer l'analyse IA"}
             </Button>
             <Button variant="secondary" disabled={isAnalyzing} onClick={() => setFeeling(exampleFeeling)}>
               Exemple de ressenti
             </Button>
           </div>
 
-          {(isAnalyzing || status || errorMsg) && (
-            <div className="space-y-2">
+          {isAnalyzing && (
+            <div className="space-y-2" aria-live="polite" aria-busy="true">
               <Progress value={progress} />
-              <p className="text-xs text-muted-foreground">{status || "Upload et analyse…"}</p>
-              {errorMsg && <p className="text-xs text-red-600 break-all">Erreur : {errorMsg}</p>}
+              <p className="text-xs text-muted-foreground">Chargement…</p>
             </div>
           )}
         </CardContent>
@@ -219,19 +174,28 @@ function CoachAnalyzer() {
           {!analysis && (<EmptyState />)}
           {analysis && (
             <div className="space-y-4">
+              {analysis.exercise && (
+                <p className="text-xs text-muted-foreground">
+                  Exercice détecté : <span className="font-medium">{analysis.exercise}</span>
+                  {typeof analysis.confidence === "number" ? ` (${Math.round(analysis.confidence * 100)}%)` : null}
+                </p>
+              )}
               <div><p className="text-sm leading-relaxed">{analysis.overall}</p></div>
+
               <div className="space-y-2">
                 <h4 className="text-sm font-medium">Muscles principalement sollicités</h4>
                 <div className="flex flex-wrap gap-2">
                   {analysis.muscles.map((m) => (<Badge key={m} variant="secondary">{m}</Badge>))}
                 </div>
               </div>
+
               <div className="space-y-2">
                 <h4 className="text-sm font-medium">Cues / corrections</h4>
                 <ul className="list-disc pl-5 space-y-1 text-sm">
                   {analysis.cues.map((c, i) => (<li key={i}>{c}</li>))}
                 </ul>
               </div>
+
               {analysis.extras && analysis.extras.length > 0 && (
                 <Accordion type="single" collapsible className="w-full">
                   <AccordionItem value="more">
@@ -244,6 +208,7 @@ function CoachAnalyzer() {
                   </AccordionItem>
                 </Accordion>
               )}
+
               <div className="space-y-2">
                 <h4 className="text-sm font-medium">Repères dans la vidéo</h4>
                 <div className="space-y-2">
@@ -380,16 +345,72 @@ function VideoRecorder({ onRecorded }: { onRecorded: (file: File) => void }) {
   );
 }
 
-const exampleFeeling = "Séance de squats. RPE 8. Genou droit un peu instable, bas du dos fatigué, j'ai surtout senti les quadris brûler sur les dernières reps.";
-function fmtTime(s: number) { const mm = Math.floor(s / 60).toString().padStart(2, "0"); const ss = Math.floor(s % 60).toString().padStart(2, "0"); return `${mm}:${ss}`; }
+const exampleFeeling =
+  "Séance de squats. RPE 8. Genou droit un peu instable, bas du dos fatigué, j'ai surtout senti les quadris brûler sur les dernières reps.";
+
+function fmtTime(s: number) {
+  const mm = Math.floor(s / 60).toString().padStart(2, "0");
+  const ss = Math.floor(s % 60).toString().padStart(2, "0");
+  return `${mm}:${ss}`;
+}
+
 function getBestMimeType() {
   const candidates = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm", "video/mp4"];
-  for (const c of candidates) { // @ts-ignore
+  for (const c of candidates) {
+    // @ts-ignore
     if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(c)) return c;
-  } return "video/webm";
+  }
+  return "video/webm";
 }
+
 async function fakeProgress(setter: (v: number) => void) {
   for (let i = 12; i <= 95; i += Math.floor(Math.random() * 10) + 3) {
-    await new Promise((r) => setTimeout(r, 220)); setter(Math.min(i, 95));
-  } await new Promise((r) => setTimeout(r, 350)); setter(100);
+    await new Promise((r) => setTimeout(r, 220));
+    setter(Math.min(i, 95));
+  }
+  await new Promise((r) => setTimeout(r, 350));
+  setter(100);
+}
+
+/** Capture N frames JPEG depuis une vidéo locale (blobUrl) pour l’IA vision */
+async function captureFramesFromVideo(src: string, opts: { count: number; maxDur?: number }) {
+  const { count, maxDur = 20 } = opts;
+  const video = document.createElement("video");
+  video.src = src;
+  video.crossOrigin = "anonymous";
+  video.muted = true;
+
+  // charge les métadonnées (durée, dimensions)
+  await new Promise<void>((resolve) => {
+    if (video.readyState >= 1) return resolve();
+    video.addEventListener("loadedmetadata", () => resolve(), { once: true });
+  });
+
+  const duration = Math.min(video.duration || maxDur, maxDur);
+  const times = Array.from({ length: count }, (_, i) => ((i + 1) * duration) / (count + 1));
+
+  // canvas offscreen pour extraire des JPEG légers
+  const targetW = 512;
+  const ratio = (video.videoHeight || 1) / (video.videoWidth || 1);
+  const canvas = document.createElement("canvas");
+  canvas.width = targetW;
+  canvas.height = Math.round(targetW * ratio);
+  const ctx = canvas.getContext("2d")!;
+
+  const frames: string[] = [];
+  const timestamps: number[] = [];
+
+  for (const t of times) {
+    await new Promise<void>((resolve) => {
+      const onSeeked = () => { video.removeEventListener("seeked", onSeeked); resolve(); };
+      video.currentTime = t;
+      video.addEventListener("seeked", onSeeked, { once: true });
+    });
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.75); // compression légère
+    frames.push(dataUrl);
+    timestamps.push(Math.round(t));
+  }
+
+  return { frames, timestamps };
 }
