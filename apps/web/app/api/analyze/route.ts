@@ -1,4 +1,4 @@
-// app/api/analyze/route.ts
+// apps/web/app/api/analyze/route.ts
 import { NextRequest, NextResponse } from "next/server";
 
 type AnalysisPoint = { time: number; label: string; detail?: string };
@@ -10,8 +10,11 @@ type AIAnalysis = {
   timeline: AnalysisPoint[];
 };
 
-// --- Mock d'analyse (remplace par ton vrai modèle plus tard)
-async function mockAnalyze(_src: { fileUrl?: string; fileName?: string }, feeling: string): Promise<AIAnalysis> {
+// --- Mock d'analyse (à remplacer par ton vrai pipeline)
+async function mockAnalyze(
+  _src: { fileUrl?: string; fileName?: string },
+  feeling: string
+): Promise<AIAnalysis> {
   const extras: string[] = [];
   const f = (feeling || "").toLowerCase();
   if (f.includes("dos")) extras.push("Renforcer le gainage lombaire (bird-dog, planche latérale).");
@@ -38,40 +41,85 @@ async function mockAnalyze(_src: { fileUrl?: string; fileName?: string }, feelin
   };
 }
 
+/**
+ * Utilitaire: renvoie un JSON d'erreur standardisé
+ */
+function error(status: number, message: string, extra?: Record<string, unknown>) {
+  return NextResponse.json({ error: message, ...extra }, { status });
+}
+
 export async function POST(req: NextRequest) {
   try {
-    const ctype = req.headers.get("content-type") || "";
+    const method = req.method.toUpperCase();
+    if (method !== "POST") {
+      return error(405, "Méthode non autorisée", { allowed: ["POST"] });
+    }
 
-    // 1) Nouveau flux: JSON { fileUrl, feeling }
+    const ctype = (req.headers.get("content-type") || "").toLowerCase();
+
+    // --- Flux 1 : JSON { fileUrl, feeling }
     if (ctype.includes("application/json")) {
-      const { fileUrl, feeling = "" } = await req.json();
-      if (!fileUrl) {
-        return NextResponse.json({ error: "fileUrl manquant" }, { status: 400 });
+      const body = await req.json().catch(() => ({}));
+      const fileUrl = body?.fileUrl as string | undefined;
+      const feeling = (body?.feeling as string) || "";
+
+      if (!fileUrl || typeof fileUrl !== "string") {
+        return error(400, "Paramètre 'fileUrl' manquant ou invalide.");
       }
+
       const out = await mockAnalyze({ fileUrl }, feeling);
       return NextResponse.json(out);
     }
 
-    // 2) Ancien flux: FormData { video: File, feeling }
+    // --- Flux 2 : multipart/form-data { video: File, feeling }
     if (ctype.includes("multipart/form-data")) {
       const form = await req.formData();
       const video = form.get("video") as File | null;
       const feeling = (form.get("feeling") as string) || "";
+
       if (!video) {
-        return NextResponse.json({ error: "Aucun fichier vidéo reçu" }, { status: 400 });
+        return error(400, "Aucun fichier 'video' reçu dans le form-data.");
       }
+
       const out = await mockAnalyze({ fileName: video.name }, feeling);
       return NextResponse.json(out);
     }
 
-    return NextResponse.json({ error: "Content-Type non supporté" }, { status: 415 });
+    // --- Fallback : tenter JSON, puis formData si content-type non standard
+    try {
+      const body = await req.json();
+      if (body?.fileUrl) {
+        const out = await mockAnalyze({ fileUrl: String(body.fileUrl) }, String(body.feeling || ""));
+        return NextResponse.json(out);
+      }
+    } catch {
+      // ignore et tente formData
+      try {
+        const form = await req.formData();
+        const video = form.get("video") as File | null;
+        const feeling = (form.get("feeling") as string) || "";
+        if (video) {
+          const out = await mockAnalyze({ fileName: video.name }, feeling);
+          return NextResponse.json(out);
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    return error(415, "Content-Type non supporté. Utilise JSON { fileUrl, feeling } ou multipart/form-data { video, feeling }.");
   } catch (err: any) {
     console.error("Erreur /api/analyze:", err);
-    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
+    return error(500, "Erreur interne");
   }
 }
 
-// Empêche tout pré-rendu de cette route pendant le build
+// Petit endpoint de diagnostic rapide: GET /api/analyze → { ok: true }
+export async function GET() {
+  return NextResponse.json({ ok: true, route: "/api/analyze", accepts: ["POST JSON {fileUrl, feeling}", "POST multipart/form-data {video, feeling}"] });
+}
+
+// Désactive le pré-rendu et force l’exécution Node.js
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const revalidate = 0;
