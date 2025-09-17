@@ -10,8 +10,16 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Loader2, UploadCloud, Video, Play, Pause, Sparkles, Dumbbell, FileVideo, Mic, Trash2 } from "lucide-react";
-import { motion } from "framer-motion";
+
+// ⛳️ petit spinner CSS (remplace Loader2)
+function Spinner({ className = "" }: { className?: string }) {
+  return (
+    <span
+      className={`inline-block align-[-0.125em] h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent ${className}`}
+      aria-label="loading"
+    />
+  );
+}
 
 interface AnalysisPoint {
   time: number;
@@ -66,8 +74,8 @@ function CoachAnalyzer() {
       fd.append("video", file);
       fd.append("feeling", feeling);
 
-      // simple progression UI pendant upload/traitement
-      const prog = fakeProgress(setProgress);
+      // progression UI pendant upload/traitement
+      void fakeProgress(setProgress);
 
       const res = await fetch("/api/analyze", { method: "POST", body: fd });
       if (!res.ok) throw new Error(`Analyse échouée (${res.status})`);
@@ -98,7 +106,7 @@ function CoachAnalyzer() {
       {/* Col 1: capture / upload */}
       <Card className="lg:col-span-1">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2"><Video className="w-5 h-5" /> Capture / Import</CardTitle>
+          <CardTitle className="flex items-center gap-2">🎥 Capture / Import</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <Tabs defaultValue="record">
@@ -121,8 +129,8 @@ function CoachAnalyzer() {
               <label className="text-xs text-muted-foreground">Aperçu</label>
               <video src={blobUrl} controls className="w-full rounded-2xl border" />
               <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <span className="truncate flex items-center gap-1"><FileVideo className="h-3 w-3" />{fileName ?? "clip.webm"}</span>
-                <button className="inline-flex items-center gap-1 hover:text-foreground" onClick={reset}><Trash2 className="h-3 w-3" />Réinitialiser</button>
+                <span className="truncate flex items-center gap-1">🎞️ {fileName ?? "clip.webm"}</span>
+                <button className="inline-flex items-center gap-1 hover:text-foreground" onClick={reset}>↺ Réinitialiser</button>
               </div>
             </div>
           )}
@@ -132,7 +140,7 @@ function CoachAnalyzer() {
       {/* Col 2: ressenti + envoi */}
       <Card className="lg:col-span-1">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2"><Mic className="w-5 h-5" /> Ressenti du client</CardTitle>
+          <CardTitle className="flex items-center gap-2">🎙️ Ressenti du client</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <Textarea
@@ -143,7 +151,7 @@ function CoachAnalyzer() {
           />
           <div className="flex items-center gap-2">
             <Button disabled={!blobUrl || isAnalyzing} onClick={onAnalyze}>
-              {isAnalyzing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+              {isAnalyzing ? <Spinner className="mr-2" /> : <span className="mr-2">✨</span>}
               {isAnalyzing ? "Analyse en cours" : "Lancer l'analyse IA"}
             </Button>
             <Button variant="secondary" disabled={isAnalyzing} onClick={() => setFeeling(exampleFeeling)}>
@@ -163,13 +171,13 @@ function CoachAnalyzer() {
       {/* Col 3: résultats */}
       <Card className="lg:col-span-1">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2"><Dumbbell className="w-5 h-5" /> Retour IA</CardTitle>
+          <CardTitle className="flex items-center gap-2">🏋️ Retour IA</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           {!analysis && (<EmptyState />)}
 
           {analysis && (
-            <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+            <div className="space-y-4">
               <div><p className="text-sm leading-relaxed">{analysis.overall}</p></div>
 
               <div className="space-y-2">
@@ -205,7 +213,7 @@ function CoachAnalyzer() {
                   {analysis.timeline.map((p) => (<TimelineRow key={p.time} point={p} videoSelector="#analysis-player" />))}
                 </div>
               </div>
-            </motion.div>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -213,7 +221,7 @@ function CoachAnalyzer() {
       {/* Player global */}
       <div className="lg:col-span-3">
         <Card>
-          <CardHeader><CardTitle className="flex items-center gap-2"><Play className="w-5 h-5" /> Démonstration / Lecture</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="flex items-center gap-2">▶️ Démonstration / Lecture</CardTitle></CardHeader>
           <CardContent>
             {blobUrl ? (
               <video id="analysis-player" src={blobUrl} controls className="w-full rounded-2xl border" />
@@ -269,7 +277,7 @@ function UploadDrop({ onFile }: { onFile: (file: File) => void }) {
   };
   return (
     <div onDragOver={(e) => e.preventDefault()} onDrop={onDrop} className="border-2 border-dashed rounded-2xl p-6 text-center">
-      <UploadCloud className="mx-auto h-8 w-8 mb-2" />
+      <div className="mx-auto h-8 w-8 mb-2">☁️</div>
       <p className="text-sm mb-2">Glisse une vidéo ici ou</p>
       <div className="flex items-center justify-center gap-2">
         <Input ref={inputRef} type="file" accept="video/*" className="hidden"
@@ -340,9 +348,9 @@ function VideoRecorder({ onRecorded }: { onRecorded: (file: File) => void }) {
       </div>
       <div className="flex items-center gap-2">
         {!isRecording ? (
-          <Button onClick={start}><Play className="mr-2 h-4 w-4" /> Démarrer</Button>
+          <Button onClick={start}>▶️ Démarrer</Button>
         ) : (
-          <Button variant="destructive" onClick={stop}><Pause className="mr-2 h-4 w-4" /> Arrêter</Button>
+          <Button variant="destructive" onClick={stop}>⏸️ Arrêter</Button>
         )}
       </div>
     </div>
@@ -376,4 +384,3 @@ async function fakeProgress(setter: (v: number) => void) {
   await new Promise((r) => setTimeout(r, 350));
   setter(100);
 }
-
