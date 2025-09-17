@@ -1,0 +1,18 @@
+{
+  "settings.general.title": "Einstellungen",
+  "settings.general.subtitle": "Anwendungseinstellungen",
+  "settings.general.intro": "Sprache, Thema sowie Datums-/Uhrzeitformat konfigurieren. Änderungen werden sofort angewendet und auf diesem Gerät gespeichert.",
+  "settings.language": "Sprache",
+  "settings.theme": "Thema",
+  "settings.theme.light": "Hell",
+  "settings.theme.dark": "Dunkel",
+  "settings.theme.system": "Auto",
+  "settings.dateTime": "Datum & Uhrzeit Format",
+  "settings.date": "Datum",
+  "settings.time": "Uhrzeit",
+  "settings.preview": "Vorschau",
+  "settings.accessibility": "Datenschutz & Cookies",
+  "settings.actions.reset": "Zurücksetzen",
+  "settings.actions.saved": "Einstellungen gespeichert ✅",
+  "settings.actions.autoSave": "Änderungen werden automatisch gespeichert"
+}
