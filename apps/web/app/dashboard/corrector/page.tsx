@@ -11,7 +11,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
-// ⛳️ petit spinner CSS (remplace Loader2)
+// petit spinner CSS (remplace Loader2)
 function Spinner({ className = "" }: { className?: string }) {
   return (
     <span
@@ -67,6 +67,17 @@ function CoachAnalyzer() {
 
   const onAnalyze = async () => {
     if (!file) return;
+
+    // ✅ Garde taille 8 MB
+    const MAX = 8 * 1024 * 1024;
+    if (file.size > MAX) {
+      alert(
+        `Ta vidéo fait ${(file.size / (1024 * 1024)).toFixed(1)} MB. ` +
+        `Réduis la durée/qualité pour rester sous ${(MAX / (1024 * 1024)).toFixed(0)} MB.`
+      );
+      return;
+    }
+
     setIsAnalyzing(true);
     setProgress(10);
     try {
@@ -78,14 +89,23 @@ function CoachAnalyzer() {
       void fakeProgress(setProgress);
 
       const res = await fetch("/api/analyze", { method: "POST", body: fd });
-      if (!res.ok) throw new Error(`Analyse échouée (${res.status})`);
-      const data: AIAnalysis = await res.json();
 
+      if (!res.ok) {
+        // essaye de lire l'erreur serveur
+        let serverMsg = "";
+        try {
+          const txt = await res.text();
+          serverMsg = txt;
+        } catch {}
+        throw new Error(`HTTP ${res.status} ${res.statusText}${serverMsg ? " — " + serverMsg : ""}`);
+      }
+
+      const data: AIAnalysis = await res.json();
       setAnalysis(data);
       setProgress(100);
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      alert("Erreur pendant l'analyse. Réessaie.");
+      alert(`Erreur pendant l'analyse: ${e?.message ?? e}`);
     } finally {
       setIsAnalyzing(false);
     }
@@ -311,9 +331,9 @@ function VideoRecorder({ onRecorded }: { onRecorded: (file: File) => void }) {
         setHasStream(true);
       }
       const mr = new MediaRecorder(stream, {
-  mimeType: getBestMimeType(),
-  videoBitsPerSecond: 350_000,
-});
+        mimeType: getBestMimeType(),
+        videoBitsPerSecond: 350_000, // ≈ 350 kbps
+      });
       mediaRecorderRef.current = mr;
       chunksRef.current = [];
       mr.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunksRef.current.push(e.data); };
@@ -324,6 +344,9 @@ function VideoRecorder({ onRecorded }: { onRecorded: (file: File) => void }) {
       };
       mr.start();
       setIsRecording(true);
+
+      // auto-stop après 10 s pour garder un petit fichier
+      setTimeout(() => { if (mr.state !== "inactive") mr.stop(); }, 10_000);
     } catch (err) {
       alert("Impossible d'accéder à la caméra/micro. Vérifie les permissions.");
       console.error(err);
