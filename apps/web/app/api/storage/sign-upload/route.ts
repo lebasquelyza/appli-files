@@ -1,3 +1,4 @@
+// apps/web/app/api/storage/sign-upload/route.ts
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 
@@ -14,16 +15,21 @@ export async function POST(req: Request) {
     const path = `uploads/${Date.now()}-${Math.random().toString(16).slice(2)}.${ext}`;
 
     const admin = getSupabaseAdmin();
+
     const { data, error } = await admin
       .storage
       .from("videos")
-      .createSignedUploadUrl(path); // v2: 1 seul arg
+      .createSignedUploadUrl(path); // v2: un seul argument
 
-    if (error || !data) throw error || new Error("createSignedUploadUrl failed");
+    if (error || !data?.token) throw error || new Error("createSignedUploadUrl failed");
 
-    return NextResponse.json({ path, token: data.token, contentType: contentType || "application/octet-stream" });
+    return NextResponse.json({
+      path,
+      token: data.token,
+      contentType: contentType || "application/octet-stream",
+    });
   } catch (e: any) {
-    console.error(e);
-    return NextResponse.json({ error: e.message || "sign-upload error" }, { status: 500 });
+    console.error("sign-upload error:", e);
+    return NextResponse.json({ error: e?.message || "sign-upload error" }, { status: 500 });
   }
 }
