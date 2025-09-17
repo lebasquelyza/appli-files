@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { supabase } from "@/lib/supabase"; // ⬅️ important: client Supabase public
+import { supabase } from "../../../lib/supabase";
 
 // petit spinner CSS (remplace Loader2)
 function Spinner({ className = "" }: { className?: string }) {
