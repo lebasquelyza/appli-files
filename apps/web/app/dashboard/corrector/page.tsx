@@ -10,16 +10,14 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Loader2, UploadCloud, Video, Play, Pause, Sparkles, Dumbbell, Download, FileVideo, Mic, Trash2 } from "lucide-react";
+import { Loader2, UploadCloud, Video, Play, Pause, Sparkles, Dumbbell, FileVideo, Mic, Trash2 } from "lucide-react";
 import { motion } from "framer-motion";
 
-// === Types ===
 interface AnalysisPoint {
-  time: number; // seconds
+  time: number;
   label: string;
   detail?: string;
 }
-
 interface AIAnalysis {
   overall: string;
   muscles: string[];
@@ -33,7 +31,8 @@ export default function Page() {
     <>
       <PageHeader title="Files te corrige" subtitle="Conseils IA sur ta posture (démo)" />
       <Section title="Filmer / Notes">
-        <p className="text-sm text-muted-foreground mb-4">Prototype complet : enregistre une vidéo, ajoute ton ressenti, puis lance l'analyse IA (à brancher).
+        <p className="text-sm text-muted-foreground mb-4">
+          Enregistre une vidéo, ajoute ton ressenti, puis lance l’analyse IA.
         </p>
         <CoachAnalyzer />
       </Section>
@@ -44,6 +43,7 @@ export default function Page() {
 function CoachAnalyzer() {
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
+  const [file, setFile] = useState<File | null>(null);
   const [feeling, setFeeling] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<AIAnalysis | null>(null);
@@ -53,27 +53,41 @@ function CoachAnalyzer() {
     const url = URL.createObjectURL(file);
     setBlobUrl(url);
     setFileName(file.name);
+    setFile(file);
     setAnalysis(null);
   };
 
   const onAnalyze = async () => {
-    if (!blobUrl) return;
+    if (!file) return;
     setIsAnalyzing(true);
-    setProgress(5);
+    setProgress(10);
+    try {
+      const fd = new FormData();
+      fd.append("video", file);
+      fd.append("feeling", feeling);
 
-    // TODO: remplacer par votre appel d'API backend (upload + analyse)
-    // Exemple: const res = await fetch("/api/analyze", { method: "POST", body: formData })
-    await fakeProgress(setProgress);
-    const mock = await mockAnalyze({ feeling });
+      // simple progression UI pendant upload/traitement
+      const prog = fakeProgress(setProgress);
 
-    setAnalysis(mock);
-    setIsAnalyzing(false);
+      const res = await fetch("/api/analyze", { method: "POST", body: fd });
+      if (!res.ok) throw new Error(`Analyse échouée (${res.status})`);
+      const data: AIAnalysis = await res.json();
+
+      setAnalysis(data);
+      setProgress(100);
+    } catch (e) {
+      console.error(e);
+      alert("Erreur pendant l'analyse. Réessaie.");
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   const reset = () => {
     if (blobUrl) URL.revokeObjectURL(blobUrl);
     setBlobUrl(null);
     setFileName(null);
+    setFile(null);
     setAnalysis(null);
     setFeeling("");
     setProgress(0);
@@ -94,7 +108,7 @@ function CoachAnalyzer() {
             </TabsList>
 
             <TabsContent value="record" className="space-y-3">
-              <VideoRecorder onRecorded={(file) => handleUpload(file)} />
+              <VideoRecorder onRecorded={(f) => handleUpload(f)} />
             </TabsContent>
 
             <TabsContent value="upload" className="space-y-3">
@@ -122,7 +136,7 @@ function CoachAnalyzer() {
         </CardHeader>
         <CardContent className="space-y-3">
           <Textarea
-            placeholder="Dis-nous comment tu te sens (douleurs, fatigue, où tu as le plus senti l'effort, RPE, etc.)."
+            placeholder="Dis-nous comment tu te sens (douleurs, fatigue, où tu as senti l'effort, RPE, etc.)."
             value={feeling}
             onChange={(e) => setFeeling(e.target.value)}
             className="min-h-[140px]"
@@ -152,31 +166,23 @@ function CoachAnalyzer() {
           <CardTitle className="flex items-center gap-2"><Dumbbell className="w-5 h-5" /> Retour IA</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {!analysis && (
-            <EmptyState />
-          )}
+          {!analysis && (<EmptyState />)}
 
           {analysis && (
             <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-              <div>
-                <p className="text-sm leading-relaxed">{analysis.overall}</p>
-              </div>
+              <div><p className="text-sm leading-relaxed">{analysis.overall}</p></div>
 
               <div className="space-y-2">
                 <h4 className="text-sm font-medium">Muscles principalement sollicités</h4>
                 <div className="flex flex-wrap gap-2">
-                  {analysis.muscles.map((m) => (
-                    <Badge key={m} variant="secondary">{m}</Badge>
-                  ))}
+                  {analysis.muscles.map((m) => (<Badge key={m} variant="secondary">{m}</Badge>))}
                 </div>
               </div>
 
               <div className="space-y-2">
                 <h4 className="text-sm font-medium">Cues / corrections</h4>
                 <ul className="list-disc pl-5 space-y-1 text-sm">
-                  {analysis.cues.map((c, i) => (
-                    <li key={i}>{c}</li>
-                  ))}
+                  {analysis.cues.map((c, i) => (<li key={i}>{c}</li>))}
                 </ul>
               </div>
 
@@ -196,9 +202,7 @@ function CoachAnalyzer() {
               <div className="space-y-2">
                 <h4 className="text-sm font-medium">Repères dans la vidéo</h4>
                 <div className="space-y-2">
-                  {analysis.timeline.map((p) => (
-                    <TimelineRow key={p.time} point={p} videoSelector="#analysis-player" />
-                  ))}
+                  {analysis.timeline.map((p) => (<TimelineRow key={p.time} point={p} videoSelector="#analysis-player" />))}
                 </div>
               </div>
             </motion.div>
@@ -206,17 +210,15 @@ function CoachAnalyzer() {
         </CardContent>
       </Card>
 
-      {/* Full-width player with id for seeking */}
+      {/* Player global */}
       <div className="lg:col-span-3">
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Play className="w-5 h-5" /> Démonstration / Lecture</CardTitle>
-          </CardHeader>
+          <CardHeader><CardTitle className="flex items-center gap-2"><Play className="w-5 h-5" /> Démonstration / Lecture</CardTitle></CardHeader>
           <CardContent>
             {blobUrl ? (
               <video id="analysis-player" src={blobUrl} controls className="w-full rounded-2xl border" />
             ) : (
-              <div className="text-sm text-muted-foreground">Aucune vidéo. Enregistre ou importe un clip pour voir les repères temporels.</div>
+              <div className="text-sm text-muted-foreground">Aucune vidéo. Enregistre ou importe un clip pour voir les repères.</div>
             )}
           </CardContent>
         </Card>
@@ -247,12 +249,8 @@ function TimelineRow({ point, videoSelector }: { point: AnalysisPoint; videoSele
       video.play();
     }
   };
-
   return (
-    <button
-      onClick={onSeek}
-      className="w-full text-left rounded-xl border p-3 hover:bg-accent transition"
-    >
+    <button onClick={onSeek} className="w-full text-left rounded-xl border p-3 hover:bg-accent transition">
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium">{fmtTime(point.time)} – {point.label}</span>
         <span className="text-xs text-muted-foreground">Aller au moment</span>
@@ -264,26 +262,18 @@ function TimelineRow({ point, videoSelector }: { point: AnalysisPoint; videoSele
 
 function UploadDrop({ onFile }: { onFile: (file: File) => void }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
-
   const onDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     const f = e.dataTransfer.files?.[0];
     if (f) onFile(f);
   };
-
   return (
-    <div
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={onDrop}
-      className="border-2 border-dashed rounded-2xl p-6 text-center"
-    >
+    <div onDragOver={(e) => e.preventDefault()} onDrop={onDrop} className="border-2 border-dashed rounded-2xl p-6 text-center">
       <UploadCloud className="mx-auto h-8 w-8 mb-2" />
       <p className="text-sm mb-2">Glisse une vidéo ici ou</p>
       <div className="flex items-center justify-center gap-2">
-        <Input ref={inputRef} type="file" accept="video/*" className="hidden" onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) onFile(f);
-        }} />
+        <Input ref={inputRef} type="file" accept="video/*" className="hidden"
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); }} />
         <Button variant="secondary" onClick={() => inputRef.current?.click()}>Choisir un fichier</Button>
       </div>
     </div>
@@ -299,7 +289,6 @@ function VideoRecorder({ onRecorded }: { onRecorded: (file: File) => void }) {
 
   useEffect(() => {
     return () => {
-      // Cleanup stream tracks on unmount
       const stream = videoRef.current?.srcObject as MediaStream | null;
       stream?.getTracks().forEach((t) => t.stop());
     };
@@ -316,9 +305,7 @@ function VideoRecorder({ onRecorded }: { onRecorded: (file: File) => void }) {
       const mr = new MediaRecorder(stream, { mimeType: getBestMimeType() });
       mediaRecorderRef.current = mr;
       chunksRef.current = [];
-      mr.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
-      };
+      mr.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunksRef.current.push(e.data); };
       mr.onstop = async () => {
         const blob = new Blob(chunksRef.current, { type: mr.mimeType });
         const file = new File([blob], `enregistrement-${Date.now()}.webm`, { type: blob.type });
@@ -347,7 +334,7 @@ function VideoRecorder({ onRecorded }: { onRecorded: (file: File) => void }) {
         <video ref={videoRef} className="w-full rounded-2xl border" muted playsInline />
         {!hasStream && (
           <div className="absolute inset-0 grid place-items-center text-xs text-muted-foreground">
-            Prépare ta caméra puis clique « Démarrer »
+            Prépare ta caméra puis clique « Démarrer »
           </div>
         )}
       </div>
@@ -362,8 +349,9 @@ function VideoRecorder({ onRecorded }: { onRecorded: (file: File) => void }) {
   );
 }
 
-// === Helpers / mocks ===
-const exampleFeeling = "Séance de squats. RPE 8. Genou droit un peu instable, bas du dos fatigué, j'ai surtout senti les quadris brûler sur les dernières reps.";
+// === helpers ===
+const exampleFeeling =
+  "Séance de squats. RPE 8. Genou droit un peu instable, bas du dos fatigué, j'ai surtout senti les quadris brûler sur les dernières reps.";
 
 function fmtTime(s: number) {
   const mm = Math.floor(s / 60).toString().padStart(2, "0");
@@ -372,50 +360,20 @@ function fmtTime(s: number) {
 }
 
 function getBestMimeType() {
-  const candidates = [
-    "video/webm;codecs=vp9,opus",
-    "video/webm;codecs=vp8,opus",
-    "video/webm",
-    "video/mp4",
-  ];
+  const candidates = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm", "video/mp4"];
   for (const c of candidates) {
-    if (MediaRecorder.isTypeSupported(c)) return c;
+    // @ts-ignore
+    if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(c)) return c;
   }
   return "video/webm";
 }
 
 async function fakeProgress(setter: (v: number) => void) {
-  for (let i = 10; i <= 95; i += Math.floor(Math.random() * 10) + 3) {
-    await new Promise((r) => setTimeout(r, 250));
+  for (let i = 12; i <= 95; i += Math.floor(Math.random() * 10) + 3) {
+    await new Promise((r) => setTimeout(r, 220));
     setter(Math.min(i, 95));
   }
-  await new Promise((r) => setTimeout(r, 400));
+  await new Promise((r) => setTimeout(r, 350));
   setter(100);
 }
 
-async function mockAnalyze({ feeling }: { feeling: string }): Promise<AIAnalysis> {
-  // Ici, on fait semblant d'analyser la vidéo + le ressenti. À remplacer par la vraie sortie modèle.
-  const extras: string[] = [];
-  if (feeling.toLowerCase().includes("dos")) extras.push("Renforcer le gainage lombaire (bird-dog, planche latérale).");
-  if (feeling.toLowerCase().includes("genou")) extras.push("Pense à pousser le genou droit vers l'extérieur (alignment pied/genou/hanche).");
-
-  return {
-    overall:
-      "Bonne maîtrise globale. Légère bascule du buste en sortie de trou, vitesse irrégulière sur les 2 dernières reps. Rester gainé et garder la trajectoire du centre de masse sur le milieu du pied.",
-    muscles: ["Quadriceps", "Fessiers", "Ischios", "Érecteurs du rachis", "Gainage"] ,
-    cues: [
-      "Pieds vissés dans le sol, voûte plantaire active.",
-      "Genoux suivent la pointe de pieds, légère ouverture vers l'extérieur.",
-      "Cage thoracique empilée sur le bassin, respiration 360° avant la descente.",
-      "Contrôle excentrique, remonter en poussant le sol (pas les épaules).",
-    ],
-    extras,
-    timeline: [
-      { time: 3, label: "Rep 1 – bon depth", detail: "Hanches sous le parallèle, dos neutre." },
-      { time: 9, label: "Rep 2 – genou droit rentre", detail: "Ajouter le cue 'genou dehors'." },
-      { time: 14, label: "Rep 3 – bascule avant", detail: "Penser 'coudes sous la barre, poitrine fière'." },
-      { time: 21, label: "Rep 4 – tempo ok" },
-      { time: 27, label: "Rep 5 – grind", detail: "Rester gainé, souffle bloqué jusqu'à mi-amplitude." },
-    ],
-  };
-}
