@@ -1,7 +1,20 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
-export const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!, // clé SECRÈTE côté serveur
-  { auth: { persistSession: false } }
-);
+let _client: SupabaseClient | null = null;
+
+export function getSupabaseAdmin(): SupabaseClient {
+  if (_client) return _client;
+
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!url || !/^https?:\/\//.test(url)) {
+    throw new Error("Env NEXT_PUBLIC_SUPABASE_URL invalide ou manquante (ex: https://xxx.supabase.co)");
+  }
+  if (!serviceKey) {
+    throw new Error("Env SUPABASE_SERVICE_ROLE_KEY manquante (clé service_role)");
+  }
+
+  _client = createClient(url, serviceKey, { auth: { persistSession: false } });
+  return _client;
+}
