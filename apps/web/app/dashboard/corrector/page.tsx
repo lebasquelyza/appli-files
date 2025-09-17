@@ -10,9 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { supabase } from "../../../lib/supabase";
+import { supabase } from "@/lib/supabase";
 
-// petit spinner CSS (remplace Loader2)
 function Spinner({ className = "" }: { className?: string }) {
   return (
     <span
@@ -22,17 +21,9 @@ function Spinner({ className = "" }: { className?: string }) {
   );
 }
 
-interface AnalysisPoint {
-  time: number;
-  label: string;
-  detail?: string;
-}
+interface AnalysisPoint { time: number; label: string; detail?: string; }
 interface AIAnalysis {
-  overall: string;
-  muscles: string[];
-  cues: string[];
-  extras?: string[];
-  timeline: AnalysisPoint[];
+  overall: string; muscles: string[]; cues: string[]; extras?: string[]; timeline: AnalysisPoint[];
 }
 
 export default function Page() {
@@ -58,19 +49,26 @@ function CoachAnalyzer() {
   const [analysis, setAnalysis] = useState<AIAnalysis | null>(null);
   const [progress, setProgress] = useState(0);
 
+  // 🔎 debug UI
+  const [status, setStatus] = useState<string>("");
+  const [errorMsg, setErrorMsg] = useState<string>("");
+
   const handleUpload = (file: File) => {
     const url = URL.createObjectURL(file);
     setBlobUrl(url);
     setFileName(file.name);
     setFile(file);
     setAnalysis(null);
+    setErrorMsg("");
+    setStatus("");
   };
 
-  // ⬇️ Nouvelle version: upload signé Supabase → URL signée → analyse IA
   const onAnalyze = async () => {
     if (!file) return;
     setIsAnalyzing(true);
     setProgress(10);
+    setStatus("1/4: demande d’URL d’upload signée…");
+    setErrorMsg("");
 
     try {
       // 1) Demander au serveur une URL d'upload signée
@@ -82,47 +80,68 @@ function CoachAnalyzer() {
           contentType: file.type || "application/octet-stream",
         }),
       });
-      if (!resSign.ok) throw new Error(`sign-upload: HTTP ${resSign.status}`);
-      const { path, token } = await resSign.json();
 
-      // 2) Upload direct vers Supabase Storage via token signé (bucket privé)
+      if (!resSign.ok) {
+        const txt = await resSign.text().catch(() => "");
+        throw new Error(`sign-upload: HTTP ${resSign.status} ${txt}`);
+      }
+      const { path, token } = await resSign.json();
+      if (!path || !token) throw new Error("sign-upload: réponse invalide (pas de path/token)");
+      setProgress(35);
+      setStatus("2/4: upload vers Supabase Storage…");
+
+      // 2) Upload vers Supabase via token signé
       const { error: upErr } = await supabase
         .storage
         .from("videos")
-        .uploadToSignedUrl(path, token, file);
+        .uploadToSignedUrl(
+          path,
+          token,
+          file,
+          { contentType: file.type || "application/octet-stream" }
+        );
 
-      if (upErr) throw new Error(`uploadToSignedUrl: ${upErr.message}`);
-      setProgress(70);
+      if (upErr) {
+        throw new Error(`uploadToSignedUrl: ${upErr.message || "erreur inconnue"}`);
+      }
+      setProgress(60);
+      setStatus("3/4: génération d’URL de lecture signée…");
 
-      // 3) Obtenir une URL de lecture signée (temporaire) pour l'IA
+      // 3) URL de lecture signée
       const resRead = await fetch("/api/storage/sign-read", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ path, expiresIn: 60 * 60 }), // 1h
       });
-      if (!resRead.ok) throw new Error(`sign-read: HTTP ${resRead.status}`);
+      if (!resRead.ok) {
+        const txt = await resRead.text().catch(() => "");
+        throw new Error(`sign-read: HTTP ${resRead.status} ${txt}`);
+      }
       const { url: fileUrl } = await resRead.json();
-
-      // 4) Appeler l'IA avec seulement l'URL + le ressenti
+      if (!fileUrl) throw new Error("sign-read: réponse invalide (pas d’url)");
+      setProgress(80);
+      setStatus("4/4: appel de l’IA…");
       void fakeProgress(setProgress);
+
+      // 4) Appel IA
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ fileUrl, feeling }),
       });
-
       if (!res.ok) {
-        let msg = "";
-        try { msg = await res.text(); } catch {}
-        throw new Error(`analyze: HTTP ${res.status}${msg ? " — " + msg : ""}`);
+        const txt = await res.text().catch(() => "");
+        throw new Error(`analyze: HTTP ${res.status} ${txt}`);
       }
 
       const data: AIAnalysis = await res.json();
       setAnalysis(data);
       setProgress(100);
+      setStatus("Terminé ✅");
     } catch (e: any) {
       console.error(e);
-      alert(`Erreur pendant l'analyse: ${e?.message ?? e}`);
+      setErrorMsg(e?.message || String(e));
+      alert(`Erreur: ${e?.message || e}`);
     } finally {
       setIsAnalyzing(false);
     }
@@ -130,32 +149,25 @@ function CoachAnalyzer() {
 
   const reset = () => {
     if (blobUrl) URL.revokeObjectURL(blobUrl);
-    setBlobUrl(null);
-    setFileName(null);
-    setFile(null);
-    setAnalysis(null);
-    setFeeling("");
-    setProgress(0);
+    setBlobUrl(null); setFileName(null); setFile(null);
+    setAnalysis(null); setFeeling(""); setProgress(0);
+    setStatus(""); setErrorMsg("");
   };
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       {/* Col 1: capture / upload */}
       <Card className="lg:col-span-1">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">🎥 Capture / Import</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle className="flex items-center gap-2">🎥 Capture / Import</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <Tabs defaultValue="record">
             <TabsList className="grid grid-cols-2">
               <TabsTrigger value="record">Filmer</TabsTrigger>
               <TabsTrigger value="upload">Importer</TabsTrigger>
             </TabsList>
-
             <TabsContent value="record" className="space-y-3">
               <VideoRecorder onRecorded={(f) => handleUpload(f)} />
             </TabsContent>
-
             <TabsContent value="upload" className="space-y-3">
               <UploadDrop onFile={handleUpload} />
             </TabsContent>
@@ -176,16 +188,10 @@ function CoachAnalyzer() {
 
       {/* Col 2: ressenti + envoi */}
       <Card className="lg:col-span-1">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">🎙️ Ressenti du client</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle className="flex items-center gap-2">🎙️ Ressenti du client</CardTitle></CardHeader>
         <CardContent className="space-y-3">
-          <Textarea
-            placeholder="Dis-nous comment tu te sens (douleurs, fatigue, où tu as senti l'effort, RPE, etc.)."
-            value={feeling}
-            onChange={(e) => setFeeling(e.target.value)}
-            className="min-h-[140px]"
-          />
+          <Textarea placeholder="Dis-nous comment tu te sens (douleurs, fatigue, où tu as senti l'effort, RPE, etc.)."
+            value={feeling} onChange={(e) => setFeeling(e.target.value)} className="min-h-[140px]" />
           <div className="flex items-center gap-2">
             <Button disabled={!blobUrl || isAnalyzing} onClick={onAnalyze}>
               {isAnalyzing ? <Spinner className="mr-2" /> : <span className="mr-2">✨</span>}
@@ -196,10 +202,11 @@ function CoachAnalyzer() {
             </Button>
           </div>
 
-          {isAnalyzing && (
+          {(isAnalyzing || status || errorMsg) && (
             <div className="space-y-2">
               <Progress value={progress} />
-              <p className="text-xs text-muted-foreground">Upload et analyse…</p>
+              <p className="text-xs text-muted-foreground">{status || "Upload et analyse…"}</p>
+              {errorMsg && <p className="text-xs text-red-600 break-all">Erreur : {errorMsg}</p>}
             </div>
           )}
         </CardContent>
@@ -207,30 +214,24 @@ function CoachAnalyzer() {
 
       {/* Col 3: résultats */}
       <Card className="lg:col-span-1">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">🏋️ Retour IA</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle className="flex items-center gap-2">🏋️ Retour IA</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           {!analysis && (<EmptyState />)}
-
           {analysis && (
             <div className="space-y-4">
               <div><p className="text-sm leading-relaxed">{analysis.overall}</p></div>
-
               <div className="space-y-2">
                 <h4 className="text-sm font-medium">Muscles principalement sollicités</h4>
                 <div className="flex flex-wrap gap-2">
                   {analysis.muscles.map((m) => (<Badge key={m} variant="secondary">{m}</Badge>))}
                 </div>
               </div>
-
               <div className="space-y-2">
                 <h4 className="text-sm font-medium">Cues / corrections</h4>
                 <ul className="list-disc pl-5 space-y-1 text-sm">
                   {analysis.cues.map((c, i) => (<li key={i}>{c}</li>))}
                 </ul>
               </div>
-
               {analysis.extras && analysis.extras.length > 0 && (
                 <Accordion type="single" collapsible className="w-full">
                   <AccordionItem value="more">
@@ -243,7 +244,6 @@ function CoachAnalyzer() {
                   </AccordionItem>
                 </Accordion>
               )}
-
               <div className="space-y-2">
                 <h4 className="text-sm font-medium">Repères dans la vidéo</h4>
                 <div className="space-y-2">
@@ -277,10 +277,7 @@ function EmptyState() {
     <div className="rounded-2xl border p-4 text-sm text-muted-foreground">
       Aucune analyse pour l'instant. Ajoute une vidéo et ton ressenti, puis clique <span className="font-medium">Lancer l'analyse IA</span>.
       <div className="mt-3 flex flex-wrap gap-2">
-        <Badge>Posture</Badge>
-        <Badge>Amplitudes</Badge>
-        <Badge>Symétrie</Badge>
-        <Badge>Rythme</Badge>
+        <Badge>Posture</Badge><Badge>Amplitudes</Badge><Badge>Symétrie</Badge><Badge>Rythme</Badge>
       </div>
     </div>
   );
@@ -289,10 +286,7 @@ function EmptyState() {
 function TimelineRow({ point, videoSelector }: { point: AnalysisPoint; videoSelector: string }) {
   const onSeek = () => {
     const video = document.querySelector<HTMLVideoElement>(videoSelector);
-    if (video) {
-      video.currentTime = point.time;
-      video.play();
-    }
+    if (video) { video.currentTime = point.time; video.play(); }
   };
   return (
     <button onClick={onSeek} className="w-full text-left rounded-xl border p-3 hover:bg-accent transition">
@@ -347,10 +341,7 @@ function VideoRecorder({ onRecorded }: { onRecorded: (file: File) => void }) {
         await videoRef.current.play();
         setHasStream(true);
       }
-      const mr = new MediaRecorder(stream, {
-        mimeType: getBestMimeType(),
-        videoBitsPerSecond: 350_000, // ≈ 350 kbps
-      });
+      const mr = new MediaRecorder(stream, { mimeType: getBestMimeType(), videoBitsPerSecond: 350_000 });
       mediaRecorderRef.current = mr;
       chunksRef.current = [];
       mr.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunksRef.current.push(e.data); };
@@ -359,11 +350,8 @@ function VideoRecorder({ onRecorded }: { onRecorded: (file: File) => void }) {
         const file = new File([blob], `enregistrement-${Date.now()}.webm`, { type: blob.type });
         onRecorded(file);
       };
-      mr.start();
-      setIsRecording(true);
-
-      // auto-stop après 10 s pour garder un petit fichier (tu peux enlever si tu veux)
-      setTimeout(() => { if (mr.state !== "inactive") mr.stop(); }, 10_000);
+      mr.start(); setIsRecording(true);
+      // setTimeout(() => { if (mr.state !== "inactive") mr.stop(); }, 10_000); // optionnel
     } catch (err) {
       alert("Impossible d'accéder à la caméra/micro. Vérifie les permissions.");
       console.error(err);
@@ -383,47 +371,25 @@ function VideoRecorder({ onRecorded }: { onRecorded: (file: File) => void }) {
     <div className="space-y-3">
       <div className="relative">
         <video ref={videoRef} className="w-full rounded-2xl border" muted playsInline />
-        {!hasStream && (
-          <div className="absolute inset-0 grid place-items-center text-xs text-muted-foreground">
-            Prépare ta caméra puis clique « Démarrer »
-          </div>
-        )}
+        {!hasStream && (<div className="absolute inset-0 grid place-items-center text-xs text-muted-foreground">Prépare ta caméra puis clique « Démarrer »</div>)}
       </div>
       <div className="flex items-center gap-2">
-        {!isRecording ? (
-          <Button onClick={start}>▶️ Démarrer</Button>
-        ) : (
-          <Button variant="destructive" onClick={stop}>⏸️ Arrêter</Button>
-        )}
+        {!isRecording ? (<Button onClick={start}>▶️ Démarrer</Button>) : (<Button variant="destructive" onClick={stop}>⏸️ Arrêter</Button>)}
       </div>
     </div>
   );
 }
 
-// === helpers ===
-const exampleFeeling =
-  "Séance de squats. RPE 8. Genou droit un peu instable, bas du dos fatigué, j'ai surtout senti les quadris brûler sur les dernières reps.";
-
-function fmtTime(s: number) {
-  const mm = Math.floor(s / 60).toString().padStart(2, "0");
-  const ss = Math.floor(s % 60).toString().padStart(2, "0");
-  return `${mm}:${ss}`;
-}
-
+const exampleFeeling = "Séance de squats. RPE 8. Genou droit un peu instable, bas du dos fatigué, j'ai surtout senti les quadris brûler sur les dernières reps.";
+function fmtTime(s: number) { const mm = Math.floor(s / 60).toString().padStart(2, "0"); const ss = Math.floor(s % 60).toString().padStart(2, "0"); return `${mm}:${ss}`; }
 function getBestMimeType() {
   const candidates = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm", "video/mp4"];
-  for (const c of candidates) {
-    // @ts-ignore
+  for (const c of candidates) { // @ts-ignore
     if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(c)) return c;
-  }
-  return "video/webm";
+  } return "video/webm";
 }
-
 async function fakeProgress(setter: (v: number) => void) {
   for (let i = 12; i <= 95; i += Math.floor(Math.random() * 10) + 3) {
-    await new Promise((r) => setTimeout(r, 220));
-    setter(Math.min(i, 95));
-  }
-  await new Promise((r) => setTimeout(r, 350));
-  setter(100);
+    await new Promise((r) => setTimeout(r, 220)); setter(Math.min(i, 95));
+  } await new Promise((r) => setTimeout(r, 350)); setter(100);
 }
