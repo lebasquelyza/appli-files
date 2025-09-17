@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { supabase } from "@/lib/supabase"; // ⬅️ important: client Supabase public
 
 // petit spinner CSS (remplace Loader2)
 function Spinner({ className = "" }: { className?: string }) {
@@ -65,39 +66,55 @@ function CoachAnalyzer() {
     setAnalysis(null);
   };
 
+  // ⬇️ Nouvelle version: upload signé Supabase → URL signée → analyse IA
   const onAnalyze = async () => {
     if (!file) return;
-
-    // ✅ Garde taille 8 MB
-    const MAX = 8 * 1024 * 1024;
-    if (file.size > MAX) {
-      alert(
-        `Ta vidéo fait ${(file.size / (1024 * 1024)).toFixed(1)} MB. ` +
-        `Réduis la durée/qualité pour rester sous ${(MAX / (1024 * 1024)).toFixed(0)} MB.`
-      );
-      return;
-    }
-
     setIsAnalyzing(true);
     setProgress(10);
+
     try {
-      const fd = new FormData();
-      fd.append("video", file);
-      fd.append("feeling", feeling);
+      // 1) Demander au serveur une URL d'upload signée
+      const resSign = await fetch("/api/storage/sign-upload", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          filename: file.name,
+          contentType: file.type || "application/octet-stream",
+        }),
+      });
+      if (!resSign.ok) throw new Error(`sign-upload: HTTP ${resSign.status}`);
+      const { path, token } = await resSign.json();
 
-      // progression UI pendant upload/traitement
+      // 2) Upload direct vers Supabase Storage via token signé (bucket privé)
+      const { error: upErr } = await supabase
+        .storage
+        .from("videos")
+        .uploadToSignedUrl(path, token, file);
+
+      if (upErr) throw new Error(`uploadToSignedUrl: ${upErr.message}`);
+      setProgress(70);
+
+      // 3) Obtenir une URL de lecture signée (temporaire) pour l'IA
+      const resRead = await fetch("/api/storage/sign-read", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ path, expiresIn: 60 * 60 }), // 1h
+      });
+      if (!resRead.ok) throw new Error(`sign-read: HTTP ${resRead.status}`);
+      const { url: fileUrl } = await resRead.json();
+
+      // 4) Appeler l'IA avec seulement l'URL + le ressenti
       void fakeProgress(setProgress);
-
-      const res = await fetch("/api/analyze", { method: "POST", body: fd });
+      const res = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ fileUrl, feeling }),
+      });
 
       if (!res.ok) {
-        // essaye de lire l'erreur serveur
-        let serverMsg = "";
-        try {
-          const txt = await res.text();
-          serverMsg = txt;
-        } catch {}
-        throw new Error(`HTTP ${res.status} ${res.statusText}${serverMsg ? " — " + serverMsg : ""}`);
+        let msg = "";
+        try { msg = await res.text(); } catch {}
+        throw new Error(`analyze: HTTP ${res.status}${msg ? " — " + msg : ""}`);
       }
 
       const data: AIAnalysis = await res.json();
@@ -182,7 +199,7 @@ function CoachAnalyzer() {
           {isAnalyzing && (
             <div className="space-y-2">
               <Progress value={progress} />
-              <p className="text-xs text-muted-foreground">Extraction des repères, détection d'angles, calcul des asymétries…</p>
+              <p className="text-xs text-muted-foreground">Upload et analyse…</p>
             </div>
           )}
         </CardContent>
@@ -345,7 +362,7 @@ function VideoRecorder({ onRecorded }: { onRecorded: (file: File) => void }) {
       mr.start();
       setIsRecording(true);
 
-      // auto-stop après 10 s pour garder un petit fichier
+      // auto-stop après 10 s pour garder un petit fichier (tu peux enlever si tu veux)
       setTimeout(() => { if (mr.state !== "inactive") mr.stop(); }, 10_000);
     } catch (err) {
       alert("Impossible d'accéder à la caméra/micro. Vérifie les permissions.");
