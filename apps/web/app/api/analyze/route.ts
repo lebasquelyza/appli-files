@@ -1,7 +1,7 @@
 // apps/web/app/api/analyze/route.ts
 import { NextRequest, NextResponse } from "next/server";
 
-/* ===================== Types ===================== */
+/* ============ Types ============ */
 type AnalysisPoint = { time: number; label: string; detail?: string };
 type AIAnalysis = {
   exercise: string;
@@ -13,7 +13,7 @@ type AIAnalysis = {
   timeline: AnalysisPoint[];
 };
 
-/* ===================== Utils ===================== */
+/* ============ Helpers ============ */
 function jsonError(status: number, msg: string, extraHeaders: Record<string, string> = {}) {
   return new NextResponse(JSON.stringify({ error: msg }), {
     status,
@@ -44,9 +44,9 @@ async function withMemLock<T>(fn: () => Promise<T>) {
 
 const lastByIp = new Map<string, number>();
 const lastOrg = { t: 0, count: 0 };
-const SOFT_COOLDOWN_IP_MS = 45_000; // 1 req / 45s IP
-const SOFT_WINDOW_ORG_MS = 60_000;  // 1 min
-const SOFT_ORG_LIMIT = 8;           // 8/min org
+const SOFT_COOLDOWN_IP_MS = 45_000;
+const SOFT_WINDOW_ORG_MS = 60_000;
+const SOFT_ORG_LIMIT = 8;
 
 function clientIp(req: NextRequest) {
   return (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || "unknown";
@@ -60,7 +60,7 @@ function hashKey(frames: string[], feeling: string, economyMode: boolean) {
   return h.toString(16);
 }
 
-/* ===================== Upstash REST (POST JSON “command”) ===================== */
+/* ============ Upstash REST (POST JSON = tableau brut) ============ */
 /** URL: UPSTASH_REDIS_REST_URL (https://...upstash.io)
  *  TOKEN: UPSTASH_REDIS_REST_TOKEN
  */
@@ -68,6 +68,7 @@ function upstashAvailable() {
   return !!process.env.UPSTASH_REDIS_REST_URL && !!process.env.UPSTASH_REDIS_REST_TOKEN;
 }
 
+/** Envoie une commande Redis à Upstash via POST avec body JSON = ["CMD","arg1",...]. */
 async function upstashCommand<T = any>(...args: (string | number)[]) {
   const base = process.env.UPSTASH_REDIS_REST_URL!;
   try {
@@ -77,14 +78,15 @@ async function upstashCommand<T = any>(...args: (string | number)[]) {
         Authorization: `Bearer ${process.env.UPSTASH_REDIS_REST_TOKEN}`,
         "content-type": "application/json",
       },
-      body: JSON.stringify({ command: args.map(String) }),
+      // ⚠️ Corps = tableau brut, pas { command: [...] }
+      body: JSON.stringify(args.map(String)),
     });
     if (!res.ok) {
       const txt = await res.text().catch(() => "");
       throw new Error(`Upstash HTTP ${res.status}: ${txt}`);
     }
     const json = await res.json();
-    // Upstash renvoie { result: ... }
+    // Réponse attendue: { result: ... }
     return json as { result: T };
   } catch (e: any) {
     console.error("[upstash] command failed:", e?.message || e);
@@ -92,9 +94,9 @@ async function upstashCommand<T = any>(...args: (string | number)[]) {
   }
 }
 
-// Helpers
+// Wrappers
 async function redisSetNXPX(key: string, value: string, ttlMs: number): Promise<boolean> {
-  // SET key value PX ttl NX
+  // SET key value PX <ms> NX
   const { result } = await upstashCommand<string>("SET", key, value, "PX", ttlMs, "NX");
   return result === "OK";
 }
@@ -144,7 +146,7 @@ async function withRedisLock<T>(key: string, ttlMs: number, timeoutMs: number, f
   try { return await fn(); } finally { await redisDel(key).catch(()=>{}); }
 }
 
-/* ===================== GET /api/analyze : diagnostic ===================== */
+/* ============ GET /api/analyze (diagnostic) ============ */
 export async function GET() {
   let imported = false, redisOk = false;
   let error: string | null = null;
@@ -169,7 +171,7 @@ export async function GET() {
   });
 }
 
-/* ===================== POST /api/analyze ===================== */
+/* ============ POST /api/analyze ============ */
 export async function POST(req: NextRequest) {
   try {
     console.log("[analyze] env",
@@ -200,7 +202,7 @@ export async function POST(req: NextRequest) {
       timestamps = timestamps.slice(0, 1);
     }
 
-    // ---- Rate-limit IP + ORG (Upstash REST si dispo, sinon fallback mémoire)
+    // ---- Rate-limit IP + ORG
     const ip = clientIp(req);
 
     if (upstashAvailable()) {
@@ -308,7 +310,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ---- Lock distribué (REST) si Upstash dispo, sinon lock mémoire
+    // ---- Lock distribué (Upstash) ou lock mémoire
     let json: any;
     if (upstashAvailable()) {
       const lockKey = "oai:gpt4o-mini:lock";
@@ -358,5 +360,3 @@ export async function POST(req: NextRequest) {
     return jsonError(500, msg);
   }
 }
-
-
