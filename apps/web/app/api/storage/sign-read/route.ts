@@ -6,26 +6,37 @@ export const runtime = "nodejs";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,         // ⚠️ service role — serveur uniquement
   { auth: { persistSession: false } }
 );
 
+const BUCKET = "videos";
+
+function json(status: number, data: any) {
+  return new NextResponse(JSON.stringify(data), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
+
 export async function POST(req: Request) {
   try {
-    const { path, expiresIn = 3600 } = await req.json();
-    if (!path) return NextResponse.json({ error: "path requis" }, { status: 400 });
+    const { path, expiresIn } = await req.json().catch(() => ({}));
+    if (!path) return json(400, { error: "path requis" });
+
+    const ttl = Number.isFinite(expiresIn) ? Math.max(60, Math.min(60 * 60 * 24, Number(expiresIn))) : 3600;
 
     const { data, error } = await supabaseAdmin
       .storage
-      .from("videos")
-      .createSignedUrl(path, expiresIn);
+      .from(BUCKET)
+      .createSignedUrl(path, ttl);
 
     if (error || !data?.signedUrl) {
-      return NextResponse.json({ error: error?.message || "createSignedUrl failed" }, { status: 500 });
+      return json(500, { error: error?.message || "createSignedUrl failed" });
     }
 
-    return NextResponse.json({ url: data.signedUrl });
+    return json(200, { url: data.signedUrl });
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || "server error" }, { status: 500 });
+    return json(500, { error: e?.message || "server error" });
   }
 }
