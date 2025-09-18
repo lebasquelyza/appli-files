@@ -25,7 +25,7 @@ export const revalidate = 0;
 
 /* -------------------- Anti-burst pacing (lissage) -------------------- */
 let lastCall = 0;
-const MIN_SPACING_MS = 600; // espace mini entre appels sortants (augmenté)
+const MIN_SPACING_MS = 1000; // pacing plus fort pour lisser les appels
 async function pace() {
   const now = Date.now();
   const wait = Math.max(0, lastCall + MIN_SPACING_MS - now);
@@ -87,43 +87,33 @@ export async function POST(req: NextRequest) {
     let timestamps: number[] = Array.isArray(body.timestamps) ? body.timestamps : [];
     const feeling: string = typeof body.feeling === "string" ? body.feeling : "";
     const fileUrl: string | undefined = typeof body.fileUrl === "string" ? body.fileUrl : undefined;
-    const economyMode: boolean = !!body.economyMode; // éco par défaut côté front
+    const economyMode: boolean = body.economyMode !== false; // éco par défaut (true si non fourni)
 
     if (!frames.length) return jsonError(400, "Aucune frame fournie.");
 
     const apiKey = process.env.OPEN_API_KEY || process.env.OPENAI_API_KEY || "";
     if (!apiKey) return jsonError(500, "Clé OpenAI manquante (OPEN_API_KEY ou OPENAI_API_KEY).");
 
-    // Cap images (2 en éco, 3 sinon)
-    const cap = economyMode ? 2 : 3;
+    // ✅ Cap extrême : 1 image (mosaïque côté front)
+    const cap = 1;
     if (frames.length > cap) {
       frames = frames.slice(0, cap);
       timestamps = timestamps.slice(0, cap);
     }
 
-    // Instruction compacte en éco
-    const instruction = economyMode
-      ? 'Analyse rapide. Réponds STRICTEMENT en JSON: {"exercise":string,"confidence":number,"overall":string,"muscles":string[],"cues":string[],"extras":string[],"timeline":[{"time":number,"label":string,"detail"?:string}]}. Limite à 3 muscles, 3 cues max, timeline 2 points.'
-      : "Analyse des images de vidéo de musculation.\n"
-        + "1) Détecte l'exercice (ex: tractions, squat, pompe, SDT, bench, row, dips, hip thrust, OHP, etc.).\n"
-        + "2) Liste les muscles PRINCIPAUX pour CET exercice.\n"
-        + "3) Donne 3–5 cues concrets adaptés à ce que tu vois.\n"
-        + "4) Si défauts visibles (genou rentrant, balancement, amplitude partielle, perte de gainage…), propose des corrections précises.\n"
-        + "Réponds UNIQUEMENT en JSON strict: "
-        + '{"exercise":string,"confidence":number,"overall":string,"muscles":string[],"cues":string[],"extras":string[],"timeline":[{"time":number,"label":string,"detail"?:string}]}';
+    // Instruction compacte
+    const instruction =
+      'Analyse d’une image mosaïque issue d’une vidéo de musculation. ' +
+      'Réponds STRICTEMENT en JSON: {"exercise":string,"confidence":number,"overall":string,"muscles":string[],"cues":string[],"extras":string[],"timeline":[{"time":number,"label":string,"detail"?:string}]}. ' +
+      'Limite à 3 muscles, 3 cues max, timeline 2 points pertinents.';
 
     const userParts: any[] = [{ type: "input_text", text: instruction }];
     if (feeling) userParts.push({ type: "input_text", text: `Ressenti: ${feeling}` });
     if (fileUrl) userParts.push({ type: "input_text", text: `URL vidéo: ${fileUrl}` });
-    for (let i = 0; i < frames.length; i++) {
-      const dataUrl = frames[i];
-      userParts.push({
-        type: "input_image",
-        image_url: typeof dataUrl === "string" ? dataUrl : `data:image/jpeg;base64,${dataUrl}`,
-      });
-      if (typeof timestamps[i] === "number") {
-        userParts.push({ type: "input_text", text: `t=${Math.round(timestamps[i])}s` });
-      }
+    // 1 seule image
+    userParts.push({ type: "input_image", image_url: frames[0] });
+    if (typeof timestamps[0] === "number") {
+      userParts.push({ type: "input_text", text: `repère=${Math.round(timestamps[0])}s` });
     }
 
     // cache
@@ -133,7 +123,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(cached.json);
     }
 
-    const maxOut = economyMode ? 180 : 320;
+    // Sortie très courte
+    const maxOut = 160;
 
     const call = async () => {
       await pace(); // lissage
@@ -148,7 +139,7 @@ export async function POST(req: NextRequest) {
           input: [{ role: "user", content: userParts }],
           temperature: 0.2,
           max_output_tokens: maxOut,
-          // Responses API → forcer JSON strict ici
+          // Responses API → JSON strict ici
           text: { format: { type: "json_object" } },
         }),
       });
