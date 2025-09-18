@@ -20,9 +20,11 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const revalidate = 0;
 
+// Utilitaire: extrait le texte de la Responses API (différentes formes possibles)
 function extractTextFromResponses(payload: any): string {
   if (!payload) return "";
   if (typeof payload.output_text === "string" && payload.output_text.trim()) return payload.output_text;
+
   if (Array.isArray(payload.output)) {
     const joined = payload.output
       .map((o: any) => (typeof o.text === "string" ? o.text : ""))
@@ -31,9 +33,12 @@ function extractTextFromResponses(payload: any): string {
       .trim();
     if (joined) return joined;
   }
+
   if (Array.isArray(payload.content) && payload.content[0]?.text) return String(payload.content[0].text);
   if (Array.isArray(payload.choices) && payload.choices[0]?.message?.content)
     return String(payload.choices[0].message.content);
+
+  // Dernier recours: tenter d'extraire un JSON en fin de chaîne
   const asStr = typeof payload === "string" ? payload : JSON.stringify(payload);
   const m = asStr.match(/\{[\s\S]*\}$/);
   return m ? m[0] : "";
@@ -54,7 +59,7 @@ export async function POST(req: NextRequest) {
 
     if (!frames.length) return bad(400, "Aucune frame fournie.");
 
-    // on garde OPEN_API_KEY (fallback OPENAI_API_KEY)
+    // 🔑 On garde OPEN_API_KEY (fallback OPENAI_API_KEY)
     const apiKey = process.env.OPEN_API_KEY || process.env.OPENAI_API_KEY || "";
     if (!apiKey) return bad(500, "Clé OpenAI manquante (OPEN_API_KEY ou OPENAI_API_KEY).");
     if (!apiKey.startsWith("sk-")) return bad(500, "Clé OpenAI invalide (doit commencer par 'sk-').");
@@ -76,11 +81,12 @@ export async function POST(req: NextRequest) {
     if (feeling) userParts.push({ type: "input_text", text: `Ressenti athlète: ${feeling}` });
     if (fileUrl) userParts.push({ type: "input_text", text: `URL vidéo (réf): ${fileUrl}` });
 
+    // Ajout des frames (max 8 pour rester léger)
     const maxFrames = Math.min(frames.length, 8);
     for (let i = 0; i < maxFrames; i++) {
       const dataUrl = frames[i];
 
-      // force un data URL valide
+      // On s'assure d'avoir une data URL complète "data:image/jpeg;base64,...."
       let imageDataUrl: string;
       if (typeof dataUrl === "string" && dataUrl.startsWith("data:image/")) {
         imageDataUrl = dataUrl;
@@ -91,7 +97,7 @@ export async function POST(req: NextRequest) {
 
       userParts.push({
         type: "input_image",
-        image_url: { url: imageDataUrl }, // ✅ objet { url: ... }
+        image_url: imageDataUrl, // ✅ Doit être une STRING (pas un objet)
       });
 
       if (typeof timestamps[i] === "number") {
@@ -99,7 +105,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ✅ text.format doit être un objet, pas une string
+    // ✅ Pour forcer une sortie JSON, text.format doit être un OBJET
     const resp = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
@@ -110,7 +116,7 @@ export async function POST(req: NextRequest) {
         model: "gpt-4o-mini",
         input: [{ role: "user", content: userParts }],
         temperature: 0.3,
-        text: { format: { type: "json" } }, // <-- correction ici
+        text: { format: { type: "json" } }, // <-- important
       }),
     });
 
@@ -134,6 +140,7 @@ export async function POST(req: NextRequest) {
     }
     if (!parsed) return bad(500, "Impossible de parser la réponse JSON.");
 
+    // Sécurise les champs optionnels
     parsed.muscles ||= [];
     parsed.cues ||= [];
     parsed.extras ||= [];
@@ -145,4 +152,3 @@ export async function POST(req: NextRequest) {
     return bad(500, e?.message || "Erreur interne");
   }
 }
-
