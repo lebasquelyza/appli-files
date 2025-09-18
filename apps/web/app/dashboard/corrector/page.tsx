@@ -12,6 +12,17 @@ import { Progress } from "@/components/ui/progress";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { supabase } from "@/lib/supabase";
 
+interface AnalysisPoint { time: number; label: string; detail?: string; }
+interface AIAnalysis {
+  exercise: string;
+  confidence: number;
+  overall: string;
+  muscles: string[];
+  cues: string[];
+  extras?: string[];
+  timeline: AnalysisPoint[];
+}
+
 function Spinner({ className = "" }: { className?: string }) {
   return (
     <span
@@ -19,17 +30,6 @@ function Spinner({ className = "" }: { className?: string }) {
       aria-label="loading"
     />
   );
-}
-
-interface AnalysisPoint { time: number; label: string; detail?: string; }
-interface AIAnalysis {
-  exercise: string;
-  confidence: number; // 0..1
-  overall: string;
-  muscles: string[];
-  cues: string[];
-  extras?: string[];
-  timeline: AnalysisPoint[];
 }
 
 export default function Page() {
@@ -54,47 +54,47 @@ function CoachAnalyzer() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<AIAnalysis | null>(null);
   const [progress, setProgress] = useState(0);
-
-  // UX/debug
   const [status, setStatus] = useState<string>("");
   const [errorMsg, setErrorMsg] = useState<string>("");
 
-  // Cooldown & mode éco
-  const [cooldown, setCooldown] = useState(0);
-  const [economyMode, setEconomyMode] = useState(true);
-
+  const [cooldown, setCooldown] = useState<number>(0);
   useEffect(() => {
-    if (!cooldown) return;
-    const id = setInterval(() => setCooldown((s) => (s > 1 ? s - 1 : 0)), 1000);
+    if (cooldown <= 0) return;
+    const id = setInterval(() => setCooldown((c) => (c > 0 ? c - 1 : 0)), 1000);
     return () => clearInterval(id);
   }, [cooldown]);
 
-  const handleUpload = (file: File) => {
-    const url = URL.createObjectURL(file);
+  const handleUpload = (f: File) => {
+    const url = URL.createObjectURL(f);
     setBlobUrl(url);
-    setFileName(file.name);
-    setFile(file);
+    setFileName(f.name);
+    setFile(f);
     setAnalysis(null);
     setErrorMsg("");
     setStatus("");
+    setProgress(0);
   };
 
   const onAnalyze = async () => {
-    if (!file) return;
+    if (!file || isAnalyzing || cooldown > 0) return;
 
     setIsAnalyzing(true);
     setProgress(5);
-    setStatus("");
+    setStatus("Préparation des images…");
     setErrorMsg("");
 
     try {
-      // 0) MOSAÏQUE (4 mini-frames -> 1 image légère)
-      setProgress(10);
-      const n = 4; // 2x2
-      const { frame: mosaic, timestamps } = await extractMosaicFromFile(file, n, economyMode ? 0.35 : 0.4);
-      if (!mosaic) throw new Error("Impossible de créer la mosaïque.");
+      // 0) EXTRACTION DE 6 FRAMES + MOSAÏQUE 3x2 (qualité 0.30)
+      const { frames, timestamps } = await extractFramesFromFile(file, 6);
+      if (!frames.length) throw new Error("Impossible d’extraire des images de la vidéo.");
+      setProgress(12);
 
-      // 1) URL d’upload signée
+      const mosaic = await makeMosaic(frames, 3, 2, 960, 540, 0.30); // 16:9
+      const oneImage = [mosaic]; // on n'envoie qu'une image
+      setProgress(18);
+
+      // 1) SIGNED UPLOAD (Supabase)
+      setStatus("Préparation de l’upload…");
       const resSign = await fetch("/api/storage/sign-upload", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -103,75 +103,74 @@ function CoachAnalyzer() {
           contentType: file.type || "application/octet-stream",
         }),
       });
-      if (!resSign.ok) {
-        const txt = await resSign.text().catch(() => "");
-        throw new Error(`sign-upload: HTTP ${resSign.status} ${txt}`);
-      }
+      if (!resSign.ok) throw new Error(`sign-upload: HTTP ${resSign.status} ${await resSign.text()}`);
       const { path, token } = await resSign.json();
       if (!path || !token) throw new Error("sign-upload: réponse invalide (pas de path/token)");
       setProgress(35);
 
-      // 2) Upload vers Supabase
+      // 2) UPLOAD SUPABASE
+      setStatus("Upload de la vidéo…");
       const { error: upErr } = await supabase
         .storage
         .from("videos")
         .uploadToSignedUrl(path, token, file, { contentType: file.type || "application/octet-stream" });
-      if (upErr) throw new Error(`uploadToSignedUrl: ${upErr.message || "Load failed"}`);
+      if (upErr) throw new Error(`uploadToSignedUrl: ${upErr.message || "erreur inconnue"}`);
       setProgress(60);
 
-      // 3) URL de lecture signée
+      // 3) READ URL SIGNÉE
+      setStatus("Récupération de l’URL…");
       const resRead = await fetch("/api/storage/sign-read", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ path, expiresIn: 60 * 60 }), // 1h
+        body: JSON.stringify({ path, expiresIn: 60 * 60 }),
       });
-      if (!resRead.ok) {
-        const txt = await resRead.text().catch(() => "");
-        throw new Error(`sign-read: HTTP ${resRead.status} ${txt}`);
-      }
+      if (!resRead.ok) throw new Error(`sign-read: HTTP ${resRead.status} ${await resRead.text()}`);
       const { url: fileUrl } = await resRead.json();
       if (!fileUrl) throw new Error("sign-read: réponse invalide (pas d’url)");
-      setProgress(80);
+      setProgress(75);
 
-      // 4) Appel IA (mosaïque 1 image)
-      void fakeProgress(setProgress);
-
-      const middleTs = timestamps[Math.floor(timestamps.length / 2)] ?? 0;
+      // 4) APPEL IA (1 image mosaïque) + gestion 429/504
+      void fakeProgress(setProgress, 80, 98);
+      setStatus("Analyse IA…");
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          frames: [mosaic],
-          timestamps: [middleTs],
+          frames: oneImage,
+          timestamps: [timestamps[Math.floor(timestamps.length / 2)] || 0],
           feeling,
           fileUrl,
-          economyMode, // true par défaut
+          economyMode: true,
         }),
       });
 
-      const text = await res.text().catch(() => "");
-
       if (!res.ok) {
-        if (res.status === 429 || /rate_limit/i.test(text)) {
-          const retryAfterHeader = res.headers.get("retry-after");
-          const retryAfterSec = retryAfterHeader ? Math.max(1, parseInt(retryAfterHeader, 10) || 0) : 30;
-          setErrorMsg(`La limite d’usage du modèle est atteinte. Réessaie dans ~${retryAfterSec}s.`);
-          setStatus("Limite atteinte (429).");
-          setCooldown(retryAfterSec);
-          setEconomyMode(true);
-          throw new Error("rate_limit_exceeded");
+        const retryAfterHdr = res.headers.get("retry-after");
+        const retryAfter = parseInt(retryAfterHdr || "", 10);
+        const seconds = Number.isFinite(retryAfter)
+          ? retryAfter
+          : res.status === 504
+          ? 12
+          : res.status === 429
+          ? 20
+          : 0;
+
+        if (res.status === 429 || res.status === 504) {
+          setCooldown(seconds);
+          setStatus(`Réessaie dans ${seconds}s…`);
         }
-        throw new Error(`analyze: HTTP ${res.status} ${text}`);
+
+        const txt = await res.text().catch(() => "");
+        throw new Error(`analyze: HTTP ${res.status} ${txt}`);
       }
 
-      const data: Partial<AIAnalysis> = JSON.parse(text);
-
+      const data: Partial<AIAnalysis> = await res.json();
       const safe: AIAnalysis = {
         exercise: (data.exercise || "exercice_inconnu").toString(),
         confidence: typeof data.confidence === "number" ? data.confidence : 0.5,
         overall:
-          (typeof data.overall === "string" && data.overall.trim()) ||
-          "Analyse effectuée mais je manque d’indices visuels. Réessaie avec un angle plus net ou un cadrage entier.",
+          (data.overall && data.overall.trim()) ||
+          "Analyse effectuée mais je manque d’indices visuels. Réessaie avec un angle plus net / cadrage entier.",
         muscles: Array.isArray(data.muscles) && data.muscles.length ? data.muscles.slice(0, 8) : [],
         cues: Array.isArray(data.cues) && data.cues.length ? data.cues : [],
         extras: Array.isArray(data.extras) ? data.extras : [],
@@ -184,14 +183,12 @@ function CoachAnalyzer() {
       setAnalysis(safe);
       setProgress(100);
       setStatus("Terminé ✅");
-      setErrorMsg("");
     } catch (e: any) {
       console.error(e);
       const msg = e?.message || String(e);
       setErrorMsg(msg);
-      if (!/429|rate[_\s-]?limit/i.test(msg)) {
-        alert(`Erreur pendant l'analyse: ${msg}`);
-      }
+      setStatus("");
+      alert(`Erreur pendant l'analyse: ${msg}`);
     } finally {
       setIsAnalyzing(false);
     }
@@ -208,16 +205,13 @@ function CoachAnalyzer() {
     setStatus("");
     setErrorMsg("");
     setCooldown(0);
-    setEconomyMode(true);
   };
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       {/* Col 1: capture / upload */}
       <Card className="lg:col-span-1">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">🎥 Capture / Import</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle className="flex items-center gap-2">🎥 Capture / Import</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <Tabs defaultValue="record">
             <TabsList className="grid grid-cols-2">
@@ -249,9 +243,7 @@ function CoachAnalyzer() {
 
       {/* Col 2: ressenti + envoi */}
       <Card className="lg:col-span-1">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">🎙️ Ressenti du client</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle className="flex items-center gap-2">🎙️ Ressenti du client</CardTitle></CardHeader>
         <CardContent className="space-y-3">
           <Textarea
             placeholder="Dis-nous comment tu te sens (douleurs, fatigue, où tu as senti l'effort, RPE, etc.)."
@@ -262,26 +254,18 @@ function CoachAnalyzer() {
           <div className="flex items-center gap-2">
             <Button disabled={!blobUrl || isAnalyzing || cooldown > 0} onClick={onAnalyze}>
               {isAnalyzing ? <Spinner className="mr-2" /> : <span className="mr-2">✨</span>}
-              {cooldown > 0
-                ? `Réessaie dans ${cooldown}s`
-                : (isAnalyzing ? "Analyse en cours" : "Lancer l'analyse IA")}
+              {isAnalyzing ? "Analyse en cours" : cooldown > 0 ? `Patiente ${cooldown}s` : "Lancer l'analyse IA"}
             </Button>
-            <Button variant="secondary" disabled={isAnalyzing} onClick={() => setFeeling(exampleFeeling)}>
+            <Button variant="secondary" disabled={isAnalyzing || cooldown > 0} onClick={() => setFeeling(exampleFeeling)}>
               Exemple de ressenti
             </Button>
           </div>
 
-          {(isAnalyzing || progress > 0 || errorMsg) && (
+          {(isAnalyzing || progress > 0 || errorMsg || status) && (
             <div className="space-y-2">
               <Progress value={progress} />
-              <p className="text-xs text-muted-foreground">
-                {isAnalyzing ? "Chargement…" : status || (progress === 100 ? "Terminé ✅" : "")}
-              </p>
-              {errorMsg && (
-                <p className="text-xs text-red-600 break-all">
-                  {`Erreur : ${errorMsg}`}
-                </p>
-              )}
+              <p className="text-xs text-muted-foreground">{status}</p>
+              {errorMsg && <p className="text-xs text-red-600 break-all">Erreur : {errorMsg}</p>}
             </div>
           )}
         </CardContent>
@@ -289,28 +273,20 @@ function CoachAnalyzer() {
 
       {/* Col 3: résultats */}
       <Card className="lg:col-span-1">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">🏋️ Retour IA</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle className="flex items-center gap-2">🏋️ Retour IA</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           {!analysis && (<EmptyState />)}
 
           {analysis && (
             <div className="space-y-4">
               <div className="flex items-center flex-wrap gap-2">
-                <Badge variant="secondary">
-                  Exercice détecté : {analysis.exercise || "inconnu"}
-                </Badge>
-                <span className="text-xs text-muted-foreground">
-                  Confiance : {Math.round((analysis.confidence ?? 0) * 100)}%
-                </span>
+                <Badge variant="secondary">Exercice détecté : {analysis.exercise || "inconnu"}</Badge>
+                <span className="text-xs text-muted-foreground">Confiance : {Math.round((analysis.confidence ?? 0) * 100)}%</span>
               </div>
 
-              <div>
-                <p className="text-sm leading-relaxed">
-                  {analysis.overall?.trim() || "Pas d’observations précises. Réessaie avec un angle plus net / cadrage entier."}
-                </p>
-              </div>
+              <p className="text-sm leading-relaxed">
+                {analysis.overall?.trim() || "Pas d’observations précises. Réessaie avec un angle plus net / cadrage entier."}
+              </p>
 
               <div className="space-y-2">
                 <h4 className="text-sm font-medium">Muscles principalement sollicités</h4>
@@ -502,40 +478,24 @@ function getBestMimeType() {
   return "video/webm";
 }
 
-async function fakeProgress(setter: (v: number) => void) {
-  for (let i = 12; i <= 95; i += Math.floor(Math.random() * 10) + 3) {
+async function fakeProgress(setter: (v: number) => void, from = 12, to = 95) {
+  let i = from;
+  while (i < to) {
     await new Promise((r) => setTimeout(r, 220));
-    setter(Math.min(i, 95));
+    i += Math.floor(Math.random() * 10) + 3;
+    setter(Math.min(i, to));
   }
-  await new Promise((r) => setTimeout(r, 350));
-  setter(100);
 }
 
-/* ====== Extraction + mosaïque (1 image légère) ====== */
-
-/** Extrait N mini-frames, puis les assemble en une mosaïque 2x2 JPEG légère. */
-async function extractMosaicFromFile(
-  file: File,
-  nFrames = 4,
-  quality = 0.35
-): Promise<{ frame: string; timestamps: number[] }> {
-  const { frames, timestamps } = await extractFramesRaw(file, nFrames, 480, 270, quality);
-  const mosaic = await makeMosaic(frames, 2, 2, quality); // 2x2
-  return { frame: mosaic, timestamps };
-}
-
-/** Extraction “raw” des petites frames. */
-async function extractFramesRaw(
-  file: File,
-  nFrames = 4,
-  targetW = 480,
-  targetH = 270,
-  quality = 0.35
-): Promise<{ frames: string[]; timestamps: number[] }> {
+/** ➜ Extrait N frames JPEG (dataURL) d’un fichier vidéo local. */
+async function extractFramesFromFile(file: File, nFrames = 6): Promise<{ frames: string[]; timestamps: number[] }> {
   const videoURL = URL.createObjectURL(file);
   try {
     const video = document.createElement("video");
-    video.src = videoURL; video.crossOrigin = "anonymous"; video.muted = true; video.playsInline = true;
+    video.src = videoURL;
+    video.crossOrigin = "anonymous";
+    video.muted = true;
+    video.playsInline = true;
 
     await new Promise<void>((resolve, reject) => {
       video.onloadedmetadata = () => resolve();
@@ -544,19 +504,30 @@ async function extractFramesRaw(
 
     const duration = Math.max(0.001, video.duration || 0);
     const times: number[] = [];
-    for (let i = 0; i < nFrames; i++) times.push((duration * (i + 1)) / (nFrames + 1));
+    if (nFrames <= 1) {
+      times.push(Math.min(duration, 0.1));
+    } else {
+      for (let i = 0; i < nFrames; i++) {
+        const t = (duration * (i + 1)) / (nFrames + 1); // réparti
+        times.push(t);
+      }
+    }
 
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
     const frames: string[] = [];
     const timestamps: number[] = [];
 
+    const targetW = 640;
+    const targetH = 360;
+
     for (const t of times) {
       await seek(video, t);
       const { width, height } = bestFit(video.videoWidth, video.videoHeight, targetW, targetH);
-      canvas.width = width; canvas.height = height;
+      canvas.width = width;
+      canvas.height = height;
       ctx.drawImage(video, 0, 0, width, height);
-      const dataUrl = canvas.toDataURL("image/jpeg", quality);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.35); // qualité plus basse
       frames.push(dataUrl);
       timestamps.push(Math.round(t));
     }
@@ -566,40 +537,6 @@ async function extractFramesRaw(
     URL.revokeObjectURL(videoURL);
   }
 }
-
-/** Assemble un tableau de dataURL JPEG en mosaïque CxR, renvoie un dataURL JPEG. */
-async function makeMosaic(dataUrls: string[], cols = 2, rows = 2, quality = 0.35): Promise<string> {
-  const imgs = await Promise.all(dataUrls.slice(0, cols * rows).map(loadImage));
-  const cellW = 256, cellH = 144; // plus petit = moins de tokens
-  const w = cols * cellW, h = rows * cellH;
-
-  const canvas = document.createElement("canvas");
-  canvas.width = w; canvas.height = h;
-  const ctx = canvas.getContext("2d")!;
-
-  for (let idx = 0; idx < imgs.length; idx++) {
-    const img = imgs[idx];
-    const x = (idx % cols) * cellW;
-    const y = Math.floor(idx / cols) * cellH;
-    const { width, height } = bestFit(img.naturalWidth, img.naturalHeight, cellW, cellH);
-    const ox = x + Math.floor((cellW - width) / 2);
-    const oy = y + Math.floor((cellH - height) / 2);
-    ctx.drawImage(img, ox, oy, width, height);
-  }
-
-  return canvas.toDataURL("image/jpeg", quality);
-}
-
-function loadImage(src: string) {
-  return new Promise<HTMLImageElement>((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = src;
-  });
-}
-
-/* ====== Utilitaires communs ====== */
 
 function seek(video: HTMLVideoElement, time: number) {
   return new Promise<void>((resolve, reject) => {
@@ -619,4 +556,40 @@ function bestFit(w: number, h: number, maxW: number, maxH: number) {
   if (!w || !h) return { width: maxW, height: maxH };
   const r = Math.min(maxW / w, maxH / h);
   return { width: Math.round(w * r), height: Math.round(h * r) };
+}
+
+/** Construit une mosaïque WxH depuis une liste d’images (dataURL). */
+async function makeMosaic(images: string[], gridW = 3, gridH = 2, outW = 960, outH = 540, quality = 0.30): Promise<string> {
+  const cvs = document.createElement("canvas");
+  const ctx = cvs.getContext("2d")!;
+  cvs.width = outW;
+  cvs.height = outH;
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, outW, outH);
+
+  const cellW = Math.floor(outW / gridW);
+  const cellH = Math.floor(outH / gridH);
+
+  for (let i = 0; i < Math.min(images.length, gridW * gridH); i++) {
+    const img = await loadImage(images[i]);
+    const x = (i % gridW) * cellW;
+    const y = Math.floor(i / gridW) * cellH;
+
+    // fit-to-cell en conservant le ratio
+    const { width, height } = bestFit(img.width, img.height, cellW, cellH);
+    const dx = x + Math.floor((cellW - width) / 2);
+    const dy = y + Math.floor((cellH - height) / 2);
+    ctx.drawImage(img, dx, dy, width, height);
+  }
+
+  return cvs.toDataURL("image/jpeg", quality);
+}
+
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("Impossible de charger l’image."));
+    img.src = src;
+  });
 }
