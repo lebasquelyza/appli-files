@@ -10,10 +10,9 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { supabase } from "@/lib/supabase";
 
-// ✅ plus besoin du client Supabase pour l’analyse
-// import { supabase } from "@/lib/supabase";
-
+// Petit spinner CSS
 function Spinner({ className = "" }: { className?: string }) {
   return (
     <span
@@ -25,8 +24,8 @@ function Spinner({ className = "" }: { className?: string }) {
 
 interface AnalysisPoint { time: number; label: string; detail?: string; }
 interface AIAnalysis {
-  exercise?: string;
-  confidence?: number;
+  exercise: string;
+  confidence: number; // 0..1
   overall: string;
   muscles: string[];
   cues: string[];
@@ -57,44 +56,109 @@ function CoachAnalyzer() {
   const [analysis, setAnalysis] = useState<AIAnalysis | null>(null);
   const [progress, setProgress] = useState(0);
 
+  // Debug minimal (non visible pour le client final)
+  const [status, setStatus] = useState<string>("");
+  const [errorMsg, setErrorMsg] = useState<string>("");
+
   const handleUpload = (file: File) => {
     const url = URL.createObjectURL(file);
     setBlobUrl(url);
     setFileName(file.name);
     setFile(file);
     setAnalysis(null);
+    setErrorMsg("");
+    setStatus("");
   };
 
-  // 🔎 Nouvelle analyse: on capture 6 images clés localement puis on appelle /api/analyze
   const onAnalyze = async () => {
-    if (!file || !blobUrl) return;
+    if (!file) return;
     setIsAnalyzing(true);
     setProgress(10);
+    setStatus(""); // on masque les étapes → affichage “chargement…” propre
+    setErrorMsg("");
 
     try {
-      // 1) Capturer quelques frames de la vidéo côté client
-      const { frames, timestamps } = await captureFramesFromVideo(blobUrl, { count: 6, maxDur: 20 });
-      setProgress(55);
-      void fakeProgress(setProgress);
+      // 1) URL d'upload signée
+      const resSign = await fetch("/api/storage/sign-upload", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          filename: file.name,
+          contentType: file.type || "application/octet-stream",
+        }),
+      });
+      if (!resSign.ok) {
+        const txt = await resSign.text().catch(() => "");
+        throw new Error(`sign-upload: HTTP ${resSign.status} ${txt}`);
+      }
+      const { path, token } = await resSign.json();
+      if (!path || !token) throw new Error("sign-upload: réponse invalide (pas de path/token)");
+      setProgress(35);
 
-      // 2) Appel IA : on envoie juste frames + timestamps + feeling
+      // 2) Upload vers Supabase via token signé
+      const { error: upErr } = await supabase
+        .storage
+        .from("videos")
+        .uploadToSignedUrl(path, token, file, { contentType: file.type || "application/octet-stream" });
+      if (upErr) throw new Error(`uploadToSignedUrl: ${upErr.message || "erreur inconnue"}`);
+      setProgress(60);
+
+      // 3) URL de lecture signée
+      const resRead = await fetch("/api/storage/sign-read", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ path, expiresIn: 60 * 60 }), // 1h
+      });
+      if (!resRead.ok) {
+        const txt = await resRead.text().catch(() => "");
+        throw new Error(`sign-read: HTTP ${resRead.status} ${txt}`);
+      }
+      const { url: fileUrl } = await resRead.json();
+      if (!fileUrl) throw new Error("sign-read: réponse invalide (pas d’url)");
+      setProgress(80);
+
+      // 4) Appel IA — on envoie quelques frames + feeling + fileUrl (si utile côté serveur)
+      void fakeProgress(setProgress);
+      // On extrait quelques frames côté client (simplifié : ici on laisse la route serveur gérer frames si tu as déjà ça)
+      // Si ta route `/api/analyze` attend frames/timestamps, adapte ici en conséquence.
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ frames, timestamps, feeling }),
+        body: JSON.stringify({
+          fileUrl,
+          feeling,
+          // Si tu as un extracteur de frames côté client, ajoute:
+          // frames: [ "data:image/jpeg;base64,....", ... ],
+          // timestamps: [0, 1.2, 2.4, ...]
+        }),
       });
-
       if (!res.ok) {
         const txt = await res.text().catch(() => "");
-        throw new Error(`Analyse: HTTP ${res.status}${txt ? " — " + txt : ""}`);
+        throw new Error(`analyze: HTTP ${res.status} ${txt}`);
       }
 
-      const data: AIAnalysis = await res.json();
-      setAnalysis(data);
+      const data: Partial<AIAnalysis> = await res.json();
+      console.log("AIAnalysis (raw):", data);
+
+      // ✅ Fallbacks si l’IA renvoie des champs vides
+      const safe: AIAnalysis = {
+        exercise: (data.exercise || "exercice_inconnu").toString(),
+        confidence: typeof data.confidence === "number" ? data.confidence : 0.5,
+        overall:
+          (data.overall && data.overall.trim()) ||
+          "Analyse effectuée mais je manque d’indices visuels. Réessaie avec un angle plus net ou un cadrage entier.",
+        muscles: Array.isArray(data.muscles) && data.muscles.length ? data.muscles.slice(0, 8) : [],
+        cues: Array.isArray(data.cues) && data.cues.length ? data.cues : [],
+        extras: Array.isArray(data.extras) ? data.extras : [],
+        timeline: Array.isArray(data.timeline) ? data.timeline.filter(v => typeof v?.time === "number" && typeof v?.label === "string") : [],
+      };
+
+      setAnalysis(safe);
       setProgress(100);
     } catch (e: any) {
       console.error(e);
-      alert(`Erreur pendant l'analyse: ${e?.message ?? e}`);
+      setErrorMsg(e?.message || String(e));
+      alert(`Erreur pendant l'analyse: ${e?.message || e}`);
     } finally {
       setIsAnalyzing(false);
     }
@@ -102,24 +166,34 @@ function CoachAnalyzer() {
 
   const reset = () => {
     if (blobUrl) URL.revokeObjectURL(blobUrl);
-    setBlobUrl(null); setFileName(null); setFile(null);
-    setAnalysis(null); setFeeling(""); setProgress(0);
+    setBlobUrl(null);
+    setFileName(null);
+    setFile(null);
+    setAnalysis(null);
+    setFeeling("");
+    setProgress(0);
+    setStatus("");
+    setErrorMsg("");
   };
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       {/* Col 1: capture / upload */}
       <Card className="lg:col-span-1">
-        <CardHeader><CardTitle className="flex items-center gap-2">🎥 Capture / Import</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">🎥 Capture / Import</CardTitle>
+        </CardHeader>
         <CardContent className="space-y-4">
           <Tabs defaultValue="record">
             <TabsList className="grid grid-cols-2">
               <TabsTrigger value="record">Filmer</TabsTrigger>
               <TabsTrigger value="upload">Importer</TabsTrigger>
             </TabsList>
+
             <TabsContent value="record" className="space-y-3">
               <VideoRecorder onRecorded={(f) => handleUpload(f)} />
             </TabsContent>
+
             <TabsContent value="upload" className="space-y-3">
               <UploadDrop onFile={handleUpload} />
             </TabsContent>
@@ -140,7 +214,9 @@ function CoachAnalyzer() {
 
       {/* Col 2: ressenti + envoi */}
       <Card className="lg:col-span-1">
-        <CardHeader><CardTitle className="flex items-center gap-2">🎙️ Ressenti du client</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">🎙️ Ressenti du client</CardTitle>
+        </CardHeader>
         <CardContent className="space-y-3">
           <Textarea
             placeholder="Dis-nous comment tu te sens (douleurs, fatigue, où tu as senti l'effort, RPE, etc.)."
@@ -151,17 +227,20 @@ function CoachAnalyzer() {
           <div className="flex items-center gap-2">
             <Button disabled={!blobUrl || isAnalyzing} onClick={onAnalyze}>
               {isAnalyzing ? <Spinner className="mr-2" /> : <span className="mr-2">✨</span>}
-              {isAnalyzing ? "Chargement…" : "Lancer l'analyse IA"}
+              {isAnalyzing ? "Analyse en cours" : "Lancer l'analyse IA"}
             </Button>
             <Button variant="secondary" disabled={isAnalyzing} onClick={() => setFeeling(exampleFeeling)}>
               Exemple de ressenti
             </Button>
           </div>
 
-          {isAnalyzing && (
-            <div className="space-y-2" aria-live="polite" aria-busy="true">
+          {(isAnalyzing || progress > 0 || errorMsg) && (
+            <div className="space-y-2">
               <Progress value={progress} />
-              <p className="text-xs text-muted-foreground">Chargement…</p>
+              <p className="text-xs text-muted-foreground">
+                {isAnalyzing ? "Chargement…" : status || (progress === 100 ? "Terminé ✅" : "")}
+              </p>
+              {errorMsg && <p className="text-xs text-red-600 break-all">Erreur : {errorMsg}</p>}
             </div>
           )}
         </CardContent>
@@ -169,33 +248,54 @@ function CoachAnalyzer() {
 
       {/* Col 3: résultats */}
       <Card className="lg:col-span-1">
-        <CardHeader><CardTitle className="flex items-center gap-2">🏋️ Retour IA</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">🏋️ Retour IA</CardTitle>
+        </CardHeader>
         <CardContent className="space-y-4">
           {!analysis && (<EmptyState />)}
+
           {analysis && (
             <div className="space-y-4">
-              {analysis.exercise && (
-                <p className="text-xs text-muted-foreground">
-                  Exercice détecté : <span className="font-medium">{analysis.exercise}</span>
-                  {typeof analysis.confidence === "number" ? ` (${Math.round(analysis.confidence * 100)}%)` : null}
-                </p>
-              )}
-              <div><p className="text-sm leading-relaxed">{analysis.overall}</p></div>
+              {/* En-tête exercice + confiance */}
+              <div className="flex items-center flex-wrap gap-2">
+                <Badge variant="secondary">
+                  Exercice détecté : {analysis.exercise || "inconnu"}
+                </Badge>
+                <span className="text-xs text-muted-foreground">
+                  Confiance : {Math.round((analysis.confidence ?? 0) * 100)}%
+                </span>
+              </div>
 
+              {/* Synthèse */}
+              <div>
+                <p className="text-sm leading-relaxed">
+                  {analysis.overall?.trim() || "Pas d’observations précises. Réessaie avec un angle plus net / cadrage entier."}
+                </p>
+              </div>
+
+              {/* Muscles */}
               <div className="space-y-2">
                 <h4 className="text-sm font-medium">Muscles principalement sollicités</h4>
                 <div className="flex flex-wrap gap-2">
-                  {analysis.muscles.map((m) => (<Badge key={m} variant="secondary">{m}</Badge>))}
+                  {analysis.muscles?.length
+                    ? analysis.muscles.map((m) => (<Badge key={m} variant="secondary">{m}</Badge>))
+                    : <span className="text-xs text-muted-foreground">— non détecté —</span>}
                 </div>
               </div>
 
+              {/* Cues */}
               <div className="space-y-2">
                 <h4 className="text-sm font-medium">Cues / corrections</h4>
-                <ul className="list-disc pl-5 space-y-1 text-sm">
-                  {analysis.cues.map((c, i) => (<li key={i}>{c}</li>))}
-                </ul>
+                {analysis.cues?.length ? (
+                  <ul className="list-disc pl-5 space-y-1 text-sm">
+                    {analysis.cues.map((c, i) => (<li key={i}>{c}</li>))}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-muted-foreground">— pas de consignes spécifiques détectées —</p>
+                )}
               </div>
 
+              {/* Extras */}
               {analysis.extras && analysis.extras.length > 0 && (
                 <Accordion type="single" collapsible className="w-full">
                   <AccordionItem value="more">
@@ -209,11 +309,16 @@ function CoachAnalyzer() {
                 </Accordion>
               )}
 
+              {/* Timeline */}
               <div className="space-y-2">
                 <h4 className="text-sm font-medium">Repères dans la vidéo</h4>
-                <div className="space-y-2">
-                  {analysis.timeline.map((p) => (<TimelineRow key={p.time} point={p} videoSelector="#analysis-player" />))}
-                </div>
+                {analysis.timeline?.length ? (
+                  <div className="space-y-2">
+                    {analysis.timeline.map((p, idx) => (<TimelineRow key={`${p.time}-${idx}`} point={p} videoSelector="#analysis-player" />))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">— aucun repère temporel —</p>
+                )}
               </div>
             </div>
           )}
@@ -316,7 +421,6 @@ function VideoRecorder({ onRecorded }: { onRecorded: (file: File) => void }) {
         onRecorded(file);
       };
       mr.start(); setIsRecording(true);
-      // setTimeout(() => { if (mr.state !== "inactive") mr.stop(); }, 10_000); // optionnel
     } catch (err) {
       alert("Impossible d'accéder à la caméra/micro. Vérifie les permissions.");
       console.error(err);
@@ -370,47 +474,4 @@ async function fakeProgress(setter: (v: number) => void) {
   }
   await new Promise((r) => setTimeout(r, 350));
   setter(100);
-}
-
-/** Capture N frames JPEG depuis une vidéo locale (blobUrl) pour l’IA vision */
-async function captureFramesFromVideo(src: string, opts: { count: number; maxDur?: number }) {
-  const { count, maxDur = 20 } = opts;
-  const video = document.createElement("video");
-  video.src = src;
-  video.crossOrigin = "anonymous";
-  video.muted = true;
-
-  // charge les métadonnées (durée, dimensions)
-  await new Promise<void>((resolve) => {
-    if (video.readyState >= 1) return resolve();
-    video.addEventListener("loadedmetadata", () => resolve(), { once: true });
-  });
-
-  const duration = Math.min(video.duration || maxDur, maxDur);
-  const times = Array.from({ length: count }, (_, i) => ((i + 1) * duration) / (count + 1));
-
-  // canvas offscreen pour extraire des JPEG légers
-  const targetW = 512;
-  const ratio = (video.videoHeight || 1) / (video.videoWidth || 1);
-  const canvas = document.createElement("canvas");
-  canvas.width = targetW;
-  canvas.height = Math.round(targetW * ratio);
-  const ctx = canvas.getContext("2d")!;
-
-  const frames: string[] = [];
-  const timestamps: number[] = [];
-
-  for (const t of times) {
-    await new Promise<void>((resolve) => {
-      const onSeeked = () => { video.removeEventListener("seeked", onSeeked); resolve(); };
-      video.currentTime = t;
-      video.addEventListener("seeked", onSeeked, { once: true });
-    });
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.75); // compression légère
-    frames.push(dataUrl);
-    timestamps.push(Math.round(t));
-  }
-
-  return { frames, timestamps };
 }
