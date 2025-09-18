@@ -13,32 +13,29 @@ type AIAnalysis = {
   timeline: AnalysisPoint[];
 };
 
-/* ============ Helpers génériques ============ */
+/* ============ Helpers ============ */
 function jsonError(status: number, msg: string, extraHeaders: Record<string, string> = {}) {
   return new NextResponse(JSON.stringify({ error: msg }), {
     status,
     headers: { "content-type": "application/json", ...extraHeaders },
   });
 }
+
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const revalidate = 0;
 
-/** Petit util pour borner un promise par un timeout. */
-async function withTimeout<T>(p: Promise<T>, ms: number, label = "timeout"): Promise<T> {
+/** Borne une promesse avec un timeout. (Si c'est un fetch, crée-la avec AbortController et passe signal) */
+async function withTimeout<T>(p: Promise<T>, ms: number, _label = "timeout"): Promise<T> {
   const ac = new AbortController();
-  const t = setTimeout(() => ac.abort(label), ms);
-  try {
-    // Si p est un fetch, passe { signal: ac.signal } au moment de créer p.
-    return await p;
-  } finally {
-    clearTimeout(t);
-  }
+  const t = setTimeout(() => ac.abort(_label), ms);
+  try { return await p; }
+  finally { clearTimeout(t); }
 }
 
 /* pacing / verrous mémoire (fallback local) */
 let lastCall = 0;
-const MIN_SPACING_MS = 2500; // lissage pour éviter 429 OpenAI
+const MIN_SPACING_MS = 2000;
 async function pace() {
   const now = Date.now();
   const wait = Math.max(0, lastCall + MIN_SPACING_MS - now);
@@ -55,7 +52,7 @@ async function withMemLock<T>(fn: () => Promise<T>) {
 
 const lastByIp = new Map<string, number>();
 const lastOrg = { t: 0, count: 0 };
-const SOFT_COOLDOWN_IP_MS = 60_000; // fallback mémoire
+const SOFT_COOLDOWN_IP_MS = 60_000;
 const SOFT_WINDOW_ORG_MS = 60_000;
 const SOFT_ORG_LIMIT = 3;
 
@@ -72,14 +69,11 @@ function hashKey(frames: string[], feeling: string, economyMode: boolean) {
 }
 
 /* ============ Upstash REST (POST JSON = tableau brut) ============ */
-/** URL: UPSTASH_REDIS_REST_URL (https://...upstash.io)
- *  TOKEN: UPSTASH_REDIS_REST_TOKEN
- */
 function upstashAvailable() {
   return !!process.env.UPSTASH_REDIS_REST_URL && !!process.env.UPSTASH_REDIS_REST_TOKEN;
 }
 
-/** Envoie une commande Redis à Upstash via POST avec body JSON = ["CMD","arg1",...]. */
+/** Envoie une commande Redis à Upstash (body JSON = ["CMD","arg1",...]) */
 async function upstashCommand<T = any>(...args: (string | number)[]) {
   const base = process.env.UPSTASH_REDIS_REST_URL!;
   const controller = new AbortController();
@@ -89,7 +83,7 @@ async function upstashCommand<T = any>(...args: (string | number)[]) {
       Authorization: `Bearer ${process.env.UPSTASH_REDIS_REST_TOKEN}`,
       "content-type": "application/json",
     },
-    body: JSON.stringify(args.map(String)),
+    body: JSON.stringify(args.map(String)), // tableau brut
     signal: controller.signal,
   }).then(async (res) => {
     if (!res.ok) {
@@ -98,13 +92,12 @@ async function upstashCommand<T = any>(...args: (string | number)[]) {
     }
     return res.json() as Promise<{ result: T }>;
   });
-  // Upstash doit répondre très vite; borne à 3s
+  // Upstash doit répondre très vite
   return withTimeout(p, 3000, "upstash");
 }
 
 // Wrappers
 async function redisSetNXPX(key: string, value: string, ttlMs: number): Promise<boolean> {
-  // SET key value PX <ms> NX
   const { result } = await upstashCommand<string>("SET", key, value, "PX", ttlMs, "NX");
   return result === "OK";
 }
@@ -138,7 +131,7 @@ async function fixedWindowLimit(key: string, limit: number, windowSec: number) {
   return { success: count <= limit, reset: Date.now() + pttl };
 }
 
-/** Lock distribué via SET NX PX avec timeouts courts. */
+/** Lock distribué via SET NX PX (timeouts courts). */
 async function withRedisLock<T>(key: string, ttlMs: number, timeoutMs: number, fn: () => Promise<T>): Promise<T> {
   const start = Date.now();
   while (true) {
@@ -164,7 +157,7 @@ export async function GET() {
       await redisSetNXPX("diag:ping", "1", 3000);
       const v = await redisGet("diag:ping");
       redisOk = v !== null;
-      imported = true; // “REST utilisable”
+      imported = true;
     } catch (e: any) {
       error = e?.message || String(e);
       imported = false; redisOk = false;
@@ -181,16 +174,11 @@ export async function GET() {
 
 /* ============ POST /api/analyze ============ */
 export async function POST(req: NextRequest) {
-  // Timeout global de la route (22s)
+  // Timeout global (9s) — en-dessous du timeout Netlify / proxy
   const abort = new AbortController();
-  const globalTimeout = setTimeout(() => abort.abort("route_timeout"), 22_000);
+  const globalTimeout = setTimeout(() => abort.abort("route_timeout"), 9_000);
 
   try {
-    console.log("[analyze] env",
-      "UPSTASH_ENV:", upstashAvailable(),
-      "OPENAI_KEY:", !!(process.env.OPEN_API_KEY || process.env.OPENAI_API_KEY)
-    );
-
     const ctype = (req.headers.get("content-type") || "").toLowerCase();
     if (!ctype.includes("application/json")) {
       return jsonError(415, "Envoie JSON { frames: base64[], timestamps: number[], feeling?: string, fileUrl?: string, economyMode?: boolean }");
@@ -208,7 +196,7 @@ export async function POST(req: NextRequest) {
     const apiKey = process.env.OPEN_API_KEY || process.env.OPENAI_API_KEY || "";
     if (!apiKey) return jsonError(500, "Clé OpenAI manquante (OPEN_API_KEY ou OPENAI_API_KEY).");
 
-    // Cap: 1 image (mosaïque côté front)
+    // Cap: 1 image (mosaïque côté client)
     if (frames.length > 1) {
       frames = frames.slice(0, 1);
       timestamps = timestamps.slice(0, 1);
@@ -262,12 +250,12 @@ export async function POST(req: NextRequest) {
     userParts.push({ type: "input_image", image_url: frames[0] });
     if (typeof timestamps[0] === "number") userParts.push({ type: "input_text", text: `repere=${Math.round(timestamps[0])}s` });
 
-    const maxOut = 80;
+    const maxOut = 60;
 
     const callOpenAI = async () => {
       await pace();
 
-      // ⬇️ fetch OpenAI avec timeout court (12s)
+      // fetch OpenAI avec timeout court (7s)
       const controller = new AbortController();
       const p = fetch("https://api.openai.com/v1/responses", {
         method: "POST",
@@ -284,14 +272,6 @@ export async function POST(req: NextRequest) {
         if (!resp.ok) {
           const txt = await resp.text().catch(() => "");
           const retryAfter = resp.headers.get("retry-after") || "";
-          console.error("[analyze] oai_error", {
-            status: resp.status,
-            retryAfter,
-            rlReqLimit: resp.headers.get("x-ratelimit-limit-requests"),
-            rlReqRemain: resp.headers.get("x-ratelimit-remaining-requests"),
-            rlTokLimit: resp.headers.get("x-ratelimit-limit-tokens"),
-            rlTokRemain: resp.headers.get("x-ratelimit-remaining-tokens"),
-          });
           const err: any = new Error(`OpenAI error ${resp.status}: ${txt}`);
           err.status = resp.status;
           err.retryAfter = retryAfter;
@@ -305,10 +285,10 @@ export async function POST(req: NextRequest) {
         return resp.json();
       });
 
-      return withTimeout(p, 12_000, "openai");
+      return withTimeout(p, 7_000, "openai");
     };
 
-    // ⬇️ retry 2× sur 429 (Retry-After ou backoff+jitter)
+    // retry 2× sur 429 (Retry-After ou backoff+jitter)
     async function callWithRetry() {
       let attempt = 0;
       while (true) {
@@ -318,13 +298,7 @@ export async function POST(req: NextRequest) {
           const status = e?.status ?? e?.response?.status;
           const is429 = status === 429 || e?.code === "rate_limit_exceeded" || /rate[_\s-]?limit/i.test(String(e?.message||""));
           const isAbort = e?.name === "AbortError" || /openai/i.test(String(e)) && /timeout/i.test(String(e));
-
-          if (isAbort) {
-            // transforme en 504 propre pour éviter le 504 proxy
-            const retry = 20;
-            throw Object.assign(new Error("gateway_timeout"), { status: 504, retryAfter: String(retry) });
-          }
-
+          if (isAbort) throw Object.assign(new Error("gateway_timeout"), { status: 504, retryAfter: "12" });
           if (!is429 || attempt >= 2) throw e;
 
           const raSec = Number.parseInt(e?.retryAfter || "", 10);
@@ -337,12 +311,12 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ---- Lock distribué (Upstash) ou lock mémoire — TTL/patience plus courts
+    // ---- Lock distribué (Upstash) ou lock mémoire — TTL/patience courts
     let json: any;
     if (upstashAvailable()) {
       const lockKey = "oai:gpt4o-mini:lock";
-      const ttlMs = 5000;     // verrou court
-      const timeout = 7000;   // patience max
+      const ttlMs = 3000;
+      const timeout = 4000;
       json = await withRedisLock(lockKey, ttlMs, timeout, async () => {
         return await callWithRetry();
       });
@@ -365,7 +339,6 @@ export async function POST(req: NextRequest) {
     cache.set(key, { t: Date.now(), json: parsed });
     return NextResponse.json(parsed);
   } catch (e: any) {
-    console.error("/api/analyze error:", e);
     const status = e?.status ?? e?.response?.status;
     const msg = e?.message || "Erreur interne";
     const is429 =
@@ -375,11 +348,11 @@ export async function POST(req: NextRequest) {
       msg === "queue_timeout";
 
     if (status === 504 || /gateway_timeout|route_timeout/i.test(String(msg))) {
-      const retryAfter = e?.retryAfter || "20";
+      const retryAfter = e?.retryAfter || "12";
       return jsonError(504, "gateway_timeout", { "retry-after": retryAfter });
     }
     if (is429) {
-      const retryAfter = e?.retryAfter || "30";
+      const retryAfter = e?.retryAfter || "20";
       return jsonError(429, "rate_limit_exceeded", { "retry-after": retryAfter });
     }
     if (status === 400 && /Unsupported parameter:\s*'response_format'/i.test(msg)) {
