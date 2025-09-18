@@ -20,27 +20,23 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const revalidate = 0;
 
-// Utilitaire: récupère le texte de sortie quelle que soit la forme de payload
-function extractTextFromResponses(payload: any): string {
-  if (!payload) return "";
-  if (typeof payload.output_text === "string" && payload.output_text.trim()) return payload.output_text;
-
-  if (Array.isArray(payload.output)) {
-    const joined = payload.output
-      .map((o: any) => (typeof o.text === "string" ? o.text : ""))
-      .filter(Boolean)
-      .join("\n")
-      .trim();
-    if (joined) return joined;
+// Retry simple avec backoff
+async function withBackoff<T>(fn: () => Promise<T>, tries = 2) {
+  let lastErr: any;
+  for (let i = 0; i <= tries; i++) {
+    try {
+      return await fn();
+    } catch (e: any) {
+      lastErr = e;
+      const status = e?.status ?? e?.response?.status;
+      const is429 = status === 429 || /rate[_\s-]?limit/i.test(String(e?.message || ""));
+      if (!is429 || i === tries) throw e;
+      // backoff (1.5s puis 3s)
+      const delay = 1500 * (i + 1);
+      await new Promise(r => setTimeout(r, delay));
+    }
   }
-
-  if (Array.isArray(payload.content) && payload.content[0]?.text) return String(payload.content[0].text);
-  if (Array.isArray(payload.choices) && payload.choices[0]?.message?.content)
-    return String(payload.choices[0].message.content);
-
-  const asStr = typeof payload === "string" ? payload : JSON.stringify(payload);
-  const m = asStr.match(/\{[\s\S]*\}$/);
-  return m ? m[0] : "";
+  throw lastErr;
 }
 
 export async function POST(req: NextRequest) {
@@ -51,83 +47,86 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const frames: string[] = Array.isArray(body.frames) ? body.frames : [];
-    const timestamps: number[] = Array.isArray(body.timestamps) ? body.timestamps : [];
+    let frames: string[] = Array.isArray(body.frames) ? body.frames : [];
+    let timestamps: number[] = Array.isArray(body.timestamps) ? body.timestamps : [];
     const feeling: string = typeof body.feeling === "string" ? body.feeling : "";
     const fileUrl: string | undefined = typeof body.fileUrl === "string" ? body.fileUrl : undefined;
 
     if (!frames.length) return bad(400, "Aucune frame fournie.");
 
-    // 🔑 On garde OPEN_API_KEY (fallback OPENAI_API_KEY)
+    // 🔑 garde OPEN_API_KEY (fallback OPENAI_API_KEY)
     const apiKey = process.env.OPEN_API_KEY || process.env.OPENAI_API_KEY || "";
     if (!apiKey) return bad(500, "Clé OpenAI manquante (OPEN_API_KEY ou OPENAI_API_KEY).");
-    if (!apiKey.startsWith("sk-")) return bad(500, "Clé OpenAI invalide (doit commencer par 'sk-').");
 
-    // ---- Construction du message multimodal (Responses API)
-    const userParts: any[] = [
-      {
-        type: "input_text",
-        text:
-          "Analyse ces images extraites d'une vidéo d'entraînement.\n" +
-          "1) Détecte l'exercice (tractions, squat, pompe, SDT, bench, row, dips, hip thrust, overhead press, etc.).\n" +
-          "2) Donne les muscles PRINCIPAUX réellement sollicités pour CET EXERCICE.\n" +
-          "3) Génère 3–6 cues concrets adaptés à ce que tu vois.\n" +
-          "4) S'il y a des défauts (genou rentrant, balancement, amplitude partielle, perte de gainage…), propose des corrections précises.\n" +
-          "5) Utilise le ressenti si pertinent.\n" +
-          'Réponds en JSON strict (pas de texte hors JSON) exactement: {"exercise":string,"confidence":number,"overall":string,"muscles":string[],"cues":string[],"extras":string[],"timeline":[{"time":number,"label":string,"detail"?:string}]}.',
-      },
-    ];
-    if (feeling) userParts.push({ type: "input_text", text: `Ressenti athlète: ${feeling}` });
-    if (fileUrl) userParts.push({ type: "input_text", text: `URL vidéo (réf): ${fileUrl}` });
+    // ⚠️ Réduction d’empreinte token : max 4 frames, qualité + résolution plus faibles côté client recommandé
+    if (frames.length > 4) {
+      frames = frames.slice(0, 4);
+      timestamps = timestamps.slice(0, 4);
+    }
 
-    // Ajout des frames (max 8 pour rester léger). Chaque frame doit être une data URL string.
-    const maxFrames = Math.min(frames.length, 8);
-    for (let i = 0; i < maxFrames; i++) {
-      const src = frames[i];
+    // Prompt court (moins de tokens)
+    const instruction =
+      "Analyse des images de vidéo de musculation.\n" +
+      "1) Détecte l'exercice (ex: tractions, squat, pompe, SDT, bench, row, dips, hip thrust, OHP, etc.).\n" +
+      "2) Liste les muscles PRINCIPAUX pour CET exercice.\n" +
+      "3) Donne 3–5 cues concrets adaptés à ce que tu vois.\n" +
+      "4) Si défauts visibles (genou rentrant, balancement, amplitude partielle, perte de gainage…), propose des corrections précises.\n" +
+      "Réponds UNIQUEMENT en JSON strict: " +
+      '{"exercise":string,"confidence":number,"overall":string,"muscles":string[],"cues":string[],"extras":string[],"timeline":[{"time":number,"label":string,"detail"?:string}]}';
 
-      // Assure une data URL complète "data:image/jpeg;base64,...."
-      let imageDataUrl: string;
-      if (typeof src === "string" && src.startsWith("data:image/")) {
-        imageDataUrl = src;
-      } else {
-        const base64 = typeof src === "string" && src.includes(",") ? src.split(",")[1] : src;
-        imageDataUrl = `data:image/jpeg;base64,${base64}`;
-      }
+    const userParts: any[] = [{ type: "input_text", text: instruction }];
+    if (feeling) userParts.push({ type: "input_text", text: `Ressenti: ${feeling}` });
+    if (fileUrl) userParts.push({ type: "input_text", text: `URL vidéo: ${fileUrl}` });
 
+    for (let i = 0; i < frames.length; i++) {
+      const dataUrl = frames[i];
+      // Responses API attend un image_url sous forme de string (data URL OK)
       userParts.push({
         type: "input_image",
-        image_url: imageDataUrl, // ✅ Doit être une STRING
+        image_url: typeof dataUrl === "string" ? dataUrl : `data:image/jpeg;base64,${dataUrl}`,
       });
-
       if (typeof timestamps[i] === "number") {
-        userParts.push({ type: "input_text", text: `timestamp: ${timestamps[i]}s` });
+        userParts.push({ type: "input_text", text: `t=${Math.round(timestamps[i])}s` });
       }
     }
 
-    // ✅ text.format.type doit être l'une des valeurs supportées: "json_object" / "text" / "json_schema"
-    const resp = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        input: [{ role: "user", content: userParts }],
-        temperature: 0.3,
-        text: { format: { type: "json_object" } }, // ← CORRECTION: "json_object"
-      }),
-    });
+    const call = async () => {
+      const resp = await fetch("https://api.openai.com/v1/responses", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          input: [{ role: "user", content: userParts }],
+          temperature: 0.2,
+          // ↓ limite la taille de sortie
+          max_output_tokens: 450,
+          // ↓ format JSON strict (valeur supportée : json_object)
+          text: { format: { type: "json_object" } },
+        }),
+      });
 
-    if (!resp.ok) {
-      const txt = await resp.text().catch(() => "");
-      if (resp.status === 401) return bad(500, `OpenAI 401: clé invalide côté serveur. Détail: ${txt}`);
-      if (resp.status === 400) return bad(500, `OpenAI 400: requête invalide. Détail: ${txt}`);
-      return bad(500, `OpenAI error ${resp.status}: ${txt}`);
-    }
+      if (!resp.ok) {
+        const txt = await resp.text().catch(() => "");
+        const err = new Error(`OpenAI error ${resp.status}: ${txt}`);
+        // @ts-ignore
+        err.status = resp.status;
+        throw err;
+      }
+      return resp.json();
+    };
 
-    const payload = await resp.json();
-    const text = extractTextFromResponses(payload);
+    const json = await withBackoff(call, 2);
+
+    // Extraire le texte
+    const text: string =
+      json?.output_text ||
+      json?.content?.[0]?.text ||
+      json?.choices?.[0]?.message?.content ||
+      "";
+
     if (!text) return bad(500, "Réponse vide du modèle.");
 
     let parsed: AIAnalysis | null = null;
@@ -139,7 +138,6 @@ export async function POST(req: NextRequest) {
     }
     if (!parsed) return bad(500, "Impossible de parser la réponse JSON.");
 
-    // Sécurisation des champs
     parsed.muscles ||= [];
     parsed.cues ||= [];
     parsed.extras ||= [];
