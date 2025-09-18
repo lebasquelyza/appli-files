@@ -20,7 +20,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const revalidate = 0;
 
-// Utilitaire: extrait le texte de la Responses API (différentes formes possibles)
+// Utilitaire: récupère le texte de sortie quelle que soit la forme de payload
 function extractTextFromResponses(payload: any): string {
   if (!payload) return "";
   if (typeof payload.output_text === "string" && payload.output_text.trim()) return payload.output_text;
@@ -38,7 +38,6 @@ function extractTextFromResponses(payload: any): string {
   if (Array.isArray(payload.choices) && payload.choices[0]?.message?.content)
     return String(payload.choices[0].message.content);
 
-  // Dernier recours: tenter d'extraire un JSON en fin de chaîne
   const asStr = typeof payload === "string" ? payload : JSON.stringify(payload);
   const m = asStr.match(/\{[\s\S]*\}$/);
   return m ? m[0] : "";
@@ -81,23 +80,23 @@ export async function POST(req: NextRequest) {
     if (feeling) userParts.push({ type: "input_text", text: `Ressenti athlète: ${feeling}` });
     if (fileUrl) userParts.push({ type: "input_text", text: `URL vidéo (réf): ${fileUrl}` });
 
-    // Ajout des frames (max 8 pour rester léger)
+    // Ajout des frames (max 8 pour rester léger). Chaque frame doit être une data URL string.
     const maxFrames = Math.min(frames.length, 8);
     for (let i = 0; i < maxFrames; i++) {
-      const dataUrl = frames[i];
+      const src = frames[i];
 
-      // On s'assure d'avoir une data URL complète "data:image/jpeg;base64,...."
+      // Assure une data URL complète "data:image/jpeg;base64,...."
       let imageDataUrl: string;
-      if (typeof dataUrl === "string" && dataUrl.startsWith("data:image/")) {
-        imageDataUrl = dataUrl;
+      if (typeof src === "string" && src.startsWith("data:image/")) {
+        imageDataUrl = src;
       } else {
-        const base64 = typeof dataUrl === "string" && dataUrl.includes(",") ? dataUrl.split(",")[1] : dataUrl;
+        const base64 = typeof src === "string" && src.includes(",") ? src.split(",")[1] : src;
         imageDataUrl = `data:image/jpeg;base64,${base64}`;
       }
 
       userParts.push({
         type: "input_image",
-        image_url: imageDataUrl, // ✅ Doit être une STRING (pas un objet)
+        image_url: imageDataUrl, // ✅ Doit être une STRING
       });
 
       if (typeof timestamps[i] === "number") {
@@ -105,7 +104,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ✅ Pour forcer une sortie JSON, text.format doit être un OBJET
+    // ✅ text.format.type doit être l'une des valeurs supportées: "json_object" / "text" / "json_schema"
     const resp = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
@@ -116,7 +115,7 @@ export async function POST(req: NextRequest) {
         model: "gpt-4o-mini",
         input: [{ role: "user", content: userParts }],
         temperature: 0.3,
-        text: { format: { type: "json" } }, // <-- important
+        text: { format: { type: "json_object" } }, // ← CORRECTION: "json_object"
       }),
     });
 
@@ -140,7 +139,7 @@ export async function POST(req: NextRequest) {
     }
     if (!parsed) return bad(500, "Impossible de parser la réponse JSON.");
 
-    // Sécurise les champs optionnels
+    // Sécurisation des champs
     parsed.muscles ||= [];
     parsed.cues ||= [];
     parsed.extras ||= [];
