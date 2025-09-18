@@ -59,7 +59,7 @@ function CoachAnalyzer() {
   const [status, setStatus] = useState<string>("");
   const [errorMsg, setErrorMsg] = useState<string>("");
 
-  // Cooldown & mode éco (éco par défaut)
+  // Cooldown & mode éco
   const [cooldown, setCooldown] = useState(0);
   const [economyMode, setEconomyMode] = useState(true);
 
@@ -88,10 +88,10 @@ function CoachAnalyzer() {
     setErrorMsg("");
 
     try {
-      // 0) FABRIQUER UNE MOSAÏQUE (4 mini-frames -> 1 image)
+      // 0) MOSAÏQUE (4 mini-frames -> 1 image légère)
       setProgress(10);
       const n = 4; // 2x2
-      const { frame: mosaic, timestamps } = await extractMosaicFromFile(file, n, economyMode ? 0.45 : 0.5);
+      const { frame: mosaic, timestamps } = await extractMosaicFromFile(file, n, economyMode ? 0.35 : 0.4);
       if (!mosaic) throw new Error("Impossible de créer la mosaïque.");
 
       // 1) URL d’upload signée
@@ -111,7 +111,7 @@ function CoachAnalyzer() {
       if (!path || !token) throw new Error("sign-upload: réponse invalide (pas de path/token)");
       setProgress(35);
 
-      // 2) Upload vers Supabase (signed URL)
+      // 2) Upload vers Supabase
       const { error: upErr } = await supabase
         .storage
         .from("videos")
@@ -133,7 +133,7 @@ function CoachAnalyzer() {
       if (!fileUrl) throw new Error("sign-read: réponse invalide (pas d’url)");
       setProgress(80);
 
-      // 4) Appel IA (avec mosaïque)
+      // 4) Appel IA (mosaïque 1 image)
       void fakeProgress(setProgress);
 
       const middleTs = timestamps[Math.floor(timestamps.length / 2)] ?? 0;
@@ -141,24 +141,24 @@ function CoachAnalyzer() {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          frames: [mosaic],                 // ✅ 1 seule image
+          frames: [mosaic],
           timestamps: [middleTs],
           feeling,
           fileUrl,
-          economyMode,                      // éco par défaut (true)
+          economyMode, // true par défaut
         }),
       });
 
       const text = await res.text().catch(() => "");
 
       if (!res.ok) {
-        if (res.status === 429 || /rate_limit_exceeded/i.test(text)) {
+        if (res.status === 429 || /rate_limit/i.test(text)) {
           const retryAfterHeader = res.headers.get("retry-after");
-          const retryAfterSec = retryAfterHeader ? Math.max(1, parseInt(retryAfterHeader, 10) || 0) : 60;
+          const retryAfterSec = retryAfterHeader ? Math.max(1, parseInt(retryAfterHeader, 10) || 0) : 30;
           setErrorMsg(`La limite d’usage du modèle est atteinte. Réessaie dans ~${retryAfterSec}s.`);
           setStatus("Limite atteinte (429).");
           setCooldown(retryAfterSec);
-          setEconomyMode(true); // rester en mode éco
+          setEconomyMode(true);
           throw new Error("rate_limit_exceeded");
         }
         throw new Error(`analyze: HTTP ${res.status} ${text}`);
@@ -208,7 +208,7 @@ function CoachAnalyzer() {
     setStatus("");
     setErrorMsg("");
     setCooldown(0);
-    setEconomyMode(true); // rester prudent par défaut
+    setEconomyMode(true);
   };
 
   return (
@@ -511,13 +511,13 @@ async function fakeProgress(setter: (v: number) => void) {
   setter(100);
 }
 
-/* ====== Extraction + mosaïque (1 image) ====== */
+/* ====== Extraction + mosaïque (1 image légère) ====== */
 
 /** Extrait N mini-frames, puis les assemble en une mosaïque 2x2 JPEG légère. */
 async function extractMosaicFromFile(
   file: File,
   nFrames = 4,
-  quality = 0.5
+  quality = 0.35
 ): Promise<{ frame: string; timestamps: number[] }> {
   const { frames, timestamps } = await extractFramesRaw(file, nFrames, 480, 270, quality);
   const mosaic = await makeMosaic(frames, 2, 2, quality); // 2x2
@@ -530,7 +530,7 @@ async function extractFramesRaw(
   nFrames = 4,
   targetW = 480,
   targetH = 270,
-  quality = 0.5
+  quality = 0.35
 ): Promise<{ frames: string[]; timestamps: number[] }> {
   const videoURL = URL.createObjectURL(file);
   try {
@@ -568,9 +568,9 @@ async function extractFramesRaw(
 }
 
 /** Assemble un tableau de dataURL JPEG en mosaïque CxR, renvoie un dataURL JPEG. */
-async function makeMosaic(dataUrls: string[], cols = 2, rows = 2, quality = 0.5): Promise<string> {
+async function makeMosaic(dataUrls: string[], cols = 2, rows = 2, quality = 0.35): Promise<string> {
   const imgs = await Promise.all(dataUrls.slice(0, cols * rows).map(loadImage));
-  const cellW = 360, cellH = 202; // petite taille pour réduire les tokens
+  const cellW = 256, cellH = 144; // plus petit = moins de tokens
   const w = cols * cellW, h = rows * cellH;
 
   const canvas = document.createElement("canvas");
