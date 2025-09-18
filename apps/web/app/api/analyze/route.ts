@@ -25,7 +25,7 @@ export const revalidate = 0;
 
 /* -------------------- Pacing doux -------------------- */
 let lastCall = 0;
-const MIN_SPACING_MS = 1500; // plus fort pour lisser
+const MIN_SPACING_MS = 1500; // lisser les appels sortants
 async function pace() {
   const now = Date.now();
   const wait = Math.max(0, lastCall + MIN_SPACING_MS - now);
@@ -42,11 +42,12 @@ async function withMemLock<T>(fn: () => Promise<T>) {
 }
 const lastByIp = new Map<string, number>();
 const lastOrg = { t: 0, count: 0 };
-const SOFT_COOLDOWN_IP_MS = 30_000;   // 30s par IP en fallback
-const SOFT_WINDOW_ORG_MS = 60_000;    // 1 min org
-const SOFT_ORG_LIMIT = 10;            // 10/min en fallback
+const SOFT_COOLDOWN_IP_MS = 30_000;   // 1 req / 30s par IP (fallback)
+const SOFT_WINDOW_ORG_MS = 60_000;    // fenêtre 1 min
+const SOFT_ORG_LIMIT = 10;            // 10 req / min org (fallback)
 
-/* -------------------- Import paresseux Upstash -------------------- */
+/* -------------------- Import Upstash paresseux via eval -------------------- */
+/** On passe par eval('import(...)') pour empêcher Next/Webpack de résoudre au build. */
 type UpstashLibs = { Redis: any; Ratelimit: any };
 async function getUpstash(): Promise<UpstashLibs | null> {
   const url = process.env.UPSTASH_REDIS_REST_URL;
@@ -54,12 +55,12 @@ async function getUpstash(): Promise<UpstashLibs | null> {
   if (!url || !token) return null;
   try {
     // @ts-ignore
-    const { Redis } = await import("@upstash/redis");
+    const redisMod = await (0, eval)('import("@upstash/redis")');
     // @ts-ignore
-    const { Ratelimit } = await import("@upstash/ratelimit");
-    return { Redis, Ratelimit };
+    const rateMod  = await (0, eval)('import("@upstash/ratelimit")');
+    return { Redis: redisMod.Redis, Ratelimit: rateMod.Ratelimit };
   } catch {
-    return null; // deps non installées -> fallback
+    return null; // packages non installés → fallback mémoire
   }
 }
 
@@ -96,10 +97,9 @@ export async function POST(req: NextRequest) {
     if (!apiKey) return jsonError(500, "Clé OpenAI manquante (OPEN_API_KEY ou OPENAI_API_KEY).");
 
     // ✅ 1 seule image (mosaïque côté front)
-    const cap = 1;
-    if (frames.length > cap) {
-      frames = frames.slice(0, cap);
-      timestamps = timestamps.slice(0, cap);
+    if (frames.length > 1) {
+      frames = frames.slice(0, 1);
+      timestamps = timestamps.slice(0, 1);
     }
 
     // ---- Upstash (si dispo) : rate-limit + lock distribué
@@ -185,7 +185,7 @@ export async function POST(req: NextRequest) {
           input: [{ role: "user", content: userParts }],
           temperature: 0.2,
           max_output_tokens: maxOut,
-          text: { format: { type: "json_object" } }, // JSON strict
+          text: { format: { type: "json_object" } }, // JSON strict (Responses API)
         }),
       });
 
@@ -206,15 +206,14 @@ export async function POST(req: NextRequest) {
     };
 
     let json: any;
-    if (upstash && upstash.Redis) {
+    if (upstash && upstash.Redis && upstash.Ratelimit) {
       // lock distribué via Redis (NX + TTL)
-      // ré-import léger pour récupérer l'instance initialisée
       const { Redis } = upstash;
       const redis = new Redis({ url: process.env.UPSTASH_REDIS_REST_URL!, token: process.env.UPSTASH_REDIS_REST_TOKEN! });
       const lockKey = "oai:gpt4o-mini:lock";
-      const ttlMs = 8000;   // lock plus long
+      const ttlMs = 8000;   // lock 8s
       const start = Date.now();
-      const timeout = 15_000; // attente max 15s
+      const timeout = 15_000; // patience max 15s
 
       while (true) {
         const ok = await redis.set(lockKey, "1", { nx: true, px: ttlMs });
