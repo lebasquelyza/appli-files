@@ -1,6 +1,7 @@
 // apps/web/app/api/analyze/route.ts
 import { NextRequest, NextResponse } from "next/server";
 
+/* ===================== Types ===================== */
 type AnalysisPoint = { time: number; label: string; detail?: string };
 type AIAnalysis = {
   exercise: string;
@@ -12,6 +13,7 @@ type AIAnalysis = {
   timeline: AnalysisPoint[];
 };
 
+/* ===================== Utils ===================== */
 function jsonError(status: number, msg: string, extraHeaders: Record<string, string> = {}) {
   return new NextResponse(JSON.stringify({ error: msg }), {
     status,
@@ -23,10 +25,9 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const revalidate = 0;
 
-/* -------------------- Pacing + limites mémoire -------------------- */
+/* pacing / verrous mémoire (fallback local) */
 let lastCall = 0;
-const MIN_SPACING_MS = 1800;            // lissage des appels sortants
-
+const MIN_SPACING_MS = 1800;
 async function pace() {
   const now = Date.now();
   const wait = Math.max(0, lastCall + MIN_SPACING_MS - now);
@@ -34,7 +35,7 @@ async function pace() {
   lastCall = Date.now();
 }
 
-let inFlight = 0;                       // lock mémoire mono-instance
+let inFlight = 0;
 async function withMemLock<T>(fn: () => Promise<T>) {
   while (inFlight >= 1) await new Promise((r) => setTimeout(r, 50));
   inFlight++;
@@ -43,33 +44,14 @@ async function withMemLock<T>(fn: () => Promise<T>) {
 
 const lastByIp = new Map<string, number>();
 const lastOrg = { t: 0, count: 0 };
-const SOFT_COOLDOWN_IP_MS = 45_000;     // 1 req / 45s par IP (fallback mémoire)
-const SOFT_WINDOW_ORG_MS = 60_000;      // fenêtre 1 min
-const SOFT_ORG_LIMIT = 8;               // 8 req / min org (fallback)
-
-/* -------------------- Import Upstash paresseux via eval -------------------- */
-/** On passe par eval('import(...)') pour éviter la résolution statique au build. */
-type UpstashLibs = { Redis: any; Ratelimit: any };
-async function getUpstash(): Promise<UpstashLibs | null> {
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
-  if (!url || !token) return null;
-  try {
-    // @ts-ignore
-    const redisMod = await (0, eval)('import("@upstash/redis")');
-    // @ts-ignore
-    const rateMod  = await (0, eval)('import("@upstash/ratelimit")');
-    return { Redis: redisMod.Redis, Ratelimit: rateMod.Ratelimit };
-  } catch {
-    return null; // packages non installés → fallback mémoire
-  }
-}
+const SOFT_COOLDOWN_IP_MS = 45_000; // 1 req / 45s IP
+const SOFT_WINDOW_ORG_MS = 60_000;  // 1 min
+const SOFT_ORG_LIMIT = 8;           // 8/min org
 
 function clientIp(req: NextRequest) {
   return (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || "unknown";
 }
 
-/* -------------------- Cache anti double-clic -------------------- */
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const cache = new Map<string, { t: number; json: AIAnalysis }>();
 function hashKey(frames: string[], feeling: string, economyMode: boolean) {
@@ -78,37 +60,120 @@ function hashKey(frames: string[], feeling: string, economyMode: boolean) {
   return h.toString(16);
 }
 
-/* -------------------- GET /api/analyze : diagnostic simple -------------------- */
-export async function GET() {
-  const upstashEnv = !!process.env.UPSTASH_REDIS_REST_URL && !!process.env.UPSTASH_REDIS_REST_TOKEN;
-  let imported = false, redisOk = false;
-  try {
-    // @ts-ignore
-    const { Redis } = await (0, eval)('import("@upstash/redis")');
-    imported = true;
-    if (upstashEnv) {
-      const redis = new Redis({ url: process.env.UPSTASH_REDIS_REST_URL!, token: process.env.UPSTASH_REDIS_REST_TOKEN! });
-      await redis.set("diag:ping", "pong", { px: 3000 });
-      const v = await redis.get("diag:ping");
-      redisOk = v === "pong";
+/* ===================== Upstash REST (sans SDK) ===================== */
+/** Upstash REST simple: utilise les endpoints HTTP natifs (SET/GET/DEL/INCR/PTTL/EXPIRE).
+ *  URL attendue: process.env.UPSTASH_REDIS_REST_URL
+ *  TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN
+ */
+function upstashAvailable() {
+  return !!process.env.UPSTASH_REDIS_REST_URL && !!process.env.UPSTASH_REDIS_REST_TOKEN;
+}
+function upstashUrl(cmd: string, ...parts: (string | number)[]) {
+  const base = process.env.UPSTASH_REDIS_REST_URL!.replace(/\/+$/, "");
+  const encoded = parts.map(p => encodeURIComponent(String(p))).join("/");
+  return `${base}/${cmd}/${encoded}`;
+}
+async function upstashFetch<T = any>(url: string) {
+  const res = await fetch(url, {
+    method: "POST", // Upstash accepte POST/GET; POST évite caches intermédiaires
+    headers: { Authorization: `Bearer ${process.env.UPSTASH_REDIS_REST_TOKEN}` },
+  });
+  if (!res.ok) {
+    throw new Error(`Upstash HTTP ${res.status} ${await res.text().catch(()=> "")}`);
+  }
+  return res.json() as Promise<{ result: T }>;
+}
+
+async function redisSetNXPX(key: string, value: string, ttlMs: number): Promise<boolean> {
+  // /SET/key/value?NX=1&PX=ttl
+  const url = upstashUrl("set", key, value) + `?NX=1&PX=${ttlMs}`;
+  const { result } = await upstashFetch<string | null>(url);
+  return result === "OK";
+}
+async function redisGet(key: string): Promise<string | null> {
+  const url = upstashUrl("get", key);
+  const { result } = await upstashFetch<string | null>(url);
+  return result ?? null;
+}
+async function redisDel(key: string): Promise<number> {
+  const url = upstashUrl("del", key);
+  const { result } = await upstashFetch<number>(url);
+  return result || 0;
+}
+async function redisIncr(key: string): Promise<number> {
+  const url = upstashUrl("incr", key);
+  const { result } = await upstashFetch<number>(url);
+  return Number(result || 0);
+}
+async function redisExpire(key: string, seconds: number): Promise<number> {
+  const url = upstashUrl("expire", key, seconds);
+  const { result } = await upstashFetch<number>(url);
+  return result || 0;
+}
+async function redisPTTL(key: string): Promise<number> {
+  const url = upstashUrl("pttl", key);
+  const { result } = await upstashFetch<number>(url);
+  return typeof result === "number" ? result : -2;
+}
+
+/** Limiteur fenêtre fixe via INCR/EXPIRE.
+ *  Retourne { success, reset } (reset = timestamp ms de fin de fenêtre).
+ */
+async function fixedWindowLimit(key: string, limit: number, windowSec: number) {
+  const count = await redisIncr(key);
+  if (count === 1) {
+    await redisExpire(key, windowSec);
+  }
+  let pttl = await redisPTTL(key);
+  if (pttl < 0) pttl = windowSec * 1000;
+  return { success: count <= limit, reset: Date.now() + pttl };
+}
+
+/** Lock distribué via SET NX PX. */
+async function withRedisLock<T>(key: string, ttlMs: number, timeoutMs: number, fn: () => Promise<T>): Promise<T> {
+  const start = Date.now();
+  while (true) {
+    const ok = await redisSetNXPX(key, "1", ttlMs);
+    if (ok) break;
+    if (Date.now() - start > timeoutMs) {
+      const err: any = new Error("queue_timeout");
+      err.status = 429; err.retryAfter = "10";
+      throw err;
     }
-  } catch { imported = false; redisOk = false; }
+    await new Promise(r => setTimeout(r, 150 + Math.floor(Math.random() * 100)));
+  }
+  try { return await fn(); } finally { await redisDel(key).catch(()=>{}); }
+}
+
+/* ===================== GET /api/analyze (diagnostic) ===================== */
+export async function GET() {
+  let imported = false, redisOk = false;
+  const env = upstashAvailable();
+  if (env) {
+    try {
+      // ping simple: set/get/expire
+      await redisSetNXPX("diag:ping", "1", 3000);
+      const v = await redisGet("diag:ping");
+      redisOk = v !== null;
+      imported = true; // ici imported veut dire "REST utilisable"
+    } catch {
+      imported = false; redisOk = false;
+    }
+  }
   const hasOpenAI = !!(process.env.OPEN_API_KEY || process.env.OPENAI_API_KEY);
   return NextResponse.json({
-    upstash: { env: upstashEnv, imported, redisOk },
+    upstash: { env, imported, redisOk },
     openaiKey: hasOpenAI,
     pacingMs: MIN_SPACING_MS,
     ipCooldownFallbackMs: SOFT_COOLDOWN_IP_MS,
   });
 }
 
-/* -------------------- POST /api/analyze -------------------- */
+/* ===================== POST /api/analyze ===================== */
 export async function POST(req: NextRequest) {
   try {
-    // (A) Logs env
     console.log("[analyze] env",
-      "UPSTASH_URL:", !!process.env.UPSTASH_REDIS_REST_URL,
-      "UPSTASH_TOKEN:", !!process.env.UPSTASH_REDIS_REST_TOKEN,
+      "UPSTASH_ENV:", upstashAvailable(),
       "OPENAI_KEY:", !!(process.env.OPEN_API_KEY || process.env.OPENAI_API_KEY)
     );
 
@@ -122,50 +187,38 @@ export async function POST(req: NextRequest) {
     let timestamps: number[] = Array.isArray(body.timestamps) ? body.timestamps : [];
     const feeling: string = typeof body.feeling === "string" ? body.feeling : "";
     const fileUrl: string | undefined = typeof body.fileUrl === "string" ? body.fileUrl : undefined;
-    const economyMode: boolean = body.economyMode !== false; // éco par défaut
+    const economyMode: boolean = body.economyMode !== false;
 
     if (!frames.length) return jsonError(400, "Aucune frame fournie.");
 
     const apiKey = process.env.OPEN_API_KEY || process.env.OPENAI_API_KEY || "";
     if (!apiKey) return jsonError(500, "Clé OpenAI manquante (OPEN_API_KEY ou OPENAI_API_KEY).");
 
-    // ✅ 1 seule image (mosaïque côté front)
+    // Cap: 1 image (mosaïque côté front)
     if (frames.length > 1) {
       frames = frames.slice(0, 1);
       timestamps = timestamps.slice(0, 1);
     }
 
-    // Upstash (si dispo) : rate-limit + lock distribué
-    const upstash = await getUpstash();
-    // (B) Log sur Upstash
-    console.log("[analyze] usingUpstash:", !!upstash);
-
-    let ipLimiter: any = null, orgLimiter: any = null, redis: any = null;
-    if (upstash) {
-      const { Redis, Ratelimit } = upstash;
-      redis = new Redis({
-        url: process.env.UPSTASH_REDIS_REST_URL!,
-        token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-      });
-      // 1 req / 40s IP — plus strict
-      ipLimiter = new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(1, "40 s"), prefix: "analyze:ip" });
-      // 6 req / min org
-      orgLimiter = new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(6, "60 s"), prefix: "analyze:org" });
-    }
-
-    // ---- Rate-limit par IP
+    // ---- Rate-limit IP + ORG (Upstash REST si dispo, sinon fallback mémoire)
     const ip = clientIp(req);
-    // (C) Log IP
-    console.log("[analyze] ip:", ip);
-
-    if (ipLimiter) {
-      const ipRes = await ipLimiter.limit(ip);
+    if (upstashAvailable()) {
+      // IP: 1 req / 40s
+      const ipKey = `analyze:ip:${ip}`;
+      const ipRes = await fixedWindowLimit(ipKey, 1, 40);
       if (!ipRes.success) {
         const retry = Math.max(1, Math.ceil((ipRes.reset - Date.now()) / 1000));
         return jsonError(429, "rate_limit_per_ip", { "retry-after": String(retry) });
       }
+      // ORG: 6 req / min
+      const orgKey = `analyze:org:global`;
+      const orgRes = await fixedWindowLimit(orgKey, 6, 60);
+      if (!orgRes.success) {
+        const retry = Math.max(1, Math.ceil((orgRes.reset - Date.now()) / 1000));
+        return jsonError(429, "rate_limit_org", { "retry-after": String(retry) });
+      }
     } else {
-      // fallback mémoire (mono-instance)
+      // Fallback mémoire (mono-instance)
       const now = Date.now();
       const last = lastByIp.get(ip) || 0;
       if (now - last < SOFT_COOLDOWN_IP_MS) {
@@ -173,17 +226,6 @@ export async function POST(req: NextRequest) {
         return jsonError(429, "rate_limit_per_ip", { "retry-after": String(retry) });
       }
       lastByIp.set(ip, now);
-    }
-
-    // ---- Rate-limit org-wide
-    if (orgLimiter) {
-      const orgRes = await orgLimiter.limit("global");
-      if (!orgRes.success) {
-        const retry = Math.max(1, Math.ceil((orgRes.reset - Date.now()) / 1000));
-        return jsonError(429, "rate_limit_org", { "retry-after": String(retry) });
-      }
-    } else {
-      const now = Date.now();
       if (now - lastOrg.t > SOFT_WINDOW_ORG_MS) { lastOrg.t = now; lastOrg.count = 0; }
       lastOrg.count++;
       if (lastOrg.count > SOFT_ORG_LIMIT) {
@@ -199,7 +241,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(cached.json);
     }
 
-    // Prompt compact (éco)
+    // Prompt compact
     const instruction =
       'Analyse d’une image mosaïque issue d’une vidéo de musculation. ' +
       'Réponds STRICTEMENT en JSON: {"exercise":string,"confidence":number,"overall":string,"muscles":string[],"cues":string[],"extras":string[],"timeline":[{"time":number,"label":string,"detail"?:string}]}. ' +
@@ -211,9 +253,8 @@ export async function POST(req: NextRequest) {
     userParts.push({ type: "input_image", image_url: frames[0] });
     if (typeof timestamps[0] === "number") userParts.push({ type: "input_text", text: `repere=${Math.round(timestamps[0])}s` });
 
-    const maxOut = 100; // sortie courte
+    const maxOut = 100;
 
-    // ---- Appel OpenAI (avec logs & retry 1× sur 429)
     const callOpenAI = async () => {
       await pace();
       const resp = await fetch("https://api.openai.com/v1/responses", {
@@ -224,14 +265,13 @@ export async function POST(req: NextRequest) {
           input: [{ role: "user", content: userParts }],
           temperature: 0.2,
           max_output_tokens: maxOut,
-          text: { format: { type: "json_object" } }, // JSON strict (Responses API)
+          text: { format: { type: "json_object" } },
         }),
       });
 
       if (!resp.ok) {
         const txt = await resp.text().catch(() => "");
         const retryAfter = resp.headers.get("retry-after") || "";
-        // (F) Log d'erreur OpenAI
         console.error("[analyze] oai_error", {
           status: resp.status,
           retryAfter,
@@ -240,7 +280,6 @@ export async function POST(req: NextRequest) {
           rlTokLimit: resp.headers.get("x-ratelimit-limit-tokens"),
           rlTokRemain: resp.headers.get("x-ratelimit-remaining-tokens"),
         });
-
         const err: any = new Error(`OpenAI error ${resp.status}: ${txt}`);
         err.status = resp.status;
         err.retryAfter = retryAfter;
@@ -261,7 +300,6 @@ export async function POST(req: NextRequest) {
         const status = e?.status ?? e?.response?.status;
         const is429 = status === 429 || e?.code === "rate_limit_exceeded" || /rate[_\s-]?limit/i.test(String(e?.message||""));
         if (!is429) throw e;
-
         const raSec = Number.parseInt(e?.retryAfter || "", 10);
         const waitMs = Number.isFinite(raSec) && raSec > 0 ? raSec * 1000 : (5000 + Math.floor(Math.random() * 3000));
         await new Promise(r => setTimeout(r, waitMs));
@@ -269,37 +307,18 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // ---- Lock distribué (REST) si Upstash dispo, sinon lock mémoire
     let json: any;
-    if (upstash && upstash.Redis && upstash.Ratelimit) {
-      // lock distribué via Redis (NX + TTL)
-      const { Redis } = upstash;
-      const redis = new Redis({ url: process.env.UPSTASH_REDIS_REST_URL!, token: process.env.UPSTASH_REDIS_REST_TOKEN! });
+    if (upstashAvailable()) {
       const lockKey = "oai:gpt4o-mini:lock";
-      const ttlMs = 8000;                  // lock 8s
-      const start = Date.now();
-      const timeout = 15_000;              // patience max 15s
-
-      // (D) Log début de lock
+      const ttlMs = 8000;
+      const timeout = 15_000;
       console.log("[analyze] lock:start", new Date().toISOString());
-
-      while (true) {
-        const ok = await redis.set(lockKey, "1", { nx: true, px: ttlMs });
-        if (ok) break;
-        if (Date.now() - start > timeout) {
-          const err: any = new Error("queue_timeout");
-          err.status = 429; err.retryAfter = "10";
-          throw err;
-        }
-        await new Promise((r) => setTimeout(r, 150 + Math.floor(Math.random() * 100)));
-      }
-
-      // (E) Log lock acquis
-      console.log("[analyze] lock:acquired");
-
-      try { json = await callWithRetry(); }
-      finally { await redis.del(lockKey); }
+      json = await withRedisLock(lockKey, ttlMs, timeout, async () => {
+        console.log("[analyze] lock:acquired");
+        return await callWithRetry();
+      });
     } else {
-      // fallback mono-instance
       json = await withMemLock(callWithRetry);
     }
 
@@ -310,10 +329,7 @@ export async function POST(req: NextRequest) {
 
     let parsed: AIAnalysis | null = null;
     try { parsed = JSON.parse(text); }
-    catch {
-      const m = text.match(/\{[\s\S]*\}$/);
-      if (m) parsed = JSON.parse(m[0]);
-    }
+    catch { const m = text.match(/\{[\s\S]*\}$/); if (m) parsed = JSON.parse(m[0]); }
     if (!parsed) return jsonError(502, "Impossible de parser la réponse JSON.");
 
     parsed.muscles ||= []; parsed.cues ||= []; parsed.extras ||= []; parsed.timeline ||= [];
@@ -322,7 +338,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(parsed);
   } catch (e: any) {
     console.error("/api/analyze error:", e);
-
     const status = e?.status ?? e?.response?.status;
     const msg = e?.message || "Erreur interne";
     const is429 =
@@ -335,11 +350,9 @@ export async function POST(req: NextRequest) {
       const retryAfter = e?.retryAfter || "30";
       return jsonError(429, "rate_limit_exceeded", { "retry-after": retryAfter });
     }
-
     if (status === 400 && /Unsupported parameter:\s*'response_format'/i.test(msg)) {
       return jsonError(400, "Config invalide: utiliser text.format (Responses API) au lieu de response_format.");
     }
-
     if (Number.isInteger(status)) return jsonError(status, msg);
     return jsonError(500, msg);
   }
