@@ -59,9 +59,9 @@ function CoachAnalyzer() {
   const [status, setStatus] = useState<string>("");
   const [errorMsg, setErrorMsg] = useState<string>("");
 
-  // Cooldown & mode éco
+  // Cooldown & mode éco (éco par défaut)
   const [cooldown, setCooldown] = useState(0);
-  const [economyMode, setEconomyMode] = useState(false);
+  const [economyMode, setEconomyMode] = useState(true);
 
   useEffect(() => {
     if (!cooldown) return;
@@ -88,9 +88,9 @@ function CoachAnalyzer() {
     setErrorMsg("");
 
     try {
-      // 0) EXTRACTION DE FRAMES (2 en éco, sinon 4)
+      // 0) EXTRACTION DE FRAMES (2 en éco, sinon 3)
       setProgress(10);
-      const n = economyMode ? 2 : 4;
+      const n = economyMode ? 2 : 3;
       const { frames, timestamps } = await extractFramesFromFile(file, n, economyMode ? 0.55 : 0.7);
       if (!frames.length) throw new Error("Impossible d’extraire des images de la vidéo.");
 
@@ -151,7 +151,7 @@ function CoachAnalyzer() {
           setErrorMsg(`La limite d’usage du modèle est atteinte. Réessaie dans ~${retryAfterSec}s.`);
           setStatus("Limite atteinte (429).");
           setCooldown(retryAfterSec);
-          setEconomyMode(true); // prochain run en mode éco
+          setEconomyMode(true); // rester en mode éco
           throw new Error("rate_limit_exceeded");
         }
         throw new Error(`analyze: HTTP ${res.status} ${text}`);
@@ -182,10 +182,8 @@ function CoachAnalyzer() {
       console.error(e);
       const msg = e?.message || String(e);
       setErrorMsg(msg);
-      if (/429|rate[_\s-]?limit/i.test(msg)) {
-        // pas d’alert bloquante si tu préfères
-        // alert("Limite d’usage de l’API atteinte. Réessaie un peu plus tard.");
-      } else {
+      // pas d'alert bloquante pour 429
+      if (!/429|rate[_\s-]?limit/i.test(msg)) {
         alert(`Erreur pendant l'analyse: ${msg}`);
       }
     } finally {
@@ -204,7 +202,7 @@ function CoachAnalyzer() {
     setStatus("");
     setErrorMsg("");
     setCooldown(0);
-    setEconomyMode(false);
+    setEconomyMode(true); // rester prudent par défaut
   };
 
   return (
@@ -275,9 +273,7 @@ function CoachAnalyzer() {
               </p>
               {errorMsg && (
                 <p className="text-xs text-red-600 break-all">
-                  {/\brate[_\s-]?limit\b|429/i.test(errorMsg)
-                    ? `Erreur : ${errorMsg}`
-                    : `Erreur : ${errorMsg}`}
+                  {`Erreur : ${errorMsg}`}
                 </p>
               )}
             </div>
@@ -510,7 +506,7 @@ async function fakeProgress(setter: (v: number) => void) {
 }
 
 /** ➜ Extrait N frames JPEG (dataURL) d’un fichier vidéo local. */
-async function extractFramesFromFile(file: File, nFrames = 4, quality = 0.7): Promise<{ frames: string[]; timestamps: number[] }> {
+async function extractFramesFromFile(file: File, nFrames = 3, quality = 0.7): Promise<{ frames: string[]; timestamps: number[] }> {
   const videoURL = URL.createObjectURL(file);
   try {
     const video = document.createElement("video");
