@@ -1,5 +1,7 @@
 // apps/web/app/api/analyze/route.ts
 import { NextRequest, NextResponse } from "next/server";
+import { Ratelimit } from "@upstash/ratelimit";
+import { Redis } from "@upstash/redis";
 
 type AnalysisPoint = { time: number; label: string; detail?: string };
 type AIAnalysis = {
@@ -23,9 +25,51 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const revalidate = 0;
 
-/* -------------------- Anti-burst pacing (lissage) -------------------- */
+/* -------------------- Upstash Redis -------------------- */
+const redis = new Redis({
+  url: process.env.UPSTASH_REDIS_REST_URL!,
+  token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+});
+
+// 1) Rate-limit par IP: 1 requête / 20s
+const ipLimiter = new Ratelimit({
+  redis,
+  limiter: Ratelimit.fixedWindow(1, "20 s"),
+  prefix: "analyze:ip",
+});
+
+// 2) Rate-limit org-wide: 20 requêtes / minute (ajuste selon ton quota)
+const orgLimiter = new Ratelimit({
+  redis,
+  limiter: Ratelimit.fixedWindow(20, "60 s"),
+  prefix: "analyze:org",
+});
+
+/* -------------------- Lock distribué (global) -------------------- */
+// Empêche plusieurs lambdas de frapper OAI en même temps
+async function withRedisLock<T>(key: string, ttlMs: number, fn: () => Promise<T>) {
+  const start = Date.now();
+  const timeout = 10_000; // patience max 10s pour prendre le lock
+  while (true) {
+    const ok = await redis.set(key, "1", { nx: true, px: ttlMs });
+    if (ok) break;
+    if (Date.now() - start > timeout) {
+      throw Object.assign(new Error("queue_timeout"), { status: 429, retryAfter: "10" });
+    }
+    // petit backoff
+    await new Promise((r) => setTimeout(r, 150 + Math.floor(Math.random() * 100)));
+  }
+
+  try {
+    return await fn();
+  } finally {
+    await redis.del(key);
+  }
+}
+
+/* -------------------- Pacing doux -------------------- */
 let lastCall = 0;
-const MIN_SPACING_MS = 1000; // pacing plus fort pour lisser les appels
+const MIN_SPACING_MS = 1000; // espace mini entre appels sortants
 async function pace() {
   const now = Date.now();
   const wait = Math.max(0, lastCall + MIN_SPACING_MS - now);
@@ -33,45 +77,16 @@ async function pace() {
   lastCall = Date.now();
 }
 
-/* -------------------- Sémaphore (concurrence=1) -------------------- */
-let inFlight = 0;
-async function withSemaphore<T>(fn: () => Promise<T>) {
-  while (inFlight >= 1) {
-    await new Promise((r) => setTimeout(r, 50));
-  }
-  inFlight++;
-  try { return await fn(); }
-  finally { inFlight--; }
+/* -------------------- Utils -------------------- */
+function clientIp(req: NextRequest) {
+  return (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || "unknown";
 }
 
-/* -------------------- Retry enveloppe (désactivé ici) -------------------- */
-async function withBackoff<T>(fn: () => Promise<T>, tries = 0) {
-  let lastErr: any;
-  for (let i = 0; i <= tries; i++) {
-    try {
-      return await fn();
-    } catch (e: any) {
-      lastErr = e;
-      const status = e?.status ?? e?.response?.status;
-      const is429 =
-        status === 429 ||
-        e?.code === "rate_limit_exceeded" ||
-        /rate[_\s-]?limit/i.test(String(e?.message || ""));
-      if (!is429 || i === tries) throw e;
-      const delay = 1500 * (i + 1);
-      await new Promise((r) => setTimeout(r, delay));
-    }
-  }
-  throw lastErr;
-}
-
-/* -------------------- Mini cache anti double-clic -------------------- */
-const cache = new Map<string, { t: number; json: AIAnalysis }>();
 const CACHE_TTL_MS = 5 * 60 * 1000;
+const cache = new Map<string, { t: number; json: AIAnalysis }>();
 function hashKey(frames: string[], feeling: string, economyMode: boolean) {
   const s = frames.join("|").slice(0, 2000) + "::" + (feeling || "") + "::" + (economyMode ? "e1" : "e0");
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
   return h.toString(16);
 }
 
@@ -87,21 +102,44 @@ export async function POST(req: NextRequest) {
     let timestamps: number[] = Array.isArray(body.timestamps) ? body.timestamps : [];
     const feeling: string = typeof body.feeling === "string" ? body.feeling : "";
     const fileUrl: string | undefined = typeof body.fileUrl === "string" ? body.fileUrl : undefined;
-    const economyMode: boolean = body.economyMode !== false; // éco par défaut (true si non fourni)
+    const economyMode: boolean = body.economyMode !== false; // éco par défaut
 
     if (!frames.length) return jsonError(400, "Aucune frame fournie.");
 
     const apiKey = process.env.OPEN_API_KEY || process.env.OPENAI_API_KEY || "";
     if (!apiKey) return jsonError(500, "Clé OpenAI manquante (OPEN_API_KEY ou OPENAI_API_KEY).");
 
-    // ✅ Cap extrême : 1 image (mosaïque côté front)
+    // ✅ On n'autorise qu'UNE image (mosaïque côté front)
     const cap = 1;
     if (frames.length > cap) {
       frames = frames.slice(0, cap);
       timestamps = timestamps.slice(0, cap);
     }
 
-    // Instruction compacte
+    // ---- Rate-limit par IP
+    const ip = clientIp(req);
+    const ipRes = await ipLimiter.limit(ip || "unknown");
+    if (!ipRes.success) {
+      const retry = Math.max(1, Math.ceil((ipRes.reset - Date.now()) / 1000));
+      return jsonError(429, "rate_limit_per_ip", { "retry-after": String(retry) });
+    }
+
+    // ---- Rate-limit org-wide
+    const orgKey = "global";
+    const orgRes = await orgLimiter.limit(orgKey);
+    if (!orgRes.success) {
+      const retry = Math.max(1, Math.ceil((orgRes.reset - Date.now()) / 1000));
+      return jsonError(429, "rate_limit_org", { "retry-after": String(retry) });
+    }
+
+    // ---- Cache anti double-clic
+    const key = hashKey(frames, feeling || "", economyMode);
+    const cached = cache.get(key);
+    if (cached && Date.now() - cached.t < CACHE_TTL_MS) {
+      return NextResponse.json(cached.json);
+    }
+
+    // Prompt compact (éco)
     const instruction =
       'Analyse d’une image mosaïque issue d’une vidéo de musculation. ' +
       'Réponds STRICTEMENT en JSON: {"exercise":string,"confidence":number,"overall":string,"muscles":string[],"cues":string[],"extras":string[],"timeline":[{"time":number,"label":string,"detail"?:string}]}. ' +
@@ -110,24 +148,16 @@ export async function POST(req: NextRequest) {
     const userParts: any[] = [{ type: "input_text", text: instruction }];
     if (feeling) userParts.push({ type: "input_text", text: `Ressenti: ${feeling}` });
     if (fileUrl) userParts.push({ type: "input_text", text: `URL vidéo: ${fileUrl}` });
-    // 1 seule image
     userParts.push({ type: "input_image", image_url: frames[0] });
     if (typeof timestamps[0] === "number") {
-      userParts.push({ type: "input_text", text: `repère=${Math.round(timestamps[0])}s` });
+      userParts.push({ type: "input_text", text: `repere=${Math.round(timestamps[0])}s` });
     }
 
-    // cache
-    const key = hashKey(frames, feeling || "", economyMode);
-    const cached = cache.get(key);
-    if (cached && Date.now() - cached.t < CACHE_TTL_MS) {
-      return NextResponse.json(cached.json);
-    }
+    const maxOut = 120; // sortie très courte
 
-    // Sortie très courte
-    const maxOut = 160;
-
-    const call = async () => {
-      await pace(); // lissage
+    // ---- Appel OpenAI sous lock distribué
+    const json = await withRedisLock("oai:gpt4o-mini:lock", 5000, async () => {
+      await pace();
       const resp = await fetch("https://api.openai.com/v1/responses", {
         method: "POST",
         headers: {
@@ -139,8 +169,7 @@ export async function POST(req: NextRequest) {
           input: [{ role: "user", content: userParts }],
           temperature: 0.2,
           max_output_tokens: maxOut,
-          // Responses API → JSON strict ici
-          text: { format: { type: "json_object" } },
+          text: { format: { type: "json_object" } }, // JSON strict
         }),
       });
 
@@ -158,11 +187,8 @@ export async function POST(req: NextRequest) {
         throw err;
       }
       return resp.json();
-    };
+    });
 
-    const json = await withSemaphore(() => withBackoff(call, 0)); // pas de retry auto
-
-    // Extraire le texte de la Responses API
     const text: string =
       json?.output_text ||
       json?.content?.[0]?.text ||
@@ -171,7 +197,6 @@ export async function POST(req: NextRequest) {
 
     if (!text) return jsonError(502, "Réponse vide du modèle.");
 
-    // Parsing JSON robuste
     let parsed: AIAnalysis | null = null;
     try {
       parsed = JSON.parse(text);
@@ -181,7 +206,6 @@ export async function POST(req: NextRequest) {
     }
     if (!parsed) return jsonError(502, "Impossible de parser la réponse JSON.");
 
-    // Normalisation
     parsed.muscles ||= [];
     parsed.cues ||= [];
     parsed.extras ||= [];
@@ -195,14 +219,14 @@ export async function POST(req: NextRequest) {
     const status = e?.status ?? e?.response?.status;
     const msg = e?.message || "Erreur interne";
 
-    // Propager 429 + Retry-After
     const is429 =
       status === 429 ||
       e?.code === "rate_limit_exceeded" ||
-      /rate[_\s-]?limit/i.test(String(msg));
+      /rate[_\s-]?limit/i.test(String(msg)) ||
+      msg === "queue_timeout";
 
     if (is429) {
-      const retryAfter = e?.retryAfter || "60";
+      const retryAfter = e?.retryAfter || "20";
       return jsonError(429, "rate_limit_exceeded", { "retry-after": retryAfter });
     }
 
