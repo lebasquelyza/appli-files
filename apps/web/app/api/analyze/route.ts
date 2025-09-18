@@ -40,10 +40,10 @@ export async function POST(req: NextRequest) {
     if (!apiKey) return bad(500, "Clé OpenAI manquante (OPEN_API_KEY ou OPENAI_API_KEY).");
     if (!apiKey.startsWith("sk-")) return bad(500, "Clé OpenAI invalide (doit commencer par 'sk-').");
 
-    // contenu multimodal
+    // ---- Construction du message multimodal (Responses API)
     const userParts: any[] = [
       {
-        type: "text",
+        type: "input_text",
         text:
           "Analyse ces images extraites d'une vidéo d'entraînement.\n" +
           "1) Détecte l'exercice (tractions, squat, pompe, SDT, bench, row, dips, hip thrust, overhead press, etc.).\n" +
@@ -54,18 +54,25 @@ export async function POST(req: NextRequest) {
           'Réponds en JSON strict (pas de texte hors JSON) exactement: {"exercise":string,"confidence":number,"overall":string,"muscles":string[],"cues":string[],"extras":string[],"timeline":[{"time":number,"label":string,"detail"?:string}]}.',
       },
     ];
-    if (feeling) userParts.push({ type: "text", text: `Ressenti athlète: ${feeling}` });
-    if (fileUrl) userParts.push({ type: "text", text: `URL vidéo (réf): ${fileUrl}` });
+    if (feeling) userParts.push({ type: "input_text", text: `Ressenti athlète: ${feeling}` });
+    if (fileUrl) userParts.push({ type: "input_text", text: `URL vidéo (réf): ${fileUrl}` });
 
     const maxFrames = Math.min(frames.length, 8);
     for (let i = 0; i < maxFrames; i++) {
       const dataUrl = frames[i];
       const base64 = typeof dataUrl === "string" && dataUrl.includes(",") ? dataUrl.split(",")[1] : dataUrl;
-      userParts.push({ type: "input_image", image_data: { data: base64, mime_type: "image/jpeg" } });
-      if (typeof timestamps[i] === "number") userParts.push({ type: "text", text: `timestamp: ${timestamps[i]}s` });
+
+      userParts.push({
+        type: "input_image",
+        image_data: { data: base64, mime_type: "image/jpeg" },
+      });
+
+      if (typeof timestamps[i] === "number") {
+        userParts.push({ type: "input_text", text: `timestamp: ${timestamps[i]}s` });
+      }
     }
 
-    // ✅ Responses API: utiliser text.format au lieu de response_format
+    // ✅ Responses API: JSON via text.format
     const resp = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: { "content-type": "application/json", Authorization: `Bearer ${apiKey}` },
@@ -73,7 +80,7 @@ export async function POST(req: NextRequest) {
         model: "gpt-4o-mini",
         input: [{ role: "user", content: userParts }],
         temperature: 0.3,
-        text: { format: "json" }, // <-- correctif
+        text: { format: "json" },
       }),
     });
 
