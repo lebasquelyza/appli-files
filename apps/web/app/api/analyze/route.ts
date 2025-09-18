@@ -54,6 +54,7 @@ export async function POST(req: NextRequest) {
 
     if (!frames.length) return bad(400, "Aucune frame fournie.");
 
+    // on garde OPEN_API_KEY (fallback OPENAI_API_KEY)
     const apiKey = process.env.OPEN_API_KEY || process.env.OPENAI_API_KEY || "";
     if (!apiKey) return bad(500, "Clé OpenAI manquante (OPEN_API_KEY ou OPENAI_API_KEY).");
     if (!apiKey.startsWith("sk-")) return bad(500, "Clé OpenAI invalide (doit commencer par 'sk-').");
@@ -75,22 +76,22 @@ export async function POST(req: NextRequest) {
     if (feeling) userParts.push({ type: "input_text", text: `Ressenti athlète: ${feeling}` });
     if (fileUrl) userParts.push({ type: "input_text", text: `URL vidéo (réf): ${fileUrl}` });
 
-    const maxFrames = Math.min(frames.length, 8); // limite raisonnable
+    const maxFrames = Math.min(frames.length, 8);
     for (let i = 0; i < maxFrames; i++) {
       const dataUrl = frames[i];
 
-      // Accepte soit un data URL complet, soit du base64 brut : on force un data URL valide
-      let imageUrl: string;
+      // force un data URL valide
+      let imageDataUrl: string;
       if (typeof dataUrl === "string" && dataUrl.startsWith("data:image/")) {
-        imageUrl = dataUrl; // déjà un data URL
+        imageDataUrl = dataUrl;
       } else {
         const base64 = typeof dataUrl === "string" && dataUrl.includes(",") ? dataUrl.split(",")[1] : dataUrl;
-        imageUrl = `data:image/jpeg;base64,${base64}`;
+        imageDataUrl = `data:image/jpeg;base64,${base64}`;
       }
 
       userParts.push({
         type: "input_image",
-        image_url: imageUrl, // ✅ Responses API attend image_url (et pas image_data)
+        image_url: { url: imageDataUrl }, // ✅ objet { url: ... }
       });
 
       if (typeof timestamps[i] === "number") {
@@ -98,7 +99,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ✅ Responses API : demander un JSON via text.format
+    // ✅ text.format doit être un objet, pas une string
     const resp = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
@@ -109,7 +110,7 @@ export async function POST(req: NextRequest) {
         model: "gpt-4o-mini",
         input: [{ role: "user", content: userParts }],
         temperature: 0.3,
-        text: { format: "json" },
+        text: { format: { type: "json" } }, // <-- correction ici
       }),
     });
 
