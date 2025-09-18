@@ -23,9 +23,9 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const revalidate = 0;
 
-/* -------------------- Pacing doux (toujours actif) -------------------- */
+/* -------------------- Pacing doux -------------------- */
 let lastCall = 0;
-const MIN_SPACING_MS = 1000;
+const MIN_SPACING_MS = 1500; // plus fort pour lisser
 async function pace() {
   const now = Date.now();
   const wait = Math.max(0, lastCall + MIN_SPACING_MS - now);
@@ -34,7 +34,7 @@ async function pace() {
 }
 
 /* -------------------- Fallback mémoire (si pas d'Upstash) -------------------- */
-let inFlight = 0; // lock mémoire (mono-instance)
+let inFlight = 0; // lock mémoire mono-instance
 async function withMemLock<T>(fn: () => Promise<T>) {
   while (inFlight >= 1) await new Promise((r) => setTimeout(r, 50));
   inFlight++;
@@ -42,12 +42,11 @@ async function withMemLock<T>(fn: () => Promise<T>) {
 }
 const lastByIp = new Map<string, number>();
 const lastOrg = { t: 0, count: 0 };
-const SOFT_COOLDOWN_IP_MS = 20_000;
-const SOFT_WINDOW_ORG_MS = 60_000;
-const SOFT_ORG_LIMIT = 20;
+const SOFT_COOLDOWN_IP_MS = 30_000;   // 30s par IP en fallback
+const SOFT_WINDOW_ORG_MS = 60_000;    // 1 min org
+const SOFT_ORG_LIMIT = 10;            // 10/min en fallback
 
 /* -------------------- Import paresseux Upstash -------------------- */
-// évite l’erreur “module not found” au build si les deps ne sont pas installées
 type UpstashLibs = { Redis: any; Ratelimit: any };
 async function getUpstash(): Promise<UpstashLibs | null> {
   const url = process.env.UPSTASH_REDIS_REST_URL;
@@ -60,7 +59,7 @@ async function getUpstash(): Promise<UpstashLibs | null> {
     const { Ratelimit } = await import("@upstash/ratelimit");
     return { Redis, Ratelimit };
   } catch {
-    return null; // packages non présents → fallback mémoire
+    return null; // deps non installées -> fallback
   }
 }
 
@@ -112,8 +111,10 @@ export async function POST(req: NextRequest) {
         url: process.env.UPSTASH_REDIS_REST_URL!,
         token: process.env.UPSTASH_REDIS_REST_TOKEN!,
       });
-      ipLimiter = new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(1, "20 s"), prefix: "analyze:ip" });
-      orgLimiter = new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(20, "60 s"), prefix: "analyze:org" });
+      // 1 req / 30s par IP
+      ipLimiter = new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(1, "30 s"), prefix: "analyze:ip" });
+      // 10 req / min org-wide
+      orgLimiter = new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(10, "60 s"), prefix: "analyze:org" });
     }
 
     // ---- Rate-limit par IP
@@ -125,7 +126,7 @@ export async function POST(req: NextRequest) {
         return jsonError(429, "rate_limit_per_ip", { "retry-after": String(retry) });
       }
     } else {
-      // fallback mémoire (moins fiable en serverless multi-instances)
+      // fallback mémoire (mono-instance)
       const now = Date.now();
       const last = lastByIp.get(ip) || 0;
       if (now - last < SOFT_COOLDOWN_IP_MS) {
@@ -171,7 +172,7 @@ export async function POST(req: NextRequest) {
     userParts.push({ type: "input_image", image_url: frames[0] });
     if (typeof timestamps[0] === "number") userParts.push({ type: "input_text", text: `repere=${Math.round(timestamps[0])}s` });
 
-    const maxOut = 120; // sortie courte
+    const maxOut = 100; // sortie très courte
 
     // ---- Appel OpenAI sous lock (Upstash si dispo, sinon mémoire)
     const callOpenAI = async () => {
@@ -205,12 +206,16 @@ export async function POST(req: NextRequest) {
     };
 
     let json: any;
-    if (upstash && redis) {
+    if (upstash && upstash.Redis) {
       // lock distribué via Redis (NX + TTL)
+      // ré-import léger pour récupérer l'instance initialisée
+      const { Redis } = upstash;
+      const redis = new Redis({ url: process.env.UPSTASH_REDIS_REST_URL!, token: process.env.UPSTASH_REDIS_REST_TOKEN! });
       const lockKey = "oai:gpt4o-mini:lock";
-      const ttlMs = 5000;
+      const ttlMs = 8000;   // lock plus long
       const start = Date.now();
-      const timeout = 10_000;
+      const timeout = 15_000; // attente max 15s
+
       while (true) {
         const ok = await redis.set(lockKey, "1", { nx: true, px: ttlMs });
         if (ok) break;
@@ -257,7 +262,7 @@ export async function POST(req: NextRequest) {
       msg === "queue_timeout";
 
     if (is429) {
-      const retryAfter = e?.retryAfter || "20";
+      const retryAfter = e?.retryAfter || "30";
       return jsonError(429, "rate_limit_exceeded", { "retry-after": retryAfter });
     }
 
