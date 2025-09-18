@@ -23,9 +23,10 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const revalidate = 0;
 
-/* -------------------- Pacing doux -------------------- */
+/* -------------------- Pacing + limites mémoire -------------------- */
 let lastCall = 0;
-const MIN_SPACING_MS = 1500; // lisser les appels sortants
+const MIN_SPACING_MS = 1800;            // lissage des appels sortants
+
 async function pace() {
   const now = Date.now();
   const wait = Math.max(0, lastCall + MIN_SPACING_MS - now);
@@ -33,21 +34,21 @@ async function pace() {
   lastCall = Date.now();
 }
 
-/* -------------------- Fallback mémoire (si pas d'Upstash) -------------------- */
-let inFlight = 0; // lock mémoire mono-instance
+let inFlight = 0;                       // lock mémoire mono-instance
 async function withMemLock<T>(fn: () => Promise<T>) {
   while (inFlight >= 1) await new Promise((r) => setTimeout(r, 50));
   inFlight++;
   try { return await fn(); } finally { inFlight--; }
 }
+
 const lastByIp = new Map<string, number>();
 const lastOrg = { t: 0, count: 0 };
-const SOFT_COOLDOWN_IP_MS = 30_000;   // 1 req / 30s par IP (fallback)
-const SOFT_WINDOW_ORG_MS = 60_000;    // fenêtre 1 min
-const SOFT_ORG_LIMIT = 10;            // 10 req / min org (fallback)
+const SOFT_COOLDOWN_IP_MS = 45_000;     // 1 req / 45s par IP (fallback mémoire)
+const SOFT_WINDOW_ORG_MS = 60_000;      // fenêtre 1 min
+const SOFT_ORG_LIMIT = 8;               // 8 req / min org (fallback)
 
 /* -------------------- Import Upstash paresseux via eval -------------------- */
-/** On passe par eval('import(...)') pour empêcher Next/Webpack de résoudre au build. */
+/** On passe par eval('import(...)') pour éviter la résolution statique au build. */
 type UpstashLibs = { Redis: any; Ratelimit: any };
 async function getUpstash(): Promise<UpstashLibs | null> {
   const url = process.env.UPSTASH_REDIS_REST_URL;
@@ -77,8 +78,40 @@ function hashKey(frames: string[], feeling: string, economyMode: boolean) {
   return h.toString(16);
 }
 
+/* -------------------- GET /api/analyze : diagnostic simple -------------------- */
+export async function GET() {
+  const upstashEnv = !!process.env.UPSTASH_REDIS_REST_URL && !!process.env.UPSTASH_REDIS_REST_TOKEN;
+  let imported = false, redisOk = false;
+  try {
+    // @ts-ignore
+    const { Redis } = await (0, eval)('import("@upstash/redis")');
+    imported = true;
+    if (upstashEnv) {
+      const redis = new Redis({ url: process.env.UPSTASH_REDIS_REST_URL!, token: process.env.UPSTASH_REDIS_REST_TOKEN! });
+      await redis.set("diag:ping", "pong", { px: 3000 });
+      const v = await redis.get("diag:ping");
+      redisOk = v === "pong";
+    }
+  } catch { imported = false; redisOk = false; }
+  const hasOpenAI = !!(process.env.OPEN_API_KEY || process.env.OPENAI_API_KEY);
+  return NextResponse.json({
+    upstash: { env: upstashEnv, imported, redisOk },
+    openaiKey: hasOpenAI,
+    pacingMs: MIN_SPACING_MS,
+    ipCooldownFallbackMs: SOFT_COOLDOWN_IP_MS,
+  });
+}
+
+/* -------------------- POST /api/analyze -------------------- */
 export async function POST(req: NextRequest) {
   try {
+    // (A) Logs env
+    console.log("[analyze] env",
+      "UPSTASH_URL:", !!process.env.UPSTASH_REDIS_REST_URL,
+      "UPSTASH_TOKEN:", !!process.env.UPSTASH_REDIS_REST_TOKEN,
+      "OPENAI_KEY:", !!(process.env.OPEN_API_KEY || process.env.OPENAI_API_KEY)
+    );
+
     const ctype = (req.headers.get("content-type") || "").toLowerCase();
     if (!ctype.includes("application/json")) {
       return jsonError(415, "Envoie JSON { frames: base64[], timestamps: number[], feeling?: string, fileUrl?: string, economyMode?: boolean }");
@@ -102,8 +135,11 @@ export async function POST(req: NextRequest) {
       timestamps = timestamps.slice(0, 1);
     }
 
-    // ---- Upstash (si dispo) : rate-limit + lock distribué
+    // Upstash (si dispo) : rate-limit + lock distribué
     const upstash = await getUpstash();
+    // (B) Log sur Upstash
+    console.log("[analyze] usingUpstash:", !!upstash);
+
     let ipLimiter: any = null, orgLimiter: any = null, redis: any = null;
     if (upstash) {
       const { Redis, Ratelimit } = upstash;
@@ -111,14 +147,17 @@ export async function POST(req: NextRequest) {
         url: process.env.UPSTASH_REDIS_REST_URL!,
         token: process.env.UPSTASH_REDIS_REST_TOKEN!,
       });
-      // 1 req / 30s par IP
-      ipLimiter = new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(1, "30 s"), prefix: "analyze:ip" });
-      // 10 req / min org-wide
-      orgLimiter = new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(10, "60 s"), prefix: "analyze:org" });
+      // 1 req / 40s IP — plus strict
+      ipLimiter = new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(1, "40 s"), prefix: "analyze:ip" });
+      // 6 req / min org
+      orgLimiter = new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(6, "60 s"), prefix: "analyze:org" });
     }
 
     // ---- Rate-limit par IP
     const ip = clientIp(req);
+    // (C) Log IP
+    console.log("[analyze] ip:", ip);
+
     if (ipLimiter) {
       const ipRes = await ipLimiter.limit(ip);
       if (!ipRes.success) {
@@ -172,9 +211,9 @@ export async function POST(req: NextRequest) {
     userParts.push({ type: "input_image", image_url: frames[0] });
     if (typeof timestamps[0] === "number") userParts.push({ type: "input_text", text: `repere=${Math.round(timestamps[0])}s` });
 
-    const maxOut = 100; // sortie très courte
+    const maxOut = 100; // sortie courte
 
-    // ---- Appel OpenAI sous lock (Upstash si dispo, sinon mémoire)
+    // ---- Appel OpenAI (avec logs & retry 1× sur 429)
     const callOpenAI = async () => {
       await pace();
       const resp = await fetch("https://api.openai.com/v1/responses", {
@@ -192,6 +231,16 @@ export async function POST(req: NextRequest) {
       if (!resp.ok) {
         const txt = await resp.text().catch(() => "");
         const retryAfter = resp.headers.get("retry-after") || "";
+        // (F) Log d'erreur OpenAI
+        console.error("[analyze] oai_error", {
+          status: resp.status,
+          retryAfter,
+          rlReqLimit: resp.headers.get("x-ratelimit-limit-requests"),
+          rlReqRemain: resp.headers.get("x-ratelimit-remaining-requests"),
+          rlTokLimit: resp.headers.get("x-ratelimit-limit-tokens"),
+          rlTokRemain: resp.headers.get("x-ratelimit-remaining-tokens"),
+        });
+
         const err: any = new Error(`OpenAI error ${resp.status}: ${txt}`);
         err.status = resp.status;
         err.retryAfter = retryAfter;
@@ -205,15 +254,33 @@ export async function POST(req: NextRequest) {
       return resp.json();
     };
 
+    async function callWithRetry() {
+      try {
+        return await callOpenAI();
+      } catch (e: any) {
+        const status = e?.status ?? e?.response?.status;
+        const is429 = status === 429 || e?.code === "rate_limit_exceeded" || /rate[_\s-]?limit/i.test(String(e?.message||""));
+        if (!is429) throw e;
+
+        const raSec = Number.parseInt(e?.retryAfter || "", 10);
+        const waitMs = Number.isFinite(raSec) && raSec > 0 ? raSec * 1000 : (5000 + Math.floor(Math.random() * 3000));
+        await new Promise(r => setTimeout(r, waitMs));
+        return await callOpenAI();
+      }
+    }
+
     let json: any;
     if (upstash && upstash.Redis && upstash.Ratelimit) {
       // lock distribué via Redis (NX + TTL)
       const { Redis } = upstash;
       const redis = new Redis({ url: process.env.UPSTASH_REDIS_REST_URL!, token: process.env.UPSTASH_REDIS_REST_TOKEN! });
       const lockKey = "oai:gpt4o-mini:lock";
-      const ttlMs = 8000;   // lock 8s
+      const ttlMs = 8000;                  // lock 8s
       const start = Date.now();
-      const timeout = 15_000; // patience max 15s
+      const timeout = 15_000;              // patience max 15s
+
+      // (D) Log début de lock
+      console.log("[analyze] lock:start", new Date().toISOString());
 
       while (true) {
         const ok = await redis.set(lockKey, "1", { nx: true, px: ttlMs });
@@ -225,11 +292,15 @@ export async function POST(req: NextRequest) {
         }
         await new Promise((r) => setTimeout(r, 150 + Math.floor(Math.random() * 100)));
       }
-      try { json = await callOpenAI(); }
+
+      // (E) Log lock acquis
+      console.log("[analyze] lock:acquired");
+
+      try { json = await callWithRetry(); }
       finally { await redis.del(lockKey); }
     } else {
       // fallback mono-instance
-      json = await withMemLock(callOpenAI);
+      json = await withMemLock(callWithRetry);
     }
 
     const text: string =
