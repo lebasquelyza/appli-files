@@ -8,3 +8,14 @@
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
+
+[build]
+  base = "apps/web"
+  command = "npm ci --no-audit --no-fund || npm install && npm run build"
+  publish = "apps/web/.next"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
