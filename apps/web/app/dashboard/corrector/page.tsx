@@ -88,11 +88,11 @@ function CoachAnalyzer() {
     setErrorMsg("");
 
     try {
-      // 0) EXTRACTION DE FRAMES (2 en éco, sinon 3)
+      // 0) FABRIQUER UNE MOSAÏQUE (4 mini-frames -> 1 image)
       setProgress(10);
-      const n = economyMode ? 2 : 3;
-      const { frames, timestamps } = await extractFramesFromFile(file, n, economyMode ? 0.55 : 0.7);
-      if (!frames.length) throw new Error("Impossible d’extraire des images de la vidéo.");
+      const n = 4; // 2x2
+      const { frame: mosaic, timestamps } = await extractMosaicFromFile(file, n, economyMode ? 0.45 : 0.5);
+      if (!mosaic) throw new Error("Impossible de créer la mosaïque.");
 
       // 1) URL d’upload signée
       const resSign = await fetch("/api/storage/sign-upload", {
@@ -133,13 +133,20 @@ function CoachAnalyzer() {
       if (!fileUrl) throw new Error("sign-read: réponse invalide (pas d’url)");
       setProgress(80);
 
-      // 4) Appel IA
+      // 4) Appel IA (avec mosaïque)
       void fakeProgress(setProgress);
 
+      const middleTs = timestamps[Math.floor(timestamps.length / 2)] ?? 0;
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ frames, timestamps, feeling, fileUrl, economyMode }),
+        body: JSON.stringify({
+          frames: [mosaic],                 // ✅ 1 seule image
+          timestamps: [middleTs],
+          feeling,
+          fileUrl,
+          economyMode,                      // éco par défaut (true)
+        }),
       });
 
       const text = await res.text().catch(() => "");
@@ -182,7 +189,6 @@ function CoachAnalyzer() {
       console.error(e);
       const msg = e?.message || String(e);
       setErrorMsg(msg);
-      // pas d'alert bloquante pour 429
       if (!/429|rate[_\s-]?limit/i.test(msg)) {
         alert(`Erreur pendant l'analyse: ${msg}`);
       }
@@ -505,15 +511,31 @@ async function fakeProgress(setter: (v: number) => void) {
   setter(100);
 }
 
-/** ➜ Extrait N frames JPEG (dataURL) d’un fichier vidéo local. */
-async function extractFramesFromFile(file: File, nFrames = 3, quality = 0.7): Promise<{ frames: string[]; timestamps: number[] }> {
+/* ====== Extraction + mosaïque (1 image) ====== */
+
+/** Extrait N mini-frames, puis les assemble en une mosaïque 2x2 JPEG légère. */
+async function extractMosaicFromFile(
+  file: File,
+  nFrames = 4,
+  quality = 0.5
+): Promise<{ frame: string; timestamps: number[] }> {
+  const { frames, timestamps } = await extractFramesRaw(file, nFrames, 480, 270, quality);
+  const mosaic = await makeMosaic(frames, 2, 2, quality); // 2x2
+  return { frame: mosaic, timestamps };
+}
+
+/** Extraction “raw” des petites frames. */
+async function extractFramesRaw(
+  file: File,
+  nFrames = 4,
+  targetW = 480,
+  targetH = 270,
+  quality = 0.5
+): Promise<{ frames: string[]; timestamps: number[] }> {
   const videoURL = URL.createObjectURL(file);
   try {
     const video = document.createElement("video");
-    video.src = videoURL;
-    video.crossOrigin = "anonymous";
-    video.muted = true;
-    video.playsInline = true;
+    video.src = videoURL; video.crossOrigin = "anonymous"; video.muted = true; video.playsInline = true;
 
     await new Promise<void>((resolve, reject) => {
       video.onloadedmetadata = () => resolve();
@@ -522,29 +544,17 @@ async function extractFramesFromFile(file: File, nFrames = 3, quality = 0.7): Pr
 
     const duration = Math.max(0.001, video.duration || 0);
     const times: number[] = [];
-    if (nFrames <= 1) {
-      times.push(Math.min(duration, 0.1));
-    } else {
-      for (let i = 0; i < nFrames; i++) {
-        const t = (duration * (i + 1)) / (nFrames + 1); // réparti
-        times.push(t);
-      }
-    }
+    for (let i = 0; i < nFrames; i++) times.push((duration * (i + 1)) / (nFrames + 1));
 
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
     const frames: string[] = [];
     const timestamps: number[] = [];
 
-    // Dimension raisonnable pour l’IA (réduit la charge réseau)
-    const targetW = 640;
-    const targetH = 360;
-
     for (const t of times) {
       await seek(video, t);
       const { width, height } = bestFit(video.videoWidth, video.videoHeight, targetW, targetH);
-      canvas.width = width;
-      canvas.height = height;
+      canvas.width = width; canvas.height = height;
       ctx.drawImage(video, 0, 0, width, height);
       const dataUrl = canvas.toDataURL("image/jpeg", quality);
       frames.push(dataUrl);
@@ -557,16 +567,44 @@ async function extractFramesFromFile(file: File, nFrames = 3, quality = 0.7): Pr
   }
 }
 
+/** Assemble un tableau de dataURL JPEG en mosaïque CxR, renvoie un dataURL JPEG. */
+async function makeMosaic(dataUrls: string[], cols = 2, rows = 2, quality = 0.5): Promise<string> {
+  const imgs = await Promise.all(dataUrls.slice(0, cols * rows).map(loadImage));
+  const cellW = 360, cellH = 202; // petite taille pour réduire les tokens
+  const w = cols * cellW, h = rows * cellH;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext("2d")!;
+
+  for (let idx = 0; idx < imgs.length; idx++) {
+    const img = imgs[idx];
+    const x = (idx % cols) * cellW;
+    const y = Math.floor(idx / cols) * cellH;
+    const { width, height } = bestFit(img.naturalWidth, img.naturalHeight, cellW, cellH);
+    const ox = x + Math.floor((cellW - width) / 2);
+    const oy = y + Math.floor((cellH - height) / 2);
+    ctx.drawImage(img, ox, oy, width, height);
+  }
+
+  return canvas.toDataURL("image/jpeg", quality);
+}
+
+function loadImage(src: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+/* ====== Utilitaires communs ====== */
+
 function seek(video: HTMLVideoElement, time: number) {
   return new Promise<void>((resolve, reject) => {
-    const onSeeked = () => {
-      cleanup();
-      resolve();
-    };
-    const onError = () => {
-      cleanup();
-      reject(new Error("Échec du seek vidéo."));
-    };
+    const onSeeked = () => { cleanup(); resolve(); };
+    const onError = () => { cleanup(); reject(new Error("Échec du seek vidéo.")); };
     const cleanup = () => {
       video.removeEventListener("seeked", onSeeked);
       video.removeEventListener("error", onError);
