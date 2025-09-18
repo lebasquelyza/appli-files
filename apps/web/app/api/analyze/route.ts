@@ -12,8 +12,11 @@ type AIAnalysis = {
   timeline: AnalysisPoint[];
 };
 
-function bad(status: number, msg: string) {
-  return NextResponse.json({ error: msg }, { status });
+function bad(status: number, msg: string, extraHeaders: Record<string, string> = {}) {
+  return new NextResponse(JSON.stringify({ error: msg }), {
+    status,
+    headers: { "content-type": "application/json", ...extraHeaders },
+  });
 }
 
 export const dynamic = "force-dynamic";
@@ -29,11 +32,14 @@ async function withBackoff<T>(fn: () => Promise<T>, tries = 2) {
     } catch (e: any) {
       lastErr = e;
       const status = e?.status ?? e?.response?.status;
-      const is429 = status === 429 || /rate[_\s-]?limit/i.test(String(e?.message || ""));
+      const is429 =
+        status === 429 ||
+        e?.code === "rate_limit_exceeded" ||
+        /rate[_\s-]?limit/i.test(String(e?.message || ""));
       if (!is429 || i === tries) throw e;
       // backoff (1.5s puis 3s)
       const delay = 1500 * (i + 1);
-      await new Promise(r => setTimeout(r, delay));
+      await new Promise((r) => setTimeout(r, delay));
     }
   }
   throw lastErr;
@@ -58,13 +64,12 @@ export async function POST(req: NextRequest) {
     const apiKey = process.env.OPEN_API_KEY || process.env.OPENAI_API_KEY || "";
     if (!apiKey) return bad(500, "Clé OpenAI manquante (OPEN_API_KEY ou OPENAI_API_KEY).");
 
-    // ⚠️ Réduction d’empreinte token : max 4 frames, qualité + résolution plus faibles côté client recommandé
+    // ⚠️ Réduction d’empreinte token : max 4 frames
     if (frames.length > 4) {
       frames = frames.slice(0, 4);
       timestamps = timestamps.slice(0, 4);
     }
 
-    // Prompt court (moins de tokens)
     const instruction =
       "Analyse des images de vidéo de musculation.\n" +
       "1) Détecte l'exercice (ex: tractions, squat, pompe, SDT, bench, row, dips, hip thrust, OHP, etc.).\n" +
@@ -77,10 +82,8 @@ export async function POST(req: NextRequest) {
     const userParts: any[] = [{ type: "input_text", text: instruction }];
     if (feeling) userParts.push({ type: "input_text", text: `Ressenti: ${feeling}` });
     if (fileUrl) userParts.push({ type: "input_text", text: `URL vidéo: ${fileUrl}` });
-
     for (let i = 0; i < frames.length; i++) {
       const dataUrl = frames[i];
-      // Responses API attend un image_url sous forme de string (data URL OK)
       userParts.push({
         type: "input_image",
         image_url: typeof dataUrl === "string" ? dataUrl : `data:image/jpeg;base64,${dataUrl}`,
@@ -101,18 +104,24 @@ export async function POST(req: NextRequest) {
           model: "gpt-4o-mini",
           input: [{ role: "user", content: userParts }],
           temperature: 0.2,
-          // ↓ limite la taille de sortie
           max_output_tokens: 450,
-          // ↓ format JSON strict (valeur supportée : json_object)
-          text: { format: { type: "json_object" } },
+          // ✅ Responses API : forcer un JSON strict
+          response_format: { type: "json_object" },
         }),
       });
 
       if (!resp.ok) {
         const txt = await resp.text().catch(() => "");
-        const err = new Error(`OpenAI error ${resp.status}: ${txt}`);
-        // @ts-ignore
+        const retryAfter = resp.headers.get("retry-after") || "";
+        const err: any = new Error(`OpenAI error ${resp.status}: ${txt}`);
         err.status = resp.status;
+        err.retryAfter = retryAfter;
+        // essaie d’extraire le code openai si présent
+        try {
+          const parsed = JSON.parse(txt);
+          err.code = parsed?.error?.code;
+          err.message = parsed?.error?.message || err.message;
+        } catch {}
         throw err;
       }
       return resp.json();
@@ -127,7 +136,7 @@ export async function POST(req: NextRequest) {
       json?.choices?.[0]?.message?.content ||
       "";
 
-    if (!text) return bad(500, "Réponse vide du modèle.");
+    if (!text) return bad(502, "Réponse vide du modèle.");
 
     let parsed: AIAnalysis | null = null;
     try {
@@ -136,7 +145,7 @@ export async function POST(req: NextRequest) {
       const m = text.match(/\{[\s\S]*\}$/);
       if (m) parsed = JSON.parse(m[0]);
     }
-    if (!parsed) return bad(500, "Impossible de parser la réponse JSON.");
+    if (!parsed) return bad(502, "Impossible de parser la réponse JSON.");
 
     parsed.muscles ||= [];
     parsed.cues ||= [];
@@ -146,6 +155,28 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(parsed);
   } catch (e: any) {
     console.error("/api/analyze error:", e);
-    return bad(500, e?.message || "Erreur interne");
+
+    // 🔁 Propager les bons codes plutôt que 500
+    const status = e?.status ?? e?.response?.status;
+    const msg = e?.message || "Erreur interne";
+
+    // 429 (rate limit) → renvoyer 429 + Retry-After pour que le front réagisse correctement
+    const is429 =
+      status === 429 ||
+      e?.code === "rate_limit_exceeded" ||
+      /rate[_\s-]?limit/i.test(String(msg));
+
+    if (is429) {
+      const retryAfter = e?.retryAfter || "60";
+      return bad(429, "rate_limit_exceeded", { "retry-after": retryAfter });
+    }
+
+    // Si on a un status côté amont, renvoie-le (ex: 400/401/403/5xx OpenAI)
+    if (Number.isInteger(status)) {
+      return bad(status, msg);
+    }
+
+    // Sinon, 500
+    return bad(500, msg);
   }
 }
