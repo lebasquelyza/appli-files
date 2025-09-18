@@ -25,7 +25,7 @@ export const revalidate = 0;
 
 /* -------------------- Anti-burst pacing (lissage) -------------------- */
 let lastCall = 0;
-const MIN_SPACING_MS = 200; // espace mini entre appels sortants
+const MIN_SPACING_MS = 600; // espace mini entre appels sortants (augmenté)
 async function pace() {
   const now = Date.now();
   const wait = Math.max(0, lastCall + MIN_SPACING_MS - now);
@@ -33,9 +33,19 @@ async function pace() {
   lastCall = Date.now();
 }
 
-/* -------------------- Retry simple sur 429 -------------------- */
-async function withBackoff<T>(fn: () => Promise<T>, tries = 1) {
-  // tries=1 => 0 retry (on garde l’enveloppe si tu veux remonter à 1 tentative plus tard)
+/* -------------------- Sémaphore (concurrence=1) -------------------- */
+let inFlight = 0;
+async function withSemaphore<T>(fn: () => Promise<T>) {
+  while (inFlight >= 1) {
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  inFlight++;
+  try { return await fn(); }
+  finally { inFlight--; }
+}
+
+/* -------------------- Retry enveloppe (désactivé ici) -------------------- */
+async function withBackoff<T>(fn: () => Promise<T>, tries = 0) {
   let lastErr: any;
   for (let i = 0; i <= tries; i++) {
     try {
@@ -55,7 +65,7 @@ async function withBackoff<T>(fn: () => Promise<T>, tries = 1) {
   throw lastErr;
 }
 
-/* -------------------- Mini cache "anti-double-clic" -------------------- */
+/* -------------------- Mini cache anti double-clic -------------------- */
 const cache = new Map<string, { t: number; json: AIAnalysis }>();
 const CACHE_TTL_MS = 5 * 60 * 1000;
 function hashKey(frames: string[], feeling: string, economyMode: boolean) {
@@ -77,23 +87,23 @@ export async function POST(req: NextRequest) {
     let timestamps: number[] = Array.isArray(body.timestamps) ? body.timestamps : [];
     const feeling: string = typeof body.feeling === "string" ? body.feeling : "";
     const fileUrl: string | undefined = typeof body.fileUrl === "string" ? body.fileUrl : undefined;
-    const economyMode: boolean = !!body.economyMode;
+    const economyMode: boolean = !!body.economyMode; // éco par défaut côté front
 
     if (!frames.length) return jsonError(400, "Aucune frame fournie.");
 
     const apiKey = process.env.OPEN_API_KEY || process.env.OPENAI_API_KEY || "";
     if (!apiKey) return jsonError(500, "Clé OpenAI manquante (OPEN_API_KEY ou OPENAI_API_KEY).");
 
-    // Réduction du nombre d’images selon mode
-    const cap = economyMode ? 2 : 4;
+    // Cap images (2 en éco, 3 sinon)
+    const cap = economyMode ? 2 : 3;
     if (frames.length > cap) {
       frames = frames.slice(0, cap);
       timestamps = timestamps.slice(0, cap);
     }
 
-    // Instruction (compacte en éco)
+    // Instruction compacte en éco
     const instruction = economyMode
-      ? 'Analyse rapide d’images de musculation. Réponds STRICTEMENT en JSON: {"exercise":string,"confidence":number,"overall":string,"muscles":string[],"cues":string[],"extras":string[],"timeline":[{"time":number,"label":string,"detail"?:string}]} . Concentre-toi sur 3 muscles max, 3 cues précis, et 2–3 points de timeline.'
+      ? 'Analyse rapide. Réponds STRICTEMENT en JSON: {"exercise":string,"confidence":number,"overall":string,"muscles":string[],"cues":string[],"extras":string[],"timeline":[{"time":number,"label":string,"detail"?:string}]}. Limite à 3 muscles, 3 cues max, timeline 2 points.'
       : "Analyse des images de vidéo de musculation.\n"
         + "1) Détecte l'exercice (ex: tractions, squat, pompe, SDT, bench, row, dips, hip thrust, OHP, etc.).\n"
         + "2) Liste les muscles PRINCIPAUX pour CET exercice.\n"
@@ -116,14 +126,14 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // cache anti double-clic
+    // cache
     const key = hashKey(frames, feeling || "", economyMode);
     const cached = cache.get(key);
     if (cached && Date.now() - cached.t < CACHE_TTL_MS) {
       return NextResponse.json(cached.json);
     }
 
-    const maxOut = economyMode ? 220 : 450;
+    const maxOut = economyMode ? 180 : 320;
 
     const call = async () => {
       await pace(); // lissage
@@ -159,7 +169,7 @@ export async function POST(req: NextRequest) {
       return resp.json();
     };
 
-    const json = await withBackoff(call, 0); // pas de retry auto (0)
+    const json = await withSemaphore(() => withBackoff(call, 0)); // pas de retry auto
 
     // Extraire le texte de la Responses API
     const text: string =
