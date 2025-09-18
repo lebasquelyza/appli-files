@@ -41,20 +41,12 @@ export async function POST(req: NextRequest) {
 
     if (!frames.length) return bad(400, "Aucune frame fournie.");
 
-    // ✅ Utilise OPEN_API_KEY en priorité, puis OPENAI_API_KEY en fallback
-    const apiKey =
-      process.env.OPEN_API_KEY ||
-      process.env.OPENAI_API_KEY ||
-      "";
+    // Prend OPEN_API_KEY en priorité, puis OPENAI_API_KEY
+    const apiKey = process.env.OPEN_API_KEY || process.env.OPENAI_API_KEY || "";
+    if (!apiKey) return bad(500, "Clé OpenAI manquante (OPEN_API_KEY ou OPENAI_API_KEY).");
+    if (!apiKey.startsWith("sk-")) return bad(500, "Clé OpenAI invalide (doit commencer par 'sk-').");
 
-    if (!apiKey) {
-      return bad(500, "Clé OpenAI manquante (OPEN_API_KEY ou OPENAI_API_KEY).");
-    }
-    if (!apiKey.startsWith("sk-")) {
-      return bad(500, "Clé OpenAI invalide (doit commencer par 'sk-').");
-    }
-
-    // Construit le message multimodal pour la vision
+    // Contenu multimodal pour l’analyse
     const userParts: any[] = [
       {
         type: "text",
@@ -65,30 +57,24 @@ export async function POST(req: NextRequest) {
           "\n3) Génère 3–6 'cues' (consignes) concrets, adaptés à la posture visible." +
           "\n4) Si tu repères des défauts (genou rentrant, balancement, amplitude partielle, perte de gainage…), donne des conseils précis." +
           "\n5) Utilise le ressenti si pertinent." +
-          "\nRéponds en JSON strict, sans texte hors JSON, conforme au schéma: " +
-          `{"exercise":string,"confidence":number,"overall":string,"muscles":string[],"cues":string[],"extras":string[],"timeline":[{"time":number,"label":string,"detail"?:string}]}`,
+          '\nRéponds en JSON strict (pas de texte hors JSON), exactement au format: {"exercise":string,"confidence":number,"overall":string,"muscles":string[],"cues":string[],"extras":string[],"timeline":[{"time":number,"label":string,"detail"?:string}]}.',
       },
     ];
 
     if (feeling) userParts.push({ type: "text", text: `Ressenti athlète: ${feeling}` });
     if (fileUrl) userParts.push({ type: "text", text: `URL vidéo (réf): ${fileUrl}` });
 
-    // Limite de prudence: on n’envoie pas plus de 8 frames
+    // Limite prudente à 8 frames envoyées
     const maxFrames = Math.min(frames.length, 8);
-
     for (let i = 0; i < maxFrames; i++) {
       const dataUrl = frames[i];
-      // data:image/jpeg;base64,XXXX
       const base64 = typeof dataUrl === "string" && dataUrl.includes(",")
         ? dataUrl.split(",")[1]
         : dataUrl;
 
       userParts.push({
         type: "input_image",
-        image_data: {
-          data: base64,
-          mime_type: "image/jpeg",
-        },
+        image_data: { data: base64, mime_type: "image/jpeg" },
       });
 
       if (typeof timestamps[i] === "number") {
@@ -96,7 +82,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Appel OpenAI Responses API (vision)
+    // ✅ Responses API: utiliser text.format au lieu de response_format
     const resp = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
@@ -107,7 +93,7 @@ export async function POST(req: NextRequest) {
         model: "gpt-4o-mini",
         input: [{ role: "user", content: userParts }],
         temperature: 0.3,
-        response_format: { type: "json_object" }, // demande un JSON strict
+        text: { format: "json" }, // <-- le correctif clé
       }),
     });
 
@@ -116,10 +102,15 @@ export async function POST(req: NextRequest) {
       if (resp.status === 401) {
         return bad(500, `OpenAI 401: clé invalide côté serveur. Détail: ${txt}`);
       }
+      if (resp.status === 400) {
+        return bad(500, `OpenAI 400: requête invalide. Détail: ${txt}`);
+      }
       return bad(500, `OpenAI error ${resp.status}: ${txt}`);
     }
 
     const json = await resp.json();
+
+    // Différents champs possibles selon la version de l’API
     const text: string =
       json?.output_text ||
       json?.content?.[0]?.text ||
@@ -132,11 +123,8 @@ export async function POST(req: NextRequest) {
     try {
       parsed = JSON.parse(text);
     } catch {
-      // fallback: tente d'extraire un JSON terminal
       const m = text.match(/\{[\s\S]*\}$/);
-      if (m) {
-        parsed = JSON.parse(m[0]);
-      }
+      if (m) parsed = JSON.parse(m[0]);
     }
     if (!parsed) return bad(500, "Impossible de parser la réponse JSON.");
 
