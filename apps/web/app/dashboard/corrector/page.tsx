@@ -78,9 +78,9 @@ function CoachAnalyzer() {
     setErrorMsg("");
 
     try {
-      // 0) EXTRACTION DE FRAMES côté client (6 images réparties)
+      // 0) EXTRACTION DE FRAMES côté client (⚠️ 4 images réparties)
       setProgress(10);
-      const { frames, timestamps } = await extractFramesFromFile(file, 6);
+      const { frames, timestamps } = await extractFramesFromFile(file, 4);
       if (!frames.length) throw new Error("Impossible d’extraire des images de la vidéo.");
 
       // 1) Demande d’URL d’upload signée
@@ -105,7 +105,7 @@ function CoachAnalyzer() {
         .storage
         .from("videos")
         .uploadToSignedUrl(path, token, file, { contentType: file.type || "application/octet-stream" });
-      if (upErr) throw new Error(`uploadToSignedUrl: ${upErr.message || "erreur inconnue"}`);
+      if (upErr) throw new Error(`uploadToSignedUrl: ${upErr.message || "Load failed"}`);
       setProgress(60);
 
       // 3) URL de lecture signée (pour référence côté serveur si besoin)
@@ -124,28 +124,63 @@ function CoachAnalyzer() {
 
       // 4) Appel IA — on ENVOIE frames + timestamps (+ feeling + fileUrl pour info)
       void fakeProgress(setProgress);
-      const res = await fetch("/api/analyze", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          frames,
-          timestamps,
-          feeling,
-          fileUrl,
-        }),
-      });
-      if (!res.ok) {
-        const txt = await res.text().catch(() => "");
-        throw new Error(`analyze: HTTP ${res.status} ${txt}`);
-      }
 
-      const data: Partial<AIAnalysis> = await res.json();
+      const doCall = async () => {
+        const res = await fetch("/api/analyze", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ frames, timestamps, feeling, fileUrl }),
+        });
+
+        const text = await res.text().catch(() => "");
+
+        if (!res.ok) {
+          // Cas 429 (rate limit propagé par le backend)
+          if (res.status === 429 || /rate_limit_exceeded/i.test(text)) {
+            const retryAfterHeader = res.headers.get("retry-after");
+            const retryAfterSec = retryAfterHeader ? Math.max(1, parseInt(retryAfterHeader, 10) || 0) : 0;
+
+            const friendly = retryAfterSec
+              ? `La limite d’usage du modèle est atteinte. Réessaie dans ~${retryAfterSec}s.`
+              : "La limite d’usage du modèle est atteinte. Réessaie dans un instant.";
+
+            setErrorMsg(friendly);
+            setStatus("Limite atteinte (429).");
+
+            // Retry unique et facultatif après un petit délai (min(retry-after, 10s))
+            const waitMs = Math.min((retryAfterSec || 4) * 1000, 10_000);
+            await new Promise(r => setTimeout(r, waitMs));
+
+            const res2 = await fetch("/api/analyze", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ frames, timestamps, feeling, fileUrl }),
+            });
+            const text2 = await res2.text().catch(() => "");
+            if (!res2.ok) {
+              throw new Error(
+                res2.status === 429 || /rate_limit_exceeded/i.test(text2)
+                  ? "Limite d’API toujours atteinte après retry."
+                  : `analyze (retry): HTTP ${res2.status} ${text2}`
+              );
+            }
+            return JSON.parse(text2);
+          }
+
+          // Autres erreurs
+          throw new Error(`analyze: HTTP ${res.status} ${text}`);
+        }
+
+        return JSON.parse(text);
+      };
+
+      const data: Partial<AIAnalysis> = await doCall();
 
       const safe: AIAnalysis = {
         exercise: (data.exercise || "exercice_inconnu").toString(),
         confidence: typeof data.confidence === "number" ? data.confidence : 0.5,
         overall:
-          (data.overall && data.overall.trim()) ||
+          (typeof data.overall === "string" && data.overall.trim()) ||
           "Analyse effectuée mais je manque d’indices visuels. Réessaie avec un angle plus net ou un cadrage entier.",
         muscles: Array.isArray(data.muscles) && data.muscles.length ? data.muscles.slice(0, 8) : [],
         cues: Array.isArray(data.cues) && data.cues.length ? data.cues : [],
@@ -158,10 +193,17 @@ function CoachAnalyzer() {
 
       setAnalysis(safe);
       setProgress(100);
+      setStatus("Terminé ✅");
+      setErrorMsg("");
     } catch (e: any) {
       console.error(e);
-      setErrorMsg(e?.message || String(e));
-      alert(`Erreur pendant l'analyse: ${e?.message || e}`);
+      const msg = e?.message || String(e);
+      setErrorMsg(msg);
+      if (/429|rate[_\s-]?limit/i.test(msg)) {
+        alert("Limite d’usage de l’API atteinte. Réessaie un peu plus tard.");
+      } else {
+        alert(`Erreur pendant l'analyse: ${msg}`);
+      }
     } finally {
       setIsAnalyzing(false);
     }
@@ -243,7 +285,13 @@ function CoachAnalyzer() {
               <p className="text-xs text-muted-foreground">
                 {isAnalyzing ? "Chargement…" : status || (progress === 100 ? "Terminé ✅" : "")}
               </p>
-              {errorMsg && <p className="text-xs text-red-600 break-all">Erreur : {errorMsg}</p>}
+              {errorMsg && (
+                <p className="text-xs text-red-600 break-all">
+                  {/\brate[_\s-]?limit\b|429/i.test(errorMsg)
+                    ? `Erreur : ${errorMsg} — Réessaie dans un instant.`
+                    : `Erreur : ${errorMsg}`}
+                </p>
+              )}
             </div>
           )}
         </CardContent>
@@ -474,7 +522,7 @@ async function fakeProgress(setter: (v: number) => void) {
 }
 
 /** ➜ Extrait N frames JPEG (dataURL) d’un fichier vidéo local. */
-async function extractFramesFromFile(file: File, nFrames = 6): Promise<{ frames: string[]; timestamps: number[] }> {
+async function extractFramesFromFile(file: File, nFrames = 4): Promise<{ frames: string[]; timestamps: number[] }> {
   const videoURL = URL.createObjectURL(file);
   try {
     const video = document.createElement("video");
