@@ -20,36 +20,20 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const revalidate = 0;
 
-/** Récupère le texte JSON renvoyé par la Responses API, quels que soient
- *  le champ utilisé (output_text, output[], content[], choices…).
- */
 function extractTextFromResponses(payload: any): string {
   if (!payload) return "";
-
-  // 1) Nouveau champ direct
-  if (typeof payload.output_text === "string" && payload.output_text.trim()) {
-    return payload.output_text;
-  }
-
-  // 2) Nouveau format: output = [{type:"output_text", text:"..."}]
+  if (typeof payload.output_text === "string" && payload.output_text.trim()) return payload.output_text;
   if (Array.isArray(payload.output)) {
-    const parts = payload.output
-      .filter((p: any) => p && (p.type === "output_text" || typeof p.text === "string"))
-      .map((p: any) => (typeof p.text === "string" ? p.text : ""))
+    const joined = payload.output
+      .map((o: any) => (typeof o.text === "string" ? o.text : ""))
+      .filter(Boolean)
       .join("\n")
       .trim();
-    if (parts) return parts;
+    if (joined) return joined;
   }
-
-  // 3) Ancien format éventuel
-  if (Array.isArray(payload.content) && payload.content[0]?.text) {
-    return String(payload.content[0].text);
-  }
-  if (Array.isArray(payload.choices) && payload.choices[0]?.message?.content) {
+  if (Array.isArray(payload.content) && payload.content[0]?.text) return String(payload.content[0].text);
+  if (Array.isArray(payload.choices) && payload.choices[0]?.message?.content)
     return String(payload.choices[0].message.content);
-  }
-
-  // 4) fallback: cherche un blob JSON en fin de string
   const asStr = typeof payload === "string" ? payload : JSON.stringify(payload);
   const m = asStr.match(/\{[\s\S]*\}$/);
   return m ? m[0] : "";
@@ -70,7 +54,6 @@ export async function POST(req: NextRequest) {
 
     if (!frames.length) return bad(400, "Aucune frame fournie.");
 
-    // 🔑 on garde OPEN_API_KEY (fallback OPENAI_API_KEY)
     const apiKey = process.env.OPEN_API_KEY || process.env.OPENAI_API_KEY || "";
     if (!apiKey) return bad(500, "Clé OpenAI manquante (OPEN_API_KEY ou OPENAI_API_KEY).");
     if (!apiKey.startsWith("sk-")) return bad(500, "Clé OpenAI invalide (doit commencer par 'sk-').");
@@ -92,16 +75,22 @@ export async function POST(req: NextRequest) {
     if (feeling) userParts.push({ type: "input_text", text: `Ressenti athlète: ${feeling}` });
     if (fileUrl) userParts.push({ type: "input_text", text: `URL vidéo (réf): ${fileUrl}` });
 
-    const maxFrames = Math.min(frames.length, 8); // limite pour éviter payloads énormes
+    const maxFrames = Math.min(frames.length, 8); // limite raisonnable
     for (let i = 0; i < maxFrames; i++) {
       const dataUrl = frames[i];
-      // autorise "data:image/jpeg;base64,..." ou base64 pur
-      const base64 =
-        typeof dataUrl === "string" && dataUrl.includes(",") ? dataUrl.split(",")[1] : dataUrl;
+
+      // Accepte soit un data URL complet, soit du base64 brut : on force un data URL valide
+      let imageUrl: string;
+      if (typeof dataUrl === "string" && dataUrl.startsWith("data:image/")) {
+        imageUrl = dataUrl; // déjà un data URL
+      } else {
+        const base64 = typeof dataUrl === "string" && dataUrl.includes(",") ? dataUrl.split(",")[1] : dataUrl;
+        imageUrl = `data:image/jpeg;base64,${base64}`;
+      }
 
       userParts.push({
         type: "input_image",
-        image_data: { data: base64, mime_type: "image/jpeg" },
+        image_url: imageUrl, // ✅ Responses API attend image_url (et pas image_data)
       });
 
       if (typeof timestamps[i] === "number") {
@@ -109,7 +98,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ✅ Responses API : format JSON via text.format
+    // ✅ Responses API : demander un JSON via text.format
     const resp = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
@@ -120,7 +109,7 @@ export async function POST(req: NextRequest) {
         model: "gpt-4o-mini",
         input: [{ role: "user", content: userParts }],
         temperature: 0.3,
-        text: { format: "json" }, // important: remplace l'ancien response_format
+        text: { format: "json" },
       }),
     });
 
@@ -139,13 +128,11 @@ export async function POST(req: NextRequest) {
     try {
       parsed = JSON.parse(text);
     } catch {
-      // dernier recours: essaie d’extraire un bloc JSON terminal
       const m = text.match(/\{[\s\S]*\}$/);
       if (m) parsed = JSON.parse(m[0]);
     }
     if (!parsed) return bad(500, "Impossible de parser la réponse JSON.");
 
-    // garanties minimales
     parsed.muscles ||= [];
     parsed.cues ||= [];
     parsed.extras ||= [];
@@ -157,3 +144,4 @@ export async function POST(req: NextRequest) {
     return bad(500, e?.message || "Erreur interne");
   }
 }
+
