@@ -1,11 +1,16 @@
-# netlify.toml (racine du repo)
+# netlify.toml (racine)
 [build]
   base = "apps/web"
   command = "npm install --no-audit --no-fund && npm run build"
-  publish = ".next"   # IMPORTANT: relatif à base => .next
+  publish = ".next"   # relatif à base => apps/web/.next
 
 [build.environment]
   NODE_VERSION = "20"
+
+[functions]
+  # ➜ bundle explicitement ces modules dans les fonctions serverless
+  external_node_modules = ["@upstash/redis", "@upstash/ratelimit"]
+  node_bundler = "esbuild"
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
