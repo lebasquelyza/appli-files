@@ -1,21 +1,18 @@
 [build]
+  # On build depuis apps/web (monorepo)
   base = "apps/web"
-  command = "npm run build"
-  publish = ".next"
-
-[functions]
-  directory = "netlify/functions"
-
-[[plugins]]
-  package = "@netlify/plugin-nextjs"
-
-[build]
-  base = "apps/web"
+  # Installe les deps PUIS build (ci si lockfile, sinon install)
   command = "npm ci --no-audit --no-fund || npm install && npm run build"
+  # Le plugin Next publie .next, mais on explicite l’emplacement par sécurité
   publish = "apps/web/.next"
 
 [build.environment]
   NODE_VERSION = "20"
+
+# (Optionnel) Si tu as vraiment des fonctions Netlify en plus des routes Next,
+# dé-commente la section suivante et pointe le bon dossier :
+# [functions]
+#   directory = "netlify/functions"
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
