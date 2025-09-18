@@ -12,7 +12,6 @@ import { Progress } from "@/components/ui/progress";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { supabase } from "@/lib/supabase";
 
-// Petit spinner CSS
 function Spinner({ className = "" }: { className?: string }) {
   return (
     <span
@@ -56,7 +55,7 @@ function CoachAnalyzer() {
   const [analysis, setAnalysis] = useState<AIAnalysis | null>(null);
   const [progress, setProgress] = useState(0);
 
-  // Debug minimal (caché au client final)
+  // Debug minimal (erreurs visibles si besoin)
   const [status, setStatus] = useState<string>("");
   const [errorMsg, setErrorMsg] = useState<string>("");
 
@@ -72,13 +71,19 @@ function CoachAnalyzer() {
 
   const onAnalyze = async () => {
     if (!file) return;
+
     setIsAnalyzing(true);
-    setProgress(10);
+    setProgress(5);
     setStatus("");
     setErrorMsg("");
 
     try {
-      // 1) URL d'upload signée
+      // 0) EXTRACTION DE FRAMES côté client (6 images réparties)
+      setProgress(10);
+      const { frames, timestamps } = await extractFramesFromFile(file, 6);
+      if (!frames.length) throw new Error("Impossible d’extraire des images de la vidéo.");
+
+      // 1) Demande d’URL d’upload signée
       const resSign = await fetch("/api/storage/sign-upload", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -95,15 +100,15 @@ function CoachAnalyzer() {
       if (!path || !token) throw new Error("sign-upload: réponse invalide (pas de path/token)");
       setProgress(35);
 
-      // 2) Upload vers Supabase via token signé
+      // 2) Upload vers Supabase (signed URL)
       const { error: upErr } = await supabase
         .storage
         .from("videos")
         .uploadToSignedUrl(path, token, file, { contentType: file.type || "application/octet-stream" });
       if (upErr) throw new Error(`uploadToSignedUrl: ${upErr.message || "erreur inconnue"}`);
-      setProgress(55);
+      setProgress(60);
 
-      // 3) URL de lecture signée
+      // 3) URL de lecture signée (pour référence côté serveur si besoin)
       const resRead = await fetch("/api/storage/sign-read", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -115,26 +120,19 @@ function CoachAnalyzer() {
       }
       const { url: fileUrl } = await resRead.json();
       if (!fileUrl) throw new Error("sign-read: réponse invalide (pas d’url)");
-      setProgress(70);
+      setProgress(80);
 
-      // 4) Extraction de frames côté client (OBLIGATOIRE pour /api/analyze actuel)
-      setStatus("Extraction des images…");
-      const { frames, timestamps } = await extractFramesFromBlob(file, {
-        fps: 2,           // 2 images / seconde
-        maxFrames: 8,     // max 8 images pour rester léger
-        width: 512,       // redimensionne en largeur 512px
-        quality: 0.8,     // jpeg qualité 80%
-      });
-      if (!frames.length) throw new Error("Impossible d’extraire des images de la vidéo.");
-      setProgress(85);
-
-      // 5) Appel IA
-      setStatus("Analyse IA…");
+      // 4) Appel IA — on ENVOIE frames + timestamps (+ feeling + fileUrl pour info)
       void fakeProgress(setProgress);
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ frames, timestamps, feeling, fileUrl }),
+        body: JSON.stringify({
+          frames,
+          timestamps,
+          feeling,
+          fileUrl,
+        }),
       });
       if (!res.ok) {
         const txt = await res.text().catch(() => "");
@@ -143,7 +141,6 @@ function CoachAnalyzer() {
 
       const data: Partial<AIAnalysis> = await res.json();
 
-      // ✅ Fallbacks si l’IA renvoie des champs vides
       const safe: AIAnalysis = {
         exercise: (data.exercise || "exercice_inconnu").toString(),
         confidence: typeof data.confidence === "number" ? data.confidence : 0.5,
@@ -153,12 +150,14 @@ function CoachAnalyzer() {
         muscles: Array.isArray(data.muscles) && data.muscles.length ? data.muscles.slice(0, 8) : [],
         cues: Array.isArray(data.cues) && data.cues.length ? data.cues : [],
         extras: Array.isArray(data.extras) ? data.extras : [],
-        timeline: Array.isArray(data.timeline) ? data.timeline.filter(v => typeof v?.time === "number" && typeof v?.label === "string") : [],
+        timeline:
+          Array.isArray(data.timeline)
+            ? data.timeline.filter(v => typeof v?.time === "number" && typeof v?.label === "string")
+            : [],
       };
 
       setAnalysis(safe);
       setProgress(100);
-      setStatus("Terminé ✅");
     } catch (e: any) {
       console.error(e);
       setErrorMsg(e?.message || String(e));
@@ -260,7 +259,6 @@ function CoachAnalyzer() {
 
           {analysis && (
             <div className="space-y-4">
-              {/* En-tête exercice + confiance */}
               <div className="flex items-center flex-wrap gap-2">
                 <Badge variant="secondary">
                   Exercice détecté : {analysis.exercise || "inconnu"}
@@ -270,14 +268,12 @@ function CoachAnalyzer() {
                 </span>
               </div>
 
-              {/* Synthèse */}
               <div>
                 <p className="text-sm leading-relaxed">
                   {analysis.overall?.trim() || "Pas d’observations précises. Réessaie avec un angle plus net / cadrage entier."}
                 </p>
               </div>
 
-              {/* Muscles */}
               <div className="space-y-2">
                 <h4 className="text-sm font-medium">Muscles principalement sollicités</h4>
                 <div className="flex flex-wrap gap-2">
@@ -287,7 +283,6 @@ function CoachAnalyzer() {
                 </div>
               </div>
 
-              {/* Cues */}
               <div className="space-y-2">
                 <h4 className="text-sm font-medium">Cues / corrections</h4>
                 {analysis.cues?.length ? (
@@ -299,7 +294,6 @@ function CoachAnalyzer() {
                 )}
               </div>
 
-              {/* Extras */}
               {analysis.extras && analysis.extras.length > 0 && (
                 <Accordion type="single" collapsible className="w-full">
                   <AccordionItem value="more">
@@ -313,7 +307,6 @@ function CoachAnalyzer() {
                 </Accordion>
               )}
 
-              {/* Timeline */}
               <div className="space-y-2">
                 <h4 className="text-sm font-medium">Repères dans la vidéo</h4>
                 {analysis.timeline?.length ? (
@@ -480,82 +473,80 @@ async function fakeProgress(setter: (v: number) => void) {
   setter(100);
 }
 
-/** -------- Helpers frames: extrait quelques images JPEG base64 d'un Blob vidéo --------
- *  - fps: images par seconde (échantillonnage fixe)
- *  - maxFrames: nombre max d'images
- *  - width: redimensionnement (garde ratio)
- *  - quality: 0..1 qualité JPEG
- */
-async function extractFramesFromBlob(
-  file: File,
-  opts: { fps?: number; maxFrames?: number; width?: number; quality?: number } = {}
-): Promise<{ frames: string[]; timestamps: number[] }> {
-  const fps = Math.max(0.5, opts.fps ?? 2);
-  const maxFrames = Math.max(1, opts.maxFrames ?? 8);
-  const targetW = Math.max(160, opts.width ?? 512);
-  const quality = Math.min(1, Math.max(0.5, opts.quality ?? 0.8));
+/** ➜ Extrait N frames JPEG (dataURL) d’un fichier vidéo local. */
+async function extractFramesFromFile(file: File, nFrames = 6): Promise<{ frames: string[]; timestamps: number[] }> {
+  const videoURL = URL.createObjectURL(file);
+  try {
+    const video = document.createElement("video");
+    video.src = videoURL;
+    video.crossOrigin = "anonymous";
+    video.muted = true;
+    video.playsInline = true;
 
-  const url = URL.createObjectURL(file);
-  const video = document.createElement("video");
-  video.src = url;
-  video.muted = true;
-  video.playsInline = true;
-  video.crossOrigin = "anonymous";
-
-  await new Promise<void>((resolve, reject) => {
-    const onErr = () => reject(new Error("Chargement vidéo impossible."));
-    video.addEventListener("error", onErr, { once: true });
-    video.addEventListener("loadedmetadata", () => resolve(), { once: true });
-  });
-
-  if (!isFinite(video.duration) || video.duration === 0) {
-    URL.revokeObjectURL(url);
-    throw new Error("Durée vidéo invalide.");
-  }
-
-  // moments à échantillonner
-  const step = 1 / fps;
-  const times: number[] = [];
-  for (let t = 0; t <= video.duration && times.length < maxFrames; t += step) {
-    times.push(Math.min(video.duration, Math.max(0, t)));
-  }
-  if (times.length === 0) times.push(0);
-
-  const frames: string[] = [];
-  const timestamps: number[] = [];
-
-  // canvas pour capture
-  const tmpCanvas = document.createElement("canvas");
-  const ctx = tmpCanvas.getContext("2d");
-  if (!ctx) {
-    URL.revokeObjectURL(url);
-    throw new Error("Canvas non supporté.");
-  }
-
-  const seekTo = (t: number) =>
-    new Promise<void>((resolve, reject) => {
-      const onSeeked = () => resolve();
-      const onErr = () => reject(new Error("Seek échoué."));
-      video.currentTime = Math.min(video.duration, Math.max(0, t));
-      video.addEventListener("seeked", onSeeked, { once: true });
-      video.addEventListener("error", onErr, { once: true });
+    await new Promise<void>((resolve, reject) => {
+      video.onloadedmetadata = () => resolve();
+      video.onerror = () => reject(new Error("Impossible de lire la vidéo côté client."));
     });
 
-  for (const t of times) {
-    await seekTo(t);
+    const duration = Math.max(0.001, video.duration || 0);
+    const times: number[] = [];
+    if (nFrames <= 1) {
+      times.push(Math.min(duration, 0.1));
+    } else {
+      for (let i = 0; i < nFrames; i++) {
+        const t = (duration * (i + 1)) / (nFrames + 1); // réparti
+        times.push(t);
+      }
+    }
 
-    const scale = targetW / video.videoWidth;
-    const w = Math.max(1, Math.round(video.videoWidth * scale));
-    const h = Math.max(1, Math.round(video.videoHeight * scale));
-    tmpCanvas.width = w;
-    tmpCanvas.height = h;
-    ctx.drawImage(video, 0, 0, w, h);
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
+    const frames: string[] = [];
+    const timestamps: number[] = [];
 
-    const dataUrl = tmpCanvas.toDataURL("image/jpeg", quality);
-    frames.push(dataUrl);
-    timestamps.push(Math.round(t * 100) / 100);
+    // Dimension raisonnable pour l’IA (réduit la charge réseau)
+    const targetW = 640;
+    const targetH = 360;
+
+    for (const t of times) {
+      await seek(video, t);
+      const { width, height } = bestFit(video.videoWidth, video.videoHeight, targetW, targetH);
+      canvas.width = width;
+      canvas.height = height;
+      ctx.drawImage(video, 0, 0, width, height);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
+      frames.push(dataUrl);
+      timestamps.push(Math.round(t));
+    }
+
+    return { frames, timestamps };
+  } finally {
+    URL.revokeObjectURL(videoURL);
   }
+}
 
-  URL.revokeObjectURL(url);
-  return { frames, timestamps };
+function seek(video: HTMLVideoElement, time: number) {
+  return new Promise<void>((resolve, reject) => {
+    const onSeeked = () => {
+      cleanup();
+      resolve();
+    };
+    const onError = () => {
+      cleanup();
+      reject(new Error("Échec du seek vidéo."));
+    };
+    const cleanup = () => {
+      video.removeEventListener("seeked", onSeeked);
+      video.removeEventListener("error", onError);
+    };
+    video.addEventListener("seeked", onSeeked);
+    video.addEventListener("error", onError);
+    try { video.currentTime = Math.min(Math.max(0, time), video.duration || time); } catch { /* ignore */ }
+  });
+}
+
+function bestFit(w: number, h: number, maxW: number, maxH: number) {
+  if (!w || !h) return { width: maxW, height: maxH };
+  const r = Math.min(maxW / w, maxH / h);
+  return { width: Math.round(w * r), height: Math.round(h * r) };
 }
