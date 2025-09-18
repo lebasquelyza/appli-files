@@ -60,70 +60,62 @@ function hashKey(frames: string[], feeling: string, economyMode: boolean) {
   return h.toString(16);
 }
 
-/* ===================== Upstash REST (sans SDK) ===================== */
+/* ===================== Upstash REST (POST JSON “command”) ===================== */
 /** URL: UPSTASH_REDIS_REST_URL (https://...upstash.io)
  *  TOKEN: UPSTASH_REDIS_REST_TOKEN
  */
 function upstashAvailable() {
   return !!process.env.UPSTASH_REDIS_REST_URL && !!process.env.UPSTASH_REDIS_REST_TOKEN;
 }
-function upstashUrl(cmd: string, ...parts: (string | number)[]) {
-  const base = process.env.UPSTASH_REDIS_REST_URL!.replace(/\/+$/, "");
-  const encoded = parts.map(p => encodeURIComponent(String(p))).join("/");
-  return `${base}/${cmd}/${encoded}`;
-}
 
-async function upstashFetch<T = any>(url: string, method: "GET" | "POST" = "GET") {
+async function upstashCommand<T = any>(...args: (string | number)[]) {
+  const base = process.env.UPSTASH_REDIS_REST_URL!;
   try {
-    const res = await fetch(url, {
-      method,
-      headers: { Authorization: `Bearer ${process.env.UPSTASH_REDIS_REST_TOKEN}` },
+    const res = await fetch(base, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.UPSTASH_REDIS_REST_TOKEN}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ command: args.map(String) }),
     });
     if (!res.ok) {
       const txt = await res.text().catch(() => "");
       throw new Error(`Upstash HTTP ${res.status}: ${txt}`);
     }
-    return res.json() as Promise<{ result: T }>;
+    const json = await res.json();
+    // Upstash renvoie { result: ... }
+    return json as { result: T };
   } catch (e: any) {
-    console.error("[upstash] fetch failed:", e?.message || e);
+    console.error("[upstash] command failed:", e?.message || e);
     throw e;
   }
 }
 
-// -- SET NX PX(ttlMs) -> utiliser POST + NX=true
+// Helpers
 async function redisSetNXPX(key: string, value: string, ttlMs: number): Promise<boolean> {
-  const url = upstashUrl("set", key, value) + `?NX=true&PX=${ttlMs}`;
-  const { result } = await upstashFetch<string | null>(url, "POST");
+  // SET key value PX ttl NX
+  const { result } = await upstashCommand<string>("SET", key, value, "PX", ttlMs, "NX");
   return result === "OK";
 }
-// -- GET -> GET
 async function redisGet(key: string): Promise<string | null> {
-  const url = upstashUrl("get", key);
-  const { result } = await upstashFetch<string | null>(url, "GET");
+  const { result } = await upstashCommand<string | null>("GET", key);
   return result ?? null;
 }
-// -- DEL -> POST
 async function redisDel(key: string): Promise<number> {
-  const url = upstashUrl("del", key);
-  const { result } = await upstashFetch<number>(url, "POST");
-  return result || 0;
-}
-// -- INCR -> POST
-async function redisIncr(key: string): Promise<number> {
-  const url = upstashUrl("incr", key);
-  const { result } = await upstashFetch<number>(url, "POST");
+  const { result } = await upstashCommand<number>("DEL", key);
   return Number(result || 0);
 }
-// -- EXPIRE (secondes) -> POST
-async function redisExpire(key: string, seconds: number): Promise<number> {
-  const url = upstashUrl("expire", key, seconds);
-  const { result } = await upstashFetch<number>(url, "POST");
-  return result || 0;
+async function redisIncr(key: string): Promise<number> {
+  const { result } = await upstashCommand<number>("INCR", key);
+  return Number(result || 0);
 }
-// -- PTTL -> GET
+async function redisExpire(key: string, seconds: number): Promise<number> {
+  const { result } = await upstashCommand<number>("EXPIRE", key, seconds);
+  return Number(result || 0);
+}
 async function redisPTTL(key: string): Promise<number> {
-  const url = upstashUrl("pttl", key);
-  const { result } = await upstashFetch<number>(url, "GET");
+  const { result } = await upstashCommand<number>("PTTL", key);
   return typeof result === "number" ? result : -2;
 }
 
@@ -366,4 +358,5 @@ export async function POST(req: NextRequest) {
     return jsonError(500, msg);
   }
 }
+
 
