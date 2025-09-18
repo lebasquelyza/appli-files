@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "fast-xml-parser": "^5.2.5",
+    "jszip": "^3.10.1",
     "resend": "^4.0.0"
   }
 }

@@ -7,10 +7,17 @@
     "start": "next start -p 3000"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.890.0",
+    "@aws-sdk/s3-request-presigner": "^3.890.0",
+    "@supabase/supabase-js": "^2.57.4",
+    "@upstash/ratelimit": "^2.0.6",
+    "@upstash/redis": "^1.35.3",
     "axios": "^1.7.2",
     "clsx": "^2.1.0",
     "fast-xml-parser": "^4.3.2",
+    "framer-motion": "^12.23.13",
     "jszip": "^3.10.1",
+    "lucide-react": "^0.544.0",
     "next": "^14.2.32",
     "next-auth": "^4.24.7",
     "next-intl": "^4.3.8",
