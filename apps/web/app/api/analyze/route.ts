@@ -23,7 +23,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const revalidate = 0;
 
-// Retry simple avec backoff
+// Retry simple avec backoff (visé: 429 rate limit)
 async function withBackoff<T>(fn: () => Promise<T>, tries = 2) {
   let lastErr: any;
   for (let i = 0; i <= tries; i++) {
@@ -37,8 +37,7 @@ async function withBackoff<T>(fn: () => Promise<T>, tries = 2) {
         e?.code === "rate_limit_exceeded" ||
         /rate[_\s-]?limit/i.test(String(e?.message || ""));
       if (!is429 || i === tries) throw e;
-      // backoff (1.5s puis 3s)
-      const delay = 1500 * (i + 1);
+      const delay = 1500 * (i + 1); // 1.5s puis 3s
       await new Promise((r) => setTimeout(r, delay));
     }
   }
@@ -70,6 +69,7 @@ export async function POST(req: NextRequest) {
       timestamps = timestamps.slice(0, 4);
     }
 
+    // Prompt court (moins de tokens)
     const instruction =
       "Analyse des images de vidéo de musculation.\n" +
       "1) Détecte l'exercice (ex: tractions, squat, pompe, SDT, bench, row, dips, hip thrust, OHP, etc.).\n" +
@@ -82,6 +82,7 @@ export async function POST(req: NextRequest) {
     const userParts: any[] = [{ type: "input_text", text: instruction }];
     if (feeling) userParts.push({ type: "input_text", text: `Ressenti: ${feeling}` });
     if (fileUrl) userParts.push({ type: "input_text", text: `URL vidéo: ${fileUrl}` });
+
     for (let i = 0; i < frames.length; i++) {
       const dataUrl = frames[i];
       userParts.push({
@@ -105,8 +106,8 @@ export async function POST(req: NextRequest) {
           input: [{ role: "user", content: userParts }],
           temperature: 0.2,
           max_output_tokens: 450,
-          // ✅ Responses API : forcer un JSON strict
-          response_format: { type: "json_object" },
+          // ✅ Responses API : forcer JSON strict
+          text: { format: { type: "json_object" } },
         }),
       });
 
@@ -116,7 +117,6 @@ export async function POST(req: NextRequest) {
         const err: any = new Error(`OpenAI error ${resp.status}: ${txt}`);
         err.status = resp.status;
         err.retryAfter = retryAfter;
-        // essaie d’extraire le code openai si présent
         try {
           const parsed = JSON.parse(txt);
           err.code = parsed?.error?.code;
@@ -124,12 +124,13 @@ export async function POST(req: NextRequest) {
         } catch {}
         throw err;
       }
+
       return resp.json();
     };
 
     const json = await withBackoff(call, 2);
 
-    // Extraire le texte
+    // Extraire le texte renvoyé par la Responses API
     const text: string =
       json?.output_text ||
       json?.content?.[0]?.text ||
@@ -138,15 +139,17 @@ export async function POST(req: NextRequest) {
 
     if (!text) return bad(502, "Réponse vide du modèle.");
 
+    // Parsing JSON robuste
     let parsed: AIAnalysis | null = null;
     try {
       parsed = JSON.parse(text);
     } catch {
-      const m = text.match(/\{[\s\S]*\}$/);
+      const m = text.match(/\{[\s\S]*\}$/); // tente d'extraire le dernier bloc JSON
       if (m) parsed = JSON.parse(m[0]);
     }
     if (!parsed) return bad(502, "Impossible de parser la réponse JSON.");
 
+    // Normalisation
     parsed.muscles ||= [];
     parsed.cues ||= [];
     parsed.extras ||= [];
@@ -156,11 +159,10 @@ export async function POST(req: NextRequest) {
   } catch (e: any) {
     console.error("/api/analyze error:", e);
 
-    // 🔁 Propager les bons codes plutôt que 500
     const status = e?.status ?? e?.response?.status;
     const msg = e?.message || "Erreur interne";
 
-    // 429 (rate limit) → renvoyer 429 + Retry-After pour que le front réagisse correctement
+    // 429 (rate limit) → renvoyer 429 + Retry-After
     const is429 =
       status === 429 ||
       e?.code === "rate_limit_exceeded" ||
@@ -171,12 +173,17 @@ export async function POST(req: NextRequest) {
       return bad(429, "rate_limit_exceeded", { "retry-after": retryAfter });
     }
 
-    // Si on a un status côté amont, renvoie-le (ex: 400/401/403/5xx OpenAI)
+    // 400 spécifique de paramètre mal nommé (au cas où) → message clair
+    if (status === 400 && /Unsupported parameter:\s*'response_format'/i.test(msg)) {
+      return bad(400, "Config invalide: utiliser text.format (Responses API) au lieu de response_format.");
+    }
+
+    // Si on a un status amont connu, propage-le
     if (Number.isInteger(status)) {
       return bad(status, msg);
     }
 
-    // Sinon, 500
+    // Sinon, 500 générique
     return bad(500, msg);
   }
 }
