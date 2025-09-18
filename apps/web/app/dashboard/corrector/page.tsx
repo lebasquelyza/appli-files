@@ -56,7 +56,7 @@ function CoachAnalyzer() {
   const [analysis, setAnalysis] = useState<AIAnalysis | null>(null);
   const [progress, setProgress] = useState(0);
 
-  // Debug minimal (non visible pour le client final)
+  // Debug minimal (caché au client final)
   const [status, setStatus] = useState<string>("");
   const [errorMsg, setErrorMsg] = useState<string>("");
 
@@ -74,7 +74,7 @@ function CoachAnalyzer() {
     if (!file) return;
     setIsAnalyzing(true);
     setProgress(10);
-    setStatus(""); // on masque les étapes → affichage “chargement…” propre
+    setStatus("");
     setErrorMsg("");
 
     try {
@@ -101,7 +101,7 @@ function CoachAnalyzer() {
         .from("videos")
         .uploadToSignedUrl(path, token, file, { contentType: file.type || "application/octet-stream" });
       if (upErr) throw new Error(`uploadToSignedUrl: ${upErr.message || "erreur inconnue"}`);
-      setProgress(60);
+      setProgress(55);
 
       // 3) URL de lecture signée
       const resRead = await fetch("/api/storage/sign-read", {
@@ -115,22 +115,26 @@ function CoachAnalyzer() {
       }
       const { url: fileUrl } = await resRead.json();
       if (!fileUrl) throw new Error("sign-read: réponse invalide (pas d’url)");
-      setProgress(80);
+      setProgress(70);
 
-      // 4) Appel IA — on envoie quelques frames + feeling + fileUrl (si utile côté serveur)
+      // 4) Extraction de frames côté client (OBLIGATOIRE pour /api/analyze actuel)
+      setStatus("Extraction des images…");
+      const { frames, timestamps } = await extractFramesFromBlob(file, {
+        fps: 2,           // 2 images / seconde
+        maxFrames: 8,     // max 8 images pour rester léger
+        width: 512,       // redimensionne en largeur 512px
+        quality: 0.8,     // jpeg qualité 80%
+      });
+      if (!frames.length) throw new Error("Impossible d’extraire des images de la vidéo.");
+      setProgress(85);
+
+      // 5) Appel IA
+      setStatus("Analyse IA…");
       void fakeProgress(setProgress);
-      // On extrait quelques frames côté client (simplifié : ici on laisse la route serveur gérer frames si tu as déjà ça)
-      // Si ta route `/api/analyze` attend frames/timestamps, adapte ici en conséquence.
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          fileUrl,
-          feeling,
-          // Si tu as un extracteur de frames côté client, ajoute:
-          // frames: [ "data:image/jpeg;base64,....", ... ],
-          // timestamps: [0, 1.2, 2.4, ...]
-        }),
+        body: JSON.stringify({ frames, timestamps, feeling, fileUrl }),
       });
       if (!res.ok) {
         const txt = await res.text().catch(() => "");
@@ -138,7 +142,6 @@ function CoachAnalyzer() {
       }
 
       const data: Partial<AIAnalysis> = await res.json();
-      console.log("AIAnalysis (raw):", data);
 
       // ✅ Fallbacks si l’IA renvoie des champs vides
       const safe: AIAnalysis = {
@@ -155,6 +158,7 @@ function CoachAnalyzer() {
 
       setAnalysis(safe);
       setProgress(100);
+      setStatus("Terminé ✅");
     } catch (e: any) {
       console.error(e);
       setErrorMsg(e?.message || String(e));
@@ -474,4 +478,84 @@ async function fakeProgress(setter: (v: number) => void) {
   }
   await new Promise((r) => setTimeout(r, 350));
   setter(100);
+}
+
+/** -------- Helpers frames: extrait quelques images JPEG base64 d'un Blob vidéo --------
+ *  - fps: images par seconde (échantillonnage fixe)
+ *  - maxFrames: nombre max d'images
+ *  - width: redimensionnement (garde ratio)
+ *  - quality: 0..1 qualité JPEG
+ */
+async function extractFramesFromBlob(
+  file: File,
+  opts: { fps?: number; maxFrames?: number; width?: number; quality?: number } = {}
+): Promise<{ frames: string[]; timestamps: number[] }> {
+  const fps = Math.max(0.5, opts.fps ?? 2);
+  const maxFrames = Math.max(1, opts.maxFrames ?? 8);
+  const targetW = Math.max(160, opts.width ?? 512);
+  const quality = Math.min(1, Math.max(0.5, opts.quality ?? 0.8));
+
+  const url = URL.createObjectURL(file);
+  const video = document.createElement("video");
+  video.src = url;
+  video.muted = true;
+  video.playsInline = true;
+  video.crossOrigin = "anonymous";
+
+  await new Promise<void>((resolve, reject) => {
+    const onErr = () => reject(new Error("Chargement vidéo impossible."));
+    video.addEventListener("error", onErr, { once: true });
+    video.addEventListener("loadedmetadata", () => resolve(), { once: true });
+  });
+
+  if (!isFinite(video.duration) || video.duration === 0) {
+    URL.revokeObjectURL(url);
+    throw new Error("Durée vidéo invalide.");
+  }
+
+  // moments à échantillonner
+  const step = 1 / fps;
+  const times: number[] = [];
+  for (let t = 0; t <= video.duration && times.length < maxFrames; t += step) {
+    times.push(Math.min(video.duration, Math.max(0, t)));
+  }
+  if (times.length === 0) times.push(0);
+
+  const frames: string[] = [];
+  const timestamps: number[] = [];
+
+  // canvas pour capture
+  const tmpCanvas = document.createElement("canvas");
+  const ctx = tmpCanvas.getContext("2d");
+  if (!ctx) {
+    URL.revokeObjectURL(url);
+    throw new Error("Canvas non supporté.");
+  }
+
+  const seekTo = (t: number) =>
+    new Promise<void>((resolve, reject) => {
+      const onSeeked = () => resolve();
+      const onErr = () => reject(new Error("Seek échoué."));
+      video.currentTime = Math.min(video.duration, Math.max(0, t));
+      video.addEventListener("seeked", onSeeked, { once: true });
+      video.addEventListener("error", onErr, { once: true });
+    });
+
+  for (const t of times) {
+    await seekTo(t);
+
+    const scale = targetW / video.videoWidth;
+    const w = Math.max(1, Math.round(video.videoWidth * scale));
+    const h = Math.max(1, Math.round(video.videoHeight * scale));
+    tmpCanvas.width = w;
+    tmpCanvas.height = h;
+    ctx.drawImage(video, 0, 0, w, h);
+
+    const dataUrl = tmpCanvas.toDataURL("image/jpeg", quality);
+    frames.push(dataUrl);
+    timestamps.push(Math.round(t * 100) / 100);
+  }
+
+  URL.revokeObjectURL(url);
+  return { frames, timestamps };
 }
