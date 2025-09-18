@@ -62,7 +62,7 @@ function hashKey(frames: string[], feeling: string, economyMode: boolean) {
 
 /* ===================== Upstash REST (sans SDK) ===================== */
 /** Upstash REST simple: utilise les endpoints HTTP natifs (SET/GET/DEL/INCR/PTTL/EXPIRE).
- *  URL attendue: process.env.UPSTASH_REDIS_REST_URL
+ *  URL attendue: process.env.UPSTASH_REDIS_REST_URL (https://...upstash.io)
  *  TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN
  */
 function upstashAvailable() {
@@ -73,15 +73,23 @@ function upstashUrl(cmd: string, ...parts: (string | number)[]) {
   const encoded = parts.map(p => encodeURIComponent(String(p))).join("/");
   return `${base}/${cmd}/${encoded}`;
 }
+
+// --- Upstash fetch via GET + logs d'erreur détaillés ---
 async function upstashFetch<T = any>(url: string) {
-  const res = await fetch(url, {
-    method: "POST", // Upstash accepte POST/GET; POST évite caches intermédiaires
-    headers: { Authorization: `Bearer ${process.env.UPSTASH_REDIS_REST_TOKEN}` },
-  });
-  if (!res.ok) {
-    throw new Error(`Upstash HTTP ${res.status} ${await res.text().catch(()=> "")}`);
+  try {
+    const res = await fetch(url, {
+      method: "GET", // Upstash REST path accepte GET
+      headers: { Authorization: `Bearer ${process.env.UPSTASH_REDIS_REST_TOKEN}` },
+    });
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      throw new Error(`Upstash HTTP ${res.status}: ${txt}`);
+    }
+    return res.json() as Promise<{ result: T }>;
+  } catch (e: any) {
+    console.error("[upstash] fetch failed:", e?.message || e);
+    throw e;
   }
-  return res.json() as Promise<{ result: T }>;
 }
 
 async function redisSetNXPX(key: string, value: string, ttlMs: number): Promise<boolean> {
@@ -121,9 +129,7 @@ async function redisPTTL(key: string): Promise<number> {
  */
 async function fixedWindowLimit(key: string, limit: number, windowSec: number) {
   const count = await redisIncr(key);
-  if (count === 1) {
-    await redisExpire(key, windowSec);
-  }
+  if (count === 1) await redisExpire(key, windowSec);
   let pttl = await redisPTTL(key);
   if (pttl < 0) pttl = windowSec * 1000;
   return { success: count <= limit, reset: Date.now() + pttl };
@@ -145,24 +151,25 @@ async function withRedisLock<T>(key: string, ttlMs: number, timeoutMs: number, f
   try { return await fn(); } finally { await redisDel(key).catch(()=>{}); }
 }
 
-/* ===================== GET /api/analyze (diagnostic) ===================== */
+/* ===================== GET /api/analyze : diagnostic ===================== */
 export async function GET() {
   let imported = false, redisOk = false;
+  let error: string | null = null;
   const env = upstashAvailable();
   if (env) {
     try {
-      // ping simple: set/get/expire
       await redisSetNXPX("diag:ping", "1", 3000);
       const v = await redisGet("diag:ping");
       redisOk = v !== null;
-      imported = true; // ici imported veut dire "REST utilisable"
-    } catch {
+      imported = true; // “REST utilisable”
+    } catch (e: any) {
+      error = e?.message || String(e);
       imported = false; redisOk = false;
     }
   }
   const hasOpenAI = !!(process.env.OPEN_API_KEY || process.env.OPENAI_API_KEY);
   return NextResponse.json({
-    upstash: { env, imported, redisOk },
+    upstash: { env, imported, redisOk, error },
     openaiKey: hasOpenAI,
     pacingMs: MIN_SPACING_MS,
     ipCooldownFallbackMs: SOFT_COOLDOWN_IP_MS,
@@ -202,6 +209,7 @@ export async function POST(req: NextRequest) {
 
     // ---- Rate-limit IP + ORG (Upstash REST si dispo, sinon fallback mémoire)
     const ip = clientIp(req);
+
     if (upstashAvailable()) {
       // IP: 1 req / 40s
       const ipKey = `analyze:ip:${ip}`;
