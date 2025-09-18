@@ -1,30 +1,44 @@
+// apps/web/app/api/storage/sign-upload/route.ts
 import { NextResponse } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import { createClient } from "@supabase/supabase-js";
 
-export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-export const revalidate = 0;
+
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!, // ⚠️ service role, serveur uniquement
+  { auth: { persistSession: false } }
+);
 
 export async function POST(req: Request) {
   try {
     const { filename, contentType } = await req.json();
-    if (!filename) return NextResponse.json({ error: "filename requis" }, { status: 400 });
 
-    const ext = (filename.split(".").pop() || "webm").toLowerCase();
-    const path = `uploads/${Date.now()}-${Math.random().toString(16).slice(2)}.${ext}`;
+    if (!filename) {
+      return NextResponse.json({ error: "filename requis" }, { status: 400 });
+    }
 
-    const admin = getSupabaseAdmin();
-    const { data, error } = await admin.storage.from("videos").createSignedUploadUrl(path);
+    // ⚠️ PAS de slash initial
+    const safeName = filename.replace(/[^\w.\-]/g, "_");
+    const path = `uploads/${Date.now()}-${safeName}`;
 
-    if (error || !data?.token) throw error || new Error("createSignedUploadUrl failed");
+    // Crée une URL d’upload signée pour le bucket "videos"
+    const { data, error } = await supabaseAdmin
+      .storage
+      .from("videos")
+      .createSignedUploadUrl(path);
+
+    if (error || !data) {
+      return NextResponse.json({ error: error?.message || "createSignedUploadUrl failed" }, { status: 500 });
+    }
+
+    // Retourne tel quel. Ne pas JSON-stringifier le token à part.
     return NextResponse.json({
-      path,
-      token: data.token,
-      contentType: contentType || "application/octet-stream",
+      path, // ex: "uploads/1234-file.webm"
+      token: data.token, // string opaque
+      contentType: contentType || "application/octet-stream"
     });
   } catch (e: any) {
-    console.error("videos/sign-upload error:", e);
-    // Réponds en texte pour débogage si jamais le JSON pose souci
-    return new NextResponse(`videos/sign-upload ERROR: ${e?.message || e}`, { status: 500 });
+    return NextResponse.json({ error: e?.message || "server error" }, { status: 500 });
   }
 }
