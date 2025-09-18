@@ -152,4 +152,3 @@ export async function POST(req: NextRequest) {
     return bad(500, e?.message || "Erreur interne");
   }
 }
-
