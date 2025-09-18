@@ -61,9 +61,8 @@ function hashKey(frames: string[], feeling: string, economyMode: boolean) {
 }
 
 /* ===================== Upstash REST (sans SDK) ===================== */
-/** Upstash REST simple: utilise les endpoints HTTP natifs (SET/GET/DEL/INCR/PTTL/EXPIRE).
- *  URL attendue: process.env.UPSTASH_REDIS_REST_URL (https://...upstash.io)
- *  TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN
+/** URL: UPSTASH_REDIS_REST_URL (https://...upstash.io)
+ *  TOKEN: UPSTASH_REDIS_REST_TOKEN
  */
 function upstashAvailable() {
   return !!process.env.UPSTASH_REDIS_REST_URL && !!process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -74,11 +73,10 @@ function upstashUrl(cmd: string, ...parts: (string | number)[]) {
   return `${base}/${cmd}/${encoded}`;
 }
 
-// --- Upstash fetch via GET + logs d'erreur détaillés ---
-async function upstashFetch<T = any>(url: string) {
+async function upstashFetch<T = any>(url: string, method: "GET" | "POST" = "GET") {
   try {
     const res = await fetch(url, {
-      method: "GET", // Upstash REST path accepte GET
+      method,
       headers: { Authorization: `Bearer ${process.env.UPSTASH_REDIS_REST_TOKEN}` },
     });
     if (!res.ok) {
@@ -92,41 +90,44 @@ async function upstashFetch<T = any>(url: string) {
   }
 }
 
+// -- SET NX PX(ttlMs) -> utiliser POST + NX=true
 async function redisSetNXPX(key: string, value: string, ttlMs: number): Promise<boolean> {
-  // /SET/key/value?NX=1&PX=ttl
-  const url = upstashUrl("set", key, value) + `?NX=1&PX=${ttlMs}`;
-  const { result } = await upstashFetch<string | null>(url);
+  const url = upstashUrl("set", key, value) + `?NX=true&PX=${ttlMs}`;
+  const { result } = await upstashFetch<string | null>(url, "POST");
   return result === "OK";
 }
+// -- GET -> GET
 async function redisGet(key: string): Promise<string | null> {
   const url = upstashUrl("get", key);
-  const { result } = await upstashFetch<string | null>(url);
+  const { result } = await upstashFetch<string | null>(url, "GET");
   return result ?? null;
 }
+// -- DEL -> POST
 async function redisDel(key: string): Promise<number> {
   const url = upstashUrl("del", key);
-  const { result } = await upstashFetch<number>(url);
+  const { result } = await upstashFetch<number>(url, "POST");
   return result || 0;
 }
+// -- INCR -> POST
 async function redisIncr(key: string): Promise<number> {
   const url = upstashUrl("incr", key);
-  const { result } = await upstashFetch<number>(url);
+  const { result } = await upstashFetch<number>(url, "POST");
   return Number(result || 0);
 }
+// -- EXPIRE (secondes) -> POST
 async function redisExpire(key: string, seconds: number): Promise<number> {
   const url = upstashUrl("expire", key, seconds);
-  const { result } = await upstashFetch<number>(url);
+  const { result } = await upstashFetch<number>(url, "POST");
   return result || 0;
 }
+// -- PTTL -> GET
 async function redisPTTL(key: string): Promise<number> {
   const url = upstashUrl("pttl", key);
-  const { result } = await upstashFetch<number>(url);
+  const { result } = await upstashFetch<number>(url, "GET");
   return typeof result === "number" ? result : -2;
 }
 
-/** Limiteur fenêtre fixe via INCR/EXPIRE.
- *  Retourne { success, reset } (reset = timestamp ms de fin de fenêtre).
- */
+/** Limiteur fenêtre fixe via INCR/EXPIRE. */
 async function fixedWindowLimit(key: string, limit: number, windowSec: number) {
   const count = await redisIncr(key);
   if (count === 1) await redisExpire(key, windowSec);
@@ -365,3 +366,4 @@ export async function POST(req: NextRequest) {
     return jsonError(500, msg);
   }
 }
+
