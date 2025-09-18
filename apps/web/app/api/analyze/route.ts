@@ -27,7 +27,8 @@ export const revalidate = 0;
 
 /* pacing / verrous mémoire (fallback local) */
 let lastCall = 0;
-const MIN_SPACING_MS = 1800;
+// ⬇️ lissage plus strict pour éviter les 429 OpenAI
+const MIN_SPACING_MS = 2500;
 async function pace() {
   const now = Date.now();
   const wait = Math.max(0, lastCall + MIN_SPACING_MS - now);
@@ -44,9 +45,9 @@ async function withMemLock<T>(fn: () => Promise<T>) {
 
 const lastByIp = new Map<string, number>();
 const lastOrg = { t: 0, count: 0 };
-const SOFT_COOLDOWN_IP_MS = 45_000;
-const SOFT_WINDOW_ORG_MS = 60_000;
-const SOFT_ORG_LIMIT = 8;
+const SOFT_COOLDOWN_IP_MS = 60_000; // 1 req / 60s IP (fallback mémoire)
+const SOFT_WINDOW_ORG_MS = 60_000;  // 1 min
+const SOFT_ORG_LIMIT = 3;           // 3/min org (fallback)
 
 function clientIp(req: NextRequest) {
   return (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || "unknown";
@@ -78,16 +79,13 @@ async function upstashCommand<T = any>(...args: (string | number)[]) {
         Authorization: `Bearer ${process.env.UPSTASH_REDIS_REST_TOKEN}`,
         "content-type": "application/json",
       },
-      // ⚠️ Corps = tableau brut, pas { command: [...] }
-      body: JSON.stringify(args.map(String)),
+      body: JSON.stringify(args.map(String)), // ⚠️ tableau brut
     });
     if (!res.ok) {
       const txt = await res.text().catch(() => "");
       throw new Error(`Upstash HTTP ${res.status}: ${txt}`);
     }
-    const json = await res.json();
-    // Réponse attendue: { result: ... }
-    return json as { result: T };
+    return res.json() as Promise<{ result: T }>;
   } catch (e: any) {
     console.error("[upstash] command failed:", e?.message || e);
     throw e;
@@ -202,26 +200,23 @@ export async function POST(req: NextRequest) {
       timestamps = timestamps.slice(0, 1);
     }
 
-    // ---- Rate-limit IP + ORG
+    // ---- Rate-limit IP + ORG (Upstash si dispo, sinon fallback mémoire)
     const ip = clientIp(req);
 
     if (upstashAvailable()) {
-      // IP: 1 req / 40s
-      const ipKey = `analyze:ip:${ip}`;
-      const ipRes = await fixedWindowLimit(ipKey, 1, 40);
+      // nouveau: IP 1/60s, ORG 3/min
+      const ipRes  = await fixedWindowLimit(`analyze:ip:${ip}`, 1, 60);
       if (!ipRes.success) {
         const retry = Math.max(1, Math.ceil((ipRes.reset - Date.now()) / 1000));
         return jsonError(429, "rate_limit_per_ip", { "retry-after": String(retry) });
       }
-      // ORG: 6 req / min
-      const orgKey = `analyze:org:global`;
-      const orgRes = await fixedWindowLimit(orgKey, 6, 60);
+      const orgRes = await fixedWindowLimit(`analyze:org:global`, 3, 60);
       if (!orgRes.success) {
         const retry = Math.max(1, Math.ceil((orgRes.reset - Date.now()) / 1000));
         return jsonError(429, "rate_limit_org", { "retry-after": String(retry) });
       }
     } else {
-      // Fallback mémoire (mono-instance)
+      // Fallback mémoire
       const now = Date.now();
       const last = lastByIp.get(ip) || 0;
       if (now - last < SOFT_COOLDOWN_IP_MS) {
@@ -268,7 +263,7 @@ export async function POST(req: NextRequest) {
           input: [{ role: "user", content: userParts }],
           temperature: 0.2,
           max_output_tokens: maxOut,
-          text: { format: { type: "json_object" } },
+          text: { format: { type: "json_object" } }, // JSON strict (Responses API)
         }),
       });
 
@@ -296,17 +291,24 @@ export async function POST(req: NextRequest) {
       return resp.json();
     };
 
+    // ⬇️ retry 2× sur 429 (Retry-After ou backoff+jitter)
     async function callWithRetry() {
-      try {
-        return await callOpenAI();
-      } catch (e: any) {
-        const status = e?.status ?? e?.response?.status;
-        const is429 = status === 429 || e?.code === "rate_limit_exceeded" || /rate[_\s-]?limit/i.test(String(e?.message||""));
-        if (!is429) throw e;
-        const raSec = Number.parseInt(e?.retryAfter || "", 10);
-        const waitMs = Number.isFinite(raSec) && raSec > 0 ? raSec * 1000 : (5000 + Math.floor(Math.random() * 3000));
-        await new Promise(r => setTimeout(r, waitMs));
-        return await callOpenAI();
+      let attempt = 0;
+      while (true) {
+        try {
+          return await callOpenAI();
+        } catch (e: any) {
+          const status = e?.status ?? e?.response?.status;
+          const is429 = status === 429 || e?.code === "rate_limit_exceeded" || /rate[_\s-]?limit/i.test(String(e?.message||""));
+          if (!is429 || attempt >= 2) throw e;
+
+          const raSec = Number.parseInt(e?.retryAfter || "", 10);
+          const waitMs = Number.isFinite(raSec) && raSec > 0
+            ? raSec * 1000
+            : (4000 + Math.floor(Math.random() * 4000)) * (attempt + 1);
+          await new Promise(r => setTimeout(r, waitMs));
+          attempt++;
+        }
       }
     }
 
