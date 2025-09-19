@@ -1,5 +1,6 @@
+// apps/web/app/api/videos/sign-upload/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabase-server";
+import { getSupabaseAdmin } from "../../../../lib/supabase-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
