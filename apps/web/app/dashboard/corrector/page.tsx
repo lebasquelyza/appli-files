@@ -1,5 +1,8 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 import { useEffect, useRef, useState } from "react";
 import { PageHeader, Section } from "@/components/ui/Page";
 import { Button } from "@/components/ui/button";
@@ -10,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { supabase } from "@/lib/supabase";
+import { createClient } from "@supabase/supabase-js";
 
 interface AnalysisPoint { time: number; label: string; detail?: string; }
 interface AIAnalysis {
@@ -21,6 +24,14 @@ interface AIAnalysis {
   cues: string[];
   extras?: string[];
   timeline: AnalysisPoint[];
+}
+
+/** Crée le client Supabase navigateur à la demande (pas au top-level => pas de crash au build) */
+function getSupabaseBrowser() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !anon) throw new Error("NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY manquants.");
+  return createClient(url, anon);
 }
 
 function Spinner({ className = "" }: { className?: string }) {
@@ -93,23 +104,29 @@ function CoachAnalyzer() {
       const oneImage = [mosaic]; // on n'envoie qu'une image
       setProgress(18);
 
-      // 1) SIGNED UPLOAD (Supabase)
+      // 1) SIGNED UPLOAD (Supabase) — accepte {url,token,bucket,path} OU {path,token}
       setStatus("Préparation de l’upload…");
       const resSign = await fetch("/api/storage/sign-upload", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          // ton implémentation actuelle : filename/contentType
           filename: file.name,
           contentType: file.type || "application/octet-stream",
+          // si ta route attend plutôt { path }, mets-le côté serveur
         }),
       });
       if (!resSign.ok) throw new Error(`sign-upload: HTTP ${resSign.status} ${await resSign.text()}`);
-      const { path, token } = await resSign.json();
+      const signJson = await resSign.json().catch(() => ({}));
+      const token: string | undefined = signJson?.token;
+      const path: string | undefined = signJson?.path || signJson?.key; // au cas où ta route renomme
       if (!path || !token) throw new Error("sign-upload: réponse invalide (pas de path/token)");
       setProgress(35);
 
-      // 2) UPLOAD SUPABASE
+      // 2) UPLOAD SUPABASE (client navigateur)
       setStatus("Upload de la vidéo…");
+      const supabase = getSupabaseBrowser();
+      // @ts-expect-error: typings supabase-js 2.x acceptent le 4ᵉ param opts
       const { error: upErr } = await supabase
         .storage
         .from("videos")
