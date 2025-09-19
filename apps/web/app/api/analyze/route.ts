@@ -18,43 +18,21 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const revalidate = 0;
 
-/* ============ Utils ============ */
+/* ============ Utils génériques ============ */
 function jsonError(status: number, msg: string, extraHeaders: Record<string, string> = {}) {
   return new NextResponse(JSON.stringify({ error: msg }), {
     status,
     headers: { "content-type": "application/json", "Cache-Control": "no-store, no-transform", ...extraHeaders },
   });
 }
-
 function clientIp(req: NextRequest) {
   return (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || "unknown";
 }
-
 function hashKey(frames: string[], feeling: string, economyMode: boolean) {
   const s = frames.join("|").slice(0, 2000) + "::" + (feeling || "") + "::" + (economyMode ? "e1" : "e0");
   let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
   return h.toString(16);
 }
-
-// Normalise une image en URL valide et “safe”
-function toDataUrl(b64orUrl: string): string {
-  const s = (b64orUrl || "").trim();
-  if (!s) return "";
-  if (/^https?:\/\//i.test(s)) return s; // URL http(s)
-  if (/^data:image\/(png|jpe?g|webp);base64,[a-z0-9+/=\s]+$/i.test(s)) {
-    // normalise : supprime espaces/premières newlines au besoin
-    const [head, payload] = s.split(",", 2);
-    return `${head},${(payload || "").replace(/\s+/g, "")}`;
-  }
-  // base64 nu -> déduire mime
-  const looksPng = s.startsWith("iVBORw0KGgo"); // magic PNG
-  const mime = looksPng ? "image/png" : "image/jpeg";
-  return `data:${mime};base64,${s.replace(/\s+/g, "")}`;
-}
-function isValidImageUrl(u: string): boolean {
-  return /^https?:\/\//i.test(u) || /^data:image\/(png|jpe?g|webp);base64,[a-z0-9+/=]+$/i.test(u);
-}
-
 // Promise timeout qui peut abort via callback
 async function withTimeout<T>(p: Promise<T>, ms: number, onTimeout?: () => void): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -64,7 +42,42 @@ async function withTimeout<T>(p: Promise<T>, ms: number, onTimeout?: () => void)
   });
 }
 
-/* ============ Simple pacing & memory lock (fallback) ============ */
+/* ============ Normalisation/validation d’image ============ */
+// Vérifie et normalise en URL http(s) OU data URL base64 stricte.
+function sanitizeImageInput(raw: string) {
+  const trimmed = (raw || "").trim();
+  if (!trimmed) return { ok: false, reason: "empty" as const };
+
+  // Interdit blob: (URL locale navigateur)
+  if (/^blob:/i.test(trimmed)) return { ok: false, reason: "blob_url" as const };
+
+  // http(s) publique
+  if (/^https?:\/\//i.test(trimmed)) return { ok: true, url: trimmed };
+
+  // Data URL stricte
+  const m = /^data:image\/(png|jpe?g|webp);base64,([a-z0-9+/=\s]+)$/i.exec(trimmed);
+  if (m) {
+    const mime = m[1].toLowerCase().replace("jpg","jpeg");
+    const b64  = m[2].replace(/\s+/g, "");
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(b64)) return { ok: false, reason: "bad_base64" as const };
+    return { ok: true, url: `data:image/${mime};base64,${b64}` };
+  }
+
+  // Base64 nu → devine le mime (png vs jpeg)
+  const looksPng = trimmed.startsWith("iVBORw0KGgo");
+  if (/^[A-Za-z0-9+/]+={0,2}$/.test(trimmed)) {
+    const mime = looksPng ? "image/png" : "image/jpeg";
+    return { ok: true, url: `data:${mime};base64,${trimmed}` };
+  }
+
+  return { ok: false, reason: "unsupported" as const };
+}
+// Log “safe” (aperçu tronqué)
+function shortPreview(u: string) {
+  return u.length <= 100 ? u : `${u.slice(0, 80)}…(${u.length} chars)`;
+}
+
+/* ============ Pacing & lock mémoire (fallback) ============ */
 let lastCall = 0;
 const MIN_SPACING_MS = 500;
 async function pace() {
@@ -80,15 +93,14 @@ async function withMemLock<T>(fn: () => Promise<T>) {
   try { return await fn(); } finally { inFlight--; }
 }
 
-/* ============ In-memory cache anti double-clic ============ */
+/* ============ Cache mémoire anti double-clic ============ */
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const cache = new Map<string, { t: number; json: AIAnalysis }>();
 
-/* ============ Upstash REST (optionnel) ============ */
+/* ============ Upstash Redis (optionnel) ============ */
 function upstashAvailable() {
   return !!process.env.UPSTASH_REDIS_REST_URL && !!process.env.UPSTASH_REDIS_REST_TOKEN;
 }
-/** Envoie une commande Redis à Upstash (body JSON = ["CMD","arg1",...]) */
 async function upstashCommand<T = any>(...args: (string | number)[]) {
   const base = process.env.UPSTASH_REDIS_REST_URL!;
   const controller = new AbortController();
@@ -109,7 +121,6 @@ async function upstashCommand<T = any>(...args: (string | number)[]) {
   });
   return withTimeout(p, 3000, () => controller.abort("upstash_timeout"));
 }
-
 async function redisIncr(key: string): Promise<number> {
   const { result } = await upstashCommand<number>("INCR", key);
   return Number(result || 0);
@@ -130,7 +141,7 @@ async function fixedWindowLimit(key: string, limit: number, windowSec: number) {
   return { success: count <= limit, reset: Date.now() + pttl };
 }
 
-/* ============ GET /api/analyze (diagnostic) ============ */
+/* ============ GET /api/analyze (diagnostic rapide) ============ */
 export async function GET() {
   let imported = false, redisOk = false;
   let error: string | null = null;
@@ -154,7 +165,7 @@ export async function GET() {
   }, { headers: { "Cache-Control": "no-store, no-transform" } });
 }
 
-/* ============ POST /api/analyze — SSE streaming + auto-fallback image_url ============ */
+/* ============ POST /api/analyze — SSE + double fallback OpenAI ============ */
 export async function POST(req: NextRequest) {
   try {
     const ctype = (req.headers.get("content-type") || "").toLowerCase();
@@ -180,13 +191,14 @@ export async function POST(req: NextRequest) {
       timestamps = timestamps.slice(0, 1);
     }
 
-    // Normaliser l'image
-    const img = toDataUrl(frames[0]);
-    if (!img || !isValidImageUrl(img)) {
-      return jsonError(400, "Format d'image non supporté. Utilisez une URL http(s) ou un data URL base64.");
+    // ---- Normaliser & valider l'image
+    const imgNorm = sanitizeImageInput(frames[0]);
+    if (!imgNorm.ok) {
+      return jsonError(400, `Format d'image invalide (${imgNorm.reason}). Utilisez https://... ou data:image/...;base64,...`);
     }
+    console.log("[analyze] image_url:", shortPreview(imgNorm.url));
 
-    // ---- Rate-limit IP + ORG (Upstash si dispo, sinon fallback mémoire)
+    // ---- Rate-limit IP + ORG
     const ip = clientIp(req);
     const SOFT_COOLDOWN_IP_MS = 60_000;
     const SOFT_WINDOW_ORG_MS = 60_000;
@@ -221,81 +233,93 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ---- Cache
+    // ---- Cache mémoire
     const key = hashKey(frames, feeling || "", economyMode);
     const hit = cache.get(key);
     if (hit && Date.now() - hit.t < CACHE_TTL_MS) {
       return NextResponse.json(hit.json, { headers: { "Cache-Control": "no-store, no-transform" } });
     }
 
-    // ---- Construire l'instruction
+    // ---- Instruction commune
     const instruction =
       'Analyse d’une image mosaïque issue d’une vidéo de musculation. ' +
       'Réponds STRICTEMENT en JSON: {"exercise":string,"confidence":number,"overall":string,"muscles":string[],"cues":string[],"extras":string[],"timeline":[{"time":number,"label":string,"detail"?:string}]}. ' +
       'Limite à 3 muscles, 3 cues max, timeline 2 points pertinents.';
 
-    // Contenu commun
-    const commonParts: any[] = [{ type: "input_text", text: instruction }];
-    if (feeling) commonParts.push({ type: "input_text", text: `Ressenti: ${feeling}` });
-    if (fileUrl) commonParts.push({ type: "input_text", text: `URL vidéo: ${fileUrl}` });
-    if (typeof timestamps[0] === "number") commonParts.push({ type: "input_text", text: `repere=${Math.round(timestamps[0])}s` });
+    const partsCommon: any[] = [{ type: "input_text", text: instruction }];
+    if (feeling) partsCommon.push({ type: "input_text", text: `Ressenti: ${feeling}` });
+    if (fileUrl) partsCommon.push({ type: "input_text", text: `URL vidéo: ${fileUrl}` });
+    if (typeof timestamps[0] === "number") partsCommon.push({ type: "input_text", text: `repere=${Math.round(timestamps[0])}s` });
 
-    const model = "gpt-4o-mini";
-    const maxOut = 60;
+    const modelResponses = "gpt-4o-mini"; // 1er essai
+    const modelChat = "gpt-4o";           // fallback plus tolérant
 
-    // ---- SSE Response (keep-alive heartbeats + final result)
+    // ---- SSE (heartbeats + result/error)
     const { readable, writable } = new TransformStream();
     const writer = writable.getWriter();
     const encoder = new TextEncoder();
-
     const writeSSE = (event: string, data: any) =>
       writer.write(encoder.encode(`event: ${event}\ndata: ${typeof data === "string" ? data : JSON.stringify(data)}\n\n`));
-    const writeComment = (comment: string) =>
-      writer.write(encoder.encode(`: ${comment}\n\n`)); // heartbeat/comment line
-
+    const writeComment = (comment: string) => writer.write(encoder.encode(`: ${comment}\n\n`));
     const hb = setInterval(() => writeComment("heartbeat"), 1000);
 
-    // ---- Appel OpenAI avec auto-fallback schéma image_url
-    async function callOpenAI(imageAs: "string" | "object") {
+    // ---- Appels OpenAI (Responses → fallback Chat)
+    async function callResponsesAPI(imgUrl: string) {
       const controller = new AbortController();
-      const parts =
-        imageAs === "string"
-          ? [...commonParts, { type: "input_image", image_url: img }]
-          : [...commonParts, { type: "input_image", image_url: { url: img } }];
-
       const p = fetch("https://api.openai.com/v1/responses", {
         method: "POST",
         headers: { "content-type": "application/json", Authorization: `Bearer ${process.env.OPEN_API_KEY || process.env.OPENAI_API_KEY}` },
         body: JSON.stringify({
-          model,
-          input: [{ role: "user", content: parts }],
+          model: modelResponses,
+          input: [{ role: "user", content: [...partsCommon, { type: "input_image", image_url: imgUrl }] }],
           temperature: 0.2,
-          max_output_tokens: maxOut,
-          text: { format: { type: "json_object" } }, // ok pour Responses API
+          max_output_tokens: 60,
+          text: { format: { type: "json_object" } },
         }),
         signal: controller.signal,
       }).then(async (resp) => {
         const txt = await resp.text().catch(() => "");
         if (!resp.ok) {
-          let parsed: any = null;
-          try { parsed = JSON.parse(txt); } catch {}
-          const err: any = new Error(parsed?.error?.message || txt || `OpenAI HTTP ${resp.status}`);
-          err.status = resp.status;
-          err.retryAfter = resp.headers.get("retry-after") || "";
-          err.code = parsed?.error?.code;
-          err.details = parsed?.error ?? txt;
+          let parsed:any=null; try { parsed = JSON.parse(txt);} catch {}
+          const err:any = new Error(parsed?.error?.message || txt || `OpenAI HTTP ${resp.status}`);
+          err.status = resp.status; err.details = parsed?.error ?? txt; err.retryAfter = resp.headers.get("retry-after") || "";
           throw err;
         }
-        try {
-          return JSON.parse(txt);
-        } catch {
-          const err: any = new Error("Réponse OpenAI non JSON.");
-          err.status = 502;
-          err.details = txt?.slice?.(0, 500);
-          throw err;
-        }
+        return JSON.parse(txt);
       });
-
+      return withTimeout(p, 20_000, () => controller.abort("openai_timeout"));
+    }
+    async function callChatAPI(imgUrl: string) {
+      const controller = new AbortController();
+      const p = fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "content-type": "application/json", Authorization: `Bearer ${process.env.OPEN_API_KEY || process.env.OPENAI_API_KEY}` },
+        body: JSON.stringify({
+          model: modelChat,
+          temperature: 0.2,
+          max_tokens: 200,
+          messages: [
+            { role: "system", content: "Réponds STRICTEMENT en JSON." },
+            {
+              role: "user",
+              content: [
+                { type: "text", text: partsCommon.filter((p:any)=>p.type==="input_text").map((p:any)=>p.text).join("\n") },
+                { type: "image_url", image_url: { url: imgUrl } }
+              ]
+            }
+          ]
+        }),
+        signal: controller.signal,
+      }).then(async (resp) => {
+        const txt = await resp.text().catch(() => "");
+        if (!resp.ok) {
+          let parsed:any=null; try { parsed = JSON.parse(txt);} catch {}
+          const err:any = new Error(parsed?.error?.message || txt || `OpenAI HTTP ${resp.status}`);
+          err.status = resp.status; err.details = parsed?.error ?? txt; err.retryAfter = resp.headers.get("retry-after") || "";
+          throw err;
+        }
+        return JSON.parse(txt);
+      });
       return withTimeout(p, 20_000, () => controller.abort("openai_timeout"));
     }
 
@@ -303,26 +327,32 @@ export async function POST(req: NextRequest) {
       try {
         await pace();
 
-        // 1) Essai au format “string”
+        // 1) Responses API (image_url string)
         let json: any;
         try {
-          json = await callOpenAI("string");
+          json = await callResponsesAPI(imgNorm.url);
         } catch (e: any) {
-          const patternErr = /did not match the expected pattern/i.test(String(e?.details || e?.message || ""));
-          const badParam = /invalid.*image_url|unsupported parameter|bad request/i.test(String(e?.details || e?.message || ""));
-          if (e?.status === 400 && (patternErr || badParam)) {
-            // 2) Fallback au format “object”
-            json = await callOpenAI("object");
+          const msg = String(e?.details || e?.message || "");
+          const patternErr = /did not match the expected pattern/i.test(msg);
+          const badImage   = /image[_\s-]?url|invalid|unsupported/i.test(msg);
+          if (e?.status === 400 && (patternErr || badImage)) {
+            // 2) Fallback Chat Completions (image_url: { url })
+            json = await callChatAPI(imgNorm.url);
           } else {
             throw e;
           }
         }
 
+        // Extraire le texte (selon endpoint)
         const text: string =
-          json?.output_text || json?.content?.[0]?.text || json?.choices?.[0]?.message?.content || "";
+          json?.output_text ||
+          json?.content?.[0]?.text ||
+          json?.choices?.[0]?.message?.content ||
+          "";
 
         if (!text) throw Object.assign(new Error("Réponse vide du modèle."), { status: 502 });
 
+        // Parser en JSON strict
         let parsed: AIAnalysis | null = null;
         try { parsed = JSON.parse(text); }
         catch {
@@ -334,15 +364,17 @@ export async function POST(req: NextRequest) {
         }
         parsed.muscles ||= []; parsed.cues ||= []; parsed.extras ||= []; parsed.timeline ||= [];
 
+        // Cache
         cache.set(key, { t: Date.now(), json: parsed });
 
+        // Envoi résultat final
         await writeSSE("result", parsed);
       } catch (e: any) {
         const status = e?.status ?? e?.response?.status;
         if (status === 429) {
           await writeSSE("error", { code: "rate_limit_exceeded", retryAfter: e?.retryAfter || "20", details: e?.details || String(e?.message || e) });
         } else if (status === 400 && /image|pattern|url/i.test(String(e?.details || e?.message || ""))) {
-          await writeSSE("error", { code: "bad_image_url", message: "Image invalide (URL/data URL attendu).", details: e?.details || String(e?.message || e) });
+          await writeSSE("error", { code: "bad_image_url", message: "Image invalide (URL http(s) ou data URL base64 attendu).", details: e?.details || String(e?.message || e) });
         } else if (status === 504 || /timeout|gateway_timeout/i.test(String(e?.message || e))) {
           await writeSSE("error", { code: "gateway_timeout", retryAfter: "12" });
         } else {
