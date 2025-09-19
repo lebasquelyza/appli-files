@@ -1,8 +1,5 @@
 "use client";
 
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
-
 import { useEffect, useRef, useState } from "react";
 import { PageHeader, Section } from "@/components/ui/Page";
 import { Button } from "@/components/ui/button";
@@ -26,7 +23,7 @@ interface AIAnalysis {
   timeline: AnalysisPoint[];
 }
 
-/** Crée le client Supabase navigateur à la demande (pas au top-level => pas de crash au build) */
+/** Client Supabase navigateur créé à la demande (aucune instanciation au build) */
 function getSupabaseBrowser() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
