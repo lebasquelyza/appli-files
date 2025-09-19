@@ -25,14 +25,25 @@ function jsonError(status: number, msg: string, extraHeaders: Record<string, str
     headers: { "content-type": "application/json", "Cache-Control": "no-store, no-transform", ...extraHeaders },
   });
 }
+
+/** Détection IP fiable sur Netlify + fallbacks */
 function clientIp(req: NextRequest) {
-  return (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || "unknown";
+  const nf = req.headers.get("x-nf-client-connection-ip");
+  if (nf) return nf.trim();
+  const xff = req.headers.get("x-forwarded-for");
+  if (xff) {
+    const ip = xff.split(",")[0]?.trim();
+    if (ip) return ip;
+  }
+  return req.headers.get("x-real-ip")?.trim() || "unknown";
 }
+
 function hashKey(frames: string[], feeling: string, economyMode: boolean) {
   const s = frames.join("|").slice(0, 2000) + "::" + (feeling || "") + "::" + (economyMode ? "e1" : "e0");
   let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
   return h.toString(16);
 }
+
 // Promise timeout qui peut abort via callback
 async function withTimeout<T>(p: Promise<T>, ms: number, onTimeout?: () => void): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -61,8 +72,8 @@ function sanitizeImageInput(raw: string): SanitizeResult {
   // Data URL stricte
   const m = /^data:image\/(png|jpe?g|webp);base64,([a-z0-9+/=\s]+)$/i.exec(trimmed);
   if (m) {
-    const mime = m[1].toLowerCase().replace("jpg","jpeg");
-    const b64  = m[2].replace(/\s+/g, "");
+    const mime = m[1].toLowerCase().replace("jpg", "jpeg");
+    const b64 = m[2].replace(/\s+/g, "");
     if (!/^[A-Za-z0-9+/]+={0,2}$/.test(b64)) return { ok: false, reason: "bad_base64" };
     return { ok: true, url: `data:image/${mime};base64,${b64}` };
   }
@@ -76,6 +87,7 @@ function sanitizeImageInput(raw: string): SanitizeResult {
 
   return { ok: false, reason: "unsupported" };
 }
+
 // Log “safe” (aperçu tronqué)
 function shortPreview(u: string) {
   return u.length <= 100 ? u : `${u.slice(0, 80)}…(${u.length} chars)`;
@@ -169,7 +181,7 @@ export async function GET() {
   }, { headers: { "Cache-Control": "no-store, no-transform" } });
 }
 
-/* ============ POST /api/analyze — SSE + double fallback OpenAI ============ */
+/* ============ POST /api/analyze — SSE + double fallback + RL configurable ============ */
 export async function POST(req: NextRequest) {
   try {
     const ctype = (req.headers.get("content-type") || "").toLowerCase();
@@ -200,41 +212,49 @@ export async function POST(req: NextRequest) {
     if (!imgNorm.ok) {
       return jsonError(400, `Format d'image invalide (${imgNorm.reason}). Utilisez https://... ou data:image/...;base64,...`);
     }
-    const imageUrl = imgNorm.url; // <- string garanti
+    const imageUrl = imgNorm.url;
     console.log("[analyze] image_url:", shortPreview(imageUrl));
 
-    // ---- Rate-limit IP + ORG
-    const ip = clientIp(req);
-    const SOFT_COOLDOWN_IP_MS = 60_000;
-    const SOFT_WINDOW_ORG_MS = 60_000;
-    const SOFT_ORG_LIMIT = 3;
-    const lastByIp = (global as any).__analyze_lastByIp ?? ((global as any).__analyze_lastByIp = new Map<string, number>());
-    const lastOrg = (global as any).__analyze_lastOrg ?? ((global as any).__analyze_lastOrg = { t: 0, count: 0 });
+    // ---- Rate-limit (configurable) : by-pass en dev
+    const isProd = process.env.NODE_ENV === "production";
+    const RL_IP_LIMIT   = Number(process.env.ANALYZE_RL_IP_LIMIT   || 3);   // 3 req
+    const RL_IP_WINDOW  = Number(process.env.ANALYZE_RL_IP_WINDOW  || 60);  // / 60 s
+    const RL_ORG_LIMIT  = Number(process.env.ANALYZE_RL_ORG_LIMIT  || 10);  // 10 req
+    const RL_ORG_WINDOW = Number(process.env.ANALYZE_RL_ORG_WINDOW || 60);  // / 60 s
 
-    if (upstashAvailable()) {
-      const ipRes  = await fixedWindowLimit(`analyze:ip:${ip}`, 1, 60);
-      if (!ipRes.success) {
-        const retry = Math.max(1, Math.ceil((ipRes.reset - Date.now()) / 1000));
-        return jsonError(429, "rate_limit_per_ip", { "retry-after": String(retry) });
-      }
-      const orgRes = await fixedWindowLimit(`analyze:org:global`, 3, 60);
-      if (!orgRes.success) {
-        const retry = Math.max(1, Math.ceil((orgRes.reset - Date.now()) / 1000));
-        return jsonError(429, "rate_limit_org", { "retry-after": String(retry) });
-      }
-    } else {
-      const now = Date.now();
-      const last = lastByIp.get(ip) || 0;
-      if (now - last < SOFT_COOLDOWN_IP_MS) {
-        const retry = Math.ceil((SOFT_COOLDOWN_IP_MS - (now - last)) / 1000);
-        return jsonError(429, "rate_limit_per_ip", { "retry-after": String(retry) });
-      }
-      lastByIp.set(ip, now);
-      if (now - lastOrg.t > SOFT_WINDOW_ORG_MS) { lastOrg.t = now; lastOrg.count = 0; }
-      lastOrg.count++;
-      if (lastOrg.count > SOFT_ORG_LIMIT) {
-        const retry = Math.ceil((lastOrg.t + SOFT_WINDOW_ORG_MS - now) / 1000);
-        return jsonError(429, "rate_limit_org", { "retry-after": String(retry) });
+    // (Option) si UserID dispo côté front, remplacez ici
+    const userId = (req.headers.get("x-user-id") || "").trim();
+    const rlKeyIp  = userId ? `analyze:user:${userId}` : `analyze:ip:${clientIp(req)}`;
+    const rlKeyOrg = `analyze:org:global`;
+
+    if (isProd) {
+      if (upstashAvailable()) {
+        const ipRes  = await fixedWindowLimit(rlKeyIp, RL_IP_LIMIT, RL_IP_WINDOW);
+        if (!ipRes.success) {
+          const retry = Math.max(1, Math.ceil((ipRes.reset - Date.now()) / 1000));
+          return jsonError(429, "rate_limit_per_ip", { "retry-after": String(retry) });
+        }
+        const orgRes = await fixedWindowLimit(rlKeyOrg, RL_ORG_LIMIT, RL_ORG_WINDOW);
+        if (!orgRes.success) {
+          const retry = Math.max(1, Math.ceil((orgRes.reset - Date.now()) / 1000));
+          return jsonError(429, "rate_limit_org", { "retry-after": String(retry) });
+        }
+      } else {
+        // Fallback mémoire si Upstash absent
+        const now = Date.now();
+        const SOFT_WINDOW = RL_IP_WINDOW * 1000;
+        const SOFT_LIMIT  = RL_IP_LIMIT;
+        const key = rlKeyIp;
+        const lastByKey: Map<string, number[]> = (global as any).__analyze_rl || ((global as any).__analyze_rl = new Map());
+        const arr = lastByKey.get(key) || [];
+        const arr2 = arr.filter((t) => now - t < SOFT_WINDOW);
+        arr2.push(now);
+        lastByKey.set(key, arr2);
+        if (arr2.length > SOFT_LIMIT) {
+          const retryMs = SOFT_WINDOW - (now - arr2[0]);
+          const retry = Math.max(1, Math.ceil(retryMs / 1000));
+          return jsonError(429, "rate_limit_per_ip", { "retry-after": String(retry) });
+        }
       }
     }
 
@@ -294,6 +314,7 @@ export async function POST(req: NextRequest) {
       });
       return withTimeout(p, 20_000, () => controller.abort("openai_timeout"));
     }
+
     async function callChatAPI(imgUrl: string) {
       const controller = new AbortController();
       const p = fetch("https://api.openai.com/v1/chat/completions", {
