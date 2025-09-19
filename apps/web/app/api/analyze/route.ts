@@ -13,66 +13,62 @@ type AIAnalysis = {
   timeline: AnalysisPoint[];
 };
 
-/* ============ Helpers ============ */
-function jsonError(status: number, msg: string, extraHeaders: Record<string, string> = {}) {
-  return new NextResponse(JSON.stringify({ error: msg }), {
-    status,
-    headers: { "content-type": "application/json", ...extraHeaders },
-  });
-}
-
+/* ============ Config Next ============ */
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const revalidate = 0;
 
-/** Borne une promesse avec un timeout. (Si c'est un fetch, crée-la avec AbortController et passe signal) */
-async function withTimeout<T>(p: Promise<T>, ms: number, _label = "timeout"): Promise<T> {
-  const ac = new AbortController();
-  const t = setTimeout(() => ac.abort(_label), ms);
-  try { return await p; }
-  finally { clearTimeout(t); }
+/* ============ Utils ============ */
+function jsonError(status: number, msg: string, extraHeaders: Record<string, string> = {}) {
+  return new NextResponse(JSON.stringify({ error: msg }), {
+    status,
+    headers: { "content-type": "application/json", "Cache-Control": "no-store, no-transform", ...extraHeaders },
+  });
 }
-
-/* pacing / verrous mémoire (fallback local) */
-let lastCall = 0;
-const MIN_SPACING_MS = 2000;
-async function pace() {
-  const now = Date.now();
-  const wait = Math.max(0, lastCall + MIN_SPACING_MS - now);
-  if (wait) await new Promise((r) => setTimeout(r, wait));
-  lastCall = Date.now();
-}
-
-let inFlight = 0;
-async function withMemLock<T>(fn: () => Promise<T>) {
-  while (inFlight >= 1) await new Promise((r) => setTimeout(r, 50));
-  inFlight++;
-  try { return await fn(); } finally { inFlight--; }
-}
-
-const lastByIp = new Map<string, number>();
-const lastOrg = { t: 0, count: 0 };
-const SOFT_COOLDOWN_IP_MS = 60_000;
-const SOFT_WINDOW_ORG_MS = 60_000;
-const SOFT_ORG_LIMIT = 3;
 
 function clientIp(req: NextRequest) {
   return (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || "unknown";
 }
 
-const CACHE_TTL_MS = 5 * 60 * 1000;
-const cache = new Map<string, { t: number; json: AIAnalysis }>();
 function hashKey(frames: string[], feeling: string, economyMode: boolean) {
   const s = frames.join("|").slice(0, 2000) + "::" + (feeling || "") + "::" + (economyMode ? "e1" : "e0");
   let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
   return h.toString(16);
 }
 
-/* ============ Upstash REST (POST JSON = tableau brut) ============ */
+// Promise timeout that truly aborts a fetch via provided AbortController.
+async function withTimeout<T>(p: Promise<T>, ms: number, onTimeout?: () => void): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => { try { onTimeout?.(); } catch {} ; reject(new Error("timeout")); }, ms);
+    p.then((v) => { clearTimeout(t); resolve(v); })
+     .catch((e) => { clearTimeout(t); reject(e); });
+  });
+}
+
+/* ============ Simple pacing & memory lock (fallback) ============ */
+let lastCall = 0;
+const MIN_SPACING_MS = 500;
+async function pace() {
+  const now = Date.now();
+  const wait = Math.max(0, lastCall + MIN_SPACING_MS - now);
+  if (wait) await new Promise((r) => setTimeout(r, wait));
+  lastCall = Date.now();
+}
+let inFlight = 0;
+async function withMemLock<T>(fn: () => Promise<T>) {
+  while (inFlight >= 1) await new Promise((r) => setTimeout(r, 40));
+  inFlight++;
+  try { return await fn(); } finally { inFlight--; }
+}
+
+/* ============ In-memory cache anti double-clic ============ */
+const CACHE_TTL_MS = 5 * 60 * 1000;
+const cache = new Map<string, { t: number; json: AIAnalysis }>();
+
+/* ============ Upstash REST (optionnel) ============ */
 function upstashAvailable() {
   return !!process.env.UPSTASH_REDIS_REST_URL && !!process.env.UPSTASH_REDIS_REST_TOKEN;
 }
-
 /** Envoie une commande Redis à Upstash (body JSON = ["CMD","arg1",...]) */
 async function upstashCommand<T = any>(...args: (string | number)[]) {
   const base = process.env.UPSTASH_REDIS_REST_URL!;
@@ -83,7 +79,7 @@ async function upstashCommand<T = any>(...args: (string | number)[]) {
       Authorization: `Bearer ${process.env.UPSTASH_REDIS_REST_TOKEN}`,
       "content-type": "application/json",
     },
-    body: JSON.stringify(args.map(String)), // tableau brut
+    body: JSON.stringify(args.map(String)),
     signal: controller.signal,
   }).then(async (res) => {
     if (!res.ok) {
@@ -93,22 +89,9 @@ async function upstashCommand<T = any>(...args: (string | number)[]) {
     return res.json() as Promise<{ result: T }>;
   });
   // Upstash doit répondre très vite
-  return withTimeout(p, 3000, "upstash");
+  return withTimeout(p, 3000, () => controller.abort("upstash_timeout"));
 }
 
-// Wrappers
-async function redisSetNXPX(key: string, value: string, ttlMs: number): Promise<boolean> {
-  const { result } = await upstashCommand<string>("SET", key, value, "PX", ttlMs, "NX");
-  return result === "OK";
-}
-async function redisGet(key: string): Promise<string | null> {
-  const { result } = await upstashCommand<string | null>("GET", key);
-  return result ?? null;
-}
-async function redisDel(key: string): Promise<number> {
-  const { result } = await upstashCommand<number>("DEL", key);
-  return Number(result || 0);
-}
 async function redisIncr(key: string): Promise<number> {
   const { result } = await upstashCommand<number>("INCR", key);
   return Number(result || 0);
@@ -121,30 +104,12 @@ async function redisPTTL(key: string): Promise<number> {
   const { result } = await upstashCommand<number>("PTTL", key);
   return typeof result === "number" ? result : -2;
 }
-
-/** Limiteur fenêtre fixe via INCR/EXPIRE. */
 async function fixedWindowLimit(key: string, limit: number, windowSec: number) {
   const count = await redisIncr(key);
   if (count === 1) await redisExpire(key, windowSec);
   let pttl = await redisPTTL(key);
   if (pttl < 0) pttl = windowSec * 1000;
   return { success: count <= limit, reset: Date.now() + pttl };
-}
-
-/** Lock distribué via SET NX PX (timeouts courts). */
-async function withRedisLock<T>(key: string, ttlMs: number, timeoutMs: number, fn: () => Promise<T>): Promise<T> {
-  const start = Date.now();
-  while (true) {
-    const ok = await redisSetNXPX(key, "1", ttlMs);
-    if (ok) break;
-    if (Date.now() - start > timeoutMs) {
-      const err: any = new Error("queue_timeout");
-      err.status = 429; err.retryAfter = "10";
-      throw err;
-    }
-    await new Promise(r => setTimeout(r, 120 + Math.floor(Math.random() * 100)));
-  }
-  try { return await fn(); } finally { await redisDel(key).catch(()=>{}); }
 }
 
 /* ============ GET /api/analyze (diagnostic) ============ */
@@ -154,9 +119,9 @@ export async function GET() {
   const env = upstashAvailable();
   if (env) {
     try {
-      await redisSetNXPX("diag:ping", "1", 3000);
-      const v = await redisGet("diag:ping");
-      redisOk = v !== null;
+      await upstashCommand("SET", "diag:ping", "1", "PX", 3000);
+      const res = await upstashCommand<string | null>("GET", "diag:ping");
+      redisOk = (res?.result ?? null) !== null;
       imported = true;
     } catch (e: any) {
       error = e?.message || String(e);
@@ -168,16 +133,19 @@ export async function GET() {
     upstash: { env, imported, redisOk, error },
     openaiKey: hasOpenAI,
     pacingMs: MIN_SPACING_MS,
-    ipCooldownFallbackMs: SOFT_COOLDOWN_IP_MS,
-  });
+  }, { headers: { "Cache-Control": "no-store, no-transform" } });
 }
 
-/* ============ POST /api/analyze ============ */
+/* ============ POST /api/analyze — SSE streaming ============ */
+/**
+ * Client-side example:
+ * const es = new EventSource('/api/analyze', { withCredentials: false });
+ * es.addEventListener('heartbeat', () => {/* keep-alive *\/});
+ * es.addEventListener('result', (e) => { const data = JSON.parse(e.data); ...; es.close(); });
+ * es.addEventListener('error', (e) => { console.error(e); es.close(); });
+ * fetch('/api/analyze', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({...}) });
+ */
 export async function POST(req: NextRequest) {
-  // Timeout global (9s) — en-dessous du timeout Netlify / proxy
-  const abort = new AbortController();
-  const globalTimeout = setTimeout(() => abort.abort("route_timeout"), 9_000);
-
   try {
     const ctype = (req.headers.get("content-type") || "").toLowerCase();
     if (!ctype.includes("application/json")) {
@@ -204,6 +172,12 @@ export async function POST(req: NextRequest) {
 
     // ---- Rate-limit IP + ORG (Upstash si dispo, sinon fallback mémoire)
     const ip = clientIp(req);
+    const SOFT_COOLDOWN_IP_MS = 60_000;
+    const SOFT_WINDOW_ORG_MS = 60_000;
+    const SOFT_ORG_LIMIT = 3;
+    const lastByIp = (global as any).__analyze_lastByIp ?? ((global as any).__analyze_lastByIp = new Map<string, number>());
+    const lastOrg = (global as any).__analyze_lastOrg ?? ((global as any).__analyze_lastOrg = { t: 0, count: 0 });
+
     if (upstashAvailable()) {
       const ipRes  = await fixedWindowLimit(`analyze:ip:${ip}`, 1, 60);
       if (!ipRes.success) {
@@ -231,14 +205,15 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ---- Cache anti double-clic
+    // ---- Cache
     const key = hashKey(frames, feeling || "", economyMode);
-    const cached = cache.get(key);
-    if (cached && Date.now() - cached.t < CACHE_TTL_MS) {
-      return NextResponse.json(cached.json);
+    const hit = cache.get(key);
+    if (hit && Date.now() - hit.t < CACHE_TTL_MS) {
+      // Retour JSON normal si déjà en cache (pas besoin de SSE)
+      return NextResponse.json(hit.json, { headers: { "Cache-Control": "no-store, no-transform" } });
     }
 
-    // Prompt compact
+    // ---- Construire l'instruction
     const instruction =
       'Analyse d’une image mosaïque issue d’une vidéo de musculation. ' +
       'Réponds STRICTEMENT en JSON: {"exercise":string,"confidence":number,"overall":string,"muscles":string[],"cues":string[],"extras":string[],"timeline":[{"time":number,"label":string,"detail"?:string}]}. ' +
@@ -250,117 +225,108 @@ export async function POST(req: NextRequest) {
     userParts.push({ type: "input_image", image_url: frames[0] });
     if (typeof timestamps[0] === "number") userParts.push({ type: "input_text", text: `repere=${Math.round(timestamps[0])}s` });
 
+    const model = "gpt-4o-mini";
     const maxOut = 60;
 
-    const callOpenAI = async () => {
-      await pace();
+    // ---- SSE Response (keep-alive heartbeats + final result)
+    const { readable, writable } = new TransformStream();
+    const writer = writable.getWriter();
+    const encoder = new TextEncoder();
 
-      // fetch OpenAI avec timeout court (7s)
-      const controller = new AbortController();
-      const p = fetch("https://api.openai.com/v1/responses", {
-        method: "POST",
-        headers: { "content-type": "application/json", Authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify({
-          model: "gpt-4o-mini",
-          input: [{ role: "user", content: userParts }],
-          temperature: 0.2,
-          max_output_tokens: maxOut,
-          text: { format: { type: "json_object" } },
-        }),
-        signal: controller.signal,
-      }).then(async (resp) => {
-        if (!resp.ok) {
-          const txt = await resp.text().catch(() => "");
-          const retryAfter = resp.headers.get("retry-after") || "";
-          const err: any = new Error(`OpenAI error ${resp.status}: ${txt}`);
-          err.status = resp.status;
-          err.retryAfter = retryAfter;
-          try {
-            const parsed = JSON.parse(txt);
-            err.code = parsed?.error?.code;
-            err.message = parsed?.error?.message || err.message;
-          } catch {}
-          throw err;
+    const writeSSE = (event: string, data: any) =>
+      writer.write(encoder.encode(`event: ${event}\ndata: ${typeof data === "string" ? data : JSON.stringify(data)}\n\n`));
+    const writeComment = (comment: string) =>
+      writer.write(encoder.encode(`: ${comment}\n\n`)); // comment line (heartbeat)
+
+    // Heartbeat every 1s to keep Netlify/LB connection alive
+    const hb = setInterval(() => writeComment("heartbeat"), 1000);
+
+    // Main job in background of this request (but same response stream)
+    (async () => {
+      try {
+        await pace();
+
+        const controller = new AbortController();
+
+        // Appel OpenAI non-streamé (simple) mais avec timeout ample (< Netlify 30s)
+        const openAiPromise = fetch("https://api.openai.com/v1/responses", {
+          method: "POST",
+          headers: { "content-type": "application/json", Authorization: `Bearer ${process.env.OPEN_API_KEY || process.env.OPENAI_API_KEY}` },
+          body: JSON.stringify({
+            model,
+            input: [{ role: "user", content: userParts }],
+            temperature: 0.2,
+            max_output_tokens: maxOut,
+            text: { format: { type: "json_object" } },
+          }),
+          signal: controller.signal,
+        }).then(async (resp) => {
+          if (!resp.ok) {
+            const txt = await resp.text().catch(() => "");
+            const err: any = new Error(`OpenAI error ${resp.status}: ${txt}`);
+            err.status = resp.status;
+            err.retryAfter = resp.headers.get("retry-after") || "";
+            try { err.code = JSON.parse(txt)?.error?.code; } catch {}
+            throw err;
+          }
+          return resp.json();
+        });
+
+        // 20s max pour l'appel modèle (garde marge vs. Netlify)
+        const json = await withTimeout(openAiPromise, 20_000, () => controller.abort("openai_timeout"));
+
+        const text: string =
+          json?.output_text || json?.content?.[0]?.text || json?.choices?.[0]?.message?.content || "";
+
+        if (!text) throw Object.assign(new Error("Réponse vide du modèle."), { status: 502 });
+
+        // Parsing robuste
+        let parsed: AIAnalysis | null = null;
+        try { parsed = JSON.parse(text); }
+        catch {
+          const m = text.match(/\{[\s\S]*\}/);
+          if (m) { try { parsed = JSON.parse(m[0]); } catch {}
+          }
         }
-        return resp.json();
-      });
-
-      return withTimeout(p, 7_000, "openai");
-    };
-
-    // retry 2× sur 429 (Retry-After ou backoff+jitter)
-    async function callWithRetry() {
-      let attempt = 0;
-      while (true) {
-        try {
-          return await callOpenAI();
-        } catch (e: any) {
-          const status = e?.status ?? e?.response?.status;
-          const is429 = status === 429 || e?.code === "rate_limit_exceeded" || /rate[_\s-]?limit/i.test(String(e?.message||""));
-          const isAbort = e?.name === "AbortError" || /openai/i.test(String(e)) && /timeout/i.test(String(e));
-          if (isAbort) throw Object.assign(new Error("gateway_timeout"), { status: 504, retryAfter: "12" });
-          if (!is429 || attempt >= 2) throw e;
-
-          const raSec = Number.parseInt(e?.retryAfter || "", 10);
-          const waitMs = Number.isFinite(raSec) && raSec > 0
-            ? raSec * 1000
-            : (4000 + Math.floor(Math.random() * 4000)) * (attempt + 1);
-          await new Promise(r => setTimeout(r, waitMs));
-          attempt++;
+        if (!parsed || typeof parsed !== "object") {
+          throw Object.assign(new Error("Impossible de parser la réponse JSON."), { status: 502 });
         }
+        parsed.muscles ||= []; parsed.cues ||= []; parsed.extras ||= []; parsed.timeline ||= [];
+
+        // Cache
+        cache.set(key, { t: Date.now(), json: parsed });
+
+        // Send final result event
+        await writeSSE("result", parsed);
+      } catch (e: any) {
+        const status = e?.status ?? e?.response?.status;
+        if (status === 429) {
+          await writeSSE("error", { code: "rate_limit_exceeded", retryAfter: e?.retryAfter || "20" });
+        } else if (status === 504 || /timeout|gateway_timeout/i.test(String(e?.message || e))) {
+          await writeSSE("error", { code: "gateway_timeout", retryAfter: "12" });
+        } else {
+          await writeSSE("error", { code: "internal_error", message: String(e?.message || e) });
+        }
+      } finally {
+        clearInterval(hb);
+        try { await writer.close(); } catch {}
       }
-    }
+    })();
 
-    // ---- Lock distribué (Upstash) ou lock mémoire — TTL/patience courts
-    let json: any;
-    if (upstashAvailable()) {
-      const lockKey = "oai:gpt4o-mini:lock";
-      const ttlMs = 3000;
-      const timeout = 4000;
-      json = await withRedisLock(lockKey, ttlMs, timeout, async () => {
-        return await callWithRetry();
-      });
-    } else {
-      json = await withMemLock(callWithRetry);
-    }
+    return new Response(readable, {
+      status: 200,
+      headers: {
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-store, no-transform",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no" // helpful on some proxies
+      },
+    });
 
-    const text: string =
-      json?.output_text || json?.content?.[0]?.text || json?.choices?.[0]?.message?.content || "";
-
-    if (!text) return jsonError(502, "Réponse vide du modèle.");
-
-    let parsed: AIAnalysis | null = null;
-    try { parsed = JSON.parse(text); }
-    catch { const m = text.match(/\{[\s\S]*\}$/); if (m) parsed = JSON.parse(m[0]); }
-    if (!parsed) return jsonError(502, "Impossible de parser la réponse JSON.");
-
-    parsed.muscles ||= []; parsed.cues ||= []; parsed.extras ||= []; parsed.timeline ||= [];
-
-    cache.set(key, { t: Date.now(), json: parsed });
-    return NextResponse.json(parsed);
   } catch (e: any) {
     const status = e?.status ?? e?.response?.status;
     const msg = e?.message || "Erreur interne";
-    const is429 =
-      status === 429 ||
-      e?.code === "rate_limit_exceeded" ||
-      /rate[_\s-]?limit/i.test(String(msg)) ||
-      msg === "queue_timeout";
-
-    if (status === 504 || /gateway_timeout|route_timeout/i.test(String(msg))) {
-      const retryAfter = e?.retryAfter || "12";
-      return jsonError(504, "gateway_timeout", { "retry-after": retryAfter });
-    }
-    if (is429) {
-      const retryAfter = e?.retryAfter || "20";
-      return jsonError(429, "rate_limit_exceeded", { "retry-after": retryAfter });
-    }
-    if (status === 400 && /Unsupported parameter:\s*'response_format'/i.test(msg)) {
-      return jsonError(400, "Config invalide: utiliser text.format (Responses API) au lieu de response_format.");
-    }
     if (Number.isInteger(status)) return jsonError(status, msg);
     return jsonError(500, msg);
-  } finally {
-    clearTimeout(globalTimeout);
   }
 }
