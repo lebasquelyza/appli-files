@@ -23,7 +23,7 @@ interface AIAnalysis {
   timeline: AnalysisPoint[];
 }
 
-/** Client Supabase navigateur créé à la demande (aucune instanciation au build) */
+/** Client Supabase navigateur créé à la demande (évite l’instanciation au build) */
 function getSupabaseBrowser() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -101,39 +101,44 @@ function CoachAnalyzer() {
       const oneImage = [mosaic]; // on n'envoie qu'une image
       setProgress(18);
 
-      // 1) SIGNED UPLOAD (Supabase) — accepte {url,token,bucket,path} OU {path,token}
+      // -------------------------
+      // 1) SIGNED UPLOAD (Supabase)
+      //    ➜ le serveur attend { path, bucket? }
+      //    On envoie un path **interne au bucket** (pas "videos/..."),
+      //    et on fournit bucket="videos" séparément.
+      // -------------------------
       setStatus("Préparation de l’upload…");
+      const bucket = "videos";
+      const objectPath = `${Date.now()}-${slugify(file.name)}`; // ex: 1726757312-squat.webm
+
       const resSign = await fetch("/api/storage/sign-upload", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          filename: file.name,
-          contentType: file.type || "application/octet-stream",
-        }),
+        body: JSON.stringify({ path: objectPath, bucket }), // ✅ conforme à l’API serveur
       });
       if (!resSign.ok) throw new Error(`sign-upload: HTTP ${resSign.status} ${await resSign.text()}`);
       const signJson = await resSign.json().catch(() => ({}));
       const token: string | undefined = signJson?.token;
-      const path: string | undefined = signJson?.path || signJson?.key; // si ta route renomme
-      if (!path || !token) throw new Error("sign-upload: réponse invalide (pas de path/token)");
+      const returnedPath: string | undefined = signJson?.path || objectPath;
+      if (!returnedPath || !token) throw new Error("sign-upload: réponse invalide (pas de path/token)");
       setProgress(35);
 
-      // 2) UPLOAD SUPABASE (client navigateur)
+      // 2) UPLOAD SUPABASE (client navigateur) — path **interne** au bucket
       setStatus("Upload de la vidéo…");
       const supabase = getSupabaseBrowser();
       const { error: upErr } = await supabase
         .storage
-        .from("videos")
-        .uploadToSignedUrl(path, token, file);
+        .from(bucket)
+        .uploadToSignedUrl(returnedPath, token, file);
       if (upErr) throw new Error(`uploadToSignedUrl: ${upErr.message || "erreur inconnue"}`);
       setProgress(60);
 
-      // 3) READ URL SIGNÉE
+      // 3) READ URL SIGNÉE (le backend connaît le bucket)
       setStatus("Récupération de l’URL…");
       const resRead = await fetch("/api/storage/sign-read", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ path, expiresIn: 60 * 60 }),
+        body: JSON.stringify({ path: returnedPath, expiresIn: 60 * 60 }),
       });
       if (!resRead.ok) throw new Error(`sign-read: HTTP ${resRead.status} ${await resRead.text()}`);
       const { url: fileUrl } = await resRead.json();
@@ -603,4 +608,15 @@ function loadImage(src: string): Promise<HTMLImageElement> {
     img.onerror = () => reject(new Error("Impossible de charger l’image."));
     img.src = src;
   });
+}
+
+/** Utils */
+function slugify(name: string) {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9._-]/g, "")
+    .replace(/-+/g, "-")
+    .slice(0, 140);
 }
