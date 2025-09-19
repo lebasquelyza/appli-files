@@ -219,7 +219,6 @@ export async function POST(req: NextRequest) {
     const key = hashKey(frames, feeling || "", economyMode);
     const hit = cache.get(key);
     if (hit && Date.now() - hit.t < CACHE_TTL_MS) {
-      // Retour JSON normal si déjà en cache (pas besoin de SSE)
       return NextResponse.json(hit.json, { headers: { "Cache-Control": "no-store, no-transform" } });
     }
 
@@ -232,8 +231,8 @@ export async function POST(req: NextRequest) {
     const userParts: any[] = [{ type: "input_text", text: instruction }];
     if (feeling) userParts.push({ type: "input_text", text: `Ressenti: ${feeling}` });
     if (fileUrl) userParts.push({ type: "input_text", text: `URL vidéo: ${fileUrl}` });
-    // 👇 important: forme objet { url } pour satisfaire les validations strictes
-    userParts.push({ type: "input_image", image_url: { url: img } });
+    // IMPORTANT: Responses API attend une *chaîne* pour image_url (URL http(s) ou data URL)
+    userParts.push({ type: "input_image", image_url: img });
     if (typeof timestamps[0] === "number") userParts.push({ type: "input_text", text: `repere=${Math.round(timestamps[0])}s` });
 
     const model = "gpt-4o-mini";
