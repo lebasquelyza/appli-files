@@ -36,16 +36,23 @@ function hashKey(frames: string[], feeling: string, economyMode: boolean) {
   return h.toString(16);
 }
 
-// Normalise une image en URL valide (http(s) ou data URL)
+// Normalise une image en URL valide et “safe”
 function toDataUrl(b64orUrl: string): string {
   const s = (b64orUrl || "").trim();
   if (!s) return "";
   if (/^https?:\/\//i.test(s)) return s; // URL http(s)
-  if (/^data:image\/(png|jpe?g|webp);base64,/i.test(s)) return s; // déjà data URL
-  // heuristique pour déduire le mime si base64 nu
-  const looksPng = s.startsWith("iVBORw0KGgo") || s.startsWith("iVBO"); // magic PNG
+  if (/^data:image\/(png|jpe?g|webp);base64,[a-z0-9+/=\s]+$/i.test(s)) {
+    // normalise : supprime espaces/premières newlines au besoin
+    const [head, payload] = s.split(",", 2);
+    return `${head},${(payload || "").replace(/\s+/g, "")}`;
+  }
+  // base64 nu -> déduire mime
+  const looksPng = s.startsWith("iVBORw0KGgo"); // magic PNG
   const mime = looksPng ? "image/png" : "image/jpeg";
-  return `data:${mime};base64,${s}`;
+  return `data:${mime};base64,${s.replace(/\s+/g, "")}`;
+}
+function isValidImageUrl(u: string): boolean {
+  return /^https?:\/\//i.test(u) || /^data:image\/(png|jpe?g|webp);base64,[a-z0-9+/=]+$/i.test(u);
 }
 
 // Promise timeout qui peut abort via callback
@@ -100,7 +107,6 @@ async function upstashCommand<T = any>(...args: (string | number)[]) {
     }
     return res.json() as Promise<{ result: T }>;
   });
-  // Upstash doit répondre très vite
   return withTimeout(p, 3000, () => controller.abort("upstash_timeout"));
 }
 
@@ -148,7 +154,7 @@ export async function GET() {
   }, { headers: { "Cache-Control": "no-store, no-transform" } });
 }
 
-/* ============ POST /api/analyze — SSE streaming ============ */
+/* ============ POST /api/analyze — SSE streaming + auto-fallback image_url ============ */
 export async function POST(req: NextRequest) {
   try {
     const ctype = (req.headers.get("content-type") || "").toLowerCase();
@@ -176,7 +182,7 @@ export async function POST(req: NextRequest) {
 
     // Normaliser l'image
     const img = toDataUrl(frames[0]);
-    if (!img || (!/^https?:\/\//.test(img) && !/^data:image\/(png|jpe?g|webp);base64,/.test(img))) {
+    if (!img || !isValidImageUrl(img)) {
       return jsonError(400, "Format d'image non supporté. Utilisez une URL http(s) ou un data URL base64.");
     }
 
@@ -228,12 +234,11 @@ export async function POST(req: NextRequest) {
       'Réponds STRICTEMENT en JSON: {"exercise":string,"confidence":number,"overall":string,"muscles":string[],"cues":string[],"extras":string[],"timeline":[{"time":number,"label":string,"detail"?:string}]}. ' +
       'Limite à 3 muscles, 3 cues max, timeline 2 points pertinents.';
 
-    const userParts: any[] = [{ type: "input_text", text: instruction }];
-    if (feeling) userParts.push({ type: "input_text", text: `Ressenti: ${feeling}` });
-    if (fileUrl) userParts.push({ type: "input_text", text: `URL vidéo: ${fileUrl}` });
-    // IMPORTANT: Responses API attend une *chaîne* pour image_url (URL http(s) ou data URL)
-    userParts.push({ type: "input_image", image_url: img });
-    if (typeof timestamps[0] === "number") userParts.push({ type: "input_text", text: `repere=${Math.round(timestamps[0])}s` });
+    // Contenu commun
+    const commonParts: any[] = [{ type: "input_text", text: instruction }];
+    if (feeling) commonParts.push({ type: "input_text", text: `Ressenti: ${feeling}` });
+    if (fileUrl) commonParts.push({ type: "input_text", text: `URL vidéo: ${fileUrl}` });
+    if (typeof timestamps[0] === "number") commonParts.push({ type: "input_text", text: `repere=${Math.round(timestamps[0])}s` });
 
     const model = "gpt-4o-mini";
     const maxOut = 60;
@@ -248,58 +253,76 @@ export async function POST(req: NextRequest) {
     const writeComment = (comment: string) =>
       writer.write(encoder.encode(`: ${comment}\n\n`)); // heartbeat/comment line
 
-    // Heartbeat every 1s to keep Netlify/LB connection alive
     const hb = setInterval(() => writeComment("heartbeat"), 1000);
+
+    // ---- Appel OpenAI avec auto-fallback schéma image_url
+    async function callOpenAI(imageAs: "string" | "object") {
+      const controller = new AbortController();
+      const parts =
+        imageAs === "string"
+          ? [...commonParts, { type: "input_image", image_url: img }]
+          : [...commonParts, { type: "input_image", image_url: { url: img } }];
+
+      const p = fetch("https://api.openai.com/v1/responses", {
+        method: "POST",
+        headers: { "content-type": "application/json", Authorization: `Bearer ${process.env.OPEN_API_KEY || process.env.OPENAI_API_KEY}` },
+        body: JSON.stringify({
+          model,
+          input: [{ role: "user", content: parts }],
+          temperature: 0.2,
+          max_output_tokens: maxOut,
+          text: { format: { type: "json_object" } }, // ok pour Responses API
+        }),
+        signal: controller.signal,
+      }).then(async (resp) => {
+        const txt = await resp.text().catch(() => "");
+        if (!resp.ok) {
+          let parsed: any = null;
+          try { parsed = JSON.parse(txt); } catch {}
+          const err: any = new Error(parsed?.error?.message || txt || `OpenAI HTTP ${resp.status}`);
+          err.status = resp.status;
+          err.retryAfter = resp.headers.get("retry-after") || "";
+          err.code = parsed?.error?.code;
+          err.details = parsed?.error ?? txt;
+          throw err;
+        }
+        try {
+          return JSON.parse(txt);
+        } catch {
+          const err: any = new Error("Réponse OpenAI non JSON.");
+          err.status = 502;
+          err.details = txt?.slice?.(0, 500);
+          throw err;
+        }
+      });
+
+      return withTimeout(p, 20_000, () => controller.abort("openai_timeout"));
+    }
 
     (async () => {
       try {
         await pace();
 
-        const controller = new AbortController();
-
-        // Appel OpenAI non-streamé (simple) mais timeout ample (< Netlify 30s)
-        const openAiPromise = fetch("https://api.openai.com/v1/responses", {
-          method: "POST",
-          headers: { "content-type": "application/json", Authorization: `Bearer ${apiKey}` },
-          body: JSON.stringify({
-            model,
-            input: [{ role: "user", content: userParts }],
-            temperature: 0.2,
-            max_output_tokens: maxOut,
-            text: { format: { type: "json_object" } },
-          }),
-          signal: controller.signal,
-        }).then(async (resp) => {
-          const txt = await resp.text().catch(() => "");
-          if (!resp.ok) {
-            let parsed: any = null;
-            try { parsed = JSON.parse(txt); } catch {}
-            const err: any = new Error(`OpenAI error ${resp.status}: ${parsed?.error?.message || txt || "unknown"}`);
-            err.status = resp.status;
-            err.retryAfter = resp.headers.get("retry-after") || "";
-            err.code = parsed?.error?.code;
-            err.details = parsed?.error ?? txt;
-            throw err;
+        // 1) Essai au format “string”
+        let json: any;
+        try {
+          json = await callOpenAI("string");
+        } catch (e: any) {
+          const patternErr = /did not match the expected pattern/i.test(String(e?.details || e?.message || ""));
+          const badParam = /invalid.*image_url|unsupported parameter|bad request/i.test(String(e?.details || e?.message || ""));
+          if (e?.status === 400 && (patternErr || badParam)) {
+            // 2) Fallback au format “object”
+            json = await callOpenAI("object");
+          } else {
+            throw e;
           }
-          try {
-            return JSON.parse(txt);
-          } catch {
-            const err: any = new Error("Réponse OpenAI non JSON.");
-            err.status = 502;
-            err.details = txt?.slice?.(0, 500);
-            throw err;
-          }
-        });
-
-        // 20s max pour l'appel modèle (garde marge vs. Netlify)
-        const json = await withTimeout(openAiPromise, 20_000, () => controller.abort("openai_timeout"));
+        }
 
         const text: string =
-          (json as any)?.output_text || (json as any)?.content?.[0]?.text || (json as any)?.choices?.[0]?.message?.content || "";
+          json?.output_text || json?.content?.[0]?.text || json?.choices?.[0]?.message?.content || "";
 
         if (!text) throw Object.assign(new Error("Réponse vide du modèle."), { status: 502 });
 
-        // Parsing robuste
         let parsed: AIAnalysis | null = null;
         try { parsed = JSON.parse(text); }
         catch {
@@ -311,10 +334,8 @@ export async function POST(req: NextRequest) {
         }
         parsed.muscles ||= []; parsed.cues ||= []; parsed.extras ||= []; parsed.timeline ||= [];
 
-        // Cache
         cache.set(key, { t: Date.now(), json: parsed });
 
-        // Envoi du résultat final
         await writeSSE("result", parsed);
       } catch (e: any) {
         const status = e?.status ?? e?.response?.status;
