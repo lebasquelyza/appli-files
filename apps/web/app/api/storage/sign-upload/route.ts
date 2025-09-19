@@ -1,4 +1,4 @@
-// apps/web/app/api/storage/sign-upload/route.ts
+// apps/web/app/api/videos/sign-upload/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
@@ -6,10 +6,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-// Optionnel: lis le bucket depuis l'env sinon valeur par défaut
-const BUCKET = process.env.ANALYZE_UPLOAD_BUCKET || "analyze-uploads-public";
+const DEFAULT_BUCKET = process.env.ANALYZE_UPLOAD_BUCKET || "analyze-uploads-public";
 
-/* Helpers */
+/* --- helpers --- */
 function json(status: number, data: unknown) {
   return new NextResponse(JSON.stringify(data), {
     status,
@@ -17,7 +16,7 @@ function json(status: number, data: unknown) {
   });
 }
 
-/** Création PARESSEUSE du client Supabase (pas au top-level !) */
+/** Création paresseuse du client Supabase (surtout pas au top-level) */
 function getSupabaseAdmin(): SupabaseClient {
   const url =
     process.env.SUPABASE_URL ||
@@ -31,8 +30,8 @@ function getSupabaseAdmin(): SupabaseClient {
 
   if (!url || !key) {
     const missing: string[] = [];
-    if (!url) missing.push("SUPABASE_URL ou NEXT_PUBLIC_SUPABASE_URL");
-    if (!key) missing.push("SUPABASE_SERVICE_ROLE_KEY ou NEXT_PUBLIC_SUPABASE_ANON_KEY");
+    if (!url) missing.push("SUPABASE_URL|NEXT_PUBLIC_SUPABASE_URL");
+    if (!key) missing.push("SUPABASE_SERVICE_ROLE_KEY|NEXT_PUBLIC_SUPABASE_ANON_KEY");
     const err = new Error("Supabase env missing: " + missing.join(", "));
     (err as any).status = 500;
     throw err;
@@ -52,16 +51,16 @@ async function readBody(req: NextRequest) {
 }
 
 /**
- * POST /api/storage/sign-upload
+ * POST /api/videos/sign-upload
  * Body: { path: string, bucket?: string }
- * Retour: { url: string, token: string } utilisable avec uploadToSignedUrl()
- *   cf. supabase-js: storage.from(bucket).uploadToSignedUrl(path, token, file)
+ * Retour: { url: string, token: string, bucket: string, path: string }
+ *  => utilisable côté client avec storage.from(bucket).uploadToSignedUrl(path, token, file)
  */
 export async function POST(req: NextRequest) {
   try {
     const body = (await readBody(req)) as { path?: string; bucket?: string };
     const path = body?.path;
-    const bucket = body?.bucket || BUCKET;
+    const bucket = body?.bucket || DEFAULT_BUCKET;
 
     if (!path || typeof path !== "string") {
       return json(400, { error: "Body attendu: { path: string, bucket?: string }" });
@@ -69,7 +68,6 @@ export async function POST(req: NextRequest) {
 
     const supabase = getSupabaseAdmin();
 
-    // Nécessite supabase-js v2+ ; génère (url, token) pour upload signé côté client
     const { data, error } = await supabase.storage
       .from(bucket)
       .createSignedUploadUrl(path);
@@ -85,7 +83,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-/** GET healthcheck */
 export async function GET() {
   return json(200, { ok: true });
 }
+
