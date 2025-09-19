@@ -110,27 +110,24 @@ function CoachAnalyzer() {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          // ton implémentation actuelle : filename/contentType
           filename: file.name,
           contentType: file.type || "application/octet-stream",
-          // si ta route attend plutôt { path }, mets-le côté serveur
         }),
       });
       if (!resSign.ok) throw new Error(`sign-upload: HTTP ${resSign.status} ${await resSign.text()}`);
       const signJson = await resSign.json().catch(() => ({}));
       const token: string | undefined = signJson?.token;
-      const path: string | undefined = signJson?.path || signJson?.key; // au cas où ta route renomme
+      const path: string | undefined = signJson?.path || signJson?.key; // si ta route renomme
       if (!path || !token) throw new Error("sign-upload: réponse invalide (pas de path/token)");
       setProgress(35);
 
       // 2) UPLOAD SUPABASE (client navigateur)
       setStatus("Upload de la vidéo…");
       const supabase = getSupabaseBrowser();
-      // @ts-expect-error: typings supabase-js 2.x acceptent le 4ᵉ param opts
       const { error: upErr } = await supabase
         .storage
         .from("videos")
-        .uploadToSignedUrl(path, token, file, { contentType: file.type || "application/octet-stream" });
+        .uploadToSignedUrl(path, token, file);
       if (upErr) throw new Error(`uploadToSignedUrl: ${upErr.message || "erreur inconnue"}`);
       setProgress(60);
 
