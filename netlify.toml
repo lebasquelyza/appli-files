@@ -1,16 +1,52 @@
 # netlify.toml (racine)
+
 [build]
-  base = "apps/web"
+  base    = "apps/web"
   command = "npm install --no-audit --no-fund && npm run build"
   publish = ".next"   # relatif à base => apps/web/.next
 
 [build.environment]
   NODE_VERSION = "20"
+  # (Optionnel) Accélère la CI
+  NPM_FLAGS = "--no-audit --no-fund"
+  # Désactive la télémétrie Next dans la CI
+  NEXT_TELEMETRY_DISABLED = "1"
+
+  # ==== Variables d'env back (à définir dans le dashboard Netlify si possible) ====
+  # OpenAI
+  OPENAI_API_KEY = ""       # ou OPEN_API_KEY ; garde une seule clé, inutile d'avoir les deux
+  OPEN_API_KEY   = ""
+  # Supabase
+  NEXT_PUBLIC_SUPABASE_URL   = ""
+  NEXT_PUBLIC_SUPABASE_ANON_KEY = ""
+  SUPABASE_SERVICE_ROLE_KEY  = ""   # ⚠️ côté serveur uniquement
+  # Upstash (si tu utilises le RL distribué)
+  UPSTASH_REDIS_REST_URL   = ""
+  UPSTASH_REDIS_REST_TOKEN = ""
+  # Rate-limit configurable (voir route.ts)
+  ANALYZE_RL_IP_LIMIT   = "3"
+  ANALYZE_RL_IP_WINDOW  = "60"
+  ANALYZE_RL_ORG_LIMIT  = "10"
+  ANALYZE_RL_ORG_WINDOW = "60"
+  # Bucket public pour upload image (si tu utilises la version avec upload)
+  ANALYZE_UPLOAD_BUCKET = "analyze-uploads-public"
 
 [functions]
-  # ➜ bundle explicitement ces modules dans les fonctions serverless
+  # Bundle explicite de libs serveur
   external_node_modules = ["@upstash/redis", "@upstash/ratelimit"]
   node_bundler = "esbuild"
+  # (Optionnel) augmente la mémoire si tu traites des images base64 volumineuses
+  # node_bundler_config = { external = [] }
 
+# Headers pour SSE (évite la mise en cache et garde la connexion vivante)
+[[headers]]
+  for = "/api/analyze"
+  [headers.values]
+    Cache-Control = "no-store, no-transform"
+    Connection    = "keep-alive"
+    # Netlify n'utilise pas Nginx mais certains proxys respectent cet en-tête :
+    X-Accel-Buffering = "no"
+
+# Laisse le plugin gérer automatiquement SSR / routes Next
 [[plugins]]
   package = "@netlify/plugin-nextjs"
