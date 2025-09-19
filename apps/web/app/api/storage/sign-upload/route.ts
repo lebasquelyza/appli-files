@@ -1,4 +1,3 @@
-// apps/web/app/api/videos/sign-upload/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
@@ -8,7 +7,6 @@ export const revalidate = 0;
 
 const DEFAULT_BUCKET = process.env.ANALYZE_UPLOAD_BUCKET || "analyze-uploads-public";
 
-/* --- helpers --- */
 function json(status: number, data: unknown) {
   return new NextResponse(JSON.stringify(data), {
     status,
@@ -16,13 +14,11 @@ function json(status: number, data: unknown) {
   });
 }
 
-/** Création paresseuse du client Supabase (surtout pas au top-level) */
 function getSupabaseAdmin(): SupabaseClient {
   const url =
     process.env.SUPABASE_URL ||
     process.env.NEXT_PUBLIC_SUPABASE_URL ||
     "";
-
   const key =
     process.env.SUPABASE_SERVICE_ROLE_KEY ||
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
@@ -36,7 +32,6 @@ function getSupabaseAdmin(): SupabaseClient {
     (err as any).status = 500;
     throw err;
   }
-
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
@@ -50,11 +45,9 @@ async function readBody(req: NextRequest) {
   }
 }
 
-/**
- * POST /api/videos/sign-upload
+/** POST /api/videos/sign-upload
  * Body: { path: string, bucket?: string }
  * Retour: { url: string, token: string, bucket: string, path: string }
- *  => utilisable côté client avec storage.from(bucket).uploadToSignedUrl(path, token, file)
  */
 export async function POST(req: NextRequest) {
   try {
@@ -67,7 +60,6 @@ export async function POST(req: NextRequest) {
     }
 
     const supabase = getSupabaseAdmin();
-
     const { data, error } = await supabase.storage
       .from(bucket)
       .createSignedUploadUrl(path);
@@ -86,4 +78,3 @@ export async function POST(req: NextRequest) {
 export async function GET() {
   return json(200, { ok: true });
 }
-
