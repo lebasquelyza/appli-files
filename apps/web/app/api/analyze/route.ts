@@ -43,13 +43,17 @@ async function withTimeout<T>(p: Promise<T>, ms: number, onTimeout?: () => void)
 }
 
 /* ============ Normalisation/validation d’image ============ */
+type SanitizeOk = { ok: true; url: string };
+type SanitizeErr = { ok: false; reason: "empty" | "blob_url" | "bad_base64" | "unsupported" };
+type SanitizeResult = SanitizeOk | SanitizeErr;
+
 // Vérifie et normalise en URL http(s) OU data URL base64 stricte.
-function sanitizeImageInput(raw: string) {
+function sanitizeImageInput(raw: string): SanitizeResult {
   const trimmed = (raw || "").trim();
-  if (!trimmed) return { ok: false, reason: "empty" as const };
+  if (!trimmed) return { ok: false, reason: "empty" };
 
   // Interdit blob: (URL locale navigateur)
-  if (/^blob:/i.test(trimmed)) return { ok: false, reason: "blob_url" as const };
+  if (/^blob:/i.test(trimmed)) return { ok: false, reason: "blob_url" };
 
   // http(s) publique
   if (/^https?:\/\//i.test(trimmed)) return { ok: true, url: trimmed };
@@ -59,7 +63,7 @@ function sanitizeImageInput(raw: string) {
   if (m) {
     const mime = m[1].toLowerCase().replace("jpg","jpeg");
     const b64  = m[2].replace(/\s+/g, "");
-    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(b64)) return { ok: false, reason: "bad_base64" as const };
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(b64)) return { ok: false, reason: "bad_base64" };
     return { ok: true, url: `data:image/${mime};base64,${b64}` };
   }
 
@@ -70,7 +74,7 @@ function sanitizeImageInput(raw: string) {
     return { ok: true, url: `data:${mime};base64,${trimmed}` };
   }
 
-  return { ok: false, reason: "unsupported" as const };
+  return { ok: false, reason: "unsupported" };
 }
 // Log “safe” (aperçu tronqué)
 function shortPreview(u: string) {
@@ -196,7 +200,8 @@ export async function POST(req: NextRequest) {
     if (!imgNorm.ok) {
       return jsonError(400, `Format d'image invalide (${imgNorm.reason}). Utilisez https://... ou data:image/...;base64,...`);
     }
-    console.log("[analyze] image_url:", shortPreview(imgNorm.url));
+    const imageUrl = imgNorm.url; // <- string garanti
+    console.log("[analyze] image_url:", shortPreview(imageUrl));
 
     // ---- Rate-limit IP + ORG
     const ip = clientIp(req);
@@ -330,14 +335,14 @@ export async function POST(req: NextRequest) {
         // 1) Responses API (image_url string)
         let json: any;
         try {
-          json = await callResponsesAPI(imgNorm.url);
+          json = await callResponsesAPI(imageUrl);
         } catch (e: any) {
           const msg = String(e?.details || e?.message || "");
           const patternErr = /did not match the expected pattern/i.test(msg);
           const badImage   = /image[_\s-]?url|invalid|unsupported/i.test(msg);
           if (e?.status === 400 && (patternErr || badImage)) {
             // 2) Fallback Chat Completions (image_url: { url })
-            json = await callChatAPI(imgNorm.url);
+            json = await callChatAPI(imageUrl);
           } else {
             throw e;
           }
