@@ -36,7 +36,19 @@ function hashKey(frames: string[], feeling: string, economyMode: boolean) {
   return h.toString(16);
 }
 
-// Promise timeout that truly aborts a fetch via provided AbortController.
+// Normalise une image en URL valide (http(s) ou data URL)
+function toDataUrl(b64orUrl: string): string {
+  const s = (b64orUrl || "").trim();
+  if (!s) return "";
+  if (/^https?:\/\//i.test(s)) return s; // URL http(s)
+  if (/^data:image\/(png|jpe?g|webp);base64,/i.test(s)) return s; // déjà data URL
+  // heuristique pour déduire le mime si base64 nu
+  const looksPng = s.startsWith("iVBORw0KGgo") || s.startsWith("iVBO"); // magic PNG
+  const mime = looksPng ? "image/png" : "image/jpeg";
+  return `data:${mime};base64,${s}`;
+}
+
+// Promise timeout qui peut abort via callback
 async function withTimeout<T>(p: Promise<T>, ms: number, onTimeout?: () => void): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const t = setTimeout(() => { try { onTimeout?.(); } catch {} ; reject(new Error("timeout")); }, ms);
@@ -137,14 +149,6 @@ export async function GET() {
 }
 
 /* ============ POST /api/analyze — SSE streaming ============ */
-/**
- * Client-side example:
- * const es = new EventSource('/api/analyze', { withCredentials: false });
- * es.addEventListener('heartbeat', () => {/* keep-alive *\/});
- * es.addEventListener('result', (e) => { const data = JSON.parse(e.data); ...; es.close(); });
- * es.addEventListener('error', (e) => { console.error(e); es.close(); });
- * fetch('/api/analyze', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({...}) });
- */
 export async function POST(req: NextRequest) {
   try {
     const ctype = (req.headers.get("content-type") || "").toLowerCase();
@@ -168,6 +172,12 @@ export async function POST(req: NextRequest) {
     if (frames.length > 1) {
       frames = frames.slice(0, 1);
       timestamps = timestamps.slice(0, 1);
+    }
+
+    // Normaliser l'image
+    const img = toDataUrl(frames[0]);
+    if (!img || (!/^https?:\/\//.test(img) && !/^data:image\/(png|jpe?g|webp);base64,/.test(img))) {
+      return jsonError(400, "Format d'image non supporté. Utilisez une URL http(s) ou un data URL base64.");
     }
 
     // ---- Rate-limit IP + ORG (Upstash si dispo, sinon fallback mémoire)
@@ -222,7 +232,8 @@ export async function POST(req: NextRequest) {
     const userParts: any[] = [{ type: "input_text", text: instruction }];
     if (feeling) userParts.push({ type: "input_text", text: `Ressenti: ${feeling}` });
     if (fileUrl) userParts.push({ type: "input_text", text: `URL vidéo: ${fileUrl}` });
-    userParts.push({ type: "input_image", image_url: frames[0] });
+    // 👇 important: forme objet { url } pour satisfaire les validations strictes
+    userParts.push({ type: "input_image", image_url: { url: img } });
     if (typeof timestamps[0] === "number") userParts.push({ type: "input_text", text: `repere=${Math.round(timestamps[0])}s` });
 
     const model = "gpt-4o-mini";
@@ -236,22 +247,21 @@ export async function POST(req: NextRequest) {
     const writeSSE = (event: string, data: any) =>
       writer.write(encoder.encode(`event: ${event}\ndata: ${typeof data === "string" ? data : JSON.stringify(data)}\n\n`));
     const writeComment = (comment: string) =>
-      writer.write(encoder.encode(`: ${comment}\n\n`)); // comment line (heartbeat)
+      writer.write(encoder.encode(`: ${comment}\n\n`)); // heartbeat/comment line
 
     // Heartbeat every 1s to keep Netlify/LB connection alive
     const hb = setInterval(() => writeComment("heartbeat"), 1000);
 
-    // Main job in background of this request (but same response stream)
     (async () => {
       try {
         await pace();
 
         const controller = new AbortController();
 
-        // Appel OpenAI non-streamé (simple) mais avec timeout ample (< Netlify 30s)
+        // Appel OpenAI non-streamé (simple) mais timeout ample (< Netlify 30s)
         const openAiPromise = fetch("https://api.openai.com/v1/responses", {
           method: "POST",
-          headers: { "content-type": "application/json", Authorization: `Bearer ${process.env.OPEN_API_KEY || process.env.OPENAI_API_KEY}` },
+          headers: { "content-type": "application/json", Authorization: `Bearer ${apiKey}` },
           body: JSON.stringify({
             model,
             input: [{ role: "user", content: userParts }],
@@ -261,22 +271,32 @@ export async function POST(req: NextRequest) {
           }),
           signal: controller.signal,
         }).then(async (resp) => {
+          const txt = await resp.text().catch(() => "");
           if (!resp.ok) {
-            const txt = await resp.text().catch(() => "");
-            const err: any = new Error(`OpenAI error ${resp.status}: ${txt}`);
+            let parsed: any = null;
+            try { parsed = JSON.parse(txt); } catch {}
+            const err: any = new Error(`OpenAI error ${resp.status}: ${parsed?.error?.message || txt || "unknown"}`);
             err.status = resp.status;
             err.retryAfter = resp.headers.get("retry-after") || "";
-            try { err.code = JSON.parse(txt)?.error?.code; } catch {}
+            err.code = parsed?.error?.code;
+            err.details = parsed?.error ?? txt;
             throw err;
           }
-          return resp.json();
+          try {
+            return JSON.parse(txt);
+          } catch {
+            const err: any = new Error("Réponse OpenAI non JSON.");
+            err.status = 502;
+            err.details = txt?.slice?.(0, 500);
+            throw err;
+          }
         });
 
         // 20s max pour l'appel modèle (garde marge vs. Netlify)
         const json = await withTimeout(openAiPromise, 20_000, () => controller.abort("openai_timeout"));
 
         const text: string =
-          json?.output_text || json?.content?.[0]?.text || json?.choices?.[0]?.message?.content || "";
+          (json as any)?.output_text || (json as any)?.content?.[0]?.text || (json as any)?.choices?.[0]?.message?.content || "";
 
         if (!text) throw Object.assign(new Error("Réponse vide du modèle."), { status: 502 });
 
@@ -285,8 +305,7 @@ export async function POST(req: NextRequest) {
         try { parsed = JSON.parse(text); }
         catch {
           const m = text.match(/\{[\s\S]*\}/);
-          if (m) { try { parsed = JSON.parse(m[0]); } catch {}
-          }
+          if (m) { try { parsed = JSON.parse(m[0]); } catch {} }
         }
         if (!parsed || typeof parsed !== "object") {
           throw Object.assign(new Error("Impossible de parser la réponse JSON."), { status: 502 });
@@ -296,16 +315,18 @@ export async function POST(req: NextRequest) {
         // Cache
         cache.set(key, { t: Date.now(), json: parsed });
 
-        // Send final result event
+        // Envoi du résultat final
         await writeSSE("result", parsed);
       } catch (e: any) {
         const status = e?.status ?? e?.response?.status;
         if (status === 429) {
-          await writeSSE("error", { code: "rate_limit_exceeded", retryAfter: e?.retryAfter || "20" });
+          await writeSSE("error", { code: "rate_limit_exceeded", retryAfter: e?.retryAfter || "20", details: e?.details || String(e?.message || e) });
+        } else if (status === 400 && /image|pattern|url/i.test(String(e?.details || e?.message || ""))) {
+          await writeSSE("error", { code: "bad_image_url", message: "Image invalide (URL/data URL attendu).", details: e?.details || String(e?.message || e) });
         } else if (status === 504 || /timeout|gateway_timeout/i.test(String(e?.message || e))) {
           await writeSSE("error", { code: "gateway_timeout", retryAfter: "12" });
         } else {
-          await writeSSE("error", { code: "internal_error", message: String(e?.message || e) });
+          await writeSSE("error", { code: "internal_error", message: String(e?.message || e), details: e?.details });
         }
       } finally {
         clearInterval(hb);
@@ -319,7 +340,7 @@ export async function POST(req: NextRequest) {
         "Content-Type": "text/event-stream; charset=utf-8",
         "Cache-Control": "no-store, no-transform",
         "Connection": "keep-alive",
-        "X-Accel-Buffering": "no" // helpful on some proxies
+        "X-Accel-Buffering": "no"
       },
     });
 
