@@ -54,11 +54,12 @@ async function withTimeout<T>(p: Promise<T>, ms: number, onTimeout?: () => void)
 }
 
 /* ============ Normalisation/validation d’image ============ */
-type SanitizeOk = { ok: true; url: string };
+type SanitizeOk = { ok: true; kind: "https" | "data"; url: string; mime?: string; b64?: string };
 type SanitizeErr = { ok: false; reason: "empty" | "blob_url" | "bad_base64" | "unsupported" };
 type SanitizeResult = SanitizeOk | SanitizeErr;
 
 // Vérifie et normalise en URL http(s) OU data URL base64 stricte.
+// Si data URL, retourne aussi { mime, b64 } pour upload.
 function sanitizeImageInput(raw: string): SanitizeResult {
   const trimmed = (raw || "").trim();
   if (!trimmed) return { ok: false, reason: "empty" };
@@ -67,22 +68,22 @@ function sanitizeImageInput(raw: string): SanitizeResult {
   if (/^blob:/i.test(trimmed)) return { ok: false, reason: "blob_url" };
 
   // http(s) publique
-  if (/^https?:\/\//i.test(trimmed)) return { ok: true, url: trimmed };
+  if (/^https?:\/\//i.test(trimmed)) return { ok: true, kind: "https", url: trimmed };
 
   // Data URL stricte
   const m = /^data:image\/(png|jpe?g|webp);base64,([a-z0-9+/=\s]+)$/i.exec(trimmed);
   if (m) {
     const mime = m[1].toLowerCase().replace("jpg", "jpeg");
-    const b64 = m[2].replace(/\s+/g, "");
-    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(b64)) return { ok: false, reason: "bad_base64" };
-    return { ok: true, url: `data:image/${mime};base64,${b64}` };
+    const b64raw = m[2].replace(/\s+/g, "");
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(b64raw)) return { ok: false, reason: "bad_base64" };
+    return { ok: true, kind: "data", url: `data:image/${mime};base64,${b64raw}`, mime: `image/${mime}`, b64: b64raw };
   }
 
   // Base64 nu → devine le mime (png vs jpeg)
   const looksPng = trimmed.startsWith("iVBORw0KGgo");
   if (/^[A-Za-z0-9+/]+={0,2}$/.test(trimmed)) {
     const mime = looksPng ? "image/png" : "image/jpeg";
-    return { ok: true, url: `data:${mime};base64,${trimmed}` };
+    return { ok: true, kind: "data", url: `data:${mime};base64,${trimmed}`, mime, b64: trimmed };
   }
 
   return { ok: false, reason: "unsupported" };
@@ -91,6 +92,47 @@ function sanitizeImageInput(raw: string): SanitizeResult {
 // Log “safe” (aperçu tronqué)
 function shortPreview(u: string) {
   return u.length <= 100 ? u : `${u.slice(0, 80)}…(${u.length} chars)`;
+}
+
+/* ============ Upload Supabase (convertit data URL → https public) ============ */
+// Utilise un bucket public (lecture publique). Configurez ANALYZE_UPLOAD_BUCKET si besoin.
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL?.toString();
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const UPLOAD_BUCKET = process.env.ANALYZE_UPLOAD_BUCKET || "analyze-uploads-public";
+
+// Envoie le binaire (base64) dans Supabase Storage et retourne l'URL publique https
+async function uploadToSupabasePublic(filename: string, mime: string, base64Data: string): Promise<string> {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    throw new Error("Supabase storage non configuré (NEXT_PUBLIC_SUPABASE_URL ou SUPABASE_SERVICE_ROLE_KEY manquant).");
+  }
+  const bytes = Buffer.from(base64Data, "base64");
+  const key = `${UPLOAD_BUCKET}/${filename}`;
+  const endpoint = `${SUPABASE_URL}/storage/v1/object/${key}`;
+
+  const controller = new AbortController();
+  const put = fetch(endpoint, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      "Content-Type": mime,
+      "x-upsert": "true",
+    },
+    body: bytes,
+    signal: controller.signal,
+  }).then(async (resp) => {
+    if (!resp.ok) {
+      const txt = await resp.text().catch(() => "");
+      throw new Error(`Supabase upload ${resp.status}: ${txt}`);
+    }
+    return true;
+  });
+
+  await withTimeout(put, 10000, () => controller.abort("supabase_upload_timeout"));
+
+  // URL publique (le bucket doit être PUBLIC)
+  // Chemin public: /storage/v1/object/public/<bucket>/<file>
+  const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${UPLOAD_BUCKET}/${filename}`;
+  return publicUrl;
 }
 
 /* ============ Pacing & lock mémoire (fallback) ============ */
@@ -181,7 +223,7 @@ export async function GET() {
   }, { headers: { "Cache-Control": "no-store, no-transform" } });
 }
 
-/* ============ POST /api/analyze — SSE + double fallback + RL configurable ============ */
+/* ============ POST /api/analyze — SSE + upload Supabase + Chat Completions ============ */
 export async function POST(req: NextRequest) {
   try {
     const ctype = (req.headers.get("content-type") || "").toLowerCase();
@@ -212,7 +254,20 @@ export async function POST(req: NextRequest) {
     if (!imgNorm.ok) {
       return jsonError(400, `Format d'image invalide (${imgNorm.reason}). Utilisez https://... ou data:image/...;base64,...`);
     }
-    const imageUrl = imgNorm.url;
+
+    // ---- Convertir data URL -> https via Supabase (si besoin)
+    let imageUrl = imgNorm.url;
+    if (imgNorm.ok && imgNorm.kind === "data") {
+      try {
+        const ext = imgNorm.mime?.split("/")[1] || "jpeg";
+        const fname = `analyze_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+        imageUrl = await uploadToSupabasePublic(fname, imgNorm.mime || "image/jpeg", imgNorm.b64!);
+      } catch (e: any) {
+        // Si upload impossible, on tente quand même le data URL côté OpenAI (ça marchera sur certains déploiements)
+        console.warn("[analyze] Supabase upload failed, fallback to data url:", e?.message || e);
+      }
+    }
+
     console.log("[analyze] image_url:", shortPreview(imageUrl));
 
     // ---- Rate-limit (configurable) : by-pass en dev
@@ -222,7 +277,6 @@ export async function POST(req: NextRequest) {
     const RL_ORG_LIMIT  = Number(process.env.ANALYZE_RL_ORG_LIMIT  || 10);  // 10 req
     const RL_ORG_WINDOW = Number(process.env.ANALYZE_RL_ORG_WINDOW || 60);  // / 60 s
 
-    // (Option) si UserID dispo côté front, remplacez ici
     const userId = (req.headers.get("x-user-id") || "").trim();
     const rlKeyIp  = userId ? `analyze:user:${userId}` : `analyze:ip:${clientIp(req)}`;
     const rlKeyOrg = `analyze:org:global`;
@@ -240,7 +294,6 @@ export async function POST(req: NextRequest) {
           return jsonError(429, "rate_limit_org", { "retry-after": String(retry) });
         }
       } else {
-        // Fallback mémoire si Upstash absent
         const now = Date.now();
         const SOFT_WINDOW = RL_IP_WINDOW * 1000;
         const SOFT_LIMIT  = RL_IP_LIMIT;
@@ -271,13 +324,10 @@ export async function POST(req: NextRequest) {
       'Réponds STRICTEMENT en JSON: {"exercise":string,"confidence":number,"overall":string,"muscles":string[],"cues":string[],"extras":string[],"timeline":[{"time":number,"label":string,"detail"?:string}]}. ' +
       'Limite à 3 muscles, 3 cues max, timeline 2 points pertinents.';
 
-    const partsCommon: any[] = [{ type: "input_text", text: instruction }];
-    if (feeling) partsCommon.push({ type: "input_text", text: `Ressenti: ${feeling}` });
-    if (fileUrl) partsCommon.push({ type: "input_text", text: `URL vidéo: ${fileUrl}` });
-    if (typeof timestamps[0] === "number") partsCommon.push({ type: "input_text", text: `repere=${Math.round(timestamps[0])}s` });
-
-    const modelResponses = "gpt-4o-mini"; // 1er essai
-    const modelChat = "gpt-4o";           // fallback plus tolérant
+    const partsText: string[] = [instruction];
+    if (feeling) partsText.push(`Ressenti: ${feeling}`);
+    if (fileUrl) partsText.push(`URL vidéo: ${fileUrl}`);
+    if (typeof timestamps[0] === "number") partsText.push(`repere=${Math.round(timestamps[0])}s`);
 
     // ---- SSE (heartbeats + result/error)
     const { readable, writable } = new TransformStream();
@@ -288,97 +338,55 @@ export async function POST(req: NextRequest) {
     const writeComment = (comment: string) => writer.write(encoder.encode(`: ${comment}\n\n`));
     const hb = setInterval(() => writeComment("heartbeat"), 1000);
 
-    // ---- Appels OpenAI (Responses → fallback Chat)
-    async function callResponsesAPI(imgUrl: string) {
-      const controller = new AbortController();
-      const p = fetch("https://api.openai.com/v1/responses", {
-        method: "POST",
-        headers: { "content-type": "application/json", Authorization: `Bearer ${process.env.OPEN_API_KEY || process.env.OPENAI_API_KEY}` },
-        body: JSON.stringify({
-          model: modelResponses,
-          input: [{ role: "user", content: [...partsCommon, { type: "input_image", image_url: imgUrl }] }],
-          temperature: 0.2,
-          max_output_tokens: 60,
-          text: { format: { type: "json_object" } },
-        }),
-        signal: controller.signal,
-      }).then(async (resp) => {
-        const txt = await resp.text().catch(() => "");
-        if (!resp.ok) {
-          let parsed:any=null; try { parsed = JSON.parse(txt);} catch {}
-          const err:any = new Error(parsed?.error?.message || txt || `OpenAI HTTP ${resp.status}`);
-          err.status = resp.status; err.details = parsed?.error ?? txt; err.retryAfter = resp.headers.get("retry-after") || "";
-          throw err;
-        }
-        return JSON.parse(txt);
-      });
-      return withTimeout(p, 20_000, () => controller.abort("openai_timeout"));
-    }
-
-    async function callChatAPI(imgUrl: string) {
-      const controller = new AbortController();
-      const p = fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: { "content-type": "application/json", Authorization: `Bearer ${process.env.OPEN_API_KEY || process.env.OPENAI_API_KEY}` },
-        body: JSON.stringify({
-          model: modelChat,
-          temperature: 0.2,
-          max_tokens: 200,
-          messages: [
-            { role: "system", content: "Réponds STRICTEMENT en JSON." },
-            {
-              role: "user",
-              content: [
-                { type: "text", text: partsCommon.filter((p:any)=>p.type==="input_text").map((p:any)=>p.text).join("\n") },
-                { type: "image_url", image_url: { url: imgUrl } }
-              ]
-            }
-          ]
-        }),
-        signal: controller.signal,
-      }).then(async (resp) => {
-        const txt = await resp.text().catch(() => "");
-        if (!resp.ok) {
-          let parsed:any=null; try { parsed = JSON.parse(txt);} catch {}
-          const err:any = new Error(parsed?.error?.message || txt || `OpenAI HTTP ${resp.status}`);
-          err.status = resp.status; err.details = parsed?.error ?? txt; err.retryAfter = resp.headers.get("retry-after") || "";
-          throw err;
-        }
-        return JSON.parse(txt);
-      });
-      return withTimeout(p, 20_000, () => controller.abort("openai_timeout"));
-    }
-
+    // ---- Appel OpenAI (Chat Completions, image_url: { url: https })
     (async () => {
       try {
         await pace();
 
-        // 1) Responses API (image_url string)
-        let json: any;
-        try {
-          json = await callResponsesAPI(imageUrl);
-        } catch (e: any) {
-          const msg = String(e?.details || e?.message || "");
-          const patternErr = /did not match the expected pattern/i.test(msg);
-          const badImage   = /image[_\s-]?url|invalid|unsupported/i.test(msg);
-          if (e?.status === 400 && (patternErr || badImage)) {
-            // 2) Fallback Chat Completions (image_url: { url })
-            json = await callChatAPI(imageUrl);
-          } else {
-            throw e;
+        const controller = new AbortController();
+        const p = fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: { "content-type": "application/json", Authorization: `Bearer ${apiKey}` },
+          body: JSON.stringify({
+            model: "gpt-4o",          // plus tolérant
+            temperature: 0.2,
+            max_tokens: 200,
+            messages: [
+              { role: "system", content: "Réponds STRICTEMENT en JSON." },
+              {
+                role: "user",
+                content: [
+                  { type: "text", text: partsText.join("\n") },
+                  { type: "image_url", image_url: { url: imageUrl } }
+                ]
+              }
+            ]
+          }),
+          signal: controller.signal,
+        }).then(async (resp) => {
+          const txt = await resp.text().catch(() => "");
+          if (!resp.ok) {
+            let parsed:any=null; try { parsed = JSON.parse(txt);} catch {}
+            const err:any = new Error(parsed?.error?.message || txt || `OpenAI HTTP ${resp.status}`);
+            err.status = resp.status; err.details = parsed?.error ?? txt; err.retryAfter = resp.headers.get("retry-after") || "";
+            throw err;
           }
-        }
+          try {
+            return JSON.parse(txt);
+          } catch {
+            const err:any = new Error("Réponse OpenAI non JSON.");
+            err.status = 502; err.details = txt?.slice?.(0, 500);
+            throw err;
+          }
+        });
 
-        // Extraire le texte (selon endpoint)
+        const json = await withTimeout(p, 20_000, () => controller.abort("openai_timeout"));
+
         const text: string =
-          json?.output_text ||
-          json?.content?.[0]?.text ||
-          json?.choices?.[0]?.message?.content ||
-          "";
+          json?.choices?.[0]?.message?.content || json?.output_text || json?.content?.[0]?.text || "";
 
         if (!text) throw Object.assign(new Error("Réponse vide du modèle."), { status: 502 });
 
-        // Parser en JSON strict
         let parsed: AIAnalysis | null = null;
         try { parsed = JSON.parse(text); }
         catch {
@@ -390,10 +398,8 @@ export async function POST(req: NextRequest) {
         }
         parsed.muscles ||= []; parsed.cues ||= []; parsed.extras ||= []; parsed.timeline ||= [];
 
-        // Cache
         cache.set(key, { t: Date.now(), json: parsed });
 
-        // Envoi résultat final
         await writeSSE("result", parsed);
       } catch (e: any) {
         const status = e?.status ?? e?.response?.status;
