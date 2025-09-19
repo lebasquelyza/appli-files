@@ -1,44 +1,44 @@
-// apps/web/app/api/storage/sign-upload/route.ts
-import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { NextRequest, NextResponse } from "next/server";
+import { getSupabaseAdmin } from "@/lib/supabase-server";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!, // ⚠️ service role, serveur uniquement
-  { auth: { persistSession: false } }
-);
+const DEFAULT_BUCKET = process.env.ANALYZE_UPLOAD_BUCKET || "analyze-uploads-public";
 
-export async function POST(req: Request) {
+function json(status: number, data: unknown) {
+  return new NextResponse(JSON.stringify(data), {
+    status,
+    headers: { "content-type": "application/json", "cache-control": "no-store" },
+  });
+}
+
+async function readBody(req: NextRequest) {
   try {
-    const { filename, contentType } = await req.json();
+    const ct = (req.headers.get("content-type") || "").toLowerCase();
+    if (!ct.includes("application/json")) return {};
+    return await req.json();
+  } catch { return {}; }
+}
 
-    if (!filename) {
-      return NextResponse.json({ error: "filename requis" }, { status: 400 });
-    }
+/** POST Body: { path: string, bucket?: string } => { url, token, bucket, path } */
+export async function POST(req: NextRequest) {
+  try {
+    const body = (await readBody(req)) as { path?: string; bucket?: string };
+    const path = body?.path;
+    const bucket = body?.bucket || DEFAULT_BUCKET;
+    if (!path || typeof path !== "string") return json(400, { error: "Body attendu: { path: string, bucket?: string }" });
 
-    // ⚠️ PAS de slash initial
-    const safeName = filename.replace(/[^\w.\-]/g, "_");
-    const path = `uploads/${Date.now()}-${safeName}`;
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase.storage.from(bucket).createSignedUploadUrl(path);
+    if (error || !data?.signedUrl || !data?.token) return json(500, { error: error?.message || "createSignedUploadUrl failed" });
 
-    // Crée une URL d’upload signée pour le bucket "videos"
-    const { data, error } = await supabaseAdmin
-      .storage
-      .from("videos")
-      .createSignedUploadUrl(path);
-
-    if (error || !data) {
-      return NextResponse.json({ error: error?.message || "createSignedUploadUrl failed" }, { status: 500 });
-    }
-
-    // Retourne tel quel. Ne pas JSON-stringifier le token à part.
-    return NextResponse.json({
-      path, // ex: "uploads/1234-file.webm"
-      token: data.token, // string opaque
-      contentType: contentType || "application/octet-stream"
-    });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || "server error" }, { status: 500 });
+    return json(200, { url: data.signedUrl, token: data.token, bucket, path });
+  } catch (e:any) {
+    const status = Number.isInteger(e?.status) ? e.status : 500;
+    return json(status, { error: e?.message || "server error" });
   }
 }
+
+export async function GET() { return json(200, { ok: true }); }
