@@ -1,3 +1,4 @@
+// apps/web/app/dashboard/corrector/page.tsx
 "use client";
 
 import { useEffect, useRef, useState } from "react";
@@ -21,6 +22,11 @@ interface AIAnalysis {
   extras?: string[];
   timeline: AnalysisPoint[];
 }
+
+const CLIENT_PROXY_MAX_BYTES =
+  typeof process !== "undefined" && process.env.NEXT_PUBLIC_PROXY_UPLOAD_MAX_BYTES
+    ? Number(process.env.NEXT_PUBLIC_PROXY_UPLOAD_MAX_BYTES)
+    : 5 * 1024 * 1024; // 5MB par défaut
 
 function Spinner({ className = "" }: { className?: string }) {
   return (
@@ -93,7 +99,7 @@ function CoachAnalyzer() {
   }
 
   async function uploadWithSignedUrl(f: File): Promise<{ path: string; readUrl: string }> {
-    // 1) on demande une URL signée d'UPLOAD
+    // 1) demander une URL signée d'UPLOAD
     const r = await fetch("/api/videos/sign-upload", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -102,7 +108,7 @@ function CoachAnalyzer() {
     if (!r.ok) throw new Error(`sign-upload: HTTP ${r.status} ${await r.text()}`);
     const { signedUrl, path } = await r.json();
 
-    // 2) on envoie le fichier par PUT sur l'URL signée
+    // 2) PUT du fichier sur l'URL signée
     const put = await fetch(signedUrl, {
       method: "PUT",
       headers: {
@@ -113,7 +119,7 @@ function CoachAnalyzer() {
     });
     if (!put.ok) throw new Error(`upload PUT failed: ${put.status} ${await put.text()}`);
 
-    // 3) on génère une URL de lecture signée
+    // 3) créer une URL signée de lecture
     const r2 = await fetch("/api/storage/sign-read", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -142,22 +148,22 @@ function CoachAnalyzer() {
       const oneImage = [mosaic];
       setProgress(18);
 
-      // 1) UPLOAD — proxy d’abord, sinon fallback signed upload
+      // 1) UPLOAD — proxy si < 5MB, sinon signed upload direct
       setStatus("Upload de la vidéo…");
       let fileUrl: string | undefined;
 
-      try {
-        const url = await uploadWithProxy(file);
-        fileUrl = url;
-      } catch (e: any) {
-        // si trop gros pour le proxy, on bascule en signed upload
-        const st = e?.status as number | undefined;
-        if (st === 413) {
-          setStatus("Fichier volumineux — bascule en upload signé…");
+      if (file.size > CLIENT_PROXY_MAX_BYTES) {
+        setStatus("Fichier volumineux — upload signé…");
+        const { readUrl } = await uploadWithSignedUrl(file);
+        fileUrl = readUrl;
+      } else {
+        try {
+          const url = await uploadWithProxy(file);
+          fileUrl = url;
+        } catch (e: any) {
+          setStatus("Proxy indisponible — upload signé…");
           const { readUrl } = await uploadWithSignedUrl(file);
           fileUrl = readUrl;
-        } else {
-          throw e;
         }
       }
 
