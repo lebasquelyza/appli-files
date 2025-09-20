@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 interface AnalysisPoint { time: number; label: string; detail?: string; }
 interface AIAnalysis {
@@ -23,12 +23,38 @@ interface AIAnalysis {
   timeline: AnalysisPoint[];
 }
 
-/** Client Supabase navigateur créé à la demande (évite l’instanciation au build) */
-function getSupabaseBrowser() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !anon) throw new Error("NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY manquants.");
-  return createClient(url, anon);
+/* ===================== Supabase client (lazy + runtime ENV) ===================== */
+
+let _sb: SupabaseClient | null = null;
+let _envPromise: Promise<{ url: string; anon: string }> | null = null;
+
+async function loadPublicEnv(): Promise<{ url: string; anon: string }> {
+  // 1) essaie d'abord ce qui a été inliné au build
+  const inlineUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+  const inlineAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
+  if (inlineUrl && inlineAnon) return { url: inlineUrl, anon: inlineAnon };
+
+  // 2) sinon, va chercher côté serveur à l’exécution
+  if (!_envPromise) {
+    _envPromise = fetch("/api/public-env")
+      .then((r) => r.json())
+      .then((j) => ({
+        url: String(j?.SUPABASE_URL || ""),
+        anon: String(j?.SUPABASE_ANON_KEY || ""),
+      }))
+      .catch(() => ({ url: "", anon: "" }));
+  }
+  return _envPromise;
+}
+
+async function getSupabaseBrowser(): Promise<SupabaseClient> {
+  if (_sb) return _sb;
+  const { url, anon } = await loadPublicEnv();
+  if (!/^https?:\/\//.test(url) || !anon) {
+    throw new Error("NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY manquants.");
+  }
+  _sb = createClient(url, anon);
+  return _sb;
 }
 
 function Spinner({ className = "" }: { className?: string }) {
@@ -40,11 +66,28 @@ function Spinner({ className = "" }: { className?: string }) {
   );
 }
 
+function MissingConfigNotice() {
+  return (
+    <div className="mb-4 rounded-2xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+      Variables publiques Supabase absentes au build. La page va tenter de les charger au runtime.
+      Si l’upload reste bloqué, ajoute <code className="mx-1">NEXT_PUBLIC_SUPABASE_URL</code> et
+      <code className="mx-1">NEXT_PUBLIC_SUPABASE_ANON_KEY</code> dans Netlify (Environment), puis
+      « Clear cache and deploy ».
+    </div>
+  );
+}
+
 export default function Page() {
+  // Indication visuelle seulement (on ne bloque plus le bouton : on tente le runtime fetch)
+  const hasInlineEnv =
+    Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL) &&
+    Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+
   return (
     <>
       <PageHeader title="Files te corrige" subtitle="Conseils IA sur ta posture (démo)" />
       <Section title="Filmer / Notes">
+        {!hasInlineEnv && <MissingConfigNotice />}
         <p className="text-sm text-muted-foreground mb-4">
           Enregistre une vidéo, ajoute ton ressenti, puis lance l’analyse IA.
         </p>
@@ -101,20 +144,15 @@ function CoachAnalyzer() {
       const oneImage = [mosaic]; // on n'envoie qu'une image
       setProgress(18);
 
-      // -------------------------
-      // 1) SIGNED UPLOAD (Supabase)
-      //    ➜ le serveur attend { path, bucket? }
-      //    On envoie un path **interne au bucket** (pas "videos/..."),
-      //    et on fournit bucket="videos" séparément.
-      // -------------------------
+      // 1) SIGNED UPLOAD
       setStatus("Préparation de l’upload…");
       const bucket = "videos";
-      const objectPath = `${Date.now()}-${slugify(file.name)}`; // ex: 1726757312-squat.webm
+      const objectPath = `${Date.now()}-${slugify(file.name)}`;
 
       const resSign = await fetch("/api/storage/sign-upload", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ path: objectPath, bucket }), // ✅ conforme à l’API serveur
+        body: JSON.stringify({ path: objectPath, bucket }),
       });
       if (!resSign.ok) throw new Error(`sign-upload: HTTP ${resSign.status} ${await resSign.text()}`);
       const signJson = await resSign.json().catch(() => ({}));
@@ -123,9 +161,9 @@ function CoachAnalyzer() {
       if (!returnedPath || !token) throw new Error("sign-upload: réponse invalide (pas de path/token)");
       setProgress(35);
 
-      // 2) UPLOAD SUPABASE (client navigateur) — path **interne** au bucket
+      // 2) UPLOAD SUPABASE (client)
       setStatus("Upload de la vidéo…");
-      const supabase = getSupabaseBrowser();
+      const supabase = await getSupabaseBrowser(); // ⚠️ lazy + runtime ENV
       const { error: upErr } = await supabase
         .storage
         .from(bucket)
@@ -133,7 +171,7 @@ function CoachAnalyzer() {
       if (upErr) throw new Error(`uploadToSignedUrl: ${upErr.message || "erreur inconnue"}`);
       setProgress(60);
 
-      // 3) READ URL SIGNÉE (le backend connaît le bucket)
+      // 3) READ URL SIGNÉE
       setStatus("Récupération de l’URL…");
       const resRead = await fetch("/api/storage/sign-read", {
         method: "POST",
@@ -145,7 +183,7 @@ function CoachAnalyzer() {
       if (!fileUrl) throw new Error("sign-read: réponse invalide (pas d’url)");
       setProgress(75);
 
-      // 4) APPEL IA (1 image mosaïque) + gestion 429/504
+      // 4) APPEL IA
       void fakeProgress(setProgress, 80, 98);
       setStatus("Analyse IA…");
       const res = await fetch("/api/analyze", {
