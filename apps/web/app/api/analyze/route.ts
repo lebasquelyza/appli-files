@@ -38,7 +38,7 @@ async function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   });
 }
 
-/* ============ Image input sanitizer ============ */
+/* ============ Image sanitizer ============ */
 type SanitizeOk = { ok: true; url: string; kind: "https" | "data" };
 type SanitizeErr = { ok: false; reason: "empty" | "blob_url" | "bad_base64" | "unsupported" };
 type SanitizeResult = SanitizeOk | SanitizeErr;
@@ -56,7 +56,7 @@ function sanitizeImageInput(raw: string): SanitizeResult {
     if (b64.length > 10 * 1024 * 1024) return { ok: false, reason: "unsupported" };
     return { ok: true, url: `data:image/${mime};base64,${b64}`, kind: "data" };
   }
-  // base64 nu sans préfixe
+  // base64 nu
   if (/^[A-Za-z0-9+/]+={0,2}$/.test(s)) {
     const looksPng = s.startsWith("iVBORw0KGgo");
     const mime = looksPng ? "image/png" : "image/jpeg";
@@ -66,11 +66,11 @@ function sanitizeImageInput(raw: string): SanitizeResult {
 }
 function shortPreview(u: string) { return u.length <= 100 ? u : `${u.slice(0, 80)}…(${u.length} chars)`; }
 
-/* ============ Cache simple (anti double-clic) ============ */
+/* ============ Cache (anti double-clic) ============ */
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const cache = new Map<string, { t: number; json: AIAnalysis }>();
 
-/* ============ GET (self-check) ============ */
+/* ============ GET diag ============ */
 export async function GET() {
   const hasOpenAI = !!(process.env.OPENAI_API_KEY || process.env.OPEN_API_KEY);
   return NextResponse.json(
@@ -79,7 +79,7 @@ export async function GET() {
   );
 }
 
-/* ============ POST (JSON in / JSON out) ============ */
+/* ============ POST (JSON → JSON) ============ */
 export async function POST(req: NextRequest) {
   try {
     const ct = (req.headers.get("content-type") || "").toLowerCase();
@@ -186,4 +186,5 @@ export async function POST(req: NextRequest) {
     return jsonError(Number.isInteger(status) ? status : 500, e?.message || "Erreur interne");
   }
 }
+
 
