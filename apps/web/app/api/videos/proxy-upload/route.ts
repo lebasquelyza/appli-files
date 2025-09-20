@@ -1,3 +1,4 @@
+// apps/web/app/api/videos/proxy-upload/route.ts
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
@@ -21,21 +22,21 @@ function getSbAdmin() {
 }
 
 const BUCKET = process.env.ANALYZE_UPLOAD_BUCKET || "videos";
-const MAX_PROXY_BYTES = Number(process.env.PROXY_UPLOAD_MAX_BYTES || 8 * 1024 * 1024); // 8MB
+const MAX_PROXY_BYTES = Number(process.env.PROXY_UPLOAD_MAX_BYTES || 5 * 1024 * 1024); // 5MB
 
 export async function GET() {
-  // petit healthcheck
   try {
     const sb = getSbAdmin();
     const { data: bucket, error } = await sb.storage.getBucket(BUCKET);
     return j(200, {
       ok: true,
-      bucket: bucket?.name || null,
       hasBucket: !error && !!bucket,
+      bucket: bucket?.name || BUCKET,
       env: {
         SUPABASE_URL: !!(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL),
         SERVICE_ROLE: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
         BUCKET,
+        MAX_PROXY_BYTES,
       },
     });
   } catch (e: any) {
@@ -63,10 +64,10 @@ export async function POST(req: Request) {
     }
 
     const sb = getSbAdmin();
-    const base = filename ? slugify(filename) : `upload-${Date.now()}.webm`;
+    const base = slugify(filename || "upload.webm");
     const path = `${Date.now()}-${base}`;
 
-    const buf = new Uint8Array(await file.arrayBuffer());
+    const buf = new Uint8Array(await (file as Blob).arrayBuffer());
     const { error: upErr } = await sb.storage.from(BUCKET).upload(path, buf, {
       contentType,
       upsert: false,
