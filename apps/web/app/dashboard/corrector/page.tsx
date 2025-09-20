@@ -92,8 +92,8 @@ function CoachAnalyzer() {
       const oneImage = [mosaic]; // on n'envoie qu'une image
       setProgress(18);
 
-      // 1) UPLOAD via proxy serveur
-      setStatus("Upload de la vidéo (serveur) …");
+      // 1) UPLOAD via proxy serveur (pas de NEXT_PUBLIC_* requis)
+      setStatus("Upload de la vidéo (serveur)…");
       const fd = new FormData();
       fd.append("file", file);
       fd.append("filename", file.name);
@@ -357,6 +357,87 @@ function TimelineRow({ point, videoSelector }: { point: AnalysisPoint; videoSele
   );
 }
 
+function UploadDrop({ onFile }: { onFile: (file: File) => void }) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const onDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const f = e.dataTransfer.files?.[0];
+    if (f) onFile(f);
+  };
+  return (
+    <div onDragOver={(e) => e.preventDefault()} onDrop={onDrop} className="border-2 border-dashed rounded-2xl p-6 text-center">
+      <div className="mx-auto h-8 w-8 mb-2">☁️</div>
+      <p className="text-sm mb-2">Glisse une vidéo ici ou</p>
+      <div className="flex items-center justify-center gap-2">
+        <Input ref={inputRef} type="file" accept="video/*" className="hidden"
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); }} />
+        <Button variant="secondary" onClick={() => inputRef.current?.click()}>Choisir un fichier</Button>
+      </div>
+    </div>
+  );
+}
+
+function VideoRecorder({ onRecorded }: { onRecorded: (file: File) => void }) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const [isRecording, setIsRecording] = useState(false);
+  const [hasStream, setHasStream] = useState(false);
+
+  useEffect(() => {
+    return () => {
+      const stream = videoRef.current?.srcObject as MediaStream | null;
+      stream?.getTracks().forEach((t) => t.stop());
+    };
+  }, []);
+
+  const start = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await (videoRef.current as HTMLVideoElement).play();
+        setHasStream(true);
+      }
+      const mr = new MediaRecorder(stream, { mimeType: getBestMimeType(), videoBitsPerSecond: 350_000 });
+      mediaRecorderRef.current = mr;
+      chunksRef.current = [];
+      mr.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunksRef.current.push(e.data); };
+      mr.onstop = async () => {
+        const blob = new Blob(chunksRef.current, { type: mr.mimeType });
+        const file = new File([blob], `enregistrement-${Date.now()}.webm`, { type: blob.type });
+        onRecorded(file);
+      };
+      mr.start();
+      setIsRecording(true);
+    } catch (err) {
+      alert("Impossible d'accéder à la caméra/micro. Vérifie les permissions.");
+      console.error(err);
+    }
+  };
+
+  const stop = () => {
+    const mr = mediaRecorderRef.current;
+    if (mr && mr.state !== "inactive") mr.stop();
+    setIsRecording(false);
+    const stream = videoRef.current?.srcObject as MediaStream | null;
+    stream?.getTracks().forEach((t) => t.stop());
+    setHasStream(false);
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="relative">
+        <video ref={videoRef} className="w-full rounded-2xl border" muted playsInline />
+        {!hasStream && (<div className="absolute inset-0 grid place-items-center text-xs text-muted-foreground">Prépare ta caméra puis clique « Démarrer »</div>)}
+      </div>
+      <div className="flex items-center gap-2">
+        {!isRecording ? (<Button onClick={start}>▶️ Démarrer</Button>) : (<Button variant="destructive" onClick={stop}>⏸️ Arrêter</Button>)}
+      </div>
+    </div>
+  );
+}
+
 /* ===== Helpers vidéo / images ===== */
 
 const exampleFeeling =
@@ -372,7 +453,7 @@ function getBestMimeType() {
   const candidates = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm", "video/mp4"];
   for (const c of candidates) {
     // @ts-ignore
-    if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(c)) return c;
+    if (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(c)) return c;
   }
   return "video/webm";
 }
@@ -393,15 +474,15 @@ async function extractFramesFromFile(file: File, nFrames = 6): Promise<{ frames:
     const video = document.createElement("video");
     video.src = videoURL;
     video.crossOrigin = "anonymous";
-    video.muted = true;
-    video.playsInline = true;
+    (video as any).muted = true;
+    (video as any).playsInline = true;
 
     await new Promise<void>((resolve, reject) => {
       video.onloadedmetadata = () => resolve();
       video.onerror = () => reject(new Error("Impossible de lire la vidéo côté client."));
     });
 
-    const duration = Math.max(0.001, video.duration || 0);
+    const duration = Math.max(0.001, (video as any).duration || 0);
     const times: number[] = [];
     if (nFrames <= 1) {
       times.push(Math.min(duration, 0.1));
@@ -421,11 +502,13 @@ async function extractFramesFromFile(file: File, nFrames = 6): Promise<{ frames:
     const targetH = 360;
 
     for (const t of times) {
-      await seek(video, t);
-      const { width, height } = bestFit(video.videoWidth, video.videoHeight, targetW, targetH);
+      await seek(video as any, t);
+      const vw = (video as any).videoWidth || targetW;
+      const vh = (video as any).videoHeight || targetH;
+      const { width, height } = bestFit(vw, vh, targetW, targetH);
       canvas.width = width;
       canvas.height = height;
-      ctx.drawImage(video, 0, 0, width, height);
+      ctx.drawImage(video as any, 0, 0, width, height);
       const dataUrl = canvas.toDataURL("image/jpeg", 0.35); // qualité plus basse
       frames.push(dataUrl);
       timestamps.push(Math.round(t));
@@ -447,7 +530,7 @@ function seek(video: HTMLVideoElement, time: number) {
     };
     video.addEventListener("seeked", onSeeked);
     video.addEventListener("error", onError);
-    try { video.currentTime = Math.min(Math.max(0, time), video.duration || time); } catch { /* ignore */ }
+    try { (video as any).currentTime = Math.min(Math.max(0, time), (video as any).duration || time); } catch { /* ignore */ }
   });
 }
 
