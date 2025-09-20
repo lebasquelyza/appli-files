@@ -74,6 +74,56 @@ function CoachAnalyzer() {
     setProgress(0);
   };
 
+  async function uploadWithProxy(f: File): Promise<string> {
+    const fd = new FormData();
+    fd.append("file", f);
+    fd.append("filename", f.name);
+    fd.append("contentType", f.type || "application/octet-stream");
+    const res = await fetch("/api/videos/proxy-upload", { method: "POST", body: fd });
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      let detail = "";
+      try { detail = JSON.parse(txt)?.error || txt; } catch { detail = txt; }
+      const err = new Error(`proxy-upload: HTTP ${res.status} ${detail}`);
+      (err as any).status = res.status;
+      throw err;
+    }
+    const json = await res.json();
+    return json.url as string;
+  }
+
+  async function uploadWithSignedUrl(f: File): Promise<{ path: string; readUrl: string }> {
+    // 1) on demande une URL signée d'UPLOAD
+    const r = await fetch("/api/videos/sign-upload", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ filename: f.name }),
+    });
+    if (!r.ok) throw new Error(`sign-upload: HTTP ${r.status} ${await r.text()}`);
+    const { signedUrl, path } = await r.json();
+
+    // 2) on envoie le fichier par PUT sur l'URL signée
+    const put = await fetch(signedUrl, {
+      method: "PUT",
+      headers: {
+        "content-type": f.type || "application/octet-stream",
+        "x-upsert": "false",
+      },
+      body: f,
+    });
+    if (!put.ok) throw new Error(`upload PUT failed: ${put.status} ${await put.text()}`);
+
+    // 3) on génère une URL de lecture signée
+    const r2 = await fetch("/api/storage/sign-read", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path, expiresIn: 60 * 60 }),
+    });
+    if (!r2.ok) throw new Error(`sign-read: HTTP ${r2.status} ${await r2.text()}`);
+    const { url } = await r2.json();
+    return { path, readUrl: url as string };
+  }
+
   const onAnalyze = async () => {
     if (!file || isAnalyzing || cooldown > 0) return;
 
@@ -83,27 +133,35 @@ function CoachAnalyzer() {
     setErrorMsg("");
 
     try {
-      // 0) EXTRACTION DE 6 FRAMES + MOSAÏQUE 3x2 (qualité 0.30)
+      // 0) EXTRACTION + MOSAÏQUE
       const { frames, timestamps } = await extractFramesFromFile(file, 6);
       if (!frames.length) throw new Error("Impossible d’extraire des images de la vidéo.");
       setProgress(12);
 
-      const mosaic = await makeMosaic(frames, 3, 2, 960, 540, 0.30); // 16:9
-      const oneImage = [mosaic]; // on n'envoie qu'une image
+      const mosaic = await makeMosaic(frames, 3, 2, 960, 540, 0.30);
+      const oneImage = [mosaic];
       setProgress(18);
 
-      // 1) UPLOAD via proxy serveur (pas de NEXT_PUBLIC_* requis)
-      setStatus("Upload de la vidéo (serveur)…");
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("filename", file.name);
-      fd.append("contentType", file.type || "application/octet-stream");
+      // 1) UPLOAD — proxy d’abord, sinon fallback signed upload
+      setStatus("Upload de la vidéo…");
+      let fileUrl: string | undefined;
 
-      const upRes = await fetch("/api/videos/proxy-upload", { method: "POST", body: fd });
-      if (!upRes.ok) throw new Error(`proxy-upload: HTTP ${upRes.status} ${await upRes.text()}`);
-      const upJson = await upRes.json().catch(() => ({}));
-      const fileUrl: string | undefined = upJson?.url;
-      if (!fileUrl) throw new Error("proxy-upload: réponse invalide (pas d’url)");
+      try {
+        const url = await uploadWithProxy(file);
+        fileUrl = url;
+      } catch (e: any) {
+        // si trop gros pour le proxy, on bascule en signed upload
+        const st = e?.status as number | undefined;
+        if (st === 413) {
+          setStatus("Fichier volumineux — bascule en upload signé…");
+          const { readUrl } = await uploadWithSignedUrl(file);
+          fileUrl = readUrl;
+        } else {
+          throw e;
+        }
+      }
+
+      if (!fileUrl) throw new Error("Upload échoué (aucune URL retournée)");
       setProgress(75);
 
       // 2) APPEL IA
