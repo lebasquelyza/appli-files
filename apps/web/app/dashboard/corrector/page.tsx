@@ -10,7 +10,6 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 interface AnalysisPoint { time: number; label: string; detail?: string; }
 interface AIAnalysis {
@@ -23,40 +22,6 @@ interface AIAnalysis {
   timeline: AnalysisPoint[];
 }
 
-/* ===================== Supabase client (lazy + runtime ENV) ===================== */
-
-let _sb: SupabaseClient | null = null;
-let _envPromise: Promise<{ url: string; anon: string }> | null = null;
-
-async function loadPublicEnv(): Promise<{ url: string; anon: string }> {
-  // 1) essaie d'abord ce qui a été inliné au build
-  const inlineUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-  const inlineAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
-  if (inlineUrl && inlineAnon) return { url: inlineUrl, anon: inlineAnon };
-
-  // 2) sinon, va chercher côté serveur à l’exécution
-  if (!_envPromise) {
-    _envPromise = fetch("/api/public-env")
-      .then((r) => r.json())
-      .then((j) => ({
-        url: String(j?.SUPABASE_URL || ""),
-        anon: String(j?.SUPABASE_ANON_KEY || ""),
-      }))
-      .catch(() => ({ url: "", anon: "" }));
-  }
-  return _envPromise;
-}
-
-async function getSupabaseBrowser(): Promise<SupabaseClient> {
-  if (_sb) return _sb;
-  const { url, anon } = await loadPublicEnv();
-  if (!/^https?:\/\//.test(url) || !anon) {
-    throw new Error("NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY manquants.");
-  }
-  _sb = createClient(url, anon);
-  return _sb;
-}
-
 function Spinner({ className = "" }: { className?: string }) {
   return (
     <span
@@ -66,28 +31,11 @@ function Spinner({ className = "" }: { className?: string }) {
   );
 }
 
-function MissingConfigNotice() {
-  return (
-    <div className="mb-4 rounded-2xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-      Variables publiques Supabase absentes au build. La page va tenter de les charger au runtime.
-      Si l’upload reste bloqué, ajoute <code className="mx-1">NEXT_PUBLIC_SUPABASE_URL</code> et
-      <code className="mx-1">NEXT_PUBLIC_SUPABASE_ANON_KEY</code> dans Netlify (Environment), puis
-      « Clear cache and deploy ».
-    </div>
-  );
-}
-
 export default function Page() {
-  // Indication visuelle seulement (on ne bloque plus le bouton : on tente le runtime fetch)
-  const hasInlineEnv =
-    Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL) &&
-    Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-
   return (
     <>
       <PageHeader title="Files te corrige" subtitle="Conseils IA sur ta posture (démo)" />
       <Section title="Filmer / Notes">
-        {!hasInlineEnv && <MissingConfigNotice />}
         <p className="text-sm text-muted-foreground mb-4">
           Enregistre une vidéo, ajoute ton ressenti, puis lance l’analyse IA.
         </p>
@@ -144,46 +92,21 @@ function CoachAnalyzer() {
       const oneImage = [mosaic]; // on n'envoie qu'une image
       setProgress(18);
 
-      // 1) SIGNED UPLOAD
-      setStatus("Préparation de l’upload…");
-      const bucket = "videos";
-      const objectPath = `${Date.now()}-${slugify(file.name)}`;
+      // 1) UPLOAD via proxy serveur
+      setStatus("Upload de la vidéo (serveur) …");
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("filename", file.name);
+      fd.append("contentType", file.type || "application/octet-stream");
 
-      const resSign = await fetch("/api/storage/sign-upload", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ path: objectPath, bucket }),
-      });
-      if (!resSign.ok) throw new Error(`sign-upload: HTTP ${resSign.status} ${await resSign.text()}`);
-      const signJson = await resSign.json().catch(() => ({}));
-      const token: string | undefined = signJson?.token;
-      const returnedPath: string | undefined = signJson?.path || objectPath;
-      if (!returnedPath || !token) throw new Error("sign-upload: réponse invalide (pas de path/token)");
-      setProgress(35);
-
-      // 2) UPLOAD SUPABASE (client)
-      setStatus("Upload de la vidéo…");
-      const supabase = await getSupabaseBrowser(); // ⚠️ lazy + runtime ENV
-      const { error: upErr } = await supabase
-        .storage
-        .from(bucket)
-        .uploadToSignedUrl(returnedPath, token, file);
-      if (upErr) throw new Error(`uploadToSignedUrl: ${upErr.message || "erreur inconnue"}`);
-      setProgress(60);
-
-      // 3) READ URL SIGNÉE
-      setStatus("Récupération de l’URL…");
-      const resRead = await fetch("/api/storage/sign-read", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ path: returnedPath, expiresIn: 60 * 60 }),
-      });
-      if (!resRead.ok) throw new Error(`sign-read: HTTP ${resRead.status} ${await resRead.text()}`);
-      const { url: fileUrl } = await resRead.json();
-      if (!fileUrl) throw new Error("sign-read: réponse invalide (pas d’url)");
+      const upRes = await fetch("/api/videos/proxy-upload", { method: "POST", body: fd });
+      if (!upRes.ok) throw new Error(`proxy-upload: HTTP ${upRes.status} ${await upRes.text()}`);
+      const upJson = await upRes.json().catch(() => ({}));
+      const fileUrl: string | undefined = upJson?.url;
+      if (!fileUrl) throw new Error("proxy-upload: réponse invalide (pas d’url)");
       setProgress(75);
 
-      // 4) APPEL IA
+      // 2) APPEL IA
       void fakeProgress(setProgress, 80, 98);
       setStatus("Analyse IA…");
       const res = await fetch("/api/analyze", {
@@ -434,85 +357,7 @@ function TimelineRow({ point, videoSelector }: { point: AnalysisPoint; videoSele
   );
 }
 
-function UploadDrop({ onFile }: { onFile: (file: File) => void }) {
-  const inputRef = useRef<HTMLInputElement | null>(null);
-  const onDrop = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    const f = e.dataTransfer.files?.[0];
-    if (f) onFile(f);
-  };
-  return (
-    <div onDragOver={(e) => e.preventDefault()} onDrop={onDrop} className="border-2 border-dashed rounded-2xl p-6 text-center">
-      <div className="mx-auto h-8 w-8 mb-2">☁️</div>
-      <p className="text-sm mb-2">Glisse une vidéo ici ou</p>
-      <div className="flex items-center justify-center gap-2">
-        <Input ref={inputRef} type="file" accept="video/*" className="hidden"
-          onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); }} />
-        <Button variant="secondary" onClick={() => inputRef.current?.click()}>Choisir un fichier</Button>
-      </div>
-    </div>
-  );
-}
-
-function VideoRecorder({ onRecorded }: { onRecorded: (file: File) => void }) {
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const [isRecording, setIsRecording] = useState(false);
-  const [hasStream, setHasStream] = useState(false);
-
-  useEffect(() => {
-    return () => {
-      const stream = videoRef.current?.srcObject as MediaStream | null;
-      stream?.getTracks().forEach((t) => t.stop());
-    };
-  }, []);
-
-  const start = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-        setHasStream(true);
-      }
-      const mr = new MediaRecorder(stream, { mimeType: getBestMimeType(), videoBitsPerSecond: 350_000 });
-      mediaRecorderRef.current = mr;
-      chunksRef.current = [];
-      mr.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunksRef.current.push(e.data); };
-      mr.onstop = async () => {
-        const blob = new Blob(chunksRef.current, { type: mr.mimeType });
-        const file = new File([blob], `enregistrement-${Date.now()}.webm`, { type: blob.type });
-        onRecorded(file);
-      };
-      mr.start(); setIsRecording(true);
-    } catch (err) {
-      alert("Impossible d'accéder à la caméra/micro. Vérifie les permissions.");
-      console.error(err);
-    }
-  };
-
-  const stop = () => {
-    const mr = mediaRecorderRef.current;
-    if (mr && mr.state !== "inactive") mr.stop();
-    setIsRecording(false);
-    const stream = videoRef.current?.srcObject as MediaStream | null;
-    stream?.getTracks().forEach((t) => t.stop());
-    setHasStream(false);
-  };
-
-  return (
-    <div className="space-y-3">
-      <div className="relative">
-        <video ref={videoRef} className="w-full rounded-2xl border" muted playsInline />
-        {!hasStream && (<div className="absolute inset-0 grid place-items-center text-xs text-muted-foreground">Prépare ta caméra puis clique « Démarrer »</div>)}
-      </div>
-      <div className="flex items-center gap-2">
-        {!isRecording ? (<Button onClick={start}>▶️ Démarrer</Button>) : (<Button variant="destructive" onClick={stop}>⏸️ Arrêter</Button>)}
-      </div>
-    </div>
-  );
-}
+/* ===== Helpers vidéo / images ===== */
 
 const exampleFeeling =
   "Séance de squats. RPE 8. Genou droit un peu instable, bas du dos fatigué, j'ai surtout senti les quadris brûler sur les dernières reps.";
@@ -646,15 +491,4 @@ function loadImage(src: string): Promise<HTMLImageElement> {
     img.onerror = () => reject(new Error("Impossible de charger l’image."));
     img.src = src;
   });
-}
-
-/** Utils */
-function slugify(name: string) {
-  return name
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, "-")
-    .replace(/[^a-z0-9._-]/g, "")
-    .replace(/-+/g, "-")
-    .slice(0, 140);
 }
