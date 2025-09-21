@@ -12,9 +12,7 @@
   # Désactive la télémétrie Next dans la CI
   NEXT_TELEMETRY_DISABLED = "1"
 
-  # ==== Variables d'env back (à définir dans le dashboard Netlify si possible) ====
-  # OpenAI
-  OPENAI_API_KEY = ""       # ou OPEN_API_KEY ; garde une seule clé, inutile d'avoir les deux
+  # ==== Variables d'env back (à définir dans le dashboard Netlify si possible) ===   
   OPEN_API_KEY   = ""
   # Supabase
   NEXT_PUBLIC_SUPABASE_URL   = ""
