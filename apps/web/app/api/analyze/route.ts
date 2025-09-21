@@ -94,8 +94,13 @@ export async function POST(req: NextRequest) {
     const feeling: string = typeof body.feeling === "string" ? body.feeling : "";
     const economy: boolean = body.economyMode !== false;
 
-    const apiKey = process.env.OPENAI_API_KEY || process.env.OPEN_API_KEY || "";
-    if (!apiKey) return jsonError(500, "Clé OpenAI manquante (OPENAI_API_KEY ou OPEN_API_KEY).");
+    // ---- Lecture et validation robuste de la clé OpenAI
+    const rawKey = (process.env.OPENAI_API_KEY || process.env.OPEN_API_KEY || "").trim();
+    if (!rawKey || !rawKey.startsWith("sk-") || rawKey.length < 40) {
+      const hint = rawKey ? `${rawKey.slice(0, 6)}… (len=${rawKey.length})` : "EMPTY";
+      return jsonError(500, `Clé OpenAI absente ou invalide côté runtime (valeur lue: ${hint}).`);
+    }
+    const apiKey = rawKey;
 
     const ONE_BY_ONE_DATA_URL =
       "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMB/az9nS0AAAAASUVORK5CYII=";
