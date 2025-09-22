@@ -171,8 +171,8 @@ export async function POST(req: NextRequest) {
 Langue: FRANÇAIS UNIQUEMENT.
 Objectif: identifier l'exercice, lister les muscles principaux, DÉTECTER LES ERREURS TECHNIQUES, et donner des CORRECTIONS concrètes.
 
-Checklist d'erreurs fréquentes (selon exercice):
-• Dos trop cambré / bassin en antéversion excessive
+Checklist d'erreurs fréquentes:
+• Dos trop cambré (hyperlordose) / bassin en antéversion
 • Jambes trop tendues / verrouillées
 • Genoux qui rentrent (valgus)
 • Genoux qui dépassent excessivement / avance trop tôt
@@ -186,22 +186,20 @@ Checklist d'erreurs fréquentes (selon exercice):
 Sortie STRICTEMENT en JSON (response_format json_object).
 Champs:
 {
-  "exercise": string,                 // nom FR (ou "inconnu")
-  "overall": string,                  // synthèse courte
-  "muscles": string[],                // ≤5
-  "corrections": string[],            // ≤5 consignes impératives FR
-  "faults": [                         // ≤6 erreurs techniques détectées
-    { "issue": string, "severity": "faible"|"moyenne"|"élevée", "evidence"?: string, "correction"?: string }
-  ],
-  "extras": string[],                 // optionnel
-  "timeline": [{"time":number,"label":string,"detail"?:string}], // ≤4
-  "objects": string[],                // optionnel
-  "movement_pattern": string          // optionnel
+  "exercise": string,
+  "overall": string,
+  "muscles": string[],
+  "corrections": string[],
+  "faults": [{ "issue": string, "severity": "faible"|"moyenne"|"élevée", "evidence"?: string, "correction"?: string }],
+  "extras": string[],
+  "timeline": [{"time":number,"label":string,"detail"?:string}],
+  "objects": string[],
+  "movement_pattern": string
 }
 
 Rappels:
 • Si indices insuffisants: exercise="inconnu".
-• Corrections: forme impérative, concrète (ex.: "Gaine le tronc", "Fléchis légèrement les genoux").`;
+• Corrections: impératives, concrètes (ex.: "Gaine le tronc", "Fléchis légèrement les genoux").`;
 
     const userTextParts: string[] = [];
     if (feeling) userTextParts.push(`Ressenti: ${feeling}`);
@@ -252,7 +250,7 @@ Rappels:
       return jsonError(502, "Impossible de parser la réponse JSON.");
     }
 
-    // Normalisation + francisation
+    // Normalisation + clamp
     parsed.exercise = frLabel(parsed.exercise || "exercice_inconnu");
     parsed.muscles ||= [];
     parsed.corrections ||= [];
