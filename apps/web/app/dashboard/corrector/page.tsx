@@ -12,17 +12,22 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
+/* ===================== Types ===================== */
 interface AnalysisPoint { time: number; label: string; detail?: string; }
+interface Candidate { label: string; confidence: number; }
 interface AIAnalysis {
-  exercise: string;
-  confidence: number;
-  overall: string;
-  muscles: string[];
-  cues: string[];
-  extras?: string[];
-  timeline: AnalysisPoint[];
+  exercise: string;              // meilleur choix (top-1)
+  confidence: number;            // confiance du top-1 (0..1)
+  overall: string;               // commentaire global
+  muscles: string[];             // muscles détectés
+  cues: string[];                // consignes/corrections
+  extras?: string[];             // points complémentaires
+  timeline: AnalysisPoint[];     // repères temporels
+  candidates?: Candidate[];      // top-k alternatives
+  rawText?: string;              // texte brut éventuel du modèle
 }
 
+/* ===================== Constantes ===================== */
 const CLIENT_PROXY_MAX_BYTES =
   typeof process !== "undefined" && process.env.NEXT_PUBLIC_PROXY_UPLOAD_MAX_BYTES
     ? Number(process.env.NEXT_PUBLIC_PROXY_UPLOAD_MAX_BYTES)
@@ -37,6 +42,7 @@ function Spinner({ className = "" }: { className?: string }) {
   );
 }
 
+/* ===================== Page ===================== */
 export default function Page() {
   return (
     <>
@@ -51,6 +57,7 @@ export default function Page() {
   );
 }
 
+/* ===================== Composant principal ===================== */
 function CoachAnalyzer() {
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
@@ -62,6 +69,11 @@ function CoachAnalyzer() {
   const [status, setStatus] = useState<string>("");
   const [errorMsg, setErrorMsg] = useState<string>("");
 
+  // Open-set options
+  const [maxCandidates, setMaxCandidates] = useState<number>(5);
+  const [openSet, setOpenSet] = useState<boolean>(true); // détection sans restriction
+
+  // cooldown (429, 504)
   const [cooldown, setCooldown] = useState<number>(0);
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -99,7 +111,6 @@ function CoachAnalyzer() {
   }
 
   async function uploadWithSignedUrl(f: File): Promise<{ path: string; readUrl: string }> {
-    // 1) demander une URL signée d'UPLOAD
     const r = await fetch("/api/videos/sign-upload", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -108,7 +119,6 @@ function CoachAnalyzer() {
     if (!r.ok) throw new Error(`sign-upload: HTTP ${r.status} ${await r.text()}`);
     const { signedUrl, path } = await r.json();
 
-    // 2) PUT du fichier sur l'URL signée
     const put = await fetch(signedUrl, {
       method: "PUT",
       headers: {
@@ -119,7 +129,6 @@ function CoachAnalyzer() {
     });
     if (!put.ok) throw new Error(`upload PUT failed: ${put.status} ${await put.text()}`);
 
-    // 3) créer une URL signée de lecture
     const r2 = await fetch("/api/storage/sign-read", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -170,9 +179,15 @@ function CoachAnalyzer() {
       if (!fileUrl) throw new Error("Upload échoué (aucune URL retournée)");
       setProgress(75);
 
-      // 2) APPEL IA
+      // 2) APPEL IA (open-set, top-k candidats)
       void fakeProgress(setProgress, 80, 98);
       setStatus("Analyse IA…");
+
+      const promptHints = `Tu es un assistant d’analyse de mouvement sportif.\n` +
+        `Tâche: identifier l’exercice visible dans la vidéo (open-set).\n` +
+        `Contraintes:\n- Si aucun exercice n’est clairement visible, réponds "inconnu" avec faible confiance.\n` +
+        `- Justifie en 1-2 phrases (overall).\n- Donne un top-k d’hypothèses (candidates) avec confidences [0..1].`;
+
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -182,6 +197,9 @@ function CoachAnalyzer() {
           feeling,
           fileUrl,
           economyMode: true,
+          openSet,                 // <— mode open-set
+          maxCandidates,           // <— top-k candidats souhaités
+          promptHints,             // <— indice de prompt pour le backend
         }),
       });
 
@@ -206,9 +224,19 @@ function CoachAnalyzer() {
       }
 
       const data: Partial<AIAnalysis> = await res.json();
+
+      // --- Normalisation open-set ---
+      const candidates = Array.isArray((data as any)?.candidates)
+        ? ((data as any).candidates as any[])
+            .map((c) => ({ label: String(c?.label || ""), confidence: typeof c?.confidence === "number" ? c.confidence : 0 }))
+            .filter((c) => c.label)
+        : [];
+
+      const top = chooseTopCandidate(data.exercise, data.confidence, candidates);
+
       const safe: AIAnalysis = {
-        exercise: (data.exercise || "exercice_inconnu").toString(),
-        confidence: typeof data.confidence === "number" ? data.confidence : 0.5,
+        exercise: top.label || (data.exercise || "exercice_inconnu").toString(),
+        confidence: typeof top.confidence === "number" ? top.confidence : (typeof data.confidence === "number" ? data.confidence : 0.5),
         overall:
           (data.overall && data.overall.trim()) ||
           "Analyse effectuée mais je manque d’indices visuels. Réessaie avec un angle plus net / cadrage entier.",
@@ -219,6 +247,8 @@ function CoachAnalyzer() {
           Array.isArray(data.timeline)
             ? data.timeline.filter(v => typeof v?.time === "number" && typeof v?.label === "string")
             : [],
+        candidates,
+        rawText: (data as any)?.rawText,
       };
 
       setAnalysis(safe);
@@ -302,6 +332,32 @@ function CoachAnalyzer() {
             </Button>
           </div>
 
+          {/* Open-set options UI */}
+          <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+            <div className="rounded-xl border p-2">
+              <div className="font-medium mb-1">Mode</div>
+              <div className="flex items-center gap-2">
+                <Badge variant={openSet ? "default" : "secondary"}>Open‑set</Badge>
+                <button className="underline" onClick={() => setOpenSet(v => !v)}>
+                  {openSet ? "désactiver" : "activer"}
+                </button>
+              </div>
+            </div>
+            <div className="rounded-xl border p-2">
+              <div className="font-medium mb-1">Top‑k candidats</div>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  className="h-8 w-20"
+                  min={1}
+                  max={10}
+                  value={maxCandidates}
+                  onChange={(e) => setMaxCandidates(Math.max(1, Math.min(10, Number(e.target.value) || 5)))}
+                />
+              </div>
+            </div>
+          </div>
+
           {(isAnalyzing || progress > 0 || errorMsg || status) && (
             <div className="space-y-2">
               <Progress value={progress} />
@@ -320,14 +376,34 @@ function CoachAnalyzer() {
 
           {analysis && (
             <div className="space-y-4">
+              {/* Top‑1 + confiance */}
               <div className="flex items-center flex-wrap gap-2">
                 <Badge variant="secondary">Exercice détecté : {analysis.exercise || "inconnu"}</Badge>
                 <span className="text-xs text-muted-foreground">Confiance : {Math.round((analysis.confidence ?? 0) * 100)}%</span>
               </div>
 
-              <p className="text-sm leading-relaxed">
-                {analysis.overall?.trim() || "Pas d’observations précises. Réessaie avec un angle plus net / cadrage entier."}
-              </p>
+              {/* Top‑k candidats */}
+              {analysis.candidates && analysis.candidates.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="text-sm font-medium">Autres hypothèses</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {analysis.candidates.map((c, i) => (
+                      <button
+                        key={`${c.label}-${i}`}
+                        onClick={() => setAnalysis(a => a ? { ...a, exercise: c.label, confidence: c.confidence } : a)}
+                        className="rounded-full border px-3 py-1 text-xs hover:bg-accent"
+                        title="Définir comme exercice choisi"
+                      >
+                        {c.label} · {Math.round(c.confidence * 100)}%
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {analysis.overall?.trim() && (
+                <p className="text-sm leading-relaxed">{analysis.overall.trim()}</p>
+              )}
 
               <div className="space-y-2">
                 <h4 className="text-sm font-medium">Muscles principalement sollicités</h4>
@@ -638,4 +714,14 @@ function loadImage(src: string): Promise<HTMLImageElement> {
     img.onerror = () => reject(new Error("Impossible de charger l’image."));
     img.src = src;
   });
+}
+
+/* ===================== Utilitaires open‑set ===================== */
+function chooseTopCandidate(primary?: string | null, primaryConf?: number, candidates?: Candidate[]) {
+  const list = [...(candidates || [])];
+  if (primary && !list.find(c => c.label === primary)) {
+    list.unshift({ label: primary, confidence: typeof primaryConf === "number" ? primaryConf : 0 });
+  }
+  list.sort((a, b) => (b.confidence || 0) - (a.confidence || 0));
+  return list[0] || { label: primary || "exercice_inconnu", confidence: typeof primaryConf === "number" ? primaryConf : 0 };
 }
