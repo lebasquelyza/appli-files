@@ -76,6 +76,9 @@ function CoachAnalyzer() {
   const [overrideOpen, setOverrideOpen] = useState(false);
   const [overrideName, setOverrideName] = useState("");
 
+  // Aperçu corrigé (overlays IA)
+  const [showAIPreview, setShowAIPreview] = useState(false);
+
   // cooldown (429, 504)
   const [cooldown, setCooldown] = useState<number>(0);
   useEffect(() => {
@@ -98,6 +101,7 @@ function CoachAnalyzer() {
     setShowChoiceGate(false);
     setOverrideOpen(false);
     setOverrideName("");
+    setShowAIPreview(false);
   };
 
   async function uploadWithProxy(f: File): Promise<string> {
@@ -253,13 +257,14 @@ function CoachAnalyzer() {
         movement_pattern: typeof (data as any)?.movement_pattern === "string" ? (data as any).movement_pattern : undefined,
       };
 
-      // 3) Après analyse : proposer la confirmation avant d'afficher les détails
+      // 3) Proposer la confirmation avant d'afficher les détails
       setAnalysis(safe);
       setPredictedExercise(safe.exercise || "exercice_inconnu");
-      setShowChoiceGate(true);            // ➜ on affiche le choix "Confirmer" / "Autre"
+      setShowChoiceGate(true);
       setOverrideOpen(false);
       setProgress(100);
       setStatus("Analyse terminée — confirme l’exercice");
+      setShowAIPreview(true); // active l’aperçu IA dans Démonstration après analyse
     } catch (e: any) {
       console.error(e);
       const msg = e?.message || String(e);
@@ -281,11 +286,8 @@ function CoachAnalyzer() {
   };
   const submitOverride = async () => {
     if (!overrideName.trim()) return;
-    // Relance l'analyse avec le nom choisi par l'utilisateur
-    await onAnalyze(overrideName.trim());
-    // Après la relance, on garde le gate actif pour confirmer (mais ici comme l'user a saisi,
-    // on peut directement fermer si tu préfères) :
-    setShowChoiceGate(false);     // ➜ on montre les résultats directement après override
+    await onAnalyze(overrideName.trim()); // relance avec le nom fourni
+    setShowChoiceGate(false);             // on peut directement afficher les résultats
     setOverrideOpen(false);
   };
 
@@ -304,9 +306,10 @@ function CoachAnalyzer() {
     setShowChoiceGate(false);
     setOverrideOpen(false);
     setOverrideName("");
+    setShowAIPreview(false);
   };
 
-  // ===== Helpers pour rendre la ligne "Erreur détectée / Correction" =====
+  // ===== Helpers "Erreur détectée / Correction" =====
   function faultsToLines(a: AIAnalysis | null) {
     if (!a) return { issuesLine: "", correctionsLine: "" };
     const issues = (a.faults || [])
@@ -317,14 +320,10 @@ function CoachAnalyzer() {
       .filter(Boolean);
 
     const issuesLine = issues.join(" - ");
-
-    // S'il n'y a pas de correction au niveau des faults, fallback aux corrections globales
     const correctionsBase = faultCorrections.length ? faultCorrections : (a.corrections || []);
     const correctionsLine = (correctionsBase || []).join(" - ");
-
     return { issuesLine, correctionsLine };
   }
-
   const { issuesLine, correctionsLine } = faultsToLines(analysis);
 
   return (
@@ -361,12 +360,12 @@ function CoachAnalyzer() {
         </CardContent>
       </Card>
 
-      {/* Col 2: ressenti + envoi */}
+      {/* Col 2: Ton ressenti ? + envoi */}
       <Card className="lg:col-span-1">
-        <CardHeader><CardTitle className="flex items-center gap-2">🎙️ Ressenti du client</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="flex items-center gap-2">🎙️ Ton ressenti ?</CardTitle></CardHeader>
         <CardContent className="space-y-3">
           <Textarea
-            placeholder="Dis-nous comment tu te sens (douleurs, fatigue, où tu as senti l'effort, RPE, etc.)."
+            placeholder="Explique comment tu te sens (douleurs, fatigue, où tu as senti l'effort, RPE, etc.)."
             value={feeling}
             onChange={(e) => setFeeling(e.target.value)}
             className="min-h-[140px]"
@@ -393,7 +392,7 @@ function CoachAnalyzer() {
 
       {/* Col 3: choix + résultats */}
       <Card className="lg:col-span-1">
-        <CardHeader><CardTitle className="flex items-center gap-2">🏋️ Retour IA</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="flex items-center gap-2">🧠 Files te dit tout</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           {!analysis && (<EmptyState />)}
 
@@ -506,15 +505,38 @@ function CoachAnalyzer() {
         </CardContent>
       </Card>
 
-      {/* Player global */}
+      {/* Démonstration (avec overlay IA optionnel) */}
       <div className="lg:col-span-3">
         <Card>
-          <CardHeader><CardTitle className="flex items-center gap-2">▶️ Démonstration / Lecture</CardTitle></CardHeader>
-          <CardContent>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              ▶️ Démonstration
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
             {blobUrl ? (
-              <video id="analysis-player" src={blobUrl} controls className="w-full rounded-2xl border" />
+              <>
+                <div className="flex items-center gap-2">
+                  <Button
+                    className="h-8 px-3 text-xs"
+                    variant={showAIPreview ? "secondary" : "default"}
+                    onClick={() => setShowAIPreview(v => !v)}
+                    disabled={!analysis}
+                  >
+                    {showAIPreview ? "Masquer l’aperçu corrigé (IA)" : "Afficher l’aperçu corrigé (IA)"}
+                  </Button>
+                </div>
+                <VideoWithOverlay
+                  id="analysis-player"
+                  src={blobUrl}
+                  analysis={analysis}
+                  showAIPreview={showAIPreview}
+                />
+              </>
             ) : (
-              <div className="text-sm text-muted-foreground">Aucune vidéo. Enregistre ou importe un clip pour voir les repères.</div>
+              <div className="text-sm text-muted-foreground">
+                Aucune vidéo. Enregistre ou importe un clip pour voir la démonstration.
+              </div>
             )}
           </CardContent>
         </Card>
@@ -534,6 +556,241 @@ function EmptyState() {
   );
 }
 
+/* ===================== Player avec overlays IA ===================== */
+function VideoWithOverlay({
+  id,
+  src,
+  analysis,
+  showAIPreview,
+}: {
+  id: string;
+  src: string;
+  analysis: AIAnalysis | null;
+  showAIPreview: boolean;
+}) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const rafRef = useRef<number | null>(null);
+
+  // Ajuste le canvas à la taille de la vidéo
+  const syncCanvasSize = () => {
+    const v = videoRef.current;
+    const c = canvasRef.current;
+    if (!v || !c) return;
+    const w = v.clientWidth || v.videoWidth || 640;
+    const h = v.clientHeight || (v.videoHeight ? (w * v.videoHeight) / v.videoWidth : 360);
+    c.width = w;
+    c.height = h;
+  };
+
+  const drawOverlay = () => {
+    const c = canvasRef.current;
+    const v = videoRef.current;
+    if (!c || !v) return;
+    const ctx = c.getContext("2d");
+    if (!ctx) return;
+
+    // Efface
+    ctx.clearRect(0, 0, c.width, c.height);
+
+    if (!showAIPreview || !analysis) return;
+
+    // Teinte douce pour indiquer "aperçu IA"
+    ctx.fillStyle = "rgba(0,0,0,0.08)";
+    ctx.fillRect(0, 0, c.width, c.height);
+
+    // Bandeau “IA : aperçu corrigé”
+    ctx.fillStyle = "rgba(0,0,0,0.55)";
+    ctx.fillRect(12, 12, 220, 28);
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 13px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+    ctx.fillText("IA : aperçu corrigé", 20, 31);
+
+    // Heuristiques d’overlay en fonction des fautes
+    const issues = (analysis.faults || []).map(f => (f?.issue || "").toLowerCase());
+
+    // 1) Dos trop cambré → ligne vertébrale corrigée + flèches
+    if (issues.some(i => /dos|lordose|cambr/.test(i))) {
+      drawSpineGuide(ctx, c.width, c.height);
+    }
+
+    // 2) Genoux qui rentrent / jambes trop tendues → guides genoux
+    if (issues.some(i => /genou|valgus/.test(i))) {
+      drawKneeGuide(ctx, c.width, c.height, { suggestBend: true });
+    } else if (issues.some(i => /jambes? trop tendu|verrouill/.test(i))) {
+      drawKneeGuide(ctx, c.width, c.height, { suggestBend: true });
+    }
+
+    // 3) Tête projetée / nuque cassée → guide tête/nuque
+    if (issues.some(i => /tête|nuque|cou/.test(i))) {
+      drawHeadGuide(ctx, c.width, c.height);
+    }
+
+    // 4) Pieds instables / talons qui se décollent → base de support
+    if (issues.some(i => /pieds|talons?/.test(i))) {
+      drawFeetGuide(ctx, c.width, c.height);
+    }
+  };
+
+  const loop = () => {
+    drawOverlay();
+    rafRef.current = requestAnimationFrame(loop);
+  };
+
+  useEffect(() => {
+    syncCanvasSize();
+  }, [src]);
+
+  useEffect(() => {
+    const onResize = () => syncCanvasSize();
+    window.addEventListener("resize", onResize);
+    syncCanvasSize();
+    rafRef.current = requestAnimationFrame(loop);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showAIPreview, analysis]);
+
+  return (
+    <div className="relative">
+      <video
+        id={id}
+        ref={videoRef}
+        src={src}
+        controls
+        className="w-full rounded-2xl border"
+        onLoadedMetadata={syncCanvasSize}
+      />
+      <canvas
+        ref={canvasRef}
+        className="pointer-events-none absolute inset-0 rounded-2xl"
+        aria-hidden
+      />
+    </div>
+  );
+}
+
+/* === Fonctions de dessin simples (visualisation “corrigée”) === */
+function drawSpineGuide(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  // Colonne vertébrale "corrigée" (verticale) + flèches pour rentrer les côtes
+  const x = Math.round(w * 0.5);
+  ctx.strokeStyle = "#22c55e"; // vert
+  ctx.lineWidth = 4;
+  ctx.setLineDash([8, 8]);
+  ctx.beginPath();
+  ctx.moveTo(x, Math.round(h * 0.2));
+  ctx.lineTo(x, Math.round(h * 0.85));
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Flèches latérales (rentrer les côtes)
+  drawArrow(ctx, x - Math.round(w * 0.18), Math.round(h * 0.45), x - Math.round(w * 0.04), Math.round(h * 0.45), "#22c55e");
+  drawArrow(ctx, x + Math.round(w * 0.18), Math.round(h * 0.45), x + Math.round(w * 0.04), Math.round(h * 0.45), "#22c55e");
+
+  // Légende
+  drawTag(ctx, x + 10, Math.round(h * 0.22), "Dos neutre / gaine le tronc");
+}
+
+function drawKneeGuide(ctx: CanvasRenderingContext2D, w: number, h: number, opts: { suggestBend?: boolean } = {}) {
+  // Lignes d'alignement genoux-pieds + indication de fléchir légèrement
+  const left = Math.round(w * 0.35);
+  const right = Math.round(w * 0.65);
+  const footY = Math.round(h * 0.88);
+  const kneeY = Math.round(h * 0.68);
+
+  ctx.strokeStyle = "#3b82f6"; // bleu
+  ctx.lineWidth = 3;
+
+  // Pieds (base)
+  ctx.beginPath();
+  ctx.moveTo(left - 30, footY);
+  ctx.lineTo(left + 30, footY);
+  ctx.moveTo(right - 30, footY);
+  ctx.lineTo(right + 30, footY);
+  ctx.stroke();
+
+  // Genoux (correctif : au-dessus et alignés)
+  ctx.beginPath();
+  ctx.moveTo(left, kneeY);
+  ctx.lineTo(left, footY);
+  ctx.moveTo(right, kneeY);
+  ctx.lineTo(right, footY);
+  ctx.stroke();
+
+  if (opts.suggestBend) {
+    drawArrow(ctx, left, kneeY - 30, left, kneeY + 5, "#3b82f6");
+    drawArrow(ctx, right, kneeY - 30, right, kneeY + 5, "#3b82f6");
+    drawTag(ctx, right + 12, kneeY - 24, "Fléchis légèrement les genoux");
+  } else {
+    drawTag(ctx, right + 12, kneeY - 24, "Genoux alignés sur pieds");
+  }
+}
+
+function drawHeadGuide(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  // Ligne d'horizon + flèche pour rentrer le menton (tête neutre)
+  const y = Math.round(h * 0.18);
+  ctx.strokeStyle = "#f59e0b"; // orange
+  ctx.lineWidth = 3;
+  ctx.setLineDash([6, 6]);
+  ctx.beginPath();
+  ctx.moveTo(Math.round(w * 0.1), y);
+  ctx.lineTo(Math.round(w * 0.9), y);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  drawArrow(ctx, Math.round(w * 0.55), y - 20, Math.round(w * 0.5), y + 6, "#f59e0b");
+  drawTag(ctx, Math.round(w * 0.56), y + 10, "Rentre légèrement le menton");
+}
+
+function drawFeetGuide(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  // Rectangle zone de stabilité
+  const x = Math.round(w * 0.25);
+  const y = Math.round(h * 0.86);
+  const width = Math.round(w * 0.5);
+  const height = Math.round(h * 0.06);
+  ctx.fillStyle = "rgba(250, 204, 21, 0.25)"; // jaune translucide
+  ctx.fillRect(x, y, width, height);
+  ctx.strokeStyle = "#eab308"; // jaune
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x, y, width, height);
+  drawTag(ctx, x + width + 10, y + 6, "Reste ancré dans le sol");
+}
+
+function drawArrow(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number, color = "#22c55e") {
+  const headlen = 10;
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const angle = Math.atan2(dy, dx);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x2, y2);
+  ctx.lineTo(x2 - headlen * Math.cos(angle - Math.PI / 6), y2 - headlen * Math.sin(angle - Math.PI / 6));
+  ctx.lineTo(x2 - headlen * Math.cos(angle + Math.PI / 6), y2 - headlen * Math.sin(angle + Math.PI / 6));
+  ctx.lineTo(x2, y2);
+  ctx.fillStyle = color;
+  ctx.fill();
+}
+
+function drawTag(ctx: CanvasRenderingContext2D, x: number, y: number, text: string) {
+  ctx.font = "12px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+  const padX = 8, padY = 6;
+  const textW = Math.ceil(ctx.measureText(text).width);
+  const boxW = textW + padX * 2;
+  const boxH = 24;
+  ctx.fillStyle = "rgba(0,0,0,0.55)";
+  ctx.fillRect(x, y, boxW, boxH);
+  ctx.fillStyle = "#fff";
+  ctx.fillText(text, x + padX, y + boxH - padY - 2);
+}
+
+/* ===================== Timeline Row ===================== */
 function TimelineRow({ point, videoSelector }: { point: AnalysisPoint; videoSelector: string }) {
   const onSeek = () => {
     const video = document.querySelector<HTMLVideoElement>(videoSelector);
@@ -550,6 +807,7 @@ function TimelineRow({ point, videoSelector }: { point: AnalysisPoint; videoSele
   );
 }
 
+/* ===================== Upload/Record ===================== */
 function UploadDrop({ onFile }: { onFile: (file: File) => void }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const onDrop = (e: React.DragEvent<HTMLDivElement>) => {
