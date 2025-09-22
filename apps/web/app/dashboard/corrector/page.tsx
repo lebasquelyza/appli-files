@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
 /* ===================== Types ===================== */
 interface AnalysisPoint { time: number; label: string; detail?: string; }
@@ -69,6 +70,16 @@ function CoachAnalyzer() {
   const [status, setStatus] = useState<string>("");
   const [errorMsg, setErrorMsg] = useState<string>("");
 
+  // Étape de confirmation
+  const [needsConfirm, setNeedsConfirm] = useState(false);
+  const [predictedExercise, setPredictedExercise] = useState<string>("");
+  const [overrideMode, setOverrideMode] = useState(false);
+  const [overrideExercise, setOverrideExercise] = useState("");
+
+  // On stocke les mosaïques / repère pour réanalyse sans re-traiter la vidéo
+  const [mosaics, setMosaics] = useState<string[]>([]);
+  const [midTime, setMidTime] = useState<number>(0);
+
   // cooldown (429, 504)
   const [cooldown, setCooldown] = useState<number>(0);
   useEffect(() => {
@@ -82,10 +93,17 @@ function CoachAnalyzer() {
     setBlobUrl(url);
     setFileName(f.name);
     setFile(f);
+    // reset états
     setAnalysis(null);
     setErrorMsg("");
     setStatus("");
     setProgress(0);
+    setNeedsConfirm(false);
+    setPredictedExercise("");
+    setOverrideMode(false);
+    setOverrideExercise("");
+    setMosaics([]);
+    setMidTime(0);
   };
 
   async function uploadWithProxy(f: File): Promise<string> {
@@ -135,6 +153,75 @@ function CoachAnalyzer() {
     return { path, readUrl: url as string };
   }
 
+  /** Lance une analyse (avec ou sans hint). Utilise mosaïques et midTime fournis. */
+  async function runAnalyze(currentMosaics: string[], currentMidTime: number, hint?: string) {
+    setIsAnalyzing(true);
+    setProgress(80);
+    setStatus("Analyse IA…");
+
+    const promptHintsBase =
+      `Tu reçois des mosaïques issues d’une VIDEO (pas une photo). ` +
+      `Identifie l'exercice et détecte les ERREURS TECHNIQUES (dos trop cambré, jambes trop tendues, genoux qui rentrent, etc.). ` +
+      `Réponds en FRANÇAIS uniquement.`;
+
+    const promptHints = hint
+      ? `${promptHintsBase}\nL'exercice exécuté par le client est : "${hint}". Base ton analyse sur cet exercice.`
+      : promptHintsBase;
+
+    const res = await fetch("/api/analyze", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        frames: currentMosaics,
+        timestamps: [currentMidTime],
+        feeling,
+        economyMode: true,
+        promptHints,
+      }),
+    });
+
+    if (!res.ok) {
+      const retryAfterHdr = res.headers.get("retry-after");
+      const retryAfter = parseInt(retryAfterHdr || "", 10);
+      const seconds = Number.isFinite(retryAfter)
+        ? retryAfter
+        : res.status === 504
+        ? 12
+        : res.status === 429
+        ? 20
+        : 0;
+
+      if (res.status === 429 || res.status === 504) {
+        setCooldown(seconds);
+        setStatus(`Réessaie dans ${seconds}s…`);
+      }
+
+      const txt = await res.text().catch(() => "");
+      throw new Error(`analyze: HTTP ${res.status} ${txt}`);
+    }
+
+    const data: Partial<AIAnalysis> = await res.json();
+
+    const safe: AIAnalysis = {
+      exercise: String(data.exercise || "exercice_inconnu"),
+      overall:
+        (data.overall && data.overall.trim()) ||
+        "Analyse effectuée mais je manque d’indices visuels. Réessaie avec un angle plus net / cadrage entier.",
+      muscles: Array.isArray(data.muscles) && data.muscles.length ? data.muscles.slice(0, 8) : [],
+      corrections: Array.isArray((data as any).corrections) ? (data as any).corrections : [],
+      faults: Array.isArray((data as any).faults) ? (data as any).faults : [],
+      extras: Array.isArray(data.extras) ? data.extras : [],
+      timeline:
+        Array.isArray(data.timeline)
+          ? data.timeline.filter(v => typeof v?.time === "number" && typeof v?.label === "string")
+          : [],
+      objects: Array.isArray((data as any)?.objects) ? (data as any).objects : [],
+      movement_pattern: typeof (data as any)?.movement_pattern === "string" ? (data as any).movement_pattern : undefined,
+    };
+
+    return safe;
+  }
+
   const onAnalyze = async () => {
     if (!file || isAnalyzing || cooldown > 0) return;
 
@@ -152,96 +239,40 @@ function CoachAnalyzer() {
       const half = Math.ceil(frames.length / 2);
       const mosaic1 = await makeMosaic(frames.slice(0, half), 3, 2, 1280, 720, 0.6);
       const mosaic2 = await makeMosaic(frames.slice(half), 3, 2, 1280, 720, 0.6);
-      const mosaics = [mosaic1, mosaic2];
-      const midTime = timestamps[Math.floor(timestamps.length / 2)] || 0;
+      const newMosaics = [mosaic1, mosaic2];
+      const newMidTime = timestamps[Math.floor(timestamps.length / 2)] || 0;
+
+      setMosaics(newMosaics);
+      setMidTime(newMidTime);
 
       setProgress(20);
 
-      // 1) UPLOAD — proxy si < 5MB, sinon signed upload direct
+      // 1) UPLOAD — proxy si < 5MB, sinon signed upload direct (utile si tu exploites l'URL ailleurs)
       setStatus("Upload de la vidéo…");
-      let fileUrl: string | undefined;
-
       if (file.size > CLIENT_PROXY_MAX_BYTES) {
         setStatus("Fichier volumineux — upload signé…");
-        const { readUrl } = await uploadWithSignedUrl(file);
-        fileUrl = readUrl;
+        await uploadWithSignedUrl(file);
       } else {
         try {
-          const url = await uploadWithProxy(file);
-          fileUrl = url;
+          await uploadWithProxy(file);
         } catch {
           setStatus("Proxy indisponible — upload signé…");
-          const { readUrl } = await uploadWithSignedUrl(file);
-          fileUrl = readUrl;
+          await uploadWithSignedUrl(file);
         }
       }
 
-      if (!fileUrl) throw new Error("Upload échoué (aucune URL retournée)");
       setProgress(75);
 
-      // 2) APPEL IA — FR + fautes + corrections
+      // 2) APPEL IA initial — sans hint → on propose la confirmation
       void fakeProgress(setProgress, 80, 98);
-      setStatus("Analyse IA…");
-
-      const promptHints =
-        `Tu reçois des mosaïques issues d’une VIDEO (pas une photo). ` +
-        `Identifie l'exercice et détecte les ERREURS TECHNIQUES (dos trop cambré, jambes trop tendues, genoux qui rentrent, etc.). ` +
-        `Donne des CORRECTIONS claires (impératives). Réponds en FRANÇAIS uniquement.`;
-
-      const res = await fetch("/api/analyze", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          frames: mosaics,
-          timestamps: [midTime],
-          feeling,
-          economyMode: true,
-          promptHints,
-        }),
-      });
-
-      if (!res.ok) {
-        const retryAfterHdr = res.headers.get("retry-after");
-        const retryAfter = parseInt(retryAfterHdr || "", 10);
-        const seconds = Number.isFinite(retryAfter)
-          ? retryAfter
-          : res.status === 504
-          ? 12
-          : res.status === 429
-          ? 20
-          : 0;
-
-        if (res.status === 429 || res.status === 504) {
-          setCooldown(seconds);
-          setStatus(`Réessaie dans ${seconds}s…`);
-        }
-
-        const txt = await res.text().catch(() => "");
-        throw new Error(`analyze: HTTP ${res.status} ${txt}`);
-      }
-
-      const data: Partial<AIAnalysis> = await res.json();
-
-      const safe: AIAnalysis = {
-        exercise: String(data.exercise || "exercice_inconnu"),
-        overall:
-          (data.overall && data.overall.trim()) ||
-          "Analyse effectuée mais je manque d’indices visuels. Réessaie avec un angle plus net / cadrage entier.",
-        muscles: Array.isArray(data.muscles) && data.muscles.length ? data.muscles.slice(0, 8) : [],
-        corrections: Array.isArray((data as any).corrections) ? (data as any).corrections : [],
-        faults: Array.isArray((data as any).faults) ? (data as any).faults : [],
-        extras: Array.isArray(data.extras) ? data.extras : [],
-        timeline:
-          Array.isArray(data.timeline)
-            ? data.timeline.filter(v => typeof v?.time === "number" && typeof v?.label === "string")
-            : [],
-        objects: Array.isArray((data as any)?.objects) ? (data as any).objects : [],
-        movement_pattern: typeof (data as any)?.movement_pattern === "string" ? (data as any).movement_pattern : undefined,
-      };
+      const safe = await runAnalyze(newMosaics, newMidTime, undefined);
 
       setAnalysis(safe);
+      setPredictedExercise(safe.exercise || "exercice_inconnu");
+      setNeedsConfirm(true);      // ➜ on affiche le bloc de confirmation
+      setOverrideMode(false);
       setProgress(100);
-      setStatus("Terminé ✅");
+      setStatus("Analyse terminée — confirme l'exercice ✅");
     } catch (e: any) {
       console.error(e);
       const msg = e?.message || String(e);
@@ -264,31 +295,64 @@ function CoachAnalyzer() {
     setStatus("");
     setErrorMsg("");
     setCooldown(0);
+    setNeedsConfirm(false);
+    setPredictedExercise("");
+    setOverrideMode(false);
+    setOverrideExercise("");
+    setMosaics([]);
+    setMidTime(0);
   };
 
-  // ===== helpers d’affichage demandés =====
-  function issuesLine(a: AIAnalysis | null) {
-    if (!a?.faults?.length) return "—";
-    const set = new Set<string>();
-    for (const f of a.faults) {
-      const s = (f?.issue || "").trim();
-      if (s) set.add(s);
-    }
-    return Array.from(set).join(" - ") || "—";
+  // ===== Helpers pour rendre la ligne "Erreur détectée / Correction" =====
+  function faultsToLines(a: AIAnalysis | null) {
+    if (!a) return { issuesLine: "", correctionsLine: "" };
+    const issues = (a.faults || [])
+      .map(f => (f?.issue || "").trim())
+      .filter(Boolean);
+    const faultCorrections = (a.faults || [])
+      .map(f => (f?.correction || "").trim())
+      .filter(Boolean);
+
+    const issuesLine = issues.join(" - ");
+
+    // S'il n'y a pas de correction au niveau des faults, fallback aux corrections globales
+    const correctionsBase = faultCorrections.length ? faultCorrections : (a.corrections || []);
+    const correctionsLine = (correctionsBase || []).join(" - ");
+
+    return { issuesLine, correctionsLine };
   }
-  function correctionsLine(a: AIAnalysis | null) {
-    const all: string[] = [];
-    if (a?.corrections?.length) all.push(...a.corrections);
-    if (a?.faults?.length) {
-      for (const f of a.faults) {
-        const s = (f?.correction || "").trim();
-        if (s) all.push(s);
-      }
+
+  const { issuesLine, correctionsLine } = faultsToLines(analysis);
+
+  // Actions confirmation
+  const confirmPredicted = () => {
+    setNeedsConfirm(false); // on dévoile les résultats existants
+  };
+
+  const openOverride = () => {
+    setOverrideMode(true);
+  };
+
+  const submitOverride = async () => {
+    if (!overrideExercise.trim() || !mosaics.length) return;
+    try {
+      setIsAnalyzing(true);
+      setStatus("Ré-analyse avec l’exercice fourni…");
+      setProgress(10);
+      const safe = await runAnalyze(mosaics, midTime, overrideExercise.trim());
+      setAnalysis(safe);
+      setPredictedExercise(safe.exercise || overrideExercise.trim());
+      setNeedsConfirm(false); // on affiche directement le résultat
+      setOverrideMode(false);
+      setProgress(100);
+      setStatus("Analyse mise à jour ✅");
+    } catch (e: any) {
+      console.error(e);
+      alert(`Ré-analyse impossible: ${e?.message || e}`);
+    } finally {
+      setIsAnalyzing(false);
     }
-    // dédoublonnage + jointure " - "
-    const out = Array.from(new Set(all.map(s => s.trim()).filter(Boolean))).join(" - ");
-    return out || "—";
-  }
+  };
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -354,21 +418,50 @@ function CoachAnalyzer() {
         </CardContent>
       </Card>
 
-      {/* Col 3: résultats */}
+      {/* Col 3: zone résultats / confirmation */}
       <Card className="lg:col-span-1">
         <CardHeader><CardTitle className="flex items-center gap-2">🏋️ Retour IA</CardTitle></CardHeader>
         <CardContent className="space-y-4">
-          {!analysis && (
-            <div className="rounded-2xl border p-4 text-sm text-muted-foreground">
-              Aucune analyse pour l'instant. Ajoute une vidéo et ton ressenti, puis clique <span className="font-medium">Lancer l'analyse IA</span>.
+          {!analysis && (<EmptyState />)}
+
+          {/* Étape de confirmation */}
+          {analysis && needsConfirm && (
+            <div className="space-y-3 rounded-xl border p-3">
+              <p className="text-sm">L’IA propose : <span className="font-medium">{predictedExercise || "exercice_inconnu"}</span></p>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" onClick={confirmPredicted} disabled={isAnalyzing}>Confirmer « {predictedExercise || "exercice_inconnu"} »</Button>
+                <Button size="sm" variant="secondary" onClick={openOverride} disabled={isAnalyzing}>Autre</Button>
+              </div>
+
+              {overrideMode && (
+                <div className="space-y-2 pt-2">
+                  <Input
+                    placeholder="Quel exercice fais-tu ? (ex. Split squat, Tractions, Hip thrust)"
+                    value={overrideExercise}
+                    onChange={(e) => setOverrideExercise(e.target.value)}
+                  />
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={submitOverride} disabled={isAnalyzing || !overrideExercise.trim()}>
+                      Ré-analyser avec cet exercice
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setOverrideMode(false)} disabled={isAnalyzing}>
+                      Annuler
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Astuce : donne le nom exact (en français ou anglais), ex. « Fentes bulgares », « Chin-up », « Développé couché ».
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
-          {analysis && (
+          {/* Résultats complets (affichés une fois confirmé OU après réanalyse override) */}
+          {analysis && !needsConfirm && (
             <div className="space-y-4">
               {/* Exercice détecté */}
               <div className="flex items-center flex-wrap gap-2">
-                <Badge variant="secondary">Exercice détecté : {analysis.exercise || "inconnu"}</Badge>
+                <Badge variant="secondary">Exercice : {analysis.exercise || "inconnu"}</Badge>
               </div>
 
               {/* Synthèse */}
@@ -377,29 +470,94 @@ function CoachAnalyzer() {
               )}
 
               {/* Muscles (avec " - " entre chaque) */}
-              <div className="space-y-1">
-                <div className="text-sm font-medium">Muscles : <span className="font-normal">
-                  {analysis.muscles?.length ? analysis.muscles.join(" - ") : "—"}
-                </span></div>
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium">Muscles principalement sollicités</h4>
+                {analysis.muscles?.length ? (
+                  <p className="text-sm">{analysis.muscles.join(" - ")}</p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">— non détecté —</p>
+                )}
               </div>
 
-              {/* Format demandé */}
-              <div className="space-y-1">
-                <div className="text-sm font-medium">Erreurs détectées : <span className="font-normal">{issuesLine(analysis)}</span></div>
-                <div className="text-sm font-medium">Corrections : <span className="font-normal">{correctionsLine(analysis)}</span></div>
-              </div>
+              {/* Bloc simplifié erreurs / corrections */}
+              {(issuesLine || correctionsLine) && (
+                <div className="space-y-1">
+                  {issuesLine && <p className="text-sm"><span className="font-medium">Erreur détectée :</span> {issuesLine}</p>}
+                  {correctionsLine && <p className="text-sm"><span className="font-medium">Correction :</span> {correctionsLine}</p>}
+                </div>
+              )}
 
-              {/* Player global */}
-              <div>
-                {blobUrl ? (
-                  <video id="analysis-player" src={blobUrl} controls className="w-full rounded-2xl border mt-2" />
-                ) : null}
+              {/* Points complémentaires (optionnel) */}
+              {analysis.extras && analysis.extras.length > 0 && (
+                <Accordion type="single" collapsible className="w-full">
+                  <AccordionItem value="more">
+                    <AccordionTrigger>Points complémentaires</AccordionTrigger>
+                    <AccordionContent>
+                      <ul className="list-disc pl-5 space-y-1 text-sm">
+                        {analysis.extras.map((x, i) => <li key={i}>{x}</li>)}
+                      </ul>
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
+              )}
+
+              {/* Timeline */}
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium">Repères dans la vidéo</h4>
+                {analysis.timeline?.length ? (
+                  <div className="space-y-2">
+                    {analysis.timeline.map((p, idx) => (<TimelineRow key={`${p.time}-${idx}`} point={p} videoSelector="#analysis-player" />))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">— aucun repère temporel —</p>
+                )}
               </div>
             </div>
           )}
         </CardContent>
       </Card>
+
+      {/* Player global */}
+      <div className="lg:col-span-3">
+        <Card>
+          <CardHeader><CardTitle className="flex items-center gap-2">▶️ Démonstration / Lecture</CardTitle></CardHeader>
+          <CardContent>
+            {blobUrl ? (
+              <video id="analysis-player" src={blobUrl} controls className="w-full rounded-2xl border" />
+            ) : (
+              <div className="text-sm text-muted-foreground">Aucune vidéo. Enregistre ou importe un clip pour voir les repères.</div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div className="rounded-2xl border p-4 text-sm text-muted-foreground">
+      Aucune analyse pour l'instant. Ajoute une vidéo et ton ressenti, puis clique <span className="font-medium">Lancer l'analyse IA</span>.
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Badge>Posture</Badge><Badge>Amplitudes</Badge><Badge>Symétrie</Badge><Badge>Rythme</Badge>
+      </div>
+    </div>
+  );
+}
+
+function TimelineRow({ point, videoSelector }: { point: AnalysisPoint; videoSelector: string }) {
+  const onSeek = () => {
+    const video = document.querySelector<HTMLVideoElement>(videoSelector);
+    if (video) { video.currentTime = point.time; video.play(); }
+  };
+  return (
+    <button onClick={onSeek} className="w-full text-left rounded-xl border p-3 hover:bg-accent transition">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium">{fmtTime(point.time)} – {point.label}</span>
+        <span className="text-xs text-muted-foreground">Aller au moment</span>
+      </div>
+      {point.detail && <p className="text-xs text-muted-foreground mt-1">{point.detail}</p>}
+    </button>
   );
 }
 
@@ -504,7 +662,7 @@ function getBestMimeType() {
   return "video/webm";
 }
 
-async function fakeProgress(setter: (v: number) => void, from = 12, to = 95) {
+async function fakeProgress(setter: (v: number) => void, from: number, to: number) {
   let i = from;
   while (i < to) {
     await new Promise((r) => setTimeout(r, 220));
@@ -555,7 +713,7 @@ async function extractFramesFromFile(file: File, nFrames = 12): Promise<{ frames
       canvas.width = width;
       canvas.height = height;
       ctx.drawImage(video as any, 0, 0, width, height);
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.6); // ✅ plus net
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.6);
       frames.push(dataUrl);
       timestamps.push(Math.round(t));
     }
@@ -576,7 +734,7 @@ function seek(video: HTMLVideoElement, time: number) {
     };
     video.addEventListener("seeked", onSeeked);
     video.addEventListener("error", onError);
-    try { (video as any).currentTime = Math.min(Math.max(0, time), (video as any).duration || time); } catch { /* ignore */ }
+    try { (video as any).currentTime = Math.min(Math.max(0, time), (video as any).duration || time); } catch {}
   });
 }
 
