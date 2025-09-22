@@ -81,6 +81,35 @@ function shortPreview(u: string) { return u.length <= 100 ? u : `${u.slice(0, 80
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const cache = new Map<string, { t: number; json: AIAnalysis }>();
 
+/* ===================== Francisation ===================== */
+function frLabel(label: string): string {
+  const s = (label || "").trim();
+  const pairs: Array<[RegExp, string]> = [
+    [/^pull[\s-]?up$/i, "Traction"],
+    [/^chin[\s-]?up$/i, "Traction supination (chin-up)"],
+    [/^chest[\s-]?to[\s-]?bar$/i, "Traction poitrine (chest-to-bar)"],
+    [/^push[\s-]?up$/i, "Pompes"],
+    [/^bench[\s-]?press$/i, "Développé couché"],
+    [/^shoulder[\s-]?press$/i, "Développé militaire"],
+    [/^overhead[\s-]?press$/i, "Développé militaire"],
+    [/^dead[\s-]?lift$/i, "Soulevé de terre"],
+    [/^(romanian|rdl)(?:.*deadlift)?$/i, "Soulevé de terre roumain"],
+    [/^front[\s-]?squat$/i, "Front squat"],
+    [/^squat$/i, "Squat"],
+    [/^lunge|^forward[\s-]?lunge|^reverse[\s-]?lunge$/i, "Fente"],
+    [/^bent[\s-]?over[\s-]?row$/i, "Rowing buste penché"],
+    [/^row(ing)?( bar| avec barre)?$/i, "Rowing barre"],
+    [/^lat[\s-]?pull[\s-]?down$/i, "Tirage vertical (lat pulldown)"],
+    [/^seated[\s-]?row$/i, "Tirage horizontal assis"],
+    [/^box[\s-]?jump$/i, "Saut sur box"],
+    [/^hip[\s-]?thrust$/i, "Extension de hanches (hip thrust)"],
+    [/^plank$/i, "Planche"],
+    [/^burpees?$/i, "Burpees"],
+  ];
+  for (const [re, fr] of pairs) if (re.test(s)) return fr;
+  return s; // par défaut: retourne tel quel (déjà FR ou inconnu)
+}
+
 /* ============ GET diag ============ */
 export async function GET() {
   const hasOpenAI = !!(process.env.OPENAI_API_KEY || process.env.OPEN_API_KEY);
@@ -111,7 +140,7 @@ export async function POST(req: NextRequest) {
     const maxCandidates = Math.max(1, Math.min(10, maxCandidatesRaw));
     const promptHints: string = typeof body.promptHints === "string" ? body.promptHints : "";
 
-    // ---- Lecture clé OpenAI
+    // Clé OpenAI
     const rawKey = (process.env.OPENAI_API_KEY || process.env.OPEN_API_KEY || "").trim();
     if (!rawKey || !rawKey.startsWith("sk-") || rawKey.length < 40) {
       const hint = rawKey ? `${rawKey.slice(0, 6)}… (len=${rawKey.length})` : "EMPTY";
@@ -119,10 +148,10 @@ export async function POST(req: NextRequest) {
     }
     const apiKey = rawKey;
 
-    // Vérifs d’entrée
+    // Entrées
     if (!selftest && !frames.length) return jsonError(400, "Aucune frame fournie.");
 
-    // ✅ conserver jusqu'à 4 images
+    // ✅ conserver jusqu'à 4 images (multi-mosaïques depuis la vidéo)
     const MAX_IMAGES = 4;
     if (frames.length > MAX_IMAGES) {
       frames = frames.slice(0, MAX_IMAGES);
@@ -145,22 +174,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(hit.json, { headers: { "Cache-Control": "no-store, no-transform" } });
     }
 
-    // ===== Prompt & JSON strict =====
+    // ===== Prompt & JSON strict (FR) =====
     const baseInstruction =
       `Analyse des images (mosaïques) PROVENANT D'UNE VIDEO (pas d'une simple photo).\n` +
+      `Langue: FRANÇAIS UNIQUEMENT. Tous les champs et le texte doivent être en français.\n` +
       `Objectif: identifier l'exercice (open-set: tout exercice connu), proposer TOP-${maxCandidates} candidats et fournir des corrections.\n\n` +
       `Checklist visuelle:\n` +
       `1) Objets: barre de traction fixe au-dessus ? barre libre ? haltères ? kettlebells ? box/step ? machine guidée ? câble ? banc ? rack ? tapis, vélo, rameur ?\n` +
       `2) Contacts: mains agrippent une barre fixe ? pieds sur box ? barre sur dos/épaules/sol ?\n` +
-      `3) Motif de mouvement: vertical (saut/traction/squat), horizontal (fente/rameur), pendulaire (kipping), bilatéral vs unilatéral.\n` +
-      `4) Repères anatomiques: mains au-dessus de la tête ? coudes fléchis/extension ? hanche descend/monte ? translation vers une surface surélevée ?\n\n` +
+      `3) Motif: vertical (saut/traction/squat), horizontal (fente/rameur), pendulaire (kipping), bilatéral vs unilatéral.\n` +
+      `4) Repères anatomiques: mains au-dessus de la tête ? coudes flexion/extension ? hanche descend/monte ? translation vers surface surélevée ?\n\n` +
       `Règles fortes:\n` +
-      `• Mains agrippant une BARRE FIXE au-dessus de la tête la plupart du temps + suspension du corps -> Traction (pull-up/chin-up/chest-to-bar), PAS box jump.\n` +
-      `• Pieds qui quittent le sol puis atterrissent sur une BOX/PLATEAU avec translation -> Box Jump.\n` +
+      `• Mains agrippant une BARRE FIXE au-dessus de la tête la plupart du temps + suspension du corps -> Traction (pull-up/chin-up/chest-to-bar), PAS saut sur box.\n` +
+      `• Pieds qui quittent le sol puis atterrissent sur une BOX/PLATEAU avec translation -> Saut sur box (box jump).\n` +
       `• Si indices insuffisants: exercise="inconnu", confidence faible.\n\n` +
-      `Sortie STRICTEMENT en JSON.\n` +
+      `Sortie STRICTEMENT en JSON (response_format json_object).\n` +
       `Champs: {"exercise":string,"confidence":number,"overall":string,"muscles":string[],"cues":string[],"extras":string[],"timeline":[{"time":number,"label":string,"detail"?:string}],"candidates":[{"label":string,"confidence":number}],"objects":string[],"movement_pattern":string}\n` +
-      `Contraintes: confidence∈[0..1]; muscles≤5, cues≤5, extras≤5, timeline≤4; candidates=TOP-${maxCandidates} triés décroissant, sans doublons.`;
+      `Contraintes: confidence∈[0..1]; muscles≤5, cues≤5, extras≤5, timeline≤4; candidates=TOP-${maxCandidates} triés décroissant, sans doublons.\n` +
+      `Style des "cues": impératifs courts en français (ex.: "Gaine le tronc", "Descends contrôlé").`;
 
     const userTextParts: string[] = [];
     if (feeling) userTextParts.push(`Ressenti: ${feeling}`);
@@ -215,20 +246,19 @@ export async function POST(req: NextRequest) {
     if (!Array.isArray(parsed.candidates)) parsed.candidates = [];
     if (!Array.isArray(parsed.objects)) parsed.objects = [];
 
-    // Clamp / tri
+    // Clamp / tri + francisation
     parsed.candidates = (parsed.candidates || [])
-      .map(c => ({ label: String(c?.label || "").trim(), confidence: Math.max(0, Math.min(1, Number(c?.confidence) || 0)) }))
+      .map(c => ({ label: frLabel(String(c?.label || "").trim()), confidence: Math.max(0, Math.min(1, Number(c?.confidence) || 0)) }))
       .filter(c => c.label)
       .slice(0, maxCandidates);
 
+    parsed.exercise = frLabel(parsed.exercise || "exercice_inconnu");
     parsed.confidence = Math.max(0, Math.min(1, Number(parsed.confidence) || 0));
 
-    // cache & retour
-    cache.set(hashKey(frames, feeling || "", economy, openSet, maxCandidates, promptHints), { t: Date.now(), json: parsed });
+    cache.set(key, { t: Date.now(), json: parsed });
     return NextResponse.json(parsed, { headers: { "Cache-Control": "no-store, no-transform" } });
   } catch (e: any) {
     const status = e?.status ?? e?.response?.status;
     return jsonError(Number.isInteger(status) ? status : 500, e?.message || "Erreur interne");
   }
 }
-
