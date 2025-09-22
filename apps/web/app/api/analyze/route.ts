@@ -3,16 +3,13 @@ import { NextRequest, NextResponse } from "next/server";
 
 /* ============ Types ============ */
 type AnalysisPoint = { time: number; label: string; detail?: string };
-type Candidate = { label: string; confidence: number };
 type AIAnalysis = {
   exercise: string;
-  confidence: number;
   overall: string;
   muscles: string[];
-  cues: string[];
+  corrections: string[];
   extras?: string[];
   timeline: AnalysisPoint[];
-  candidates?: Candidate[];
   objects?: string[];
   movement_pattern?: string;
   rawText?: string;
@@ -30,13 +27,11 @@ function jsonError(status: number, msg: string, extra: Record<string, string> = 
     headers: { "content-type": "application/json", "Cache-Control": "no-store, no-transform", ...extra },
   });
 }
-function hashKey(frames: string[], feeling: string, economy: boolean, openSet: boolean, maxCandidates: number, promptHints?: string) {
+function hashKey(frames: string[], feeling: string, economy: boolean, promptHints?: string) {
   const s = [
     frames.join("|").slice(0, 2000),
     feeling || "",
     economy ? "e1" : "e0",
-    openSet ? "os1" : "os0",
-    `k=${maxCandidates}`,
     promptHints || "",
   ].join("::");
   let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
@@ -107,7 +102,7 @@ function frLabel(label: string): string {
     [/^burpees?$/i, "Burpees"],
   ];
   for (const [re, fr] of pairs) if (re.test(s)) return fr;
-  return s; // par défaut: retourne tel quel (déjà FR ou inconnu)
+  return s;
 }
 
 /* ============ GET diag ============ */
@@ -124,7 +119,7 @@ export async function POST(req: NextRequest) {
   try {
     const ct = (req.headers.get("content-type") || "").toLowerCase();
     if (!ct.includes("application/json")) {
-      return jsonError(415, "JSON attendu: { frames: string[], timestamps?: number[], feeling?: string, selftest?: boolean, openSet?: boolean, maxCandidates?: number, promptHints?: string }");
+      return jsonError(415, "JSON attendu: { frames: string[], timestamps?: number[], feeling?: string, selftest?: boolean, promptHints?: string }");
     }
 
     const body = await req.json();
@@ -134,12 +129,6 @@ export async function POST(req: NextRequest) {
     const feeling: string = typeof body.feeling === "string" ? body.feeling : "";
     const economy: boolean = body.economyMode !== false;
 
-    // Open-set params
-    const openSet: boolean = body.openSet !== false; // par défaut true
-    const maxCandidatesRaw = Number.isFinite(body.maxCandidates) ? Number(body.maxCandidates) : 5;
-    const maxCandidates = Math.max(1, Math.min(10, maxCandidatesRaw));
-    const promptHints: string = typeof body.promptHints === "string" ? body.promptHints : "";
-
     // Clé OpenAI
     const rawKey = (process.env.OPENAI_API_KEY || process.env.OPEN_API_KEY || "").trim();
     if (!rawKey || !rawKey.startsWith("sk-") || rawKey.length < 40) {
@@ -148,10 +137,9 @@ export async function POST(req: NextRequest) {
     }
     const apiKey = rawKey;
 
-    // Entrées
     if (!selftest && !frames.length) return jsonError(400, "Aucune frame fournie.");
 
-    // ✅ conserver jusqu'à 4 images (multi-mosaïques depuis la vidéo)
+    // ✅ jusqu'à 4 images (multi-mosaïques)
     const MAX_IMAGES = 4;
     if (frames.length > MAX_IMAGES) {
       frames = frames.slice(0, MAX_IMAGES);
@@ -168,35 +156,38 @@ export async function POST(req: NextRequest) {
     console.log("[analyze] images:", imageParts.map(p => shortPreview((p as any).image_url.url)));
 
     // cache
-    const key = selftest ? "selftest" : hashKey(frames, feeling || "", economy, openSet, maxCandidates, promptHints);
+    const key = selftest ? "selftest" : hashKey(frames, feeling || "", economy, body.promptHints || "");
     const hit = !selftest ? cache.get(key) : null;
     if (hit && Date.now() - hit.t < CACHE_TTL_MS) {
       return NextResponse.json(hit.json, { headers: { "Cache-Control": "no-store, no-transform" } });
     }
 
-    // ===== Prompt & JSON strict (FR) =====
+    // ===== Prompt & JSON strict (FR) — sans confiance ni candidats =====
     const baseInstruction =
       `Analyse des images (mosaïques) PROVENANT D'UNE VIDEO (pas d'une simple photo).\n` +
       `Langue: FRANÇAIS UNIQUEMENT. Tous les champs et le texte doivent être en français.\n` +
-      `Objectif: identifier l'exercice (open-set: tout exercice connu), proposer TOP-${maxCandidates} candidats et fournir des corrections.\n\n` +
-      `Checklist visuelle:\n` +
-      `1) Objets: barre de traction fixe au-dessus ? barre libre ? haltères ? kettlebells ? box/step ? machine guidée ? câble ? banc ? rack ? tapis, vélo, rameur ?\n` +
-      `2) Contacts: mains agrippent une barre fixe ? pieds sur box ? barre sur dos/épaules/sol ?\n` +
-      `3) Motif: vertical (saut/traction/squat), horizontal (fente/rameur), pendulaire (kipping), bilatéral vs unilatéral.\n` +
-      `4) Repères anatomiques: mains au-dessus de la tête ? coudes flexion/extension ? hanche descend/monte ? translation vers surface surélevée ?\n\n` +
-      `Règles fortes:\n` +
-      `• Mains agrippant une BARRE FIXE au-dessus de la tête la plupart du temps + suspension du corps -> Traction (pull-up/chin-up/chest-to-bar), PAS saut sur box.\n` +
-      `• Pieds qui quittent le sol puis atterrissent sur une BOX/PLATEAU avec translation -> Saut sur box (box jump).\n` +
-      `• Si indices insuffisants: exercise="inconnu", confidence faible.\n\n` +
+      `Objectif: identifier l'exercice, lister les muscles principaux et donner des CORRECTIONS concrètes.\n\n` +
+      `Checklist visuelle (pour réduire les confusions):\n` +
+      `• Barre de traction fixe vs box: mains agrippant une barre fixe au-dessus de la tête + suspension du corps -> Traction; pieds qui quittent le sol et atterrissent sur une box -> Saut sur box.\n` +
+      `• Repérer aussi: barre libre, haltères, machine, câble, banc, rack.\n` +
+      `• Motif: vertical (saut/traction/squat), horizontal (fente/rameur), pendulaire (kipping), bilatéral vs unilatéral.\n\n` +
       `Sortie STRICTEMENT en JSON (response_format json_object).\n` +
-      `Champs: {"exercise":string,"confidence":number,"overall":string,"muscles":string[],"cues":string[],"extras":string[],"timeline":[{"time":number,"label":string,"detail"?:string}],"candidates":[{"label":string,"confidence":number}],"objects":string[],"movement_pattern":string}\n` +
-      `Contraintes: confidence∈[0..1]; muscles≤5, cues≤5, extras≤5, timeline≤4; candidates=TOP-${maxCandidates} triés décroissant, sans doublons.\n` +
-      `Style des "cues": impératifs courts en français (ex.: "Gaine le tronc", "Descends contrôlé").`;
+      `Champs: {\n` +
+      `  "exercise": string,                // nom FR de l'exercice (ou "inconnu")\n` +
+      `  "overall": string,                 // synthèse courte en français\n` +
+      `  "muscles": string[],               // 3 à 5 muscles max\n` +
+      `  "corrections": string[],           // 3 à 5 consignes impératives FR (ex.: "Gaine le tronc")\n` +
+      `  "extras": string[],                // (optionnel) points complémentaires\n` +
+      `  "timeline": [{"time":number,"label":string,"detail"?:string}],  // ≤ 4 repères\n` +
+      `  "objects": string[],               // (optionnel) objets détectés (ex.: "barre", "box")\n` +
+      `  "movement_pattern": string         // (optionnel) motif de mouvement\n` +
+      `}\n` +
+      `Contraintes: muscles≤5, corrections≤5, extras≤5, timeline≤4.`;
 
     const userTextParts: string[] = [];
     if (feeling) userTextParts.push(`Ressenti: ${feeling}`);
     if (typeof (timestamps?.[0]) === "number") userTextParts.push(`repere=${Math.round(timestamps[0])}s`);
-    if (promptHints) userTextParts.push(`Hints: ${promptHints}`);
+    if (typeof body.promptHints === "string" && body.promptHints) userTextParts.push(`Hints: ${body.promptHints}`);
 
     // Appel OpenAI
     const p = fetch("https://api.openai.com/v1/chat/completions", {
@@ -204,7 +195,7 @@ export async function POST(req: NextRequest) {
       headers: { "content-type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
         model: "gpt-4o",
-        temperature: openSet ? 0.2 : 0.15,
+        temperature: 0.2,
         max_tokens: 600,
         response_format: { type: "json_object" },
         messages: [
@@ -242,18 +233,19 @@ export async function POST(req: NextRequest) {
       return jsonError(502, "Impossible de parser la réponse JSON.");
     }
 
-    parsed.muscles ||= []; parsed.cues ||= []; parsed.extras ||= []; parsed.timeline ||= [];
-    if (!Array.isArray(parsed.candidates)) parsed.candidates = [];
-    if (!Array.isArray(parsed.objects)) parsed.objects = [];
-
-    // Clamp / tri + francisation
-    parsed.candidates = (parsed.candidates || [])
-      .map(c => ({ label: frLabel(String(c?.label || "").trim()), confidence: Math.max(0, Math.min(1, Number(c?.confidence) || 0)) }))
-      .filter(c => c.label)
-      .slice(0, maxCandidates);
-
+    // Normalisation + francisation
     parsed.exercise = frLabel(parsed.exercise || "exercice_inconnu");
-    parsed.confidence = Math.max(0, Math.min(1, Number(parsed.confidence) || 0));
+    parsed.muscles ||= [];
+    parsed.corrections ||= [];
+    parsed.extras ||= [];
+    parsed.timeline ||= [];
+    parsed.objects ||= [];
+
+    // Clamp légers
+    parsed.muscles = parsed.muscles.slice(0, 5);
+    parsed.corrections = parsed.corrections.slice(0, 5);
+    parsed.extras = parsed.extras.slice(0, 5);
+    parsed.timeline = parsed.timeline.slice(0, 4);
 
     cache.set(key, { t: Date.now(), json: parsed });
     return NextResponse.json(parsed, { headers: { "Cache-Control": "no-store, no-transform" } });
