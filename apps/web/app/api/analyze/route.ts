@@ -3,11 +3,13 @@ import { NextRequest, NextResponse } from "next/server";
 
 /* ============ Types ============ */
 type AnalysisPoint = { time: number; label: string; detail?: string };
+type Fault = { issue: string; severity: "faible"|"moyenne"|"élevée"; evidence?: string; correction?: string };
 type AIAnalysis = {
   exercise: string;
   overall: string;
   muscles: string[];
   corrections: string[];
+  faults?: Fault[];
   extras?: string[];
   timeline: AnalysisPoint[];
   objects?: string[];
@@ -76,7 +78,7 @@ function shortPreview(u: string) { return u.length <= 100 ? u : `${u.slice(0, 80
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const cache = new Map<string, { t: number; json: AIAnalysis }>();
 
-/* ===================== Francisation ===================== */
+/* ===================== Francisation min ===================== */
 function frLabel(label: string): string {
   const s = (label || "").trim();
   const pairs: Array<[RegExp, string]> = [
@@ -128,6 +130,7 @@ export async function POST(req: NextRequest) {
     let timestamps: number[] = Array.isArray(body.timestamps) ? body.timestamps : [];
     const feeling: string = typeof body.feeling === "string" ? body.feeling : "";
     const economy: boolean = body.economyMode !== false;
+    const promptHints: string = typeof body.promptHints === "string" ? body.promptHints : "";
 
     // Clé OpenAI
     const rawKey = (process.env.OPENAI_API_KEY || process.env.OPEN_API_KEY || "").trim();
@@ -139,7 +142,7 @@ export async function POST(req: NextRequest) {
 
     if (!selftest && !frames.length) return jsonError(400, "Aucune frame fournie.");
 
-    // ✅ jusqu'à 4 images (multi-mosaïques)
+    // Jusqu'à 4 images (multi-mosaïques)
     const MAX_IMAGES = 4;
     if (frames.length > MAX_IMAGES) {
       frames = frames.slice(0, MAX_IMAGES);
@@ -156,38 +159,54 @@ export async function POST(req: NextRequest) {
     console.log("[analyze] images:", imageParts.map(p => shortPreview((p as any).image_url.url)));
 
     // cache
-    const key = selftest ? "selftest" : hashKey(frames, feeling || "", economy, body.promptHints || "");
+    const key = selftest ? "selftest" : hashKey(frames, feeling || "", economy, promptHints);
     const hit = !selftest ? cache.get(key) : null;
     if (hit && Date.now() - hit.t < CACHE_TTL_MS) {
       return NextResponse.json(hit.json, { headers: { "Cache-Control": "no-store, no-transform" } });
     }
 
-    // ===== Prompt & JSON strict (FR) — sans confiance ni candidats =====
+    // ===== Prompt & JSON strict (FR) — avec fautes techniques =====
     const baseInstruction =
-      `Analyse des images (mosaïques) PROVENANT D'UNE VIDEO (pas d'une simple photo).\n` +
-      `Langue: FRANÇAIS UNIQUEMENT. Tous les champs et le texte doivent être en français.\n` +
-      `Objectif: identifier l'exercice, lister les muscles principaux et donner des CORRECTIONS concrètes.\n\n` +
-      `Checklist visuelle (pour réduire les confusions):\n` +
-      `• Barre de traction fixe vs box: mains agrippant une barre fixe au-dessus de la tête + suspension du corps -> Traction; pieds qui quittent le sol et atterrissent sur une box -> Saut sur box.\n` +
-      `• Repérer aussi: barre libre, haltères, machine, câble, banc, rack.\n` +
-      `• Motif: vertical (saut/traction/squat), horizontal (fente/rameur), pendulaire (kipping), bilatéral vs unilatéral.\n\n` +
-      `Sortie STRICTEMENT en JSON (response_format json_object).\n` +
-      `Champs: {\n` +
-      `  "exercise": string,                // nom FR de l'exercice (ou "inconnu")\n` +
-      `  "overall": string,                 // synthèse courte en français\n` +
-      `  "muscles": string[],               // 3 à 5 muscles max\n` +
-      `  "corrections": string[],           // 3 à 5 consignes impératives FR (ex.: "Gaine le tronc")\n` +
-      `  "extras": string[],                // (optionnel) points complémentaires\n` +
-      `  "timeline": [{"time":number,"label":string,"detail"?:string}],  // ≤ 4 repères\n` +
-      `  "objects": string[],               // (optionnel) objets détectés (ex.: "barre", "box")\n` +
-      `  "movement_pattern": string         // (optionnel) motif de mouvement\n` +
-      `}\n` +
-      `Contraintes: muscles≤5, corrections≤5, extras≤5, timeline≤4.`;
+`Analyse des images (mosaïques) PROVENANT D'UNE VIDEO.
+Langue: FRANÇAIS UNIQUEMENT.
+Objectif: identifier l'exercice, lister les muscles principaux, DÉTECTER LES ERREURS TECHNIQUES, et donner des CORRECTIONS concrètes.
+
+Checklist d'erreurs fréquentes (selon exercice):
+• Dos trop cambré / bassin en antéversion excessive
+• Jambes trop tendues / verrouillées
+• Genoux qui rentrent (valgus)
+• Genoux qui dépassent excessivement / avance trop tôt
+• Épaules enroulées / scapulas non engagées
+• Barre trop loin du corps / trajectoire non verticale
+• Amplitude incomplète / rebond en bas de mouvement
+• Rythme non contrôlé (descente chute libre)
+• Tête projetée / nuque cassée
+• Pieds instables / talons qui se décollent
+
+Sortie STRICTEMENT en JSON (response_format json_object).
+Champs:
+{
+  "exercise": string,                 // nom FR (ou "inconnu")
+  "overall": string,                  // synthèse courte
+  "muscles": string[],                // ≤5
+  "corrections": string[],            // ≤5 consignes impératives FR
+  "faults": [                         // ≤6 erreurs techniques détectées
+    { "issue": string, "severity": "faible"|"moyenne"|"élevée", "evidence"?: string, "correction"?: string }
+  ],
+  "extras": string[],                 // optionnel
+  "timeline": [{"time":number,"label":string,"detail"?:string}], // ≤4
+  "objects": string[],                // optionnel
+  "movement_pattern": string          // optionnel
+}
+
+Rappels:
+• Si indices insuffisants: exercise="inconnu".
+• Corrections: forme impérative, concrète (ex.: "Gaine le tronc", "Fléchis légèrement les genoux").`;
 
     const userTextParts: string[] = [];
     if (feeling) userTextParts.push(`Ressenti: ${feeling}`);
     if (typeof (timestamps?.[0]) === "number") userTextParts.push(`repere=${Math.round(timestamps[0])}s`);
-    if (typeof body.promptHints === "string" && body.promptHints) userTextParts.push(`Hints: ${body.promptHints}`);
+    if (promptHints) userTextParts.push(`Hints: ${promptHints}`);
 
     // Appel OpenAI
     const p = fetch("https://api.openai.com/v1/chat/completions", {
@@ -196,7 +215,7 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({
         model: "gpt-4o",
         temperature: 0.2,
-        max_tokens: 600,
+        max_tokens: 700,
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: baseInstruction },
@@ -237,13 +256,13 @@ export async function POST(req: NextRequest) {
     parsed.exercise = frLabel(parsed.exercise || "exercice_inconnu");
     parsed.muscles ||= [];
     parsed.corrections ||= [];
+    parsed.faults ||= [];
     parsed.extras ||= [];
     parsed.timeline ||= [];
     parsed.objects ||= [];
-
-    // Clamp légers
     parsed.muscles = parsed.muscles.slice(0, 5);
     parsed.corrections = parsed.corrections.slice(0, 5);
+    parsed.faults = parsed.faults.slice(0, 6);
     parsed.extras = parsed.extras.slice(0, 5);
     parsed.timeline = parsed.timeline.slice(0, 4);
 
