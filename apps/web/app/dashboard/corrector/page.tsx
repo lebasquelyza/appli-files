@@ -10,7 +10,6 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
 /* ===================== Types ===================== */
 interface AnalysisPoint { time: number; label: string; detail?: string; }
@@ -180,15 +179,14 @@ function CoachAnalyzer() {
       if (!fileUrl) throw new Error("Upload échoué (aucune URL retournée)");
       setProgress(75);
 
-      // 2) APPEL IA — FR + erreurs techniques détaillées
+      // 2) APPEL IA — FR + fautes + corrections
       void fakeProgress(setProgress, 80, 98);
       setStatus("Analyse IA…");
 
       const promptHints =
         `Tu reçois des mosaïques issues d’une VIDEO (pas une photo). ` +
-        `Identifie l'exercice et détecte les ERREURS TECHNIQUES (dos trop cambré, jambes trop tendues, genoux qui rentrent, épaules qui s'affaissent, amplitude incomplète, etc.). ` +
-        `Pour chaque erreur: nom (issue), gravité (faible|moyenne|élevée), preuve visuelle (evidence), et correction impérative (correction). ` +
-        `Réponds en FRANÇAIS uniquement.`;
+        `Identifie l'exercice et détecte les ERREURS TECHNIQUES (dos trop cambré, jambes trop tendues, genoux qui rentrent, etc.). ` +
+        `Donne des CORRECTIONS claires (impératives). Réponds en FRANÇAIS uniquement.`;
 
       const res = await fetch("/api/analyze", {
         method: "POST",
@@ -268,6 +266,30 @@ function CoachAnalyzer() {
     setCooldown(0);
   };
 
+  // ===== helpers d’affichage demandés =====
+  function issuesLine(a: AIAnalysis | null) {
+    if (!a?.faults?.length) return "—";
+    const set = new Set<string>();
+    for (const f of a.faults) {
+      const s = (f?.issue || "").trim();
+      if (s) set.add(s);
+    }
+    return Array.from(set).join(" - ") || "—";
+  }
+  function correctionsLine(a: AIAnalysis | null) {
+    const all: string[] = [];
+    if (a?.corrections?.length) all.push(...a.corrections);
+    if (a?.faults?.length) {
+      for (const f of a.faults) {
+        const s = (f?.correction || "").trim();
+        if (s) all.push(s);
+      }
+    }
+    // dédoublonnage + jointure " - "
+    const out = Array.from(new Set(all.map(s => s.trim()).filter(Boolean))).join(" - ");
+    return out || "—";
+  }
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       {/* Col 1: capture / upload */}
@@ -336,7 +358,11 @@ function CoachAnalyzer() {
       <Card className="lg:col-span-1">
         <CardHeader><CardTitle className="flex items-center gap-2">🏋️ Retour IA</CardTitle></CardHeader>
         <CardContent className="space-y-4">
-          {!analysis && (<EmptyState />)}
+          {!analysis && (
+            <div className="rounded-2xl border p-4 text-sm text-muted-foreground">
+              Aucune analyse pour l'instant. Ajoute une vidéo et ton ressenti, puis clique <span className="font-medium">Lancer l'analyse IA</span>.
+            </div>
+          )}
 
           {analysis && (
             <div className="space-y-4">
@@ -351,117 +377,29 @@ function CoachAnalyzer() {
               )}
 
               {/* Muscles (avec " - " entre chaque) */}
-              <div className="space-y-2">
-                <h4 className="text-sm font-medium">Muscles principalement sollicités</h4>
-                {analysis.muscles?.length ? (
-                  <p className="text-sm">{analysis.muscles.join(" - ")}</p>
-                ) : (
-                  <p className="text-xs text-muted-foreground">— non détecté —</p>
-                )}
+              <div className="space-y-1">
+                <div className="text-sm font-medium">Muscles : <span className="font-normal">
+                  {analysis.muscles?.length ? analysis.muscles.join(" - ") : "—"}
+                </span></div>
               </div>
 
-              {/* Erreurs détectées */}
-              {analysis.faults && analysis.faults.length > 0 && (
-                <div className="space-y-2">
-                  <h4 className="text-sm font-medium">Erreurs détectées</h4>
-                  <div className="space-y-2">
-                    {analysis.faults.map((f, i) => (
-                      <div key={i} className="rounded-xl border p-3">
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium text-sm">{f.issue}</span>
-                          <Badge variant="secondary">{f.severity}</Badge>
-                        </div>
-                        {f.evidence && <p className="text-xs text-muted-foreground mt-1">Indice visuel : {f.evidence}</p>}
-                        {f.correction && <p className="text-xs mt-1">Correction : <span className="font-medium">{f.correction}</span></p>}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Corrections (liste globale) */}
-              <div className="space-y-2">
-                <h4 className="text-sm font-medium">Corrections</h4>
-                {analysis.corrections?.length ? (
-                  <ul className="list-disc pl-5 space-y-1 text-sm">
-                    {analysis.corrections.map((c, i) => (<li key={i}>{c}</li>))}
-                  </ul>
-                ) : (
-                  <p className="text-xs text-muted-foreground">— aucune correction spécifique —</p>
-                )}
+              {/* Format demandé */}
+              <div className="space-y-1">
+                <div className="text-sm font-medium">Erreurs détectées : <span className="font-normal">{issuesLine(analysis)}</span></div>
+                <div className="text-sm font-medium">Corrections : <span className="font-normal">{correctionsLine(analysis)}</span></div>
               </div>
 
-              {/* Extras (optionnel) */}
-              {analysis.extras && analysis.extras.length > 0 && (
-                <Accordion type="single" collapsible className="w-full">
-                  <AccordionItem value="more">
-                    <AccordionTrigger>Points complémentaires</AccordionTrigger>
-                    <AccordionContent>
-                      <ul className="list-disc pl-5 space-y-1 text-sm">
-                        {analysis.extras.map((x, i) => <li key={i}>{x}</li>)}
-                      </ul>
-                    </AccordionContent>
-                  </AccordionItem>
-                </Accordion>
-              )}
-
-              {/* Timeline */}
-              <div className="space-y-2">
-                <h4 className="text-sm font-medium">Repères dans la vidéo</h4>
-                {analysis.timeline?.length ? (
-                  <div className="space-y-2">
-                    {analysis.timeline.map((p, idx) => (<TimelineRow key={`${p.time}-${idx}`} point={p} videoSelector="#analysis-player" />))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground">— aucun repère temporel —</p>
-                )}
+              {/* Player global */}
+              <div>
+                {blobUrl ? (
+                  <video id="analysis-player" src={blobUrl} controls className="w-full rounded-2xl border mt-2" />
+                ) : null}
               </div>
             </div>
           )}
         </CardContent>
       </Card>
-
-      {/* Player global */}
-      <div className="lg:col-span-3">
-        <Card>
-          <CardHeader><CardTitle className="flex items-center gap-2">▶️ Démonstration / Lecture</CardTitle></CardHeader>
-          <CardContent>
-            {blobUrl ? (
-              <video id="analysis-player" src={blobUrl} controls className="w-full rounded-2xl border" />
-            ) : (
-              <div className="text-sm text-muted-foreground">Aucune vidéo. Enregistre ou importe un clip pour voir les repères.</div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
     </div>
-  );
-}
-
-function EmptyState() {
-  return (
-    <div className="rounded-2xl border p-4 text-sm text-muted-foreground">
-      Aucune analyse pour l'instant. Ajoute une vidéo et ton ressenti, puis clique <span className="font-medium">Lancer l'analyse IA</span>.
-      <div className="mt-3 flex flex-wrap gap-2">
-        <Badge>Posture</Badge><Badge>Amplitudes</Badge><Badge>Symétrie</Badge><Badge>Rythme</Badge>
-      </div>
-    </div>
-  );
-}
-
-function TimelineRow({ point, videoSelector }: { point: AnalysisPoint; videoSelector: string }) {
-  const onSeek = () => {
-    const video = document.querySelector<HTMLVideoElement>(videoSelector);
-    if (video) { video.currentTime = point.time; video.play(); }
-  };
-  return (
-    <button onClick={onSeek} className="w-full text-left rounded-xl border p-3 hover:bg-accent transition">
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-medium">{fmtTime(point.time)} – {point.label}</span>
-        <span className="text-xs text-muted-foreground">Aller au moment</span>
-      </div>
-      {point.detail && <p className="text-xs text-muted-foreground mt-1">{point.detail}</p>}
-    </button>
   );
 }
 
@@ -682,4 +620,3 @@ function loadImage(src: string): Promise<HTMLImageElement> {
     img.src = src;
   });
 }
-
