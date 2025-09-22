@@ -24,9 +24,9 @@ interface AIAnalysis {
   extras?: string[];
   timeline: AnalysisPoint[];
   candidates?: Candidate[];
-  objects?: string[];              // facultatif, si le backend le renvoie
-  movement_pattern?: string;       // facultatif
-  rawText?: string;                // facultatif
+  objects?: string[];
+  movement_pattern?: string;
+  rawText?: string;
 }
 
 /* ===================== Constantes ===================== */
@@ -45,14 +45,13 @@ function Spinner({ className = "" }: { className?: string }) {
 }
 
 /* ===================== Page ===================== */
-
 export default function Page() {
   return (
     <>
       <PageHeader title="Files te corrige" subtitle="Conseils IA sur ta posture (démo)" />
       <Section title="Filmer / Notes">
         <p className="text-sm text-muted-foreground mb-4">
-          Enregistre une <strong>vidéo</strong>, ajoute ton ressenti, puis lance l’analyse IA.
+          Enregistre une vidéo, ajoute ton ressenti, puis lance l’analyse IA.
         </p>
         <CoachAnalyzer />
       </Section>
@@ -61,7 +60,6 @@ export default function Page() {
 }
 
 /* ===================== Composant principal ===================== */
-
 function CoachAnalyzer() {
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
@@ -73,7 +71,6 @@ function CoachAnalyzer() {
   const [status, setStatus] = useState<string>("");
   const [errorMsg, setErrorMsg] = useState<string>("");
 
-  // Open-set options
   const [maxCandidates, setMaxCandidates] = useState<number>(5);
   const [openSet, setOpenSet] = useState<boolean>(true);
 
@@ -115,7 +112,6 @@ function CoachAnalyzer() {
   }
 
   async function uploadWithSignedUrl(f: File): Promise<{ path: string; readUrl: string }> {
-    // 1) demander une URL signée d'UPLOAD
     const r = await fetch("/api/videos/sign-upload", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -124,7 +120,6 @@ function CoachAnalyzer() {
     if (!r.ok) throw new Error(`sign-upload: HTTP ${r.status} ${await r.text()}`);
     const { signedUrl, path } = await r.json();
 
-    // 2) PUT du fichier sur l'URL signée
     const put = await fetch(signedUrl, {
       method: "PUT",
       headers: {
@@ -135,7 +130,6 @@ function CoachAnalyzer() {
     });
     if (!put.ok) throw new Error(`upload PUT failed: ${put.status} ${await put.text()}`);
 
-    // 3) créer une URL signée de lecture
     const r2 = await fetch("/api/storage/sign-read", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -155,20 +149,18 @@ function CoachAnalyzer() {
     setErrorMsg("");
 
     try {
-      // 0) EXTRACTION + 2 MOSAÏQUES DE 6 (total 12 frames)
-      const N_FRAMES = 12;
-      const { frames, timestamps } = await extractFramesFromFile(file, N_FRAMES);
+      // 0) EXTRACTION — 12 frames -> 2 mosaïques 1280×720 (JPEG 0.6)
+      const { frames, timestamps } = await extractFramesFromFile(file, 12);
       if (!frames.length) throw new Error("Impossible d’extraire des images de la vidéo.");
-
       setProgress(12);
-      const mosaics = await buildMosaics(frames, 6, 3, 2, 1280, 720, 0.6); // 2 mosaïques (3x2), 1280x720, q=0.6
-      const useFrames = mosaics.length ? mosaics : [frames[Math.floor(frames.length / 2)]];
-      const useTimestamps = [
-        timestamps[Math.floor(timestamps.length / 3)] || 0,
-        timestamps[Math.floor((2 * timestamps.length) / 3)] || timestamps[0] || 0,
-      ].slice(0, useFrames.length);
 
-      setProgress(25);
+      const half = Math.ceil(frames.length / 2);
+      const mosaic1 = await makeMosaic(frames.slice(0, half), 3, 2, 1280, 720, 0.6);
+      const mosaic2 = await makeMosaic(frames.slice(half), 3, 2, 1280, 720, 0.6);
+      const mosaics = [mosaic1, mosaic2];
+      const midTime = timestamps[Math.floor(timestamps.length / 2)] || 0;
+
+      setProgress(20);
 
       // 1) UPLOAD — proxy si < 5MB, sinon signed upload direct
       setStatus("Upload de la vidéo…");
@@ -182,7 +174,7 @@ function CoachAnalyzer() {
         try {
           const url = await uploadWithProxy(file);
           fileUrl = url;
-        } catch (e: any) {
+        } catch {
           setStatus("Proxy indisponible — upload signé…");
           const { readUrl } = await uploadWithSignedUrl(file);
           fileUrl = readUrl;
@@ -192,26 +184,29 @@ function CoachAnalyzer() {
       if (!fileUrl) throw new Error("Upload échoué (aucune URL retournée)");
       setProgress(75);
 
-      // 2) APPEL IA
+      // 2) APPEL IA — open-set + top-k + prompt hints
       void fakeProgress(setProgress, 80, 98);
       setStatus("Analyse IA…");
 
       const promptHints =
-        "Client a envoyé une VIDEO (pas une photo). Privilégie indices d’objets (barre, box, haltères, machine) et motif de mouvement. " +
-        "Sois strict sur la règle barre vs box. Fourni top-k candidats triés.";
+        `Tu reçois des mosaïques issues d’une VIDEO (pas une photo). ` +
+        `Identifie l'exercice en suivant une checklist d'objets (barre de traction, box, haltères, barre libre, machine...). ` +
+        `Règle clé: mains agrippant une barre fixe au-dessus de la tête la plupart du temps = traction; ` +
+        `si pieds quittent le sol et atterrissent sur une box = box jump. ` +
+        `Si insuffisant: exercise="inconnu".`;
 
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          frames: useFrames,              // ✅ plusieurs images (mosaïques)
-          timestamps: useTimestamps,
+          frames: mosaics,                    // ✅ plusieurs images
+          timestamps: [midTime],
           feeling,
           fileUrl,
           economyMode: true,
-          openSet,                        // ✅ open-set
-          maxCandidates,                  // ✅ top-k
-          promptHints,                    // ✅ indice
+          openSet,
+          maxCandidates,
+          promptHints,
         }),
       });
 
@@ -237,9 +232,20 @@ function CoachAnalyzer() {
 
       const data: Partial<AIAnalysis> = await res.json();
 
-      const normalized: AIAnalysis = {
-        exercise: (data.exercise || "exercice_inconnu").toString(),
-        confidence: typeof data.confidence === "number" ? clamp01(data.confidence) : 0.5,
+      // post-process : smartPick pour corriger Box Jump vs Traction
+      const picked = smartPick({
+        exercise: String(data.exercise || "exercice_inconnu"),
+        confidence: typeof data.confidence === "number" ? data.confidence : 0,
+        candidates: Array.isArray(data.candidates) ? data.candidates.map(c => ({
+          label: String((c as any)?.label || ""),
+          confidence: Math.max(0, Math.min(1, Number((c as any)?.confidence) || 0)),
+        })) : [],
+        objects: Array.isArray((data as any)?.objects) ? (data as any).objects : [],
+      });
+
+      const safe: AIAnalysis = {
+        exercise: picked.label,
+        confidence: picked.confidence,
         overall:
           (data.overall && data.overall.trim()) ||
           "Analyse effectuée mais je manque d’indices visuels. Réessaie avec un angle plus net / cadrage entier.",
@@ -250,20 +256,12 @@ function CoachAnalyzer() {
           Array.isArray(data.timeline)
             ? data.timeline.filter(v => typeof v?.time === "number" && typeof v?.label === "string")
             : [],
-        candidates: Array.isArray(data.candidates)
-          ? data.candidates
-              .map((c: any) => ({ label: String(c?.label || ""), confidence: clamp01(Number(c?.confidence) || 0) }))
-              .filter(c => c.label)
-              .slice(0, maxCandidates)
-          : [],
+        candidates: Array.isArray(data.candidates) ? data.candidates as Candidate[] : [],
         objects: Array.isArray((data as any)?.objects) ? (data as any).objects : [],
         movement_pattern: typeof (data as any)?.movement_pattern === "string" ? (data as any).movement_pattern : undefined,
       };
 
-      // Smart pick: si barre détectée + candidate traction proche, préfère la traction; idem pour box jump.
-      const picked = smartPick(normalized);
-      setAnalysis({ ...normalized, exercise: picked.label, confidence: picked.confidence });
-
+      setAnalysis(safe);
       setProgress(100);
       setStatus("Terminé ✅");
     } catch (e: any) {
@@ -344,7 +342,7 @@ function CoachAnalyzer() {
             </Button>
           </div>
 
-          {/* Options open-set */}
+          {/* Open-set options UI */}
           <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
             <div className="rounded-xl border p-2">
               <div className="font-medium mb-1">Mode</div>
@@ -388,12 +386,13 @@ function CoachAnalyzer() {
 
           {analysis && (
             <div className="space-y-4">
+              {/* Top-1 + confiance */}
               <div className="flex items-center flex-wrap gap-2">
                 <Badge variant="secondary">Exercice détecté : {analysis.exercise || "inconnu"}</Badge>
                 <span className="text-xs text-muted-foreground">Confiance : {Math.round((analysis.confidence ?? 0) * 100)}%</span>
               </div>
 
-              {/* Top-k candidats cliquables */}
+              {/* Top-k candidats */}
               {analysis.candidates && analysis.candidates.length > 0 && (
                 <div className="space-y-2">
                   <h4 className="text-sm font-medium">Autres hypothèses</h4>
@@ -618,7 +617,7 @@ async function fakeProgress(setter: (v: number) => void, from = 12, to = 95) {
   }
 }
 
-/** ➜ Extrait N frames JPEG (dataURL) d’un fichier vidéo local (qualité relevée). */
+/** ➜ Extrait N frames JPEG (dataURL) d’un fichier vidéo local. */
 async function extractFramesFromFile(file: File, nFrames = 12): Promise<{ frames: string[]; timestamps: number[] }> {
   const videoURL = URL.createObjectURL(file);
   try {
@@ -660,7 +659,7 @@ async function extractFramesFromFile(file: File, nFrames = 12): Promise<{ frames
       canvas.width = width;
       canvas.height = height;
       ctx.drawImage(video as any, 0, 0, width, height);
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.6); // ✅ qualité plus nette
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.6); // ✅ qualité plus haute
       frames.push(dataUrl);
       timestamps.push(Math.round(t));
     }
@@ -692,9 +691,7 @@ function bestFit(w: number, h: number, maxW: number, maxH: number) {
 }
 
 /** Construit une mosaïque WxH depuis une liste d’images (dataURL). */
-async function makeMosaic(
-  images: string[], gridW = 3, gridH = 2, outW = 1280, outH = 720, quality = 0.6
-): Promise<string> {
+async function makeMosaic(images: string[], gridW = 3, gridH = 2, outW = 1280, outH = 720, quality = 0.6): Promise<string> {
   const cvs = document.createElement("canvas");
   const ctx = cvs.getContext("2d")!;
   cvs.width = outW;
@@ -720,26 +717,6 @@ async function makeMosaic(
   return cvs.toDataURL("image/jpeg", quality);
 }
 
-async function buildMosaics(
-  frames: string[],
-  perMosaic = 6,
-  gridW = 3,
-  gridH = 2,
-  outW = 1280,
-  outH = 720,
-  quality = 0.6
-): Promise<string[]> {
-  const groups: string[][] = [];
-  for (let i = 0; i < frames.length; i += perMosaic) {
-    groups.push(frames.slice(i, i + perMosaic));
-  }
-  const mosaics: string[] = [];
-  for (const g of groups.slice(0, 2)) {         // ✅ on limite à 2 mosaïques
-    mosaics.push(await makeMosaic(g, gridW, gridH, outW, outH, quality));
-  }
-  return mosaics;
-}
-
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -749,26 +726,33 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
-/* ===================== Post-process “smartPick” ===================== */
-function clamp01(x: number) { return Math.max(0, Math.min(1, x)); }
+/* ===================== Post-process: désambiguïsation ===================== */
+function smartPick(input: { exercise: string; confidence: number; candidates: Candidate[]; objects?: string[] }) {
+  const top = { label: input.exercise, confidence: input.confidence ?? 0 };
+  const objs = (input.objects || []).map(s => String(s || "").toLowerCase());
 
-function smartPick(a: AIAnalysis): { label: string; confidence: number } {
-  const top = { label: a.exercise, confidence: a.confidence || 0 };
-  const objs = (a.objects || []).map(s => String(s || "").toLowerCase());
-  const cands = (a.candidates || []).map(c => ({ label: c.label, confidence: c.confidence }));
+  // ✅ REGEX corrigées (pas de range invalide)
+  const hasBar = objs.some((o) => /(bar(?:re)?|pull(?:_|-| )?up|chin(?:_|-| )?up|rig|rack)/i.test(o));
+  const hasBox = objs.some((o) => /(box|plyo)/i.test(o));
 
-  const hasBar = objs.some(o => /bar(re)?|pull[_- ]?up|chin[_- ]?up|rig|rack/.test(o));
-  const hasBox = objs.some(o => /box|plyo/.test(o));
+  // Cherche une candidate proche correspondant à Traction ou Box Jump
+  const cands = (input.candidates || []).map(c => ({
+    label: String(c.label || ""),
+    confidence: Math.max(0, Math.min(1, Number(c.confidence) || 0)),
+  }));
 
-  const pullCand = cands.find(c => /traction|pull[- ]?up|chin[- ]?up|chest[- ]?to[- ]?bar/i.test(c.label));
-  const boxCand  = cands.find(c => /box jump/i.test(c.label));
+  const pullCand = cands.find((c) => /(traction|pull(?: |_|-|)?up|chin(?: |_|-|)?up|chest(?: |_|-|)?to(?: |_|-|)?bar)/i.test(c.label));
+  const boxCand  = cands.find((c) => /box(?: |_|-|)?jump/i.test(c.label));
 
+  // si barre présente et candidate traction presque aussi forte que le top -> préfère traction
   if (hasBar && pullCand && pullCand.confidence >= top.confidence - 0.05) {
     return { label: pullCand.label, confidence: Math.max(pullCand.confidence, top.confidence) };
   }
+
+  // si box présente et candidate box jump presque aussi forte -> préfère box jump
   if (hasBox && boxCand && boxCand.confidence >= top.confidence - 0.05) {
     return { label: boxCand.label, confidence: Math.max(boxCand.confidence, top.confidence) };
   }
+
   return top;
 }
-
