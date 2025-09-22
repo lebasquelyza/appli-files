@@ -74,7 +74,6 @@ function CoachAnalyzer() {
   const [maxCandidates, setMaxCandidates] = useState<number>(5);
   const [openSet, setOpenSet] = useState<boolean>(true);
 
-  // cooldown (429, 504)
   const [cooldown, setCooldown] = useState<number>(0);
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -184,7 +183,7 @@ function CoachAnalyzer() {
       if (!fileUrl) throw new Error("Upload échoué (aucune URL retournée)");
       setProgress(75);
 
-      // 2) APPEL IA — open-set + top-k + prompt hints
+      // 2) APPEL IA — open-set + top-k + FR + prompt hints
       void fakeProgress(setProgress, 80, 98);
       setStatus("Analyse IA…");
 
@@ -192,8 +191,9 @@ function CoachAnalyzer() {
         `Tu reçois des mosaïques issues d’une VIDEO (pas une photo). ` +
         `Identifie l'exercice en suivant une checklist d'objets (barre de traction, box, haltères, barre libre, machine...). ` +
         `Règle clé: mains agrippant une barre fixe au-dessus de la tête la plupart du temps = traction; ` +
-        `si pieds quittent le sol et atterrissent sur une box = box jump. ` +
-        `Si insuffisant: exercise="inconnu".`;
+        `si pieds quittent le sol et atterrissent sur une box = saut sur box. ` +
+        `Si insuffisant: exercise="inconnu". ` +
+        `Réponds en FRANÇAIS uniquement.`;
 
       const res = await fetch("/api/analyze", {
         method: "POST",
@@ -232,7 +232,7 @@ function CoachAnalyzer() {
 
       const data: Partial<AIAnalysis> = await res.json();
 
-      // post-process : smartPick pour corriger Box Jump vs Traction
+      // post-process : smartPick pour corriger Traction vs Saut sur box
       const picked = smartPick({
         exercise: String(data.exercise || "exercice_inconnu"),
         confidence: typeof data.confidence === "number" ? data.confidence : 0,
@@ -659,7 +659,7 @@ async function extractFramesFromFile(file: File, nFrames = 12): Promise<{ frames
       canvas.width = width;
       canvas.height = height;
       ctx.drawImage(video as any, 0, 0, width, height);
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.6); // ✅ qualité plus haute
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.6); // ✅ plus net
       frames.push(dataUrl);
       timestamps.push(Math.round(t));
     }
@@ -731,28 +731,23 @@ function smartPick(input: { exercise: string; confidence: number; candidates: Ca
   const top = { label: input.exercise, confidence: input.confidence ?? 0 };
   const objs = (input.objects || []).map(s => String(s || "").toLowerCase());
 
-  // ✅ REGEX corrigées (pas de range invalide)
+  // ✅ REGEX sûres (pas de range invalide)
   const hasBar = objs.some((o) => /(bar(?:re)?|pull(?:_|-| )?up|chin(?:_|-| )?up|rig|rack)/i.test(o));
   const hasBox = objs.some((o) => /(box|plyo)/i.test(o));
 
-  // Cherche une candidate proche correspondant à Traction ou Box Jump
   const cands = (input.candidates || []).map(c => ({
     label: String(c.label || ""),
     confidence: Math.max(0, Math.min(1, Number(c.confidence) || 0)),
   }));
 
   const pullCand = cands.find((c) => /(traction|pull(?: |_|-|)?up|chin(?: |_|-|)?up|chest(?: |_|-|)?to(?: |_|-|)?bar)/i.test(c.label));
-  const boxCand  = cands.find((c) => /box(?: |_|-|)?jump/i.test(c.label));
+  const boxCand  = cands.find((c) => /saut(?: |_|-|)?sur(?: |_|-|)?box|box(?: |_|-|)?jump/i.test(c.label));
 
-  // si barre présente et candidate traction presque aussi forte que le top -> préfère traction
   if (hasBar && pullCand && pullCand.confidence >= top.confidence - 0.05) {
     return { label: pullCand.label, confidence: Math.max(pullCand.confidence, top.confidence) };
   }
-
-  // si box présente et candidate box jump presque aussi forte -> préfère box jump
   if (hasBox && boxCand && boxCand.confidence >= top.confidence - 0.05) {
     return { label: boxCand.label, confidence: Math.max(boxCand.confidence, top.confidence) };
   }
-
   return top;
 }
