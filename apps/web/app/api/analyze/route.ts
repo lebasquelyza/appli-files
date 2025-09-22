@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 /* ============ Types ============ */
 type AnalysisPoint = { time: number; label: string; detail?: string };
+type Candidate = { label: string; confidence: number };
 type AIAnalysis = {
   exercise: string;
   confidence: number;
@@ -11,6 +12,9 @@ type AIAnalysis = {
   cues: string[];
   extras?: string[];
   timeline: AnalysisPoint[];
+  // Champs additionnels (facultatifs) utilisés par le front open-set
+  candidates?: Candidate[];
+  rawText?: string;
 };
 
 /* ============ Next runtime ============ */
@@ -25,8 +29,15 @@ function jsonError(status: number, msg: string, extra: Record<string, string> = 
     headers: { "content-type": "application/json", "Cache-Control": "no-store, no-transform", ...extra },
   });
 }
-function hashKey(frames: string[], feeling: string, economy: boolean) {
-  const s = frames.join("|").slice(0, 2000) + "::" + (feeling || "") + "::" + (economy ? "e1" : "e0");
+function hashKey(frames: string[], feeling: string, economy: boolean, openSet: boolean, maxCandidates: number, promptHints?: string) {
+  const s = [
+    frames.join("|").slice(0, 2000),
+    feeling || "",
+    economy ? "e1" : "e0",
+    openSet ? "os1" : "os0",
+    `k=${maxCandidates}`,
+    promptHints || "",
+  ].join("::");
   let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
   return h.toString(16);
 }
@@ -84,7 +95,7 @@ export async function POST(req: NextRequest) {
   try {
     const ct = (req.headers.get("content-type") || "").toLowerCase();
     if (!ct.includes("application/json")) {
-      return jsonError(415, "JSON attendu: { frames: string[], timestamps?: number[], feeling?: string, selftest?: boolean }");
+      return jsonError(415, "JSON attendu: { frames: string[], timestamps?: number[], feeling?: string, selftest?: boolean, openSet?: boolean, maxCandidates?: number, promptHints?: string }");
     }
 
     const body = await req.json();
@@ -93,6 +104,12 @@ export async function POST(req: NextRequest) {
     let timestamps: number[] = Array.isArray(body.timestamps) ? body.timestamps : [];
     const feeling: string = typeof body.feeling === "string" ? body.feeling : "";
     const economy: boolean = body.economyMode !== false;
+
+    // Nouveaux paramètres open-set
+    const openSet: boolean = body.openSet !== false; // par défaut true
+    const maxCandidatesRaw = Number.isFinite(body.maxCandidates) ? Number(body.maxCandidates) : 5;
+    const maxCandidates = Math.max(1, Math.min(10, maxCandidatesRaw));
+    const promptHints: string = typeof body.promptHints === "string" ? body.promptHints : "";
 
     // ---- Lecture et validation robuste de la clé OpenAI
     const rawKey = (process.env.OPENAI_API_KEY || process.env.OPEN_API_KEY || "").trim();
@@ -117,21 +134,70 @@ export async function POST(req: NextRequest) {
     console.log("[analyze] image_url:", shortPreview(imageUrl), selftest ? "(selftest)" : "");
 
     // cache
-    const key = selftest ? "selftest" : hashKey(frames, feeling || "", economy);
+    const key = selftest ? "selftest" : hashKey(frames, feeling || "", economy, openSet, maxCandidates, promptHints);
     const hit = !selftest ? cache.get(key) : null;
     if (hit && Date.now() - hit.t < CACHE_TTL_MS) {
       return NextResponse.json(hit.json, { headers: { "Cache-Control": "no-store, no-transform" } });
     }
 
-    // prompt compact
-    const instruction =
-      'Analyse d’une image mosaïque issue d’une vidéo de musculation. ' +
-      'Réponds STRICTEMENT en JSON: {"exercise":string,"confidence":number,"overall":string,"muscles":string[],"cues":string[],"extras":string[],"timeline":[{"time":number,"label":string,"detail"?:string}]}. ' +
-      'Limite à 3 muscles, 3 cues max, timeline 2 points pertinents.';
+    // ===== Prompt & schéma JSON (open-set + désambiguïsation) =====
+    // On force la sortie JSON strict (response_format) et on demande un top-k "candidates".
+    // Règles pour éviter Box Jump vs Traction: si mains agrippent une barre fixe
+    // au-dessus de la tête la majorité du temps -> Traction; si pieds quittent le sol
+    // et atterrissent sur une box -> Box Jump.
+    const schema = {
+      type: "object",
+      properties: {
+        exercise: { type: "string" },
+        confidence: { type: "number" },
+        overall: { type: "string" },
+        muscles: { type: "array", items: { type: "string" } },
+        cues: { type: "array", items: { type: "string" } },
+        extras: { type: "array", items: { type: "string" } },
+        timeline: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              time: { type: "number" },
+              label: { type: "string" },
+              detail: { type: "string" }
+            },
+            required: ["time", "label"]
+          }
+        },
+        candidates: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              label: { type: "string" },
+              confidence: { type: "number" }
+            },
+            required: ["label", "confidence"]
+          }
+        }
+      },
+      required: ["exercise", "confidence", "overall", "muscles", "cues", "timeline"]
+    };
 
-    const userTextParts: string[] = [instruction];
+    const baseInstruction =
+      `Analyse une image mosaïque tirée d'une vidéo de sport.\n` +
+      `Objectif: identifier l'exercice (open-set: n'importe quel exercice connu), proposer un TOP-${maxCandidates} d'hypothèses, et donner quelques corrections.\n\n` +
+      `Règles de désambiguïsation (très importantes):\n` +
+      `• Si les mains agrippent une BARRE FIXE au-dessus de la tête la majeure partie du temps, l'athlète est suspendu, et les pieds ne montent pas sur un support: -> exercice de TRACTION (Pull-up/Chin-up/Chest-to-bar), pas un box jump.\n` +
+      `• Si les PIEDS quittent le sol puis atterrissent SUR UNE BOX/PLATEAU, avec déplacement horizontal/vertical: -> BOX JUMP.\n` +
+      `• S'il n'y a pas assez d'indices: exercise="inconnu", confidence faible.\n\n` +
+      `Contraintes de sortie:\n` +
+      `• Réponds STRICTEMENT en JSON.\n` +
+      `• confidence dans [0..1].\n` +
+      `• Limite muscles à 5, cues à 5, extras à 5, timeline à 4 points pertinents.\n` +
+      `• Ajoute "candidates": liste des TOP-${maxCandidates} {label,confidence} triés par confiance décroissante, sans doublons.\n`;
+
+    const userTextParts: string[] = [];
     if (feeling) userTextParts.push(`Ressenti: ${feeling}`);
     if (typeof timestamps[0] === "number") userTextParts.push(`repere=${Math.round(timestamps[0])}s`);
+    if (promptHints) userTextParts.push(`Hints: ${promptHints}`);
 
     // Appel OpenAI (chat/completions avec image)
     const p = fetch("https://api.openai.com/v1/chat/completions", {
@@ -139,14 +205,15 @@ export async function POST(req: NextRequest) {
       headers: { "content-type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
         model: "gpt-4o",
-        temperature: 0.2,
-        max_tokens: 200,
+        temperature: openSet ? 0.2 : 0.15,
+        max_tokens: 500,
+        response_format: { type: "json_object" },
         messages: [
-          { role: "system", content: "Réponds STRICTEMENT en JSON." },
+          { role: "system", content: baseInstruction },
           {
             role: "user",
             content: [
-              { type: "text", text: userTextParts.join("\n") },
+              { type: "text", text: userTextParts.join("\n") || "Analyse la mosaïque." },
               { type: "image_url", image_url: { url: imageUrl } },
             ],
           },
@@ -160,6 +227,7 @@ export async function POST(req: NextRequest) {
         err.status = resp.status; err.details = parsed?.error ?? txt;
         throw err;
       }
+      // Avec response_format=json_object, content est déjà du JSON
       try { return JSON.parse(txt); }
       catch {
         const err: any = new Error("Réponse OpenAI non JSON.");
@@ -168,13 +236,15 @@ export async function POST(req: NextRequest) {
       }
     });
 
-    const json = await withTimeout(p, 20_000);
+    const json = await withTimeout(p, 25_000);
     const text: string = json?.choices?.[0]?.message?.content || "";
     if (!text) return jsonError(502, "Réponse vide du modèle.");
 
+    // Parsing strict
     let parsed: AIAnalysis | null = null;
-    try { parsed = JSON.parse(text); }
-    catch {
+    try {
+      parsed = JSON.parse(text);
+    } catch {
       const m = text.match(/\{[\s\S]*\}/);
       if (m) { try { parsed = JSON.parse(m[0]); } catch {} }
     }
@@ -182,8 +252,22 @@ export async function POST(req: NextRequest) {
       return jsonError(502, "Impossible de parser la réponse JSON.");
     }
 
-    parsed.muscles ||= []; parsed.cues ||= []; parsed.extras ||= []; parsed.timeline ||= [];
+    // Normalisation / garde-fous
+    parsed.muscles ||= [];
+    parsed.cues ||= [];
+    parsed.extras ||= [];
+    parsed.timeline ||= [];
+    if (!Array.isArray(parsed.candidates)) parsed.candidates = [];
 
+    // Tri/clip candidats et bornage des confiances
+    parsed.candidates = (parsed.candidates || [])
+      .map(c => ({ label: String(c?.label || "").trim(), confidence: Math.max(0, Math.min(1, Number(c?.confidence) || 0)) }))
+      .filter(c => c.label)
+      .slice(0, maxCandidates);
+
+    parsed.confidence = Math.max(0, Math.min(1, Number(parsed.confidence) || 0));
+
+    // Cache & retour
     if (!selftest) cache.set(key, { t: Date.now(), json: parsed });
     return NextResponse.json(parsed, { headers: { "Cache-Control": "no-store, no-transform" } });
   } catch (e: any) {
@@ -191,5 +275,3 @@ export async function POST(req: NextRequest) {
     return jsonError(Number.isInteger(status) ? status : 500, e?.message || "Erreur interne");
   }
 }
-
-
