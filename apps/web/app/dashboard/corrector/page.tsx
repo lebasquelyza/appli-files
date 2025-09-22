@@ -70,15 +70,11 @@ function CoachAnalyzer() {
   const [status, setStatus] = useState<string>("");
   const [errorMsg, setErrorMsg] = useState<string>("");
 
-  // Étape de confirmation
-  const [needsConfirm, setNeedsConfirm] = useState(false);
-  const [predictedExercise, setPredictedExercise] = useState<string>("");
-  const [overrideMode, setOverrideMode] = useState(false);
-  const [overrideExercise, setOverrideExercise] = useState("");
-
-  // On stocke les mosaïques / repère pour réanalyse sans re-traiter la vidéo
-  const [mosaics, setMosaics] = useState<string[]>([]);
-  const [midTime, setMidTime] = useState<number>(0);
+  // Flux de confirmation
+  const [predictedExercise, setPredictedExercise] = useState<string | null>(null);
+  const [showChoiceGate, setShowChoiceGate] = useState(false);
+  const [overrideOpen, setOverrideOpen] = useState(false);
+  const [overrideName, setOverrideName] = useState("");
 
   // cooldown (429, 504)
   const [cooldown, setCooldown] = useState<number>(0);
@@ -93,17 +89,15 @@ function CoachAnalyzer() {
     setBlobUrl(url);
     setFileName(f.name);
     setFile(f);
-    // reset états
+    // reset
     setAnalysis(null);
     setErrorMsg("");
     setStatus("");
     setProgress(0);
-    setNeedsConfirm(false);
-    setPredictedExercise("");
-    setOverrideMode(false);
-    setOverrideExercise("");
-    setMosaics([]);
-    setMidTime(0);
+    setPredictedExercise(null);
+    setShowChoiceGate(false);
+    setOverrideOpen(false);
+    setOverrideName("");
   };
 
   async function uploadWithProxy(f: File): Promise<string> {
@@ -153,76 +147,8 @@ function CoachAnalyzer() {
     return { path, readUrl: url as string };
   }
 
-  /** Lance une analyse (avec ou sans hint). Utilise mosaïques et midTime fournis. */
-  async function runAnalyze(currentMosaics: string[], currentMidTime: number, hint?: string) {
-    setIsAnalyzing(true);
-    setProgress(80);
-    setStatus("Analyse IA…");
-
-    const promptHintsBase =
-      `Tu reçois des mosaïques issues d’une VIDEO (pas une photo). ` +
-      `Identifie l'exercice et détecte les ERREURS TECHNIQUES (dos trop cambré, jambes trop tendues, genoux qui rentrent, etc.). ` +
-      `Réponds en FRANÇAIS uniquement.`;
-
-    const promptHints = hint
-      ? `${promptHintsBase}\nL'exercice exécuté par le client est : "${hint}". Base ton analyse sur cet exercice.`
-      : promptHintsBase;
-
-    const res = await fetch("/api/analyze", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        frames: currentMosaics,
-        timestamps: [currentMidTime],
-        feeling,
-        economyMode: true,
-        promptHints,
-      }),
-    });
-
-    if (!res.ok) {
-      const retryAfterHdr = res.headers.get("retry-after");
-      const retryAfter = parseInt(retryAfterHdr || "", 10);
-      const seconds = Number.isFinite(retryAfter)
-        ? retryAfter
-        : res.status === 504
-        ? 12
-        : res.status === 429
-        ? 20
-        : 0;
-
-      if (res.status === 429 || res.status === 504) {
-        setCooldown(seconds);
-        setStatus(`Réessaie dans ${seconds}s…`);
-      }
-
-      const txt = await res.text().catch(() => "");
-      throw new Error(`analyze: HTTP ${res.status} ${txt}`);
-    }
-
-    const data: Partial<AIAnalysis> = await res.json();
-
-    const safe: AIAnalysis = {
-      exercise: String(data.exercise || "exercice_inconnu"),
-      overall:
-        (data.overall && data.overall.trim()) ||
-        "Analyse effectuée mais je manque d’indices visuels. Réessaie avec un angle plus net / cadrage entier.",
-      muscles: Array.isArray(data.muscles) && data.muscles.length ? data.muscles.slice(0, 8) : [],
-      corrections: Array.isArray((data as any).corrections) ? (data as any).corrections : [],
-      faults: Array.isArray((data as any).faults) ? (data as any).faults : [],
-      extras: Array.isArray(data.extras) ? data.extras : [],
-      timeline:
-        Array.isArray(data.timeline)
-          ? data.timeline.filter(v => typeof v?.time === "number" && typeof v?.label === "string")
-          : [],
-      objects: Array.isArray((data as any)?.objects) ? (data as any).objects : [],
-      movement_pattern: typeof (data as any)?.movement_pattern === "string" ? (data as any).movement_pattern : undefined,
-    };
-
-    return safe;
-  }
-
-  const onAnalyze = async () => {
+  /** Lance l'analyse. Si `userExercise` est fourni, il est passé au backend pour forcer le contexte. */
+  const onAnalyze = async (userExercise?: string) => {
     if (!file || isAnalyzing || cooldown > 0) return;
 
     setIsAnalyzing(true);
@@ -239,40 +165,101 @@ function CoachAnalyzer() {
       const half = Math.ceil(frames.length / 2);
       const mosaic1 = await makeMosaic(frames.slice(0, half), 3, 2, 1280, 720, 0.6);
       const mosaic2 = await makeMosaic(frames.slice(half), 3, 2, 1280, 720, 0.6);
-      const newMosaics = [mosaic1, mosaic2];
-      const newMidTime = timestamps[Math.floor(timestamps.length / 2)] || 0;
-
-      setMosaics(newMosaics);
-      setMidTime(newMidTime);
+      const mosaics = [mosaic1, mosaic2];
+      const midTime = timestamps[Math.floor(timestamps.length / 2)] || 0;
 
       setProgress(20);
 
-      // 1) UPLOAD — proxy si < 5MB, sinon signed upload direct (utile si tu exploites l'URL ailleurs)
+      // 1) UPLOAD — proxy si < 5MB, sinon signed upload direct (optionnel si tu n'utilises pas fileUrl côté API)
       setStatus("Upload de la vidéo…");
+      let fileUrl: string | undefined;
+
       if (file.size > CLIENT_PROXY_MAX_BYTES) {
         setStatus("Fichier volumineux — upload signé…");
-        await uploadWithSignedUrl(file);
+        const { readUrl } = await uploadWithSignedUrl(file);
+        fileUrl = readUrl;
       } else {
         try {
-          await uploadWithProxy(file);
+          const url = await uploadWithProxy(file);
+          fileUrl = url;
         } catch {
           setStatus("Proxy indisponible — upload signé…");
-          await uploadWithSignedUrl(file);
+          const { readUrl } = await uploadWithSignedUrl(file);
+          fileUrl = readUrl;
         }
       }
 
+      if (!fileUrl) throw new Error("Upload échoué (aucune URL retournée)");
       setProgress(75);
 
-      // 2) APPEL IA initial — sans hint → on propose la confirmation
+      // 2) APPEL IA — FR + fautes + option "exercice indiqué par le client"
       void fakeProgress(setProgress, 80, 98);
-      const safe = await runAnalyze(newMosaics, newMidTime, undefined);
+      setStatus("Analyse IA…");
 
+      const baseHints =
+        `Tu reçois des mosaïques issues d’une VIDEO (pas une photo). ` +
+        `Identifie l'exercice et détecte les ERREURS TECHNIQUES. Réponds en FRANÇAIS.`;
+
+      const overrideHint = userExercise ? `Exercice exécuté indiqué par l'utilisateur : "${userExercise}".` : "";
+
+      const res = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          frames: mosaics,
+          timestamps: [midTime],
+          feeling,
+          economyMode: true,
+          promptHints: [baseHints, overrideHint].filter(Boolean).join(" "),
+        }),
+      });
+
+      if (!res.ok) {
+        const retryAfterHdr = res.headers.get("retry-after");
+        const retryAfter = parseInt(retryAfterHdr || "", 10);
+        const seconds = Number.isFinite(retryAfter)
+          ? retryAfter
+          : res.status === 504
+          ? 12
+          : res.status === 429
+          ? 20
+          : 0;
+
+        if (res.status === 429 || res.status === 504) {
+          setCooldown(seconds);
+          setStatus(`Réessaie dans ${seconds}s…`);
+        }
+
+        const txt = await res.text().catch(() => "");
+        throw new Error(`analyze: HTTP ${res.status} ${txt}`);
+      }
+
+      const data: Partial<AIAnalysis> = await res.json();
+
+      const safe: AIAnalysis = {
+        exercise: String(data.exercise || "exercice_inconnu"),
+        overall:
+          (data.overall && data.overall.trim()) ||
+          "Analyse effectuée mais je manque d’indices visuels. Réessaie avec un angle plus net / cadrage entier.",
+        muscles: Array.isArray(data.muscles) && data.muscles.length ? data.muscles.slice(0, 8) : [],
+        corrections: Array.isArray((data as any).corrections) ? (data as any).corrections : [],
+        faults: Array.isArray((data as any).faults) ? (data as any).faults : [],
+        extras: Array.isArray(data.extras) ? data.extras : [],
+        timeline:
+          Array.isArray(data.timeline)
+            ? data.timeline.filter(v => typeof v?.time === "number" && typeof v?.label === "string")
+            : [],
+        objects: Array.isArray((data as any)?.objects) ? (data as any).objects : [],
+        movement_pattern: typeof (data as any)?.movement_pattern === "string" ? (data as any).movement_pattern : undefined,
+      };
+
+      // 3) Après analyse : proposer la confirmation avant d'afficher les détails
       setAnalysis(safe);
       setPredictedExercise(safe.exercise || "exercice_inconnu");
-      setNeedsConfirm(true);      // ➜ on affiche le bloc de confirmation
-      setOverrideMode(false);
+      setShowChoiceGate(true);            // ➜ on affiche le choix "Confirmer" / "Autre"
+      setOverrideOpen(false);
       setProgress(100);
-      setStatus("Analyse terminée — confirme l'exercice ✅");
+      setStatus("Analyse terminée — confirme l’exercice");
     } catch (e: any) {
       console.error(e);
       const msg = e?.message || String(e);
@@ -282,6 +269,24 @@ function CoachAnalyzer() {
     } finally {
       setIsAnalyzing(false);
     }
+  };
+
+  // Actions de confirmation
+  const confirmPredicted = () => {
+    setShowChoiceGate(false);     // ➜ on montre les résultats
+  };
+  const openOverride = () => {
+    setOverrideOpen(true);        // ➜ champ de saisie pour "Autre"
+    setOverrideName("");
+  };
+  const submitOverride = async () => {
+    if (!overrideName.trim()) return;
+    // Relance l'analyse avec le nom choisi par l'utilisateur
+    await onAnalyze(overrideName.trim());
+    // Après la relance, on garde le gate actif pour confirmer (mais ici comme l'user a saisi,
+    // on peut directement fermer si tu préfères) :
+    setShowChoiceGate(false);     // ➜ on montre les résultats directement après override
+    setOverrideOpen(false);
   };
 
   const reset = () => {
@@ -295,12 +300,10 @@ function CoachAnalyzer() {
     setStatus("");
     setErrorMsg("");
     setCooldown(0);
-    setNeedsConfirm(false);
-    setPredictedExercise("");
-    setOverrideMode(false);
-    setOverrideExercise("");
-    setMosaics([]);
-    setMidTime(0);
+    setPredictedExercise(null);
+    setShowChoiceGate(false);
+    setOverrideOpen(false);
+    setOverrideName("");
   };
 
   // ===== Helpers pour rendre la ligne "Erreur détectée / Correction" =====
@@ -323,36 +326,6 @@ function CoachAnalyzer() {
   }
 
   const { issuesLine, correctionsLine } = faultsToLines(analysis);
-
-  // Actions confirmation
-  const confirmPredicted = () => {
-    setNeedsConfirm(false); // on dévoile les résultats existants
-  };
-
-  const openOverride = () => {
-    setOverrideMode(true);
-  };
-
-  const submitOverride = async () => {
-    if (!overrideExercise.trim() || !mosaics.length) return;
-    try {
-      setIsAnalyzing(true);
-      setStatus("Ré-analyse avec l’exercice fourni…");
-      setProgress(10);
-      const safe = await runAnalyze(mosaics, midTime, overrideExercise.trim());
-      setAnalysis(safe);
-      setPredictedExercise(safe.exercise || overrideExercise.trim());
-      setNeedsConfirm(false); // on affiche directement le résultat
-      setOverrideMode(false);
-      setProgress(100);
-      setStatus("Analyse mise à jour ✅");
-    } catch (e: any) {
-      console.error(e);
-      alert(`Ré-analyse impossible: ${e?.message || e}`);
-    } finally {
-      setIsAnalyzing(false);
-    }
-  };
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -399,7 +372,7 @@ function CoachAnalyzer() {
             className="min-h-[140px]"
           />
           <div className="flex items-center gap-2">
-            <Button disabled={!blobUrl || isAnalyzing || cooldown > 0} onClick={onAnalyze}>
+            <Button disabled={!blobUrl || isAnalyzing || cooldown > 0} onClick={() => onAnalyze()}>
               {isAnalyzing ? <Spinner className="mr-2" /> : <span className="mr-2">✨</span>}
               {isAnalyzing ? "Analyse en cours" : cooldown > 0 ? `Patiente ${cooldown}s` : "Lancer l'analyse IA"}
             </Button>
@@ -418,48 +391,64 @@ function CoachAnalyzer() {
         </CardContent>
       </Card>
 
-      {/* Col 3: zone résultats / confirmation */}
+      {/* Col 3: choix + résultats */}
       <Card className="lg:col-span-1">
         <CardHeader><CardTitle className="flex items-center gap-2">🏋️ Retour IA</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           {!analysis && (<EmptyState />)}
 
-          {/* Étape de confirmation */}
-          {analysis && needsConfirm && (
-            <div className="space-y-3 rounded-xl border p-3">
-              <p className="text-sm">L’IA propose : <span className="font-medium">{predictedExercise || "exercice_inconnu"}</span></p>
+          {/* --- GATE DE CONFIRMATION --- */}
+          {analysis && showChoiceGate && (
+            <div className="space-y-3">
+              <div className="flex items-center flex-wrap gap-2">
+                <Badge variant="secondary">Exercice proposé : {predictedExercise || "exercice_inconnu"}</Badge>
+              </div>
+              <p className="text-sm">
+                L’IA propose : <span className="font-medium">{predictedExercise || "exercice_inconnu"}</span>
+              </p>
               <div className="flex flex-wrap gap-2">
-                <Button size="sm" onClick={confirmPredicted} disabled={isAnalyzing}>Confirmer « {predictedExercise || "exercice_inconnu"} »</Button>
-                <Button size="sm" variant="secondary" onClick={openOverride} disabled={isAnalyzing}>Autre</Button>
+                <Button
+                  className="h-8 px-3 text-xs"
+                  onClick={confirmPredicted}
+                  disabled={isAnalyzing}
+                >
+                  Confirmer « {predictedExercise || "exercice_inconnu"} »
+                </Button>
+                <Button
+                  className="h-8 px-3 text-xs"
+                  variant="secondary"
+                  onClick={openOverride}
+                  disabled={isAnalyzing}
+                >
+                  Autre
+                </Button>
               </div>
 
-              {overrideMode && (
-                <div className="space-y-2 pt-2">
-                  <Input
-                    placeholder="Quel exercice fais-tu ? (ex. Split squat, Tractions, Hip thrust)"
-                    value={overrideExercise}
-                    onChange={(e) => setOverrideExercise(e.target.value)}
-                  />
-                  <div className="flex gap-2">
-                    <Button size="sm" onClick={submitOverride} disabled={isAnalyzing || !overrideExercise.trim()}>
-                      Ré-analyser avec cet exercice
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => setOverrideMode(false)} disabled={isAnalyzing}>
-                      Annuler
+              {overrideOpen && (
+                <div className="mt-2 rounded-xl border p-3 space-y-2">
+                  <label className="text-xs text-muted-foreground">Quel exercice fais-tu ?</label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      placeholder="ex. Tractions, Fentes bulgares, Soulevé de terre…"
+                      value={overrideName}
+                      onChange={(e) => setOverrideName(e.target.value)}
+                    />
+                    <Button className="h-8 px-3 text-xs" onClick={submitOverride} disabled={isAnalyzing || !overrideName.trim()}>
+                      Ré-analyser
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Astuce : donne le nom exact (en français ou anglais), ex. « Fentes bulgares », « Chin-up », « Développé couché ».
+                    L’IA va tenir compte de ce nom pour corriger plus précisément.
                   </p>
                 </div>
               )}
             </div>
           )}
 
-          {/* Résultats complets (affichés une fois confirmé OU après réanalyse override) */}
-          {analysis && !needsConfirm && (
+          {/* --- RÉSULTATS APRÈS CONFIRMATION --- */}
+          {analysis && !showChoiceGate && (
             <div className="space-y-4">
-              {/* Exercice détecté */}
+              {/* Exercice détecté / confirmé */}
               <div className="flex items-center flex-wrap gap-2">
                 <Badge variant="secondary">Exercice : {analysis.exercise || "inconnu"}</Badge>
               </div>
@@ -479,7 +468,7 @@ function CoachAnalyzer() {
                 )}
               </div>
 
-              {/* Bloc simplifié erreurs / corrections */}
+              {/* Bloc simplifié Erreurs / Correction */}
               {(issuesLine || correctionsLine) && (
                 <div className="space-y-1">
                   {issuesLine && <p className="text-sm"><span className="font-medium">Erreur détectée :</span> {issuesLine}</p>}
@@ -487,7 +476,7 @@ function CoachAnalyzer() {
                 </div>
               )}
 
-              {/* Points complémentaires (optionnel) */}
+              {/* Extras (optionnel) */}
               {analysis.extras && analysis.extras.length > 0 && (
                 <Accordion type="single" collapsible className="w-full">
                   <AccordionItem value="more">
