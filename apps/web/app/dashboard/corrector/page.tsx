@@ -14,16 +14,13 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 
 /* ===================== Types ===================== */
 interface AnalysisPoint { time: number; label: string; detail?: string; }
-interface Candidate { label: string; confidence: number; }
 interface AIAnalysis {
   exercise: string;
-  confidence: number;
   overall: string;
   muscles: string[];
-  cues: string[];
+  corrections: string[];
   extras?: string[];
   timeline: AnalysisPoint[];
-  candidates?: Candidate[];
   objects?: string[];
   movement_pattern?: string;
   rawText?: string;
@@ -71,9 +68,7 @@ function CoachAnalyzer() {
   const [status, setStatus] = useState<string>("");
   const [errorMsg, setErrorMsg] = useState<string>("");
 
-  const [maxCandidates, setMaxCandidates] = useState<number>(5);
-  const [openSet, setOpenSet] = useState<boolean>(true);
-
+  // cooldown (429, 504)
   const [cooldown, setCooldown] = useState<number>(0);
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -183,29 +178,23 @@ function CoachAnalyzer() {
       if (!fileUrl) throw new Error("Upload échoué (aucune URL retournée)");
       setProgress(75);
 
-      // 2) APPEL IA — open-set + top-k + FR + prompt hints
+      // 2) APPEL IA — FR, sans confiance ni autres hypothèses
       void fakeProgress(setProgress, 80, 98);
       setStatus("Analyse IA…");
 
       const promptHints =
         `Tu reçois des mosaïques issues d’une VIDEO (pas une photo). ` +
-        `Identifie l'exercice en suivant une checklist d'objets (barre de traction, box, haltères, barre libre, machine...). ` +
-        `Règle clé: mains agrippant une barre fixe au-dessus de la tête la plupart du temps = traction; ` +
-        `si pieds quittent le sol et atterrissent sur une box = saut sur box. ` +
-        `Si insuffisant: exercise="inconnu". ` +
-        `Réponds en FRANÇAIS uniquement.`;
+        `Identifie l'exercice. Réponds en FRANÇAIS. ` +
+        `Fournis des CORRECTIONS concrètes. Si insuffisant, exercise="inconnu".`;
 
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          frames: mosaics,                    // ✅ plusieurs images
+          frames: mosaics,
           timestamps: [midTime],
           feeling,
-          fileUrl,
           economyMode: true,
-          openSet,
-          maxCandidates,
           promptHints,
         }),
       });
@@ -232,31 +221,18 @@ function CoachAnalyzer() {
 
       const data: Partial<AIAnalysis> = await res.json();
 
-      // post-process : smartPick pour corriger Traction vs Saut sur box
-      const picked = smartPick({
-        exercise: String(data.exercise || "exercice_inconnu"),
-        confidence: typeof data.confidence === "number" ? data.confidence : 0,
-        candidates: Array.isArray(data.candidates) ? data.candidates.map(c => ({
-          label: String((c as any)?.label || ""),
-          confidence: Math.max(0, Math.min(1, Number((c as any)?.confidence) || 0)),
-        })) : [],
-        objects: Array.isArray((data as any)?.objects) ? (data as any).objects : [],
-      });
-
       const safe: AIAnalysis = {
-        exercise: picked.label,
-        confidence: picked.confidence,
+        exercise: String(data.exercise || "exercice_inconnu"),
         overall:
           (data.overall && data.overall.trim()) ||
           "Analyse effectuée mais je manque d’indices visuels. Réessaie avec un angle plus net / cadrage entier.",
         muscles: Array.isArray(data.muscles) && data.muscles.length ? data.muscles.slice(0, 8) : [],
-        cues: Array.isArray(data.cues) && data.cues.length ? data.cues : [],
+        corrections: Array.isArray((data as any).corrections) ? (data as any).corrections : [],
         extras: Array.isArray(data.extras) ? data.extras : [],
         timeline:
           Array.isArray(data.timeline)
             ? data.timeline.filter(v => typeof v?.time === "number" && typeof v?.label === "string")
             : [],
-        candidates: Array.isArray(data.candidates) ? data.candidates as Candidate[] : [],
         objects: Array.isArray((data as any)?.objects) ? (data as any).objects : [],
         movement_pattern: typeof (data as any)?.movement_pattern === "string" ? (data as any).movement_pattern : undefined,
       };
@@ -322,7 +298,7 @@ function CoachAnalyzer() {
         </CardContent>
       </Card>
 
-      {/* Col 2: ressenti + options + envoi */}
+      {/* Col 2: ressenti + envoi */}
       <Card className="lg:col-span-1">
         <CardHeader><CardTitle className="flex items-center gap-2">🎙️ Ressenti du client</CardTitle></CardHeader>
         <CardContent className="space-y-3">
@@ -340,32 +316,6 @@ function CoachAnalyzer() {
             <Button variant="secondary" disabled={isAnalyzing || cooldown > 0} onClick={() => setFeeling(exampleFeeling)}>
               Exemple de ressenti
             </Button>
-          </div>
-
-          {/* Open-set options UI */}
-          <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
-            <div className="rounded-xl border p-2">
-              <div className="font-medium mb-1">Mode</div>
-              <div className="flex items-center gap-2">
-                <Badge variant={openSet ? "default" : "secondary"}>Open-set</Badge>
-                <button className="underline" onClick={() => setOpenSet(v => !v)}>
-                  {openSet ? "désactiver" : "activer"}
-                </button>
-              </div>
-            </div>
-            <div className="rounded-xl border p-2">
-              <div className="font-medium mb-1">Top-k candidats</div>
-              <div className="flex items-center gap-2">
-                <Input
-                  type="number"
-                  className="h-8 w-20"
-                  min={1}
-                  max={10}
-                  value={maxCandidates}
-                  onChange={(e) => setMaxCandidates(Math.max(1, Math.min(10, Number(e.target.value) || 5)))}
-                />
-              </div>
-            </div>
           </div>
 
           {(isAnalyzing || progress > 0 || errorMsg || status) && (
@@ -386,55 +336,39 @@ function CoachAnalyzer() {
 
           {analysis && (
             <div className="space-y-4">
-              {/* Top-1 + confiance */}
+              {/* Exercice détecté */}
               <div className="flex items-center flex-wrap gap-2">
                 <Badge variant="secondary">Exercice détecté : {analysis.exercise || "inconnu"}</Badge>
-                <span className="text-xs text-muted-foreground">Confiance : {Math.round((analysis.confidence ?? 0) * 100)}%</span>
               </div>
 
-              {/* Top-k candidats */}
-              {analysis.candidates && analysis.candidates.length > 0 && (
-                <div className="space-y-2">
-                  <h4 className="text-sm font-medium">Autres hypothèses</h4>
-                  <div className="flex flex-wrap gap-2">
-                    {analysis.candidates.map((c, i) => (
-                      <button
-                        key={`${c.label}-${i}`}
-                        onClick={() => setAnalysis(a => a ? { ...a, exercise: c.label, confidence: c.confidence } : a)}
-                        className="rounded-full border px-3 py-1 text-xs hover:bg-accent"
-                        title="Définir comme exercice choisi"
-                      >
-                        {c.label} · {Math.round(c.confidence * 100)}%
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
+              {/* Synthèse */}
               {analysis.overall?.trim() && (
                 <p className="text-sm leading-relaxed">{analysis.overall.trim()}</p>
               )}
 
+              {/* Muscles (avec " - " entre chaque) */}
               <div className="space-y-2">
                 <h4 className="text-sm font-medium">Muscles principalement sollicités</h4>
-                <div className="flex flex-wrap gap-2">
-                  {analysis.muscles?.length
-                    ? analysis.muscles.map((m) => (<Badge key={m} variant="secondary">{m}</Badge>))
-                    : <span className="text-xs text-muted-foreground">— non détecté —</span>}
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <h4 className="text-sm font-medium">Cues / corrections</h4>
-                {analysis.cues?.length ? (
-                  <ul className="list-disc pl-5 space-y-1 text-sm">
-                    {analysis.cues.map((c, i) => (<li key={i}>{c}</li>))}
-                  </ul>
+                {analysis.muscles?.length ? (
+                  <p className="text-sm">{analysis.muscles.join(" - ")}</p>
                 ) : (
-                  <p className="text-xs text-muted-foreground">— pas de consignes spécifiques détectées —</p>
+                  <p className="text-xs text-muted-foreground">— non détecté —</p>
                 )}
               </div>
 
+              {/* Corrections */}
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium">Corrections</h4>
+                {analysis.corrections?.length ? (
+                  <ul className="list-disc pl-5 space-y-1 text-sm">
+                    {analysis.corrections.map((c, i) => (<li key={i}>{c}</li>))}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-muted-foreground">— aucune correction spécifique —</p>
+                )}
+              </div>
+
+              {/* Extras (optionnel) */}
               {analysis.extras && analysis.extras.length > 0 && (
                 <Accordion type="single" collapsible className="w-full">
                   <AccordionItem value="more">
@@ -448,6 +382,7 @@ function CoachAnalyzer() {
                 </Accordion>
               )}
 
+              {/* Timeline */}
               <div className="space-y-2">
                 <h4 className="text-sm font-medium">Repères dans la vidéo</h4>
                 {analysis.timeline?.length ? (
@@ -724,30 +659,4 @@ function loadImage(src: string): Promise<HTMLImageElement> {
     img.onerror = () => reject(new Error("Impossible de charger l’image."));
     img.src = src;
   });
-}
-
-/* ===================== Post-process: désambiguïsation ===================== */
-function smartPick(input: { exercise: string; confidence: number; candidates: Candidate[]; objects?: string[] }) {
-  const top = { label: input.exercise, confidence: input.confidence ?? 0 };
-  const objs = (input.objects || []).map(s => String(s || "").toLowerCase());
-
-  // ✅ REGEX sûres (pas de range invalide)
-  const hasBar = objs.some((o) => /(bar(?:re)?|pull(?:_|-| )?up|chin(?:_|-| )?up|rig|rack)/i.test(o));
-  const hasBox = objs.some((o) => /(box|plyo)/i.test(o));
-
-  const cands = (input.candidates || []).map(c => ({
-    label: String(c.label || ""),
-    confidence: Math.max(0, Math.min(1, Number(c.confidence) || 0)),
-  }));
-
-  const pullCand = cands.find((c) => /(traction|pull(?: |_|-|)?up|chin(?: |_|-|)?up|chest(?: |_|-|)?to(?: |_|-|)?bar)/i.test(c.label));
-  const boxCand  = cands.find((c) => /saut(?: |_|-|)?sur(?: |_|-|)?box|box(?: |_|-|)?jump/i.test(c.label));
-
-  if (hasBar && pullCand && pullCand.confidence >= top.confidence - 0.05) {
-    return { label: pullCand.label, confidence: Math.max(pullCand.confidence, top.confidence) };
-  }
-  if (hasBox && boxCand && boxCand.confidence >= top.confidence - 0.05) {
-    return { label: boxCand.label, confidence: Math.max(boxCand.confidence, top.confidence) };
-  }
-  return top;
 }
