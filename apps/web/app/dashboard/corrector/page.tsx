@@ -76,8 +76,8 @@ function CoachAnalyzer() {
   const [overrideOpen, setOverrideOpen] = useState(false);
   const [overrideName, setOverrideName] = useState("");
 
-  // Aperçu corrigé (overlays IA)
-  const [showAIPreview, setShowAIPreview] = useState(false);
+  // Aperçu corrigé (toujours affiché dans Démonstration)
+  const showAIPreview = true;
 
   // cooldown (429, 504)
   const [cooldown, setCooldown] = useState<number>(0);
@@ -101,7 +101,6 @@ function CoachAnalyzer() {
     setShowChoiceGate(false);
     setOverrideOpen(false);
     setOverrideName("");
-    setShowAIPreview(false);
   };
 
   async function uploadWithProxy(f: File): Promise<string> {
@@ -174,7 +173,7 @@ function CoachAnalyzer() {
 
       setProgress(20);
 
-      // 1) UPLOAD — proxy si < 5MB, sinon signed upload direct (optionnel si tu n'utilises pas fileUrl côté API)
+      // 1) UPLOAD — proxy si < 5MB, sinon signed upload direct
       setStatus("Upload de la vidéo…");
       let fileUrl: string | undefined;
 
@@ -264,7 +263,6 @@ function CoachAnalyzer() {
       setOverrideOpen(false);
       setProgress(100);
       setStatus("Analyse terminée — confirme l’exercice");
-      setShowAIPreview(true); // active l’aperçu IA dans Démonstration après analyse
     } catch (e: any) {
       console.error(e);
       const msg = e?.message || String(e);
@@ -306,7 +304,6 @@ function CoachAnalyzer() {
     setShowChoiceGate(false);
     setOverrideOpen(false);
     setOverrideName("");
-    setShowAIPreview(false);
   };
 
   // ===== Helpers "Erreur détectée / Correction" =====
@@ -505,34 +502,22 @@ function CoachAnalyzer() {
         </CardContent>
       </Card>
 
-      {/* Démonstration (avec overlay IA optionnel) */}
+      {/* Démonstration — uniquement l’aperçu corrigé par l’IA */}
       <div className="lg:col-span-3">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              ▶️ Démonstration
+              ▶️ Démonstration — aperçu corrigé par l’IA
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {blobUrl ? (
-              <>
-                <div className="flex items-center gap-2">
-                  <Button
-                    className="h-8 px-3 text-xs"
-                    variant={showAIPreview ? "secondary" : "default"}
-                    onClick={() => setShowAIPreview(v => !v)}
-                    disabled={!analysis}
-                  >
-                    {showAIPreview ? "Masquer l’aperçu corrigé (IA)" : "Afficher l’aperçu corrigé (IA)"}
-                  </Button>
-                </div>
-                <VideoWithOverlay
-                  id="analysis-player"
-                  src={blobUrl}
-                  analysis={analysis}
-                  showAIPreview={showAIPreview}
-                />
-              </>
+              <VideoWithOverlay
+                id="analysis-player"
+                src={blobUrl}
+                analysis={analysis}
+                showAIPreview={showAIPreview} // toujours true
+              />
             ) : (
               <div className="text-sm text-muted-foreground">
                 Aucune vidéo. Enregistre ou importe un clip pour voir la démonstration.
@@ -593,7 +578,7 @@ function VideoWithOverlay({
     // Efface
     ctx.clearRect(0, 0, c.width, c.height);
 
-    if (!showAIPreview || !analysis) return;
+    if (!showAIPreview) return;
 
     // Teinte douce pour indiquer "aperçu IA"
     ctx.fillStyle = "rgba(0,0,0,0.08)";
@@ -607,7 +592,7 @@ function VideoWithOverlay({
     ctx.fillText("IA : aperçu corrigé", 20, 31);
 
     // Heuristiques d’overlay en fonction des fautes
-    const issues = (analysis.faults || []).map(f => (f?.issue || "").toLowerCase());
+    const issues = (analysis?.faults || []).map(f => (f?.issue || "").toLowerCase());
 
     // 1) Dos trop cambré → ligne vertébrale corrigée + flèches
     if (issues.some(i => /dos|lordose|cambr/.test(i))) {
@@ -674,7 +659,6 @@ function VideoWithOverlay({
 
 /* === Fonctions de dessin simples (visualisation “corrigée”) === */
 function drawSpineGuide(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  // Colonne vertébrale "corrigée" (verticale) + flèches pour rentrer les côtes
   const x = Math.round(w * 0.5);
   ctx.strokeStyle = "#22c55e"; // vert
   ctx.lineWidth = 4;
@@ -689,12 +673,10 @@ function drawSpineGuide(ctx: CanvasRenderingContext2D, w: number, h: number) {
   drawArrow(ctx, x - Math.round(w * 0.18), Math.round(h * 0.45), x - Math.round(w * 0.04), Math.round(h * 0.45), "#22c55e");
   drawArrow(ctx, x + Math.round(w * 0.18), Math.round(h * 0.45), x + Math.round(w * 0.04), Math.round(h * 0.45), "#22c55e");
 
-  // Légende
   drawTag(ctx, x + 10, Math.round(h * 0.22), "Dos neutre / gaine le tronc");
 }
 
 function drawKneeGuide(ctx: CanvasRenderingContext2D, w: number, h: number, opts: { suggestBend?: boolean } = {}) {
-  // Lignes d'alignement genoux-pieds + indication de fléchir légèrement
   const left = Math.round(w * 0.35);
   const right = Math.round(w * 0.65);
   const footY = Math.round(h * 0.88);
@@ -711,7 +693,7 @@ function drawKneeGuide(ctx: CanvasRenderingContext2D, w: number, h: number, opts
   ctx.lineTo(right + 30, footY);
   ctx.stroke();
 
-  // Genoux (correctif : au-dessus et alignés)
+  // Genoux (corrigé : au-dessus et alignés)
   ctx.beginPath();
   ctx.moveTo(left, kneeY);
   ctx.lineTo(left, footY);
@@ -729,7 +711,6 @@ function drawKneeGuide(ctx: CanvasRenderingContext2D, w: number, h: number, opts
 }
 
 function drawHeadGuide(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  // Ligne d'horizon + flèche pour rentrer le menton (tête neutre)
   const y = Math.round(h * 0.18);
   ctx.strokeStyle = "#f59e0b"; // orange
   ctx.lineWidth = 3;
@@ -745,14 +726,13 @@ function drawHeadGuide(ctx: CanvasRenderingContext2D, w: number, h: number) {
 }
 
 function drawFeetGuide(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  // Rectangle zone de stabilité
   const x = Math.round(w * 0.25);
   const y = Math.round(h * 0.86);
   const width = Math.round(w * 0.5);
   const height = Math.round(h * 0.06);
-  ctx.fillStyle = "rgba(250, 204, 21, 0.25)"; // jaune translucide
+  ctx.fillStyle = "rgba(250, 204, 21, 0.25)";
   ctx.fillRect(x, y, width, height);
-  ctx.strokeStyle = "#eab308"; // jaune
+  ctx.strokeStyle = "#eab308";
   ctx.lineWidth = 2;
   ctx.strokeRect(x, y, width, height);
   drawTag(ctx, x + width + 10, y + 6, "Reste ancré dans le sol");
@@ -1025,3 +1005,4 @@ function loadImage(src: string): Promise<HTMLImageElement> {
     img.src = src;
   });
 }
+
