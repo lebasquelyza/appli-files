@@ -14,11 +14,13 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 
 /* ===================== Types ===================== */
 interface AnalysisPoint { time: number; label: string; detail?: string; }
+interface Fault { issue: string; severity: "faible"|"moyenne"|"élevée"; evidence?: string; correction?: string; }
 interface AIAnalysis {
   exercise: string;
   overall: string;
   muscles: string[];
   corrections: string[];
+  faults?: Fault[];
   extras?: string[];
   timeline: AnalysisPoint[];
   objects?: string[];
@@ -178,14 +180,15 @@ function CoachAnalyzer() {
       if (!fileUrl) throw new Error("Upload échoué (aucune URL retournée)");
       setProgress(75);
 
-      // 2) APPEL IA — FR, sans confiance ni autres hypothèses
+      // 2) APPEL IA — FR + erreurs techniques détaillées
       void fakeProgress(setProgress, 80, 98);
       setStatus("Analyse IA…");
 
       const promptHints =
         `Tu reçois des mosaïques issues d’une VIDEO (pas une photo). ` +
-        `Identifie l'exercice. Réponds en FRANÇAIS. ` +
-        `Fournis des CORRECTIONS concrètes. Si insuffisant, exercise="inconnu".`;
+        `Identifie l'exercice et détecte les ERREURS TECHNIQUES (dos trop cambré, jambes trop tendues, genoux qui rentrent, épaules qui s'affaissent, amplitude incomplète, etc.). ` +
+        `Pour chaque erreur: nom (issue), gravité (faible|moyenne|élevée), preuve visuelle (evidence), et correction impérative (correction). ` +
+        `Réponds en FRANÇAIS uniquement.`;
 
       const res = await fetch("/api/analyze", {
         method: "POST",
@@ -228,6 +231,7 @@ function CoachAnalyzer() {
           "Analyse effectuée mais je manque d’indices visuels. Réessaie avec un angle plus net / cadrage entier.",
         muscles: Array.isArray(data.muscles) && data.muscles.length ? data.muscles.slice(0, 8) : [],
         corrections: Array.isArray((data as any).corrections) ? (data as any).corrections : [],
+        faults: Array.isArray((data as any).faults) ? (data as any).faults : [],
         extras: Array.isArray(data.extras) ? data.extras : [],
         timeline:
           Array.isArray(data.timeline)
@@ -356,7 +360,26 @@ function CoachAnalyzer() {
                 )}
               </div>
 
-              {/* Corrections */}
+              {/* Erreurs détectées */}
+              {analysis.faults && analysis.faults.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="text-sm font-medium">Erreurs détectées</h4>
+                  <div className="space-y-2">
+                    {analysis.faults.map((f, i) => (
+                      <div key={i} className="rounded-xl border p-3">
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium text-sm">{f.issue}</span>
+                          <Badge variant="secondary">{f.severity}</Badge>
+                        </div>
+                        {f.evidence && <p className="text-xs text-muted-foreground mt-1">Indice visuel : {f.evidence}</p>}
+                        {f.correction && <p className="text-xs mt-1">Correction : <span className="font-medium">{f.correction}</span></p>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Corrections (liste globale) */}
               <div className="space-y-2">
                 <h4 className="text-sm font-medium">Corrections</h4>
                 {analysis.corrections?.length ? (
@@ -642,7 +665,6 @@ async function makeMosaic(images: string[], gridW = 3, gridH = 2, outW = 1280, o
     const x = (i % gridW) * cellW;
     const y = Math.floor(i / gridW) * cellH;
 
-    // fit-to-cell en conservant le ratio
     const { width, height } = bestFit(img.width, img.height, cellW, cellH);
     const dx = x + Math.floor((cellW - width) / 2);
     const dy = y + Math.floor((cellH - height) / 2);
@@ -660,3 +682,4 @@ function loadImage(src: string): Promise<HTMLImageElement> {
     img.src = src;
   });
 }
+
