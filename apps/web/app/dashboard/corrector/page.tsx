@@ -16,15 +16,17 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 interface AnalysisPoint { time: number; label: string; detail?: string; }
 interface Candidate { label: string; confidence: number; }
 interface AIAnalysis {
-  exercise: string;              // meilleur choix (top-1)
-  confidence: number;            // confiance du top-1 (0..1)
-  overall: string;               // commentaire global
-  muscles: string[];             // muscles détectés
-  cues: string[];                // consignes/corrections
-  extras?: string[];             // points complémentaires
-  timeline: AnalysisPoint[];     // repères temporels
-  candidates?: Candidate[];      // top-k alternatives
-  rawText?: string;              // texte brut éventuel du modèle
+  exercise: string;
+  confidence: number;
+  overall: string;
+  muscles: string[];
+  cues: string[];
+  extras?: string[];
+  timeline: AnalysisPoint[];
+  candidates?: Candidate[];
+  objects?: string[];              // facultatif, si le backend le renvoie
+  movement_pattern?: string;       // facultatif
+  rawText?: string;                // facultatif
 }
 
 /* ===================== Constantes ===================== */
@@ -43,13 +45,14 @@ function Spinner({ className = "" }: { className?: string }) {
 }
 
 /* ===================== Page ===================== */
+
 export default function Page() {
   return (
     <>
       <PageHeader title="Files te corrige" subtitle="Conseils IA sur ta posture (démo)" />
       <Section title="Filmer / Notes">
         <p className="text-sm text-muted-foreground mb-4">
-          Enregistre une vidéo, ajoute ton ressenti, puis lance l’analyse IA.
+          Enregistre une <strong>vidéo</strong>, ajoute ton ressenti, puis lance l’analyse IA.
         </p>
         <CoachAnalyzer />
       </Section>
@@ -58,6 +61,7 @@ export default function Page() {
 }
 
 /* ===================== Composant principal ===================== */
+
 function CoachAnalyzer() {
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
@@ -71,7 +75,7 @@ function CoachAnalyzer() {
 
   // Open-set options
   const [maxCandidates, setMaxCandidates] = useState<number>(5);
-  const [openSet, setOpenSet] = useState<boolean>(true); // détection sans restriction
+  const [openSet, setOpenSet] = useState<boolean>(true);
 
   // cooldown (429, 504)
   const [cooldown, setCooldown] = useState<number>(0);
@@ -111,6 +115,7 @@ function CoachAnalyzer() {
   }
 
   async function uploadWithSignedUrl(f: File): Promise<{ path: string; readUrl: string }> {
+    // 1) demander une URL signée d'UPLOAD
     const r = await fetch("/api/videos/sign-upload", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -119,6 +124,7 @@ function CoachAnalyzer() {
     if (!r.ok) throw new Error(`sign-upload: HTTP ${r.status} ${await r.text()}`);
     const { signedUrl, path } = await r.json();
 
+    // 2) PUT du fichier sur l'URL signée
     const put = await fetch(signedUrl, {
       method: "PUT",
       headers: {
@@ -129,6 +135,7 @@ function CoachAnalyzer() {
     });
     if (!put.ok) throw new Error(`upload PUT failed: ${put.status} ${await put.text()}`);
 
+    // 3) créer une URL signée de lecture
     const r2 = await fetch("/api/storage/sign-read", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -148,14 +155,20 @@ function CoachAnalyzer() {
     setErrorMsg("");
 
     try {
-      // 0) EXTRACTION + MOSAÏQUE
-      const { frames, timestamps } = await extractFramesFromFile(file, 6);
+      // 0) EXTRACTION + 2 MOSAÏQUES DE 6 (total 12 frames)
+      const N_FRAMES = 12;
+      const { frames, timestamps } = await extractFramesFromFile(file, N_FRAMES);
       if (!frames.length) throw new Error("Impossible d’extraire des images de la vidéo.");
-      setProgress(12);
 
-      const mosaic = await makeMosaic(frames, 3, 2, 960, 540, 0.30);
-      const oneImage = [mosaic];
-      setProgress(18);
+      setProgress(12);
+      const mosaics = await buildMosaics(frames, 6, 3, 2, 1280, 720, 0.6); // 2 mosaïques (3x2), 1280x720, q=0.6
+      const useFrames = mosaics.length ? mosaics : [frames[Math.floor(frames.length / 2)]];
+      const useTimestamps = [
+        timestamps[Math.floor(timestamps.length / 3)] || 0,
+        timestamps[Math.floor((2 * timestamps.length) / 3)] || timestamps[0] || 0,
+      ].slice(0, useFrames.length);
+
+      setProgress(25);
 
       // 1) UPLOAD — proxy si < 5MB, sinon signed upload direct
       setStatus("Upload de la vidéo…");
@@ -179,27 +192,26 @@ function CoachAnalyzer() {
       if (!fileUrl) throw new Error("Upload échoué (aucune URL retournée)");
       setProgress(75);
 
-      // 2) APPEL IA (open-set, top-k candidats)
+      // 2) APPEL IA
       void fakeProgress(setProgress, 80, 98);
       setStatus("Analyse IA…");
 
-      const promptHints = `Tu es un assistant d’analyse de mouvement sportif.\n` +
-        `Tâche: identifier l’exercice visible dans la vidéo (open-set).\n` +
-        `Contraintes:\n- Si aucun exercice n’est clairement visible, réponds "inconnu" avec faible confiance.\n` +
-        `- Justifie en 1-2 phrases (overall).\n- Donne un top-k d’hypothèses (candidates) avec confidences [0..1].`;
+      const promptHints =
+        "Client a envoyé une VIDEO (pas une photo). Privilégie indices d’objets (barre, box, haltères, machine) et motif de mouvement. " +
+        "Sois strict sur la règle barre vs box. Fourni top-k candidats triés.";
 
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          frames: oneImage,
-          timestamps: [timestamps[Math.floor(timestamps.length / 2)] || 0],
+          frames: useFrames,              // ✅ plusieurs images (mosaïques)
+          timestamps: useTimestamps,
           feeling,
           fileUrl,
           economyMode: true,
-          openSet,                 // <— mode open-set
-          maxCandidates,           // <— top-k candidats souhaités
-          promptHints,             // <— indice de prompt pour le backend
+          openSet,                        // ✅ open-set
+          maxCandidates,                  // ✅ top-k
+          promptHints,                    // ✅ indice
         }),
       });
 
@@ -225,18 +237,9 @@ function CoachAnalyzer() {
 
       const data: Partial<AIAnalysis> = await res.json();
 
-      // --- Normalisation open-set ---
-      const candidates = Array.isArray((data as any)?.candidates)
-        ? ((data as any).candidates as any[])
-            .map((c) => ({ label: String(c?.label || ""), confidence: typeof c?.confidence === "number" ? c.confidence : 0 }))
-            .filter((c) => c.label)
-        : [];
-
-      const top = chooseTopCandidate(data.exercise, data.confidence, candidates);
-
-      const safe: AIAnalysis = {
-        exercise: top.label || (data.exercise || "exercice_inconnu").toString(),
-        confidence: typeof top.confidence === "number" ? top.confidence : (typeof data.confidence === "number" ? data.confidence : 0.5),
+      const normalized: AIAnalysis = {
+        exercise: (data.exercise || "exercice_inconnu").toString(),
+        confidence: typeof data.confidence === "number" ? clamp01(data.confidence) : 0.5,
         overall:
           (data.overall && data.overall.trim()) ||
           "Analyse effectuée mais je manque d’indices visuels. Réessaie avec un angle plus net / cadrage entier.",
@@ -247,11 +250,20 @@ function CoachAnalyzer() {
           Array.isArray(data.timeline)
             ? data.timeline.filter(v => typeof v?.time === "number" && typeof v?.label === "string")
             : [],
-        candidates,
-        rawText: (data as any)?.rawText,
+        candidates: Array.isArray(data.candidates)
+          ? data.candidates
+              .map((c: any) => ({ label: String(c?.label || ""), confidence: clamp01(Number(c?.confidence) || 0) }))
+              .filter(c => c.label)
+              .slice(0, maxCandidates)
+          : [],
+        objects: Array.isArray((data as any)?.objects) ? (data as any).objects : [],
+        movement_pattern: typeof (data as any)?.movement_pattern === "string" ? (data as any).movement_pattern : undefined,
       };
 
-      setAnalysis(safe);
+      // Smart pick: si barre détectée + candidate traction proche, préfère la traction; idem pour box jump.
+      const picked = smartPick(normalized);
+      setAnalysis({ ...normalized, exercise: picked.label, confidence: picked.confidence });
+
       setProgress(100);
       setStatus("Terminé ✅");
     } catch (e: any) {
@@ -312,7 +324,7 @@ function CoachAnalyzer() {
         </CardContent>
       </Card>
 
-      {/* Col 2: ressenti + envoi */}
+      {/* Col 2: ressenti + options + envoi */}
       <Card className="lg:col-span-1">
         <CardHeader><CardTitle className="flex items-center gap-2">🎙️ Ressenti du client</CardTitle></CardHeader>
         <CardContent className="space-y-3">
@@ -332,19 +344,19 @@ function CoachAnalyzer() {
             </Button>
           </div>
 
-          {/* Open-set options UI */}
+          {/* Options open-set */}
           <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
             <div className="rounded-xl border p-2">
               <div className="font-medium mb-1">Mode</div>
               <div className="flex items-center gap-2">
-                <Badge variant={openSet ? "default" : "secondary"}>Open‑set</Badge>
+                <Badge variant={openSet ? "default" : "secondary"}>Open-set</Badge>
                 <button className="underline" onClick={() => setOpenSet(v => !v)}>
                   {openSet ? "désactiver" : "activer"}
                 </button>
               </div>
             </div>
             <div className="rounded-xl border p-2">
-              <div className="font-medium mb-1">Top‑k candidats</div>
+              <div className="font-medium mb-1">Top-k candidats</div>
               <div className="flex items-center gap-2">
                 <Input
                   type="number"
@@ -376,13 +388,12 @@ function CoachAnalyzer() {
 
           {analysis && (
             <div className="space-y-4">
-              {/* Top‑1 + confiance */}
               <div className="flex items-center flex-wrap gap-2">
                 <Badge variant="secondary">Exercice détecté : {analysis.exercise || "inconnu"}</Badge>
                 <span className="text-xs text-muted-foreground">Confiance : {Math.round((analysis.confidence ?? 0) * 100)}%</span>
               </div>
 
-              {/* Top‑k candidats */}
+              {/* Top-k candidats cliquables */}
               {analysis.candidates && analysis.candidates.length > 0 && (
                 <div className="space-y-2">
                   <h4 className="text-sm font-medium">Autres hypothèses</h4>
@@ -607,8 +618,8 @@ async function fakeProgress(setter: (v: number) => void, from = 12, to = 95) {
   }
 }
 
-/** ➜ Extrait N frames JPEG (dataURL) d’un fichier vidéo local. */
-async function extractFramesFromFile(file: File, nFrames = 6): Promise<{ frames: string[]; timestamps: number[] }> {
+/** ➜ Extrait N frames JPEG (dataURL) d’un fichier vidéo local (qualité relevée). */
+async function extractFramesFromFile(file: File, nFrames = 12): Promise<{ frames: string[]; timestamps: number[] }> {
   const videoURL = URL.createObjectURL(file);
   try {
     const video = document.createElement("video");
@@ -649,7 +660,7 @@ async function extractFramesFromFile(file: File, nFrames = 6): Promise<{ frames:
       canvas.width = width;
       canvas.height = height;
       ctx.drawImage(video as any, 0, 0, width, height);
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.35); // qualité plus basse
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.6); // ✅ qualité plus nette
       frames.push(dataUrl);
       timestamps.push(Math.round(t));
     }
@@ -681,7 +692,9 @@ function bestFit(w: number, h: number, maxW: number, maxH: number) {
 }
 
 /** Construit une mosaïque WxH depuis une liste d’images (dataURL). */
-async function makeMosaic(images: string[], gridW = 3, gridH = 2, outW = 960, outH = 540, quality = 0.30): Promise<string> {
+async function makeMosaic(
+  images: string[], gridW = 3, gridH = 2, outW = 1280, outH = 720, quality = 0.6
+): Promise<string> {
   const cvs = document.createElement("canvas");
   const ctx = cvs.getContext("2d")!;
   cvs.width = outW;
@@ -707,6 +720,26 @@ async function makeMosaic(images: string[], gridW = 3, gridH = 2, outW = 960, ou
   return cvs.toDataURL("image/jpeg", quality);
 }
 
+async function buildMosaics(
+  frames: string[],
+  perMosaic = 6,
+  gridW = 3,
+  gridH = 2,
+  outW = 1280,
+  outH = 720,
+  quality = 0.6
+): Promise<string[]> {
+  const groups: string[][] = [];
+  for (let i = 0; i < frames.length; i += perMosaic) {
+    groups.push(frames.slice(i, i + perMosaic));
+  }
+  const mosaics: string[] = [];
+  for (const g of groups.slice(0, 2)) {         // ✅ on limite à 2 mosaïques
+    mosaics.push(await makeMosaic(g, gridW, gridH, outW, outH, quality));
+  }
+  return mosaics;
+}
+
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -716,12 +749,26 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
-/* ===================== Utilitaires open‑set ===================== */
-function chooseTopCandidate(primary?: string | null, primaryConf?: number, candidates?: Candidate[]) {
-  const list = [...(candidates || [])];
-  if (primary && !list.find(c => c.label === primary)) {
-    list.unshift({ label: primary, confidence: typeof primaryConf === "number" ? primaryConf : 0 });
+/* ===================== Post-process “smartPick” ===================== */
+function clamp01(x: number) { return Math.max(0, Math.min(1, x)); }
+
+function smartPick(a: AIAnalysis): { label: string; confidence: number } {
+  const top = { label: a.exercise, confidence: a.confidence || 0 };
+  const objs = (a.objects || []).map(s => String(s || "").toLowerCase());
+  const cands = (a.candidates || []).map(c => ({ label: c.label, confidence: c.confidence }));
+
+  const hasBar = objs.some(o => /bar(re)?|pull[_- ]?up|chin[_- ]?up|rig|rack/.test(o));
+  const hasBox = objs.some(o => /box|plyo/.test(o));
+
+  const pullCand = cands.find(c => /traction|pull[- ]?up|chin[- ]?up|chest[- ]?to[- ]?bar/i.test(c.label));
+  const boxCand  = cands.find(c => /box jump/i.test(c.label));
+
+  if (hasBar && pullCand && pullCand.confidence >= top.confidence - 0.05) {
+    return { label: pullCand.label, confidence: Math.max(pullCand.confidence, top.confidence) };
   }
-  list.sort((a, b) => (b.confidence || 0) - (a.confidence || 0));
-  return list[0] || { label: primary || "exercice_inconnu", confidence: typeof primaryConf === "number" ? primaryConf : 0 };
+  if (hasBox && boxCand && boxCand.confidence >= top.confidence - 0.05) {
+    return { label: boxCand.label, confidence: Math.max(boxCand.confidence, top.confidence) };
+  }
+  return top;
 }
+
