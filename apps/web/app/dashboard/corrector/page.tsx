@@ -11,8 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import GrayCoach from "@/components/GrayCoach";
-
+import GrayCoach3D from "@/components/GrayCoach3D";
 /* ===================== Types ===================== */
 interface AnalysisPoint { time: number; label: string; detail?: string; }
 interface Fault { issue: string; severity: "faible"|"moyenne"|"élevée"; evidence?: string; correction?: string; }
