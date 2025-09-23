@@ -23,16 +23,26 @@ type AIAnalysis = {
 
 type Props = {
   analysis: AIAnalysis;
-  height?: number; // hauteur du canvas (px)
+  /** ✅ Exercice confirmé par l’utilisateur (prioritaire sur analysis.exercise) */
+  exerciseOverride?: string;
+  /** hauteur du canvas (px) */
+  height?: number;
 };
 
-export default function GrayCoach({ analysis, height = 420 }: Props) {
+export default function GrayCoach({ analysis, exerciseOverride, height = 420 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rafRef = useRef<number | null>(null);
   const [speed, setSpeed] = useState(1); // 0.5x → 2x
 
-  // Déduire un preset d’animation selon l’exo
-  const preset = choosePreset(analysis);
+  // Exercice effectif = override (si fourni) sinon ce que l’IA a détecté
+  const effectiveExercise =
+    (exerciseOverride && exerciseOverride.trim()) ||
+    analysis.exercise ||
+    analysis.movement_pattern ||
+    "exercice";
+
+  // Déduire un preset d’animation selon l’exo effectif (ou le movement_pattern)
+  const preset = choosePresetFromLabels(effectiveExercise, analysis.movement_pattern);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -43,22 +53,26 @@ export default function GrayCoach({ analysis, height = 420 }: Props) {
     let t0 = performance.now();
 
     const loop = (now: number) => {
-      const dt = Math.min(50, now - t0); // clamp
+      const dt = Math.min(50, now - t0); // clamp (non utilisé mais utile si tu veux un pas de temps)
       t0 = now;
-      const w = canvas.width;
-      const h = canvas.height;
 
-      // HiDPI scale
+      // HiDPI sizing
       const dpr = Math.max(1, window.devicePixelRatio || 1);
-      if (canvas.width !== Math.floor(canvas.clientWidth * dpr) || canvas.height !== Math.floor(canvas.clientHeight * dpr)) {
-        canvas.width = Math.floor(canvas.clientWidth * dpr);
-        canvas.height = Math.floor(canvas.clientHeight * dpr);
+      const wantW = Math.floor(canvas.clientWidth * dpr);
+      const wantH = Math.floor(canvas.clientHeight * dpr);
+      if (canvas.width !== wantW || canvas.height !== wantH) {
+        canvas.width = wantW;
+        canvas.height = wantH;
       }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      const w = canvas.clientWidth;
+      const h = canvas.clientHeight;
+
       ctx.clearRect(0, 0, w, h);
 
       // Fond
-      drawBackground(ctx, canvas.clientWidth, canvas.clientHeight);
+      drawBackground(ctx, w, h);
 
       // Temps (cycle 2.4s par défaut, modulé par speed)
       const cycle = 2400 / Math.max(0.2, speed);
@@ -68,7 +82,7 @@ export default function GrayCoach({ analysis, height = 420 }: Props) {
       const guides = buildGuidesFromFaults(analysis);
 
       // Dessiner silhouette corrigée
-      drawGrayHuman(ctx, canvas.clientWidth, canvas.clientHeight, phase, preset, guides);
+      drawGrayHuman(ctx, w, h, phase, preset, guides);
 
       rafRef.current = requestAnimationFrame(loop);
     };
@@ -81,7 +95,10 @@ export default function GrayCoach({ analysis, height = 420 }: Props) {
     <div className="w-full">
       <div className="flex items-center justify-between mb-2">
         <div className="text-sm text-muted-foreground">
-          Mouvement corrigé&nbsp;: <span className="font-medium">{labelize(analysis.exercise || analysis.movement_pattern || "Exercice")}</span>
+          Mouvement corrigé&nbsp;:{" "}
+          <span className="font-medium">
+            {labelize(effectiveExercise)}
+          </span>
         </div>
         <div className="flex items-center gap-2 text-xs">
           <span>Vitesse</span>
@@ -111,16 +128,18 @@ export default function GrayCoach({ analysis, height = 420 }: Props) {
 
 /* ---------------- Utils preset ---------------- */
 
-function choosePreset(a: AIAnalysis): PresetName {
-  const label = (a.exercise || a.movement_pattern || "").toLowerCase();
+function choosePresetFromLabels(labelA?: string, movementPattern?: string): PresetName {
+  const label = (labelA || "").toLowerCase();
+  const mp = (movementPattern || "").toLowerCase();
+
   if (/(squat|front\s*squat|goblet)/.test(label)) return "squat";
   if (/(deadlift|soulevé|romanian|rdl)/.test(label)) return "hinge";
   if (/(lunge|fente)/.test(label)) return "lunge";
   if (/(press|développé|overhead|shoulder)/.test(label)) return "ohp";
   if (/(push-?up|pompes?)/.test(label)) return "pushup";
   if (/(row|tirage|pull-?up|traction|lat\s*pull)/.test(label)) return "pull";
-  // défaut : pattern vertical/horizontal/habituels
-  const mp = (a.movement_pattern || "").toLowerCase();
+
+  // fallback via movement_pattern
   if (/hinge|hip/.test(mp)) return "hinge";
   if (/squat|knee/.test(mp)) return "squat";
   return "squat";
@@ -153,8 +172,8 @@ function buildGuidesFromFaults(a: AIAnalysis): Guides {
 
   // cues explicites > fautes implicites
   const cue = (a.skeleton_cues || [])[0];
-  if (cue?.spine?.neutral === true) { /* already neutral */ }
-  if (cue?.head?.chin_tuck) kneesTrack = kneesTrack; // just to acknowledge
+  if (cue?.spine?.neutral === true) { /* explicit neutral spine ok */ }
+  if (cue?.head?.chin_tuck) { /* explicit chin cue ok */ }
   if (cue?.feet?.anchor) {
     feetAnchor =
       cue.feet.anchor === "talons" ? "heels" :
@@ -476,5 +495,5 @@ function easeInOut(t: number) {
 }
 function labelize(s: string) {
   const x = s.trim();
-  return x.charAt(0).toUpperCase() + x.slice(1);
+  return x ? x.charAt(0).toUpperCase() + x.slice(1) : "";
 }
