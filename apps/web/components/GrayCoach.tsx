@@ -1,4 +1,3 @@
-// apps/web/components/GrayCoach.tsx
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
@@ -23,70 +22,71 @@ type AIAnalysis = {
 
 type Props = {
   analysis: AIAnalysis;
-  /** Exercice confirmé par l’utilisateur (prioritaire) */
-  exerciseOverride?: string;
-  height?: number;
+  height?: number; // hauteur du canvas (px)
 };
 
-export default function GrayCoach({ analysis, exerciseOverride, height = 420 }: Props) {
+/* ------------------------------------------------------ */
+
+export default function GrayCoach({ analysis, height = 420 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rafRef = useRef<number | null>(null);
-  const [speed, setSpeed] = useState(1);
+  const [speed, setSpeed] = useState(1.0);
 
-  const effectiveExercise =
-    (exerciseOverride && exerciseOverride.trim()) ||
-    analysis.exercise ||
-    analysis.movement_pattern ||
-    "exercice";
-
-  const preset = choosePresetFromLabels(effectiveExercise, analysis.movement_pattern);
+  const preset = choosePreset(analysis);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
+    const c = canvasRef.current;
+    if (!c) return;
+    const ctx = c.getContext("2d");
     if (!ctx) return;
 
-    let t0 = performance.now();
+    let last = performance.now();
 
     const loop = (now: number) => {
+      const dt = Math.min(50, now - last);
+      last = now;
+
       const dpr = Math.max(1, window.devicePixelRatio || 1);
-      const wantW = Math.floor(canvas.clientWidth * dpr);
-      const wantH = Math.floor(canvas.clientHeight * dpr);
-      if (canvas.width !== wantW || canvas.height !== wantH) {
-        canvas.width = wantW;
-        canvas.height = wantH;
+      const cssW = c.clientWidth;
+      const cssH = c.clientHeight;
+      if (c.width !== Math.floor(cssW * dpr) || c.height !== Math.floor(cssH * dpr)) {
+        c.width = Math.floor(cssW * dpr);
+        c.height = Math.floor(cssH * dpr);
       }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-      const w = canvas.clientWidth;
-      const h = canvas.clientHeight;
-      ctx.clearRect(0, 0, w, h);
+      // fond
+      drawBackground(ctx, cssW, cssH);
 
-      // Fond
-      drawBackground(ctx, w, h, preset);
-
-      // Temps (cycle 2.4s, modulé par speed)
-      const cycle = 2400 / Math.max(0.2, speed);
+      // phase de 0..1 (durée ajustée par speed)
+      const baseCycleMs =
+        preset === "pullup" || preset === "pushup" || preset === "ohp" || preset === "row"
+          ? 2200
+          : preset === "lunge"
+          ? 2400
+          : 2000;
+      const cycle = baseCycleMs / Math.max(0.2, speed);
       const phase = ((now % cycle) / cycle) as number;
 
       const guides = buildGuidesFromFaults(analysis);
 
-      drawGrayHuman(ctx, w, h, phase, preset, guides);
+      drawMannequin(ctx, cssW, cssH, phase, preset, guides);
 
       rafRef.current = requestAnimationFrame(loop);
     };
 
     rafRef.current = requestAnimationFrame(loop);
-    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
-  }, [analysis, speed, preset]);
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, [analysis, preset, speed]);
 
   return (
     <div className="w-full">
       <div className="flex items-center justify-between mb-2">
         <div className="text-sm text-muted-foreground">
           Mouvement corrigé&nbsp;:{" "}
-          <span className="font-medium">{labelize(effectiveExercise)}</span>
+          <span className="font-medium">{labelize(analysis.exercise || analysis.movement_pattern || "Exercice")}</span>
         </div>
         <div className="flex items-center gap-2 text-xs">
           <span>Vitesse</span>
@@ -106,37 +106,45 @@ export default function GrayCoach({ analysis, exerciseOverride, height = 420 }: 
       <div className="relative w-full border rounded-2xl overflow-hidden" style={{ height }}>
         <canvas ref={canvasRef} className="w-full h-full block" />
         <div className="absolute top-2 left-2 rounded-md bg-black/60 text-white text-[11px] px-2 py-1">
-          Silhouette corrigée (guides actifs)
+          Silhouette corrigée (mannequin)
         </div>
       </div>
     </div>
   );
 }
 
-/* ---------------- Presets ---------------- */
+/* ---------------------- Exercise mapping ---------------------- */
 
-type PresetName = "squat" | "hinge" | "lunge" | "ohp" | "pushup" | "pull" | "pullup";
+type PresetName =
+  | "squat"
+  | "hinge" // deadlift / RDL
+  | "lunge"
+  | "pushup"
+  | "pullup" // tractions / chin-up / chest-to-bar
+  | "ohp" // overhead press
+  | "row" // rowing horizontal
+  | "hipthrust";
 
-function choosePresetFromLabels(labelA?: string, movementPattern?: string): PresetName {
-  const label = (labelA || "").toLowerCase();
-  const mp = (movementPattern || "").toLowerCase();
+function choosePreset(a: AIAnalysis): PresetName {
+  const s = (a.exercise || a.movement_pattern || "").toLowerCase();
 
-  // ✅ Tractions = pullup
-  if (/(traction|pull[\s-]?up|chin[\s-]?up|chest[\s-]?to[\s-]?bar)/.test(label)) return "pullup";
+  if (/(pull[\s-]?up|chin[\s-]?up|chest[\s-]?to[\s-]?bar|tractions?)/.test(s)) return "pullup";
+  if (/(push[\s-]?up|pompes?)/.test(s)) return "pushup";
+  if (/(overhead|shoulder|militaire|ohp|press)/.test(s)) return "ohp";
+  if (/(row|tirage horizontal|seated\s*row)/.test(s)) return "row";
+  if (/(hip\s*thrust|extension de hanches)/.test(s)) return "hipthrust";
+  if (/(dead[\s-]?lift|soulevé|romanian|rdl|hinge)/.test(s)) return "hinge";
+  if (/(lunge|fentes?)/.test(s)) return "lunge";
+  if (/(front\s*squat|back\s*squat|squat)/.test(s)) return "squat";
 
-  if (/(squat|front\s*squat|goblet)/.test(label)) return "squat";
-  if (/(deadlift|soulevé|romanian|rdl)/.test(label)) return "hinge";
-  if (/(lunge|fente)/.test(label)) return "lunge";
-  if (/(press|développé|overhead|shoulder)/.test(label)) return "ohp";
-  if (/(push-?up|pompes?)/.test(label)) return "pushup";
-  if (/(row|tirage|lat\s*pull)/.test(label)) return "pull";
-
+  // fallback via movement_pattern
+  const mp = (a.movement_pattern || "").toLowerCase();
   if (/hinge|hip/.test(mp)) return "hinge";
-  if (/squat|knee/.test(mp)) return "squat";
+  if (/knee|squat/.test(mp)) return "squat";
   return "squat";
 }
 
-/* --------------- Guides (corrections) --------------- */
+/* ---------------------- Guides ---------------------- */
 
 type Guides = {
   neutralSpine: boolean;
@@ -146,79 +154,115 @@ type Guides = {
 };
 
 function buildGuidesFromFaults(a: AIAnalysis): Guides {
-  const issues = (a.faults || []).map(f => (f.issue || "").toLowerCase());
+  const issues = (a.faults || []).map((f) => (f.issue || "").toLowerCase());
 
-  const neutralSpine = !issues.some(i => /(dos trop cambr|hyperlordose|lordose|bassin en antéversion)/.test(i));
-  const chinTuck = issues.some(i => /(tête|nuque|menton|projetée|cassée)/.test(i));
+  const neutralSpine = !issues.some((i) => /(dos trop cambr|hyperlordose|lordose|antéversion)/.test(i));
+  const chinTuck = issues.some((i) => /(tête|nuque|menton|projetée|cassée)/.test(i));
+
   let kneesTrack: Guides["kneesTrack"] = "good";
-  if (issues.some(i => /(valgus|genoux qui rentrent)/.test(i))) {
-    kneesTrack = issues.some(i => /(élevée|forte|très)/.test(i)) ? "valgusStrong" : "valgusLight";
+  if (issues.some((i) => /(valgus|genoux qui rentrent)/.test(i))) {
+    kneesTrack = issues.some((i) => /(élevée|forte|très)/.test(i)) ? "valgusStrong" : "valgusLight";
   }
+
   let feetAnchor: Guides["feetAnchor"] = "auto";
-  if (issues.some(i => /(talons.*décollent|pieds instables)/.test(i))) feetAnchor = "heels";
+  if (issues.some((i) => /(talons.*décollent|pieds instables)/.test(i))) feetAnchor = "heels";
 
   const cue = (a.skeleton_cues || [])[0];
   if (cue?.feet?.anchor) {
-    feetAnchor =
-      cue.feet.anchor === "talons" ? "heels" :
-      cue.feet.anchor === "milieu" ? "mid" :
-      cue.feet.anchor === "avant" ? "fore" : "auto";
+    feetAnchor = cue.feet.anchor === "talons" ? "heels" : cue.feet.anchor === "milieu" ? "mid" : cue.feet.anchor === "avant" ? "fore" : "auto";
   }
+
   return { neutralSpine, chinTuck, kneesTrack, feetAnchor };
 }
 
-/* --------------- Dessin du fond --------------- */
+/* ---------------------- Drawing ---------------------- */
 
-function drawBackground(ctx: CanvasRenderingContext2D, w: number, h: number, preset: PresetName) {
+function drawBackground(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.fillStyle = "#0b0b0b";
   ctx.fillRect(0, 0, w, h);
-
-  // sol / décor simple
   ctx.fillStyle = "rgba(255,255,255,0.04)";
-  const floorH = Math.round(h * 0.14);
-  ctx.fillRect(0, h - floorH, w, floorH);
-
-  // Ligne d’horizon
+  const floor = Math.round(h * 0.14);
+  ctx.fillRect(0, h - floor, w, floor);
   ctx.strokeStyle = "rgba(255,255,255,0.08)";
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(0, Math.round(h * 0.3));
   ctx.lineTo(w, Math.round(h * 0.3));
   ctx.stroke();
-
-  // Barre fixe pour les tractions
-  if (preset === "pullup") {
-    ctx.strokeStyle = "rgba(200,200,200,0.9)";
-    ctx.lineWidth = 8;
-    const y = Math.round(h * 0.18);
-    ctx.beginPath();
-    ctx.moveTo(Math.round(w * 0.12), y);
-    ctx.lineTo(Math.round(w * 0.88), y);
-    ctx.stroke();
-  }
 }
 
-/* --------------- Primitives & types --------------- */
-
 type Joint = { x: number; y: number };
-type Pose = {
-  head: Joint; neck: Joint; spineTop: Joint; spineBottom: Joint;
-  hipL: Joint; hipR: Joint; kneeL: Joint; kneeR: Joint; ankleL: Joint; ankleR: Joint;
-  shoulderL: Joint; shoulderR: Joint; elbowL: Joint; elbowR: Joint; wristL: Joint; wristR: Joint;
-  /** mains accrochées (pull-up) */
-  gripL?: Joint; gripR?: Joint;
-};
 
-function drawBone(ctx: CanvasRenderingContext2D, a: Joint, b: Joint) {
+function drawLimb(ctx: CanvasRenderingContext2D, a: Joint, b: Joint, thickness: number) {
+  // segment arrondi (caps)
+  ctx.lineWidth = thickness;
+  ctx.lineCap = "round";
+  ctx.strokeStyle = "rgba(190,190,190,0.95)";
   ctx.beginPath();
   ctx.moveTo(a.x, a.y);
   ctx.lineTo(b.x, b.y);
   ctx.stroke();
 }
 
-/* --------------- Silhouette + animation --------------- */
+function drawCircle(ctx: CanvasRenderingContext2D, c: Joint, r: number) {
+  ctx.fillStyle = "rgba(190,190,190,0.95)";
+  ctx.beginPath();
+  ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+  ctx.fill();
+}
 
-function drawGrayHuman(
+function drawTag(ctx: CanvasRenderingContext2D, x: number, y: number, text: string) {
+  ctx.save();
+  ctx.font = "12px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+  const padX = 8,
+    padY = 5;
+  const textW = Math.ceil(ctx.measureText(text).width);
+  const boxW = textW + padX * 2;
+  const boxH = 22;
+  ctx.fillStyle = "rgba(0,0,0,0.6)";
+  ctx.fillRect(x, y, boxW, boxH);
+  ctx.fillStyle = "#fff";
+  ctx.fillText(text, x + padX, y + boxH - padY - 2);
+  ctx.restore();
+}
+
+function arrow(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number, color = "#22c55e") {
+  const head = 9;
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const ang = Math.atan2(dy, dx);
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x2, y2);
+  ctx.lineTo(x2 - head * Math.cos(ang - Math.PI / 6), y2 - head * Math.sin(ang - Math.PI / 6));
+  ctx.lineTo(x2 - head * Math.cos(ang + Math.PI / 6), y2 - head * Math.sin(ang + Math.PI / 6));
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+function check(ctx: CanvasRenderingContext2D, x: number, y: number, color = "#7CFFB2") {
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(x - 8, y);
+  ctx.lineTo(x - 2, y + 6);
+  ctx.lineTo(x + 8, y - 8);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/* ---------------------- Mannequin per exercise ---------------------- */
+
+function drawMannequin(
   ctx: CanvasRenderingContext2D,
   w: number,
   h: number,
@@ -227,199 +271,363 @@ function drawGrayHuman(
   guides: Guides
 ) {
   const cx = w * 0.5;
-  const baseY = preset === "pullup" ? h * 0.88 : h * 0.82;
-  const scale = Math.min(w, h) * 0.45;
-
-  const pose = generatePose(cx, baseY, scale, phase, preset, guides, w, h);
+  const baseY = h * 0.82;
+  const s = Math.min(w, h) * 0.45;
 
   // Ombre
   ctx.fillStyle = "rgba(255,255,255,0.06)";
   ctx.beginPath();
-  ctx.ellipse(cx, baseY + 8, scale * 0.45, scale * 0.12, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx, baseY + 8, s * 0.45, s * 0.12, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // Silhouette
-  ctx.strokeStyle = "rgba(180,180,180,0.95)";
-  ctx.lineWidth = 6;
-  ctx.lineCap = "round";
-
-  // Tronc
-  drawBone(ctx, pose.head, pose.neck);
-  drawBone(ctx, pose.neck, pose.spineTop);
-  drawBone(ctx, pose.spineTop, pose.spineBottom);
-
-  // Hanches
-  drawBone(ctx, pose.spineBottom, pose.hipL);
-  drawBone(ctx, pose.spineBottom, pose.hipR);
-
-  // Jambes
-  drawBone(ctx, pose.hipL, pose.kneeL);
-  drawBone(ctx, pose.kneeL, pose.ankleL);
-  drawBone(ctx, pose.hipR, pose.kneeR);
-  drawBone(ctx, pose.kneeR, pose.ankleR);
-
-  // Bras
-  drawBone(ctx, pose.spineTop, pose.shoulderL);
-  drawBone(ctx, pose.spineTop, pose.shoulderR);
-  drawBone(ctx, pose.shoulderL, pose.elbowL);
-  drawBone(ctx, pose.elbowL, pose.wristL);
-  drawBone(ctx, pose.shoulderR, pose.elbowR);
-  drawBone(ctx, pose.elbowR, pose.wristR);
-
-  // Poignées mains (pull-up)
-  if (pose.gripL && pose.gripR) {
+  // éléments de décor selon l'exo
+  if (preset === "pullup") {
+    // barre haute
+    const barY = h * 0.18;
+    ctx.strokeStyle = "rgba(180,180,180,0.7)";
+    ctx.lineWidth = 8;
     ctx.beginPath();
-    ctx.arc(pose.gripL.x, pose.gripL.y, 5, 0, Math.PI * 2);
-    ctx.arc(pose.gripR.x, pose.gripR.y, 5, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(200,200,200,0.95)";
-    ctx.fill();
+    ctx.moveTo(cx - s * 0.7, barY);
+    ctx.lineTo(cx + s * 0.7, barY);
+    ctx.stroke();
+  } else if (preset === "pushup") {
+    // sol mis en avant
+    ctx.fillStyle = "rgba(255,255,255,0.03)";
+    ctx.fillRect(cx - s * 0.7, baseY - 6, s * 1.4, 12);
   }
 
-  // Tête
-  ctx.fillStyle = "rgba(180,180,180,0.95)";
-  ctx.beginPath();
-  ctx.arc(pose.head.x, pose.head.y, scale * 0.06, 0, Math.PI * 2);
-  ctx.fill();
-
-  drawGuides(ctx, pose, guides, scale, preset);
+  // Poses selon l'exercice
+  switch (preset) {
+    case "pullup":
+      mannequinPullup(ctx, cx, baseY, s, phase, guides);
+      break;
+    case "pushup":
+      mannequinPushup(ctx, cx, baseY, s, phase, guides);
+      break;
+    case "ohp":
+      mannequinOHP(ctx, cx, baseY, s, phase, guides);
+      break;
+    case "row":
+      mannequinRow(ctx, cx, baseY, s, phase, guides);
+      break;
+    case "hipthrust":
+      mannequinHipThrust(ctx, cx, baseY, s, phase, guides);
+      break;
+    case "lunge":
+      mannequinLunge(ctx, cx, baseY, s, phase, guides);
+      break;
+    case "hinge":
+      mannequinHinge(ctx, cx, baseY, s, phase, guides);
+      break;
+    case "squat":
+    default:
+      mannequinSquat(ctx, cx, baseY, s, phase, guides);
+      break;
+  }
 }
 
-function generatePose(
-  cx: number,
-  baseY: number,
-  s: number,
-  phase: number,
-  preset: PresetName,
-  guides: Guides,
-  w?: number,
-  h?: number
-): Pose {
-  if (preset === "pullup") {
-    // Animation verticale : 0 → accroché bras tendus, 0.5 → menton au dessus, 1 → retour bas
-    const up = easeInOut(phase < 0.5 ? phase * 2 : (1 - phase) * 2); // 0..1..0
-    const barY = (h || 0) * 0.18;
-    const barLeft = (w || 0) * 0.28;
-    const barRight = (w || 0) * 0.72;
-    const gripL = { x: barLeft, y: barY };
-    const gripR = { x: barRight, y: barY };
+/* ---------------------- Individual animations ---------------------- */
 
-    // Corps se translate vers la barre
-    const hangDistance = s * 0.65;     // distance tête→barre bras tendus
-    const topDistance = s * 0.15;      // distance tête→barre en haut
-    const headY = mix(barY + hangDistance, barY + topDistance, up);
+function mannequinPullup(ctx: CanvasRenderingContext2D, cx: number, baseY: number, s: number, phase: number, g: Guides) {
+  // aller-retour vertical (accélération douce)
+  const t = easeInOut(phase < 0.5 ? phase * 2 : (1 - phase) * 2);
+  const barY = baseY - s * 0.9;
+  const bodyY = mix(baseY - s * 0.15, barY + s * 0.18, t);
 
-    const spineTopY = headY + s * 0.16;
-    const spineBottomY = spineTopY + s * 0.28;
+  // tronc
+  const spineTop = { x: cx, y: bodyY - s * 0.22 };
+  const spineBottom = { x: cx, y: bodyY };
+  const neck = { x: spineTop.x, y: spineTop.y - s * 0.05 };
+  const head = { x: neck.x, y: neck.y - s * 0.09 };
 
-    const shoulderWidth = s * 0.28;
-    const hipWidth = s * 0.18;
+  // jambes (légère flexion)
+  const stance = s * 0.18;
+  const ankleL = { x: cx - stance / 2, y: bodyY + s * 0.22 };
+  const ankleR = { x: cx + stance / 2, y: bodyY + s * 0.22 };
+  const kneeL = { x: cx - stance / 2, y: bodyY + s * 0.10 };
+  const kneeR = { x: cx + stance / 2, y: bodyY + s * 0.10 };
 
-    const head = { x: cx, y: headY };
-    const neck = { x: cx, y: headY + s * 0.10 };
-    const spineTop = { x: cx, y: spineTopY };
-    const spineBottom = { x: cx, y: spineBottomY };
+  // épaules → coudes → mains (accrochées à la barre)
+  const shoulderW = s * 0.22;
+  const shoulderL = { x: cx - shoulderW / 2, y: spineTop.y };
+  const shoulderR = { x: cx + shoulderW / 2, y: spineTop.y };
 
-    // Épaules — rapprochées en haut (dépression scapulaire)
-    const shoulderT = mix(shoulderWidth * 0.55, shoulderWidth * 0.35, up);
-    const shoulderL = { x: cx - shoulderT, y: spineTop.y };
-    const shoulderR = { x: cx + shoulderT, y: spineTop.y };
+  // mains fixées sur la barre
+  const handL = { x: cx - shoulderW / 2, y: barY };
+  const handR = { x: cx + shoulderW / 2, y: barY };
 
-    // Coudes : se fléchissent en haut
-    const elbowDrop = mix(s * 0.34, s * 0.12, up);
-    const elbowL = { x: mix(shoulderL.x, gripL.x, 0.35), y: spineTop.y + elbowDrop };
-    const elbowR = { x: mix(shoulderR.x, gripR.x, 0.35), y: spineTop.y + elbowDrop };
+  // coude selon phase (plié en haut)
+  const elbowBend = mix(0.1, 0.6, t); // 0: bras tendus, 1: pliés
+  const elbowL = { x: mix(shoulderL.x, handL.x, 0.5 - 0.25 * elbowBend), y: mix(shoulderL.y, handL.y, 0.5 + 0.15 * elbowBend) };
+  const elbowR = { x: mix(shoulderR.x, handR.x, 0.5 + 0.25 * elbowBend), y: mix(shoulderR.y, handR.y, 0.5 + 0.15 * elbowBend) };
 
-    // Poignets tirés vers la barre
-    const wristL = { x: gripL.x, y: gripL.y + 6 };
-    const wristR = { x: gripR.x, y: gripR.y + 6 };
+  // dessiner
+  // jambes
+  drawLimb(ctx, kneeL, ankleL, 8);
+  drawLimb(ctx, kneeR, ankleR, 8);
+  drawLimb(ctx, spineBottom, kneeL, 10);
+  drawLimb(ctx, spineBottom, kneeR, 10);
 
-    // Jambes légèrement fléchies en haut
-    const kneeBend = mix(0.10, 0.35, up);
-    const stance = s * 0.20;
-    const hipL = { x: cx - hipWidth / 2, y: spineBottom.y };
-    const hipR = { x: cx + hipWidth / 2, y: spineBottom.y };
-    const kneeDrop = s * (0.20 + kneeBend * 0.35);
-    const kneeL = { x: cx - stance / 2, y: baseY - kneeDrop };
-    const kneeR = { x: cx + stance / 2, y: baseY - kneeDrop };
-    const ankleL = { x: cx - stance / 2, y: baseY };
-    const ankleR = { x: cx + stance / 2, y: baseY };
+  // tronc
+  drawLimb(ctx, spineBottom, spineTop, 12);
+  drawLimb(ctx, spineTop, neck, 10);
 
-    // Menton rentré si guide
-    if (guides.chinTuck) {
-      head.x = head.x * 0.985 + neck.x * 0.015;
-    }
+  // bras + mains vers la barre
+  drawLimb(ctx, shoulderL, elbowL, 9);
+  drawLimb(ctx, elbowL, handL, 8);
+  drawLimb(ctx, shoulderR, elbowR, 9);
+  drawLimb(ctx, elbowR, handR, 8);
 
-    return { head, neck, spineTop, spineBottom, hipL, hipR, kneeL, kneeR, ankleL, ankleR, shoulderL, shoulderR, elbowL, elbowR, wristL, wristR, gripL, gripR };
-  }
+  // tête
+  drawCircle(ctx, head, s * 0.055);
 
-  // --- presets au sol (squat/hinge/lunge/pushup/ohp/row) : version précédente ---
-  const depth = easeInOut(phase < 0.5 ? phase * 2 : (1 - phase) * 2);
-  const hipWidth = s * 0.16;
-  const shoulderWidth = s * 0.20;
-  const torsoLen =
-    preset === "hinge" ? s * 0.42 :
-    preset === "lunge" ? s * 0.43 :
-    s * 0.45;
+  drawGuides(ctx, { head, neck, spineTop, spineBottom, kneeL, kneeR, ankleL, ankleR }, g, s);
+}
 
-  const kneeBend =
-    preset === "squat" ? mix(0.05, 0.65, depth) :
-    preset === "lunge" ? mix(0.05, 0.60, depth) :
-    preset === "hinge" ? mix(0.05, 0.35, depth) :
-    preset === "pushup" ? mix(0.15, 0.55, depth) :
-    preset === "ohp" || preset === "pull" ? mix(0.05, 0.20, depth) :
-    mix(0.05, 0.5, depth);
+function mannequinPushup(ctx: CanvasRenderingContext2D, cx: number, baseY: number, s: number, phase: number, g: Guides) {
+  const t = easeInOut(phase < 0.5 ? phase * 2 : (1 - phase) * 2);
+  const chestY = mix(baseY - s * 0.28, baseY - s * 0.12, t); // descend/monte
 
-  let torsoTilt =
-    preset === "hinge" ? mix(0, Math.PI * 0.35, depth) :
-    preset === "squat" ? mix(0, Math.PI * 0.18, depth) :
-    preset === "lunge" ? mix(0, Math.PI * 0.2, depth) :
-    preset === "pushup" ? 0 :
-    preset === "ohp" || preset === "pull" ? 0 : 0;
+  const spineBottom = { x: cx, y: chestY + s * 0.12 };
+  const spineTop = { x: cx, y: chestY - s * 0.06 };
+  const neck = { x: spineTop.x, y: spineTop.y - s * 0.05 };
+  const head = { x: neck.x + (g.chinTuck ? -s * 0.01 : 0), y: neck.y - s * 0.075 };
 
-  if (guides.neutralSpine) torsoTilt *= 0.8;
+  const shoulderW = s * 0.28;
+  const shoulderL = { x: cx - shoulderW / 2, y: spineTop.y };
+  const shoulderR = { x: cx + shoulderW / 2, y: spineTop.y };
 
-  const spineBottom = { x: cx, y: baseY - s * (0.18 + kneeBend * 0.10) };
-  const spineTop = { x: cx, y: spineBottom.y - torsoLen * Math.cos(torsoTilt) };
-  const neck = { x: spineTop.x, y: spineTop.y - s * 0.06 };
-  const head = { x: neck.x, y: neck.y - s * 0.10 };
+  const handY = baseY;
+  const handL = { x: shoulderL.x, y: handY };
+  const handR = { x: shoulderR.x, y: handY };
 
-  const shoulderL = { x: spineTop.x - shoulderWidth / 2, y: spineTop.y };
-  const shoulderR = { x: spineTop.x + shoulderWidth / 2, y: spineTop.y };
+  const elbowT = t; // pliage en bas
+  const elbowL = { x: mix(shoulderL.x, handL.x, 0.62 - 0.12 * elbowT), y: mix(shoulderL.y, handL.y, 0.52 + 0.20 * elbowT) };
+  const elbowR = { x: mix(shoulderR.x, handR.x, 0.38 + 0.12 * elbowT), y: mix(shoulderR.y, handR.y, 0.52 + 0.20 * elbowT) };
 
-  const hipL = { x: spineBottom.x - hipWidth / 2, y: spineBottom.y };
-  const hipR = { x: spineBottom.x + hipWidth / 2, y: spineBottom.y };
+  // jambes (corps en planche)
+  const ankleL = { x: cx - s * 0.18, y: baseY + 2 };
+  const ankleR = { x: cx + s * 0.18, y: baseY + 2 };
+  const kneeL = { x: mix(ankleL.x, spineBottom.x, 0.48), y: mix(ankleL.y, spineBottom.y, 0.48) };
+  const kneeR = { x: mix(ankleR.x, spineBottom.x, 0.48), y: mix(ankleR.y, spineBottom.y, 0.48) };
+
+  // dessiner
+  drawLimb(ctx, ankleL, kneeL, 8);
+  drawLimb(ctx, ankleR, kneeR, 8);
+  drawLimb(ctx, kneeL, spineBottom, 10);
+  drawLimb(ctx, kneeR, spineBottom, 10);
+  drawLimb(ctx, spineBottom, spineTop, 12);
+  drawLimb(ctx, spineTop, neck, 10);
+  drawLimb(ctx, shoulderL, elbowL, 9);
+  drawLimb(ctx, elbowL, handL, 8);
+  drawLimb(ctx, shoulderR, elbowR, 9);
+  drawLimb(ctx, elbowR, handR, 8);
+  drawCircle(ctx, head, s * 0.05);
+
+  drawGuides(ctx, { head, neck, spineTop, spineBottom, kneeL, kneeR, ankleL, ankleR }, g, s);
+}
+
+function mannequinOHP(ctx: CanvasRenderingContext2D, cx: number, baseY: number, s: number, phase: number, g: Guides) {
+  const t = easeInOut(phase < 0.5 ? phase * 2 : (1 - phase) * 2);
+  const spineBottom = { x: cx, y: baseY - s * 0.18 };
+  const spineTop = { x: cx, y: spineBottom.y - s * 0.40 };
+  const neck = { x: spineTop.x, y: spineTop.y - s * 0.05 };
+  const head = { x: neck.x - (g.chinTuck ? s * 0.01 : 0), y: neck.y - s * 0.075 };
+
+  const shoulderW = s * 0.28;
+  const shoulderL = { x: cx - shoulderW / 2, y: spineTop.y };
+  const shoulderR = { x: cx + shoulderW / 2, y: spineTop.y };
+
+  // barre (imaginaire) qui monte
+  const handY = mix(spineTop.y - s * 0.05, spineTop.y - s * 0.55, t);
+  const handL = { x: shoulderL.x + s * 0.02, y: handY };
+  const handR = { x: shoulderR.x - s * 0.02, y: handY };
+  const elbowL = { x: mix(shoulderL.x, handL.x, 0.5), y: mix(shoulderL.y, handL.y, 0.6) };
+  const elbowR = { x: mix(shoulderR.x, handR.x, 0.5), y: mix(shoulderR.y, handR.y, 0.6) };
 
   const stance = s * 0.36;
   const ankleL = { x: cx - stance / 2, y: baseY };
   const ankleR = { x: cx + stance / 2, y: baseY };
+  const kneeL = { x: ankleL.x, y: baseY - s * 0.14 };
+  const kneeR = { x: ankleR.x, y: baseY - s * 0.14 };
 
+  drawLimb(ctx, ankleL, kneeL, 8);
+  drawLimb(ctx, ankleR, kneeR, 8);
+  drawLimb(ctx, kneeL, spineBottom, 10);
+  drawLimb(ctx, kneeR, spineBottom, 10);
+  drawLimb(ctx, spineBottom, spineTop, 12);
+  drawLimb(ctx, spineTop, neck, 10);
+  drawLimb(ctx, shoulderL, elbowL, 9);
+  drawLimb(ctx, elbowL, handL, 8);
+  drawLimb(ctx, shoulderR, elbowR, 9);
+  drawLimb(ctx, elbowR, handR, 8);
+  drawCircle(ctx, head, s * 0.05);
+
+  drawGuides(ctx, { head, neck, spineTop, spineBottom, kneeL, kneeR, ankleL, ankleR }, g, s);
+}
+
+function mannequinRow(ctx: CanvasRenderingContext2D, cx: number, baseY: number, s: number, phase: number, g: Guides) {
+  const t = easeInOut(phase < 0.5 ? phase * 2 : (1 - phase) * 2); // tirer/relâcher
+  const hip = { x: cx, y: baseY - s * 0.18 };
+  const spineTop = { x: cx - s * 0.05, y: hip.y - s * 0.36 }; // buste penché
+  const spineBottom = hip;
+  const neck = { x: spineTop.x, y: spineTop.y - s * 0.05 };
+  const head = { x: neck.x - s * 0.02, y: neck.y - s * 0.075 };
+
+  const stance = s * 0.42;
+  const ankleL = { x: cx - stance / 2, y: baseY };
+  const ankleR = { x: cx + stance / 2, y: baseY };
+  const kneeL = { x: ankleL.x, y: baseY - s * 0.2 };
+  const kneeR = { x: ankleR.x, y: baseY - s * 0.2 };
+
+  const shoulder = { x: spineTop.x, y: spineTop.y };
+  const handX = mix(spineBottom.x - s * 0.3, spineBottom.x - s * 0.06, t);
+  const handY = mix(spineBottom.y - s * 0.02, spineBottom.y - s * 0.18, t);
+  const handL = { x: handX, y: handY };
+  const handR = { x: handX + s * 0.08, y: handY + s * 0.02 };
+  const elbowL = { x: mix(shoulder.x, handL.x, 0.5), y: mix(shoulder.y, handL.y, 0.5) };
+  const elbowR = { x: mix(shoulder.x, handR.x, 0.5), y: mix(shoulder.y, handR.y, 0.5) };
+
+  drawLimb(ctx, ankleL, kneeL, 8);
+  drawLimb(ctx, ankleR, kneeR, 8);
+  drawLimb(ctx, kneeL, spineBottom, 10);
+  drawLimb(ctx, kneeR, spineBottom, 10);
+  drawLimb(ctx, spineBottom, spineTop, 12);
+  drawLimb(ctx, spineTop, neck, 10);
+  drawLimb(ctx, shoulder, elbowL, 9);
+  drawLimb(ctx, elbowL, handL, 8);
+  drawLimb(ctx, shoulder, elbowR, 9);
+  drawLimb(ctx, elbowR, handR, 8);
+  drawCircle(ctx, head, s * 0.05);
+
+  drawGuides(ctx, { head, neck, spineTop, spineBottom, kneeL, kneeR, ankleL, ankleR }, g, s);
+}
+
+function mannequinHipThrust(ctx: CanvasRenderingContext2D, cx: number, baseY: number, s: number, phase: number, g: Guides) {
+  const t = easeInOut(phase < 0.5 ? phase * 2 : (1 - phase) * 2);
+  // dos au sol, hanches qui montent
+  const shouldersY = baseY - s * 0.24;
+  const hipsY = mix(baseY - s * 0.05, baseY - s * 0.22, t);
+
+  const spineBottom = { x: cx, y: hipsY };
+  const spineTop = { x: cx, y: shouldersY };
+  const neck = { x: spineTop.x, y: spineTop.y - s * 0.04 };
+  const head = { x: neck.x, y: neck.y - s * 0.06 };
+
+  const ankleL = { x: cx - s * 0.22, y: baseY };
+  const ankleR = { x: cx + s * 0.22, y: baseY };
+  const kneeL = { x: cx - s * 0.18, y: mix(baseY - s * 0.16, baseY - s * 0.24, t) };
+  const kneeR = { x: cx + s * 0.18, y: mix(baseY - s * 0.16, baseY - s * 0.24, t) };
+
+  drawLimb(ctx, ankleL, kneeL, 8);
+  drawLimb(ctx, ankleR, kneeR, 8);
+  drawLimb(ctx, kneeL, spineBottom, 10);
+  drawLimb(ctx, kneeR, spineBottom, 10);
+  drawLimb(ctx, spineBottom, spineTop, 12);
+  drawLimb(ctx, spineTop, neck, 10);
+  drawCircle(ctx, head, s * 0.05);
+
+  drawGuides(ctx, { head, neck, spineTop, spineBottom, kneeL, kneeR, ankleL, ankleR }, g, s);
+}
+
+function mannequinLunge(ctx: CanvasRenderingContext2D, cx: number, baseY: number, s: number, phase: number, g: Guides) {
+  const t = easeInOut(phase < 0.5 ? phase * 2 : (1 - phase) * 2);
+  const stride = s * 0.36;
+
+  const front = { ankle: { x: cx + stride / 2, y: baseY } };
+  const back = { ankle: { x: cx - stride / 2, y: baseY } };
+
+  const spineBottom = { x: cx, y: baseY - s * mix(0.24, 0.34, t) };
+  const spineTop = { x: cx, y: spineBottom.y - s * 0.42 };
+  const neck = { x: spineTop.x, y: spineTop.y - s * 0.05 };
+  const head = { x: neck.x, y: neck.y - s * 0.075 };
+
+  const frontKnee = { x: front.ankle.x, y: mix(baseY - s * 0.16, baseY - s * 0.28, t) };
+  const backKnee = { x: back.ankle.x, y: mix(baseY - s * 0.10, baseY - s * 0.20, t) };
+
+  drawLimb(ctx, back.ankle, backKnee, 8);
+  drawLimb(ctx, backKnee, spineBottom, 10);
+  drawLimb(ctx, front.ankle, frontKnee, 8);
+  drawLimb(ctx, frontKnee, spineBottom, 10);
+  drawLimb(ctx, spineBottom, spineTop, 12);
+  drawLimb(ctx, spineTop, neck, 10);
+  drawCircle(ctx, head, s * 0.05);
+
+  drawGuides(ctx, { head, neck, spineTop, spineBottom, kneeL: frontKnee, kneeR: backKnee, ankleL: front.ankle, ankleR: back.ankle }, g, s);
+}
+
+function mannequinHinge(ctx: CanvasRenderingContext2D, cx: number, baseY: number, s: number, phase: number, g: Guides) {
+  const t = easeInOut(phase < 0.5 ? phase * 2 : (1 - phase) * 2);
+  const hip = { x: cx, y: baseY - s * 0.18 };
+  const torsoTilt = mix(0, Math.PI * 0.35, t) * (g.neutralSpine ? 0.85 : 1);
+
+  const spineBottom = hip;
+  const spineTop = { x: hip.x - Math.sin(torsoTilt) * s * 0.42, y: hip.y - Math.cos(torsoTilt) * s * 0.42 };
+  const neck = { x: spineTop.x, y: spineTop.y - s * 0.05 };
+  const head = { x: neck.x, y: neck.y - s * 0.07 };
+
+  const stance = s * 0.42;
+  const ankleL = { x: cx - stance / 2, y: baseY };
+  const ankleR = { x: cx + stance / 2, y: baseY };
+  const kneeDrop = mix(s * 0.10, s * 0.24, t);
+  const kneeL = { x: ankleL.x, y: baseY - kneeDrop };
+  const kneeR = { x: ankleR.x, y: baseY - kneeDrop };
+
+  drawLimb(ctx, ankleL, kneeL, 8);
+  drawLimb(ctx, ankleR, kneeR, 8);
+  drawLimb(ctx, kneeL, spineBottom, 10);
+  drawLimb(ctx, kneeR, spineBottom, 10);
+  drawLimb(ctx, spineBottom, spineTop, 12);
+  drawLimb(ctx, spineTop, neck, 10);
+  drawCircle(ctx, head, s * 0.05);
+
+  drawGuides(ctx, { head, neck, spineTop, spineBottom, kneeL, kneeR, ankleL, ankleR }, g, s);
+}
+
+function mannequinSquat(ctx: CanvasRenderingContext2D, cx: number, baseY: number, s: number, phase: number, g: Guides) {
+  const t = easeInOut(phase < 0.5 ? phase * 2 : (1 - phase) * 2);
+  const stance = s * 0.42;
+
+  const kneeBend = mix(0.06, 0.62, t);
+  const spineBottom = { x: cx, y: baseY - s * (0.18 + kneeBend * 0.10) };
+  const spineTop = { x: cx, y: spineBottom.y - s * 0.45 };
+  const neck = { x: spineTop.x, y: spineTop.y - s * 0.05 };
+  const head = { x: neck.x - (g.chinTuck ? s * 0.01 : 0), y: neck.y - s * 0.075 };
+
+  const ankleL = { x: cx - stance / 2, y: baseY };
+  const ankleR = { x: cx + stance / 2, y: baseY };
   const kneeSpread =
-    guides.kneesTrack === "good" ? stance * 0.28 :
-    guides.kneesTrack === "valgusLight" ? stance * 0.18 :
-    stance * 0.10;
-
+    g.kneesTrack === "good" ? stance * 0.28 : g.kneesTrack === "valgusLight" ? stance * 0.18 : stance * 0.10;
   const kneeDrop = s * (0.18 + kneeBend * 0.25);
   const kneeL = { x: cx - kneeSpread / 2, y: baseY - kneeDrop };
   const kneeR = { x: cx + kneeSpread / 2, y: baseY - kneeDrop };
 
-  let elbowOffset = s * 0.16;
-  let wristOffset = s * 0.16;
-  if (preset === "ohp") elbowOffset = s * 0.12;
+  drawLimb(ctx, ankleL, kneeL, 8);
+  drawLimb(ctx, ankleR, kneeR, 8);
+  drawLimb(ctx, kneeL, spineBottom, 10);
+  drawLimb(ctx, kneeR, spineBottom, 10);
+  drawLimb(ctx, spineBottom, spineTop, 12);
+  drawLimb(ctx, spineTop, neck, 10);
+  drawCircle(ctx, head, s * 0.05);
 
-  const elbowL = { x: shoulderL.x - elbowOffset * 0.6, y: shoulderL.y + elbowOffset * 0.4 };
-  const elbowR = { x: shoulderR.x + elbowOffset * 0.6, y: shoulderR.y + elbowOffset * 0.4 };
-  const wristL = { x: elbowL.x - wristOffset * 0.5, y: elbowL.y + wristOffset * 0.3 };
-  const wristR = { x: elbowR.x + wristOffset * 0.5, y: elbowR.y + wristOffset * 0.3 };
-
-  if (guides.chinTuck) head.x = head.x * 0.98 + neck.x * 0.02;
-
-  return { head, neck, spineTop, spineBottom, hipL, hipR, kneeL, kneeR, ankleL, ankleR, shoulderL, shoulderR, elbowL, elbowR, wristL, wristR };
+  drawGuides(ctx, { head, neck, spineTop, spineBottom, kneeL, kneeR, ankleL, ankleR }, g, s);
 }
 
-/* --------------- Guides visuels --------------- */
+/* ---------------------- Guides overlay ---------------------- */
 
-function drawGuides(ctx: CanvasRenderingContext2D, pose: Pose, guides: Guides, s: number, preset: PresetName) {
-  if (guides.neutralSpine) {
+type GuidePose = {
+  head: Joint;
+  neck: Joint;
+  spineTop: Joint;
+  spineBottom: Joint;
+  kneeL: Joint;
+  kneeR: Joint;
+  ankleL: Joint;
+  ankleR: Joint;
+};
+
+function drawGuides(ctx: CanvasRenderingContext2D, pose: GuidePose, g: Guides, s: number) {
+  if (g.neutralSpine) {
     ctx.save();
     ctx.strokeStyle = "#7CFFB2";
     ctx.setLineDash([8, 6]);
@@ -433,41 +641,36 @@ function drawGuides(ctx: CanvasRenderingContext2D, pose: Pose, guides: Guides, s
     ctx.restore();
   }
 
-  // Pour pullup, on n'affiche pas les flèches genoux (pas pertinent) – on garde le check “OK”
-  if (preset !== "pullup") {
-    if (guides.kneesTrack !== "good") {
-      const color = guides.kneesTrack === "valgusLight" ? "#FFD266" : "#FF7C7C";
-      arrow(ctx, pose.kneeL.x, pose.kneeL.y, pose.kneeL.x - s * 0.10, pose.kneeL.y, color);
-      arrow(ctx, pose.kneeR.x, pose.kneeR.y, pose.kneeR.x + s * 0.10, pose.kneeR.y, color);
-      drawTag(ctx, pose.kneeR.x + s * 0.12, pose.kneeR.y - s * 0.06, "Pousse les genoux vers l’extérieur");
-    } else {
-      check(ctx, (pose.kneeL.x + pose.kneeR.x) / 2, pose.kneeL.y - s * 0.12, "#9EF79E");
-    }
+  if (g.kneesTrack !== "good") {
+    const color = g.kneesTrack === "valgusLight" ? "#FFD266" : "#FF7C7C";
+    arrow(ctx, pose.kneeL.x, pose.kneeL.y, pose.kneeL.x - s * 0.10, pose.kneeL.y, color);
+    arrow(ctx, pose.kneeR.x, pose.kneeR.y, pose.kneeR.x + s * 0.10, pose.kneeR.y, color);
+    drawTag(ctx, pose.kneeR.x + s * 0.12, pose.kneeR.y - s * 0.06, "Pousse les genoux vers l’extérieur");
+  } else {
+    check(ctx, (pose.kneeL.x + pose.kneeR.x) / 2, pose.kneeL.y - s * 0.12, "#9EF79E");
   }
 
-  if (guides.chinTuck) {
+  if (g.chinTuck) {
     arrow(ctx, pose.head.x + s * 0.08, pose.head.y, pose.head.x - s * 0.02, pose.head.y, "#FFC97C");
     drawTag(ctx, pose.head.x + s * 0.10, pose.head.y + s * 0.04, "Rentre légèrement le menton");
   }
+
+  if (g.feetAnchor !== "auto") {
+    const txt =
+      g.feetAnchor === "heels" ? "Poids sur talons/milieu" : g.feetAnchor === "mid" ? "Poids milieu du pied" : "Poids avant-pied";
+    drawTag(ctx, (pose.ankleR.x + pose.ankleL.x) / 2 + s * 0.14, pose.ankleR.y - s * 0.06, txt);
+  }
 }
 
-/* --------------- Primitives --------------- */
+/* ---------------------- Math helpers ---------------------- */
 
-function drawTag(ctx: CanvasRenderingContext2D, x: number, y: number, text: string) {
-  ctx.save();
-  ctx.font = "12px system-ui, -apple-system, Segoe UI, Roboto, Arial";
-  const padX = 8, padY = 5;
-  const textW = Math.ceil(ctx.measureText(text).width);
-  const boxW = textW + padX * 2;
-  const boxH = 22;
-  ctx.fillStyle = "rgba(0,0,0,0.6)";
-  ctx.fillRect(x, y, boxW, boxH);
-  ctx.fillStyle = "#fff";
-  ctx.fillText(text, x + padX, y + boxH - padY - 2);
-  ctx.restore();
+function mix(a: number, b: number, t: number) {
+  return a + (b - a) * t;
 }
-
-function arrow(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number, color = "#22c55e") {
-  const headlen = 9;
-  const dx = x2 - x1;
-  const dy = y
+function easeInOut(t: number) {
+  return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+}
+function labelize(s: string) {
+  const x = (s || "").trim();
+  return x ? x.charAt(0).toUpperCase() + x.slice(1) : "";
+}
