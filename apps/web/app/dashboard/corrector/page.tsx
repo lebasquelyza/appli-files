@@ -1,3 +1,6 @@
+Voici le fichier complet **corrigé** (avec overlay forcé au-dessus de la vidéo, fix iOS/Safari : z-index inline, playsInline, aspectRatio inline, canvas HiDPI).
+
+```tsx
 // apps/web/app/dashboard/corrector/page.tsx
 "use client";
 
@@ -195,7 +198,7 @@ function CoachAnalyzer() {
       if (!fileUrl) throw new Error("Upload échoué (aucune URL retournée)");
       setProgress(75);
 
-      // 2) APPEL IA — FR + fautes + option "exercice indiqué par le client"
+      // 2) APPEL IA
       void fakeProgress(setProgress, 80, 98);
       setStatus("Analyse IA…");
 
@@ -275,17 +278,12 @@ function CoachAnalyzer() {
   };
 
   // Actions de confirmation
-  const confirmPredicted = () => {
-    setShowChoiceGate(false);     // ➜ on montre les résultats
-  };
-  const openOverride = () => {
-    setOverrideOpen(true);        // ➜ champ de saisie pour "Autre"
-    setOverrideName("");
-  };
+  const confirmPredicted = () => setShowChoiceGate(false);
+  const openOverride = () => { setOverrideOpen(true); setOverrideName(""); };
   const submitOverride = async () => {
     if (!overrideName.trim()) return;
-    await onAnalyze(overrideName.trim()); // relance avec le nom fourni
-    setShowChoiceGate(false);             // on peut directement afficher les résultats
+    await onAnalyze(overrideName.trim());
+    setShowChoiceGate(false);
     setOverrideOpen(false);
   };
 
@@ -309,13 +307,8 @@ function CoachAnalyzer() {
   // ===== Helpers "Erreur détectée / Correction" =====
   function faultsToLines(a: AIAnalysis | null) {
     if (!a) return { issuesLine: "", correctionsLine: "" };
-    const issues = (a.faults || [])
-      .map(f => (f?.issue || "").trim())
-      .filter(Boolean);
-    const faultCorrections = (a.faults || [])
-      .map(f => (f?.correction || "").trim())
-      .filter(Boolean);
-
+    const issues = (a.faults || []).map(f => (f?.issue || "").trim()).filter(Boolean);
+    const faultCorrections = (a.faults || []).map(f => (f?.correction || "").trim()).filter(Boolean);
     const issuesLine = issues.join(" - ");
     const correctionsBase = faultCorrections.length ? faultCorrections : (a.corrections || []);
     const correctionsLine = (correctionsBase || []).join(" - ");
@@ -403,19 +396,10 @@ function CoachAnalyzer() {
                 L’IA propose : <span className="font-medium">{predictedExercise || "exercice_inconnu"}</span>
               </p>
               <div className="flex flex-wrap gap-2">
-                <Button
-                  className="h-8 px-3 text-xs"
-                  onClick={confirmPredicted}
-                  disabled={isAnalyzing}
-                >
+                <Button className="h-8 px-3 text-xs" onClick={confirmPredicted} disabled={isAnalyzing}>
                   Confirmer « {predictedExercise || "exercice_inconnu"} »
                 </Button>
-                <Button
-                  className="h-8 px-3 text-xs"
-                  variant="secondary"
-                  onClick={openOverride}
-                  disabled={isAnalyzing}
-                >
+                <Button className="h-8 px-3 text-xs" variant="secondary" onClick={openOverride} disabled={isAnalyzing}>
                   Autre
                 </Button>
               </div>
@@ -444,17 +428,14 @@ function CoachAnalyzer() {
           {/* --- RÉSULTATS APRÈS CONFIRMATION --- */}
           {analysis && !showChoiceGate && (
             <div className="space-y-4">
-              {/* Exercice détecté / confirmé */}
               <div className="flex items-center flex-wrap gap-2">
                 <Badge variant="secondary">Exercice : {analysis.exercise || "inconnu"}</Badge>
               </div>
 
-              {/* Synthèse */}
               {analysis.overall?.trim() && (
                 <p className="text-sm leading-relaxed">{analysis.overall.trim()}</p>
               )}
 
-              {/* Muscles (avec " - " entre chaque) */}
               <div className="space-y-2">
                 <h4 className="text-sm font-medium">Muscles principalement sollicités</h4>
                 {analysis.muscles?.length ? (
@@ -464,7 +445,6 @@ function CoachAnalyzer() {
                 )}
               </div>
 
-              {/* Bloc simplifié Erreurs / Correction */}
               {(issuesLine || correctionsLine) && (
                 <div className="space-y-1">
                   {issuesLine && <p className="text-sm"><span className="font-medium">Erreur détectée :</span> {issuesLine}</p>}
@@ -472,7 +452,6 @@ function CoachAnalyzer() {
                 </div>
               )}
 
-              {/* Extras (optionnel) */}
               {analysis.extras && analysis.extras.length > 0 && (
                 <Accordion type="single" collapsible className="w-full">
                   <AccordionItem value="more">
@@ -486,7 +465,6 @@ function CoachAnalyzer() {
                 </Accordion>
               )}
 
-              {/* Timeline */}
               <div className="space-y-2">
                 <h4 className="text-sm font-medium">Repères dans la vidéo</h4>
                 {analysis.timeline?.length ? (
@@ -502,7 +480,7 @@ function CoachAnalyzer() {
         </CardContent>
       </Card>
 
-      {/* Démonstration — uniquement l’aperçu corrigé par l’IA */}
+      {/* Démonstration — overlay IA permanent */}
       <div className="lg:col-span-3">
         <Card>
           <CardHeader>
@@ -516,7 +494,7 @@ function CoachAnalyzer() {
                 id="analysis-player"
                 src={blobUrl}
                 analysis={analysis}
-                showAIPreview={showAIPreview} // toujours true
+                showAIPreview={showAIPreview}
               />
             ) : (
               <div className="text-sm text-muted-foreground">
@@ -541,7 +519,7 @@ function EmptyState() {
   );
 }
 
-/* ===================== Player avec overlays IA ===================== */
+/* ===================== Player avec overlays IA (fix iOS) ===================== */
 function VideoWithOverlay({
   id,
   src,
@@ -557,17 +535,16 @@ function VideoWithOverlay({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rafRef = useRef<number | null>(null);
 
-  // Ajuste le canvas à la taille de la vidéo (net sur écrans HiDPI)
+  // Ajuste le canvas à la taille visible (net sur HiDPI)
   const syncCanvasSize = () => {
     const v = videoRef.current;
     const c = canvasRef.current;
     if (!v || !c) return;
 
-    // Taille CSS de la zone d’affichage
-    const cssW = v.clientWidth || v.videoWidth || 640;
-    const cssH = v.clientHeight || (v.videoHeight ? (cssW * v.videoHeight) / v.videoWidth : 360);
+    const rect = v.getBoundingClientRect();
+    const cssW = Math.max(1, rect.width || v.clientWidth || v.videoWidth || 640);
+    const cssH = Math.max(1, rect.height || v.clientHeight || (v.videoHeight ? (cssW * v.videoHeight) / v.videoWidth : 360));
 
-    // Bitmap 1:1 pixels réels pour éviter le flou (rétine / zoom)
     const dpr = Math.max(1, window.devicePixelRatio || 1);
     c.width = Math.floor(cssW * dpr);
     c.height = Math.floor(cssH * dpr);
@@ -576,7 +553,6 @@ function VideoWithOverlay({
 
     const ctx = c.getContext("2d");
     if (ctx) {
-      // remet la matrice et applique le scale DPR
       // @ts-ignore
       ctx.reset?.();
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -585,61 +561,33 @@ function VideoWithOverlay({
 
   const drawOverlay = () => {
     const c = canvasRef.current;
-    const v = videoRef.current;
-    if (!c || !v) return;
+    if (!c) return;
     const ctx = c.getContext("2d");
     if (!ctx) return;
 
-    // Efface
     ctx.clearRect(0, 0, c.width, c.height);
-
     if (!showAIPreview) return;
 
-    // Teinte douce pour indiquer "aperçu IA"
+    // voile léger + titre
     ctx.fillStyle = "rgba(0,0,0,0.08)";
     ctx.fillRect(0, 0, c.width, c.height);
-
-    // Bandeau “IA : aperçu corrigé”
     ctx.fillStyle = "rgba(0,0,0,0.55)";
     ctx.fillRect(12, 12, 220, 28);
     ctx.fillStyle = "#fff";
     ctx.font = "bold 13px system-ui, -apple-system, Segoe UI, Roboto, Arial";
     ctx.fillText("IA : aperçu corrigé", 20, 31);
 
-    // Heuristiques d’overlay en fonction des fautes
     const issues = (analysis?.faults || []).map(f => (f?.issue || "").toLowerCase());
-
-    // 1) Dos trop cambré → ligne vertébrale corrigée + flèches
-    if (issues.some(i => /dos|lordose|cambr/.test(i))) {
-      drawSpineGuide(ctx as CanvasRenderingContext2D, c.width, c.height);
-    }
-
-    // 2) Genoux qui rentrent / jambes trop tendues → guides genoux
-    if (issues.some(i => /genou|valgus/.test(i))) {
-      drawKneeGuide(ctx as CanvasRenderingContext2D, c.width, c.height, { suggestBend: true });
-    } else if (issues.some(i => /jambes? trop tendu|verrouill/.test(i))) {
-      drawKneeGuide(ctx as CanvasRenderingContext2D, c.width, c.height, { suggestBend: true });
-    }
-
-    // 3) Tête projetée / nuque cassée → guide tête/nuque
-    if (issues.some(i => /tête|nuque|cou/.test(i))) {
-      drawHeadGuide(ctx as CanvasRenderingContext2D, c.width, c.height);
-    }
-
-    // 4) Pieds instables / talons qui se décollent → base de support
-    if (issues.some(i => /pieds|talons?/.test(i))) {
-      drawFeetGuide(ctx as CanvasRenderingContext2D, c.width, c.height);
-    }
+    if (issues.some(i => /dos|lordose|cambr/.test(i))) drawSpineGuide(ctx as CanvasRenderingContext2D, c.width, c.height);
+    if (issues.some(i => /genou|valgus|jambes? trop tendu|verrouill/.test(i))) drawKneeGuide(ctx as CanvasRenderingContext2D, c.width, c.height, { suggestBend: true });
+    if (issues.some(i => /tête|nuque|cou/.test(i))) drawHeadGuide(ctx as CanvasRenderingContext2D, c.width, c.height);
+    if (issues.some(i => /pieds|talons?/.test(i))) drawFeetGuide(ctx as CanvasRenderingContext2D, c.width, c.height);
   };
 
   const loop = () => {
     drawOverlay();
     rafRef.current = requestAnimationFrame(loop);
   };
-
-  useEffect(() => {
-    syncCanvasSize();
-  }, [src]);
 
   useEffect(() => {
     const onResize = () => syncCanvasSize();
@@ -651,21 +599,37 @@ function VideoWithOverlay({
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showAIPreview, analysis]);
+  }, [showAIPreview, analysis, src]);
 
   return (
-    <div className="relative w-full aspect-video overflow-hidden rounded-2xl border">
+    <div
+      className="relative w-full overflow-hidden rounded-2xl border"
+      style={{ aspectRatio: "16 / 9" }}
+    >
       <video
         id={id}
         ref={videoRef}
         src={src}
         controls
-        className="block h-full w-full object-contain"
+        playsInline
+        style={{
+          display: "block",
+          width: "100%",
+          height: "100%",
+          objectFit: "contain",
+          position: "relative",
+          zIndex: 1, // la vidéo est sous le canvas
+        }}
         onLoadedMetadata={syncCanvasSize}
       />
       <canvas
         ref={canvasRef}
-        className="pointer-events-none absolute inset-0 z-10"
+        style={{
+          position: "absolute",
+          inset: 0,
+          zIndex: 2, // canvas au-dessus
+          pointerEvents: "none",
+        }}
         aria-hidden="true"
       />
     </div>
@@ -684,7 +648,6 @@ function drawSpineGuide(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.stroke();
   ctx.setLineDash([]);
 
-  // Flèches latérales (rentrer les côtes)
   drawArrow(ctx, x - Math.round(w * 0.18), Math.round(h * 0.45), x - Math.round(w * 0.04), Math.round(h * 0.45), "#22c55e");
   drawArrow(ctx, x + Math.round(w * 0.18), Math.round(h * 0.45), x + Math.round(w * 0.04), Math.round(h * 0.45), "#22c55e");
 
@@ -934,7 +897,7 @@ async function extractFramesFromFile(file: File, nFrames = 12): Promise<{ frames
       times.push(Math.min(duration, 0.1));
     } else {
       for (let i = 0; i < nFrames; i++) {
-        const t = (duration * (i + 1)) / (nFrames + 1); // réparti
+        const t = (duration * (i + 1)) / (nFrames + 1);
         times.push(t);
       }
     }
@@ -1020,4 +983,5 @@ function loadImage(src: string): Promise<HTMLImageElement> {
     img.src = src;
   });
 }
+```
 
