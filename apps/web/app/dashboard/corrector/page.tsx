@@ -27,7 +27,6 @@ interface AIAnalysis {
   objects?: string[];
   movement_pattern?: string;
   rawText?: string;
-  // optionnel si tu ajoutes skeleton_cues côté API (sinon ignoré par GrayCoach)
   skeleton_cues?: Array<{
     phase?: "setup"|"descente"|"bas"|"montée"|"lockout";
     spine?: { neutral?: boolean; tilt_deg?: number };
@@ -87,6 +86,9 @@ function CoachAnalyzer() {
   const [overrideOpen, setOverrideOpen] = useState(false);
   const [overrideName, setOverrideName] = useState("");
 
+  // *** NOUVEAU: Exercice confirmé par l'utilisateur ***
+  const [confirmedExercise, setConfirmedExercise] = useState<string | null>(null);
+
   // cooldown (429, 504)
   const [cooldown, setCooldown] = useState<number>(0);
   useEffect(() => {
@@ -109,6 +111,7 @@ function CoachAnalyzer() {
     setShowChoiceGate(false);
     setOverrideOpen(false);
     setOverrideName("");
+    setConfirmedExercise(null); // reset confirmé
   };
 
   async function uploadWithProxy(f: File): Promise<string> {
@@ -268,7 +271,13 @@ function CoachAnalyzer() {
       // 3) Proposer la confirmation avant d'afficher les détails
       setAnalysis(safe);
       setPredictedExercise(safe.exercise || "exercice_inconnu");
-      setShowChoiceGate(true);
+      // si c'était une saisie manuelle, on considère déjà que c'est "confirmé"
+      if (userExercise && userExercise.trim()) {
+        setConfirmedExercise(userExercise.trim());
+        setShowChoiceGate(false);
+      } else {
+        setShowChoiceGate(true);
+      }
       setOverrideOpen(false);
       setProgress(100);
       setStatus("Analyse terminée — confirme l’exercice");
@@ -284,11 +293,15 @@ function CoachAnalyzer() {
   };
 
   // Actions de confirmation
-  const confirmPredicted = () => setShowChoiceGate(false);
+  const confirmPredicted = () => {
+    setConfirmedExercise(predictedExercise || null);
+    setShowChoiceGate(false);
+  };
   const openOverride = () => { setOverrideOpen(true); setOverrideName(""); };
   const submitOverride = async () => {
     if (!overrideName.trim()) return;
-    await onAnalyze(overrideName.trim());
+    setConfirmedExercise(overrideName.trim()); // on fige le choix utilisateur
+    await onAnalyze(overrideName.trim());      // on relance l'analyse avec le contexte
     setShowChoiceGate(false);
     setOverrideOpen(false);
   };
@@ -308,6 +321,7 @@ function CoachAnalyzer() {
     setShowChoiceGate(false);
     setOverrideOpen(false);
     setOverrideName("");
+    setConfirmedExercise(null);
   };
 
   // ===== Helpers "Erreur détectée / Correction" =====
@@ -435,7 +449,9 @@ function CoachAnalyzer() {
           {analysis && !showChoiceGate && (
             <div className="space-y-4">
               <div className="flex items-center flex-wrap gap-2">
-                <Badge variant="secondary">Exercice : {analysis.exercise || "inconnu"}</Badge>
+                <Badge variant="secondary">
+                  Exercice : {confirmedExercise || analysis.exercise || "inconnu"}
+                </Badge>
               </div>
 
               {analysis.overall?.trim() && (
@@ -486,7 +502,12 @@ function CoachAnalyzer() {
           <CardContent className="space-y-3">
             {analysis ? (
               <>
-                <GrayCoach analysis={analysis} />
+                {/* ==> On force le mannequin à suivre l'exercice CONFIRMÉ */}
+                <GrayCoach
+                  analysis={analysis}
+                  // @ts-ignore: prop prise en charge dans le composant
+                  exerciseOverride={confirmedExercise || undefined}
+                />
                 <p className="text-xs text-muted-foreground">
                   Cette animation illustre la posture à viser d'après l'analyse, <b>sans afficher ta vidéo</b>.
                 </p>
@@ -728,9 +749,10 @@ async function makeMosaic(images: string[], gridW = 3, gridH = 2, outW = 1280, o
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.onload = () => resolve(img);
+    img.onload = () => resolve(img as HTMLImageElement);
     img.onerror = () => reject(new Error("Impossible de charger l’image."));
     img.src = src;
   });
 }
+
 
