@@ -1,6 +1,4 @@
-Voici le fichier complet **corrigé** (avec overlay forcé au-dessus de la vidéo, fix iOS/Safari : z-index inline, playsInline, aspectRatio inline, canvas HiDPI).
 
-```tsx
 // apps/web/app/dashboard/corrector/page.tsx
 "use client";
 
