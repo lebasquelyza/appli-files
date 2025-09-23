@@ -27,6 +27,15 @@ interface AIAnalysis {
   objects?: string[];
   movement_pattern?: string;
   rawText?: string;
+  // optionnel si tu ajoutes skeleton_cues côté API (sinon ignoré par GrayCoach)
+  skeleton_cues?: Array<{
+    phase?: "setup"|"descente"|"bas"|"montée"|"lockout";
+    spine?: { neutral?: boolean; tilt_deg?: number };
+    knees?: { valgus_level?: 0|1|2; should_bend?: boolean };
+    head?: { chin_tuck?: boolean };
+    feet?: { anchor?: "talons"|"milieu"|"avant"; unstable?: boolean };
+    notes?: string;
+  }>;
 }
 
 /* ===================== Constantes ===================== */
@@ -48,10 +57,11 @@ function Spinner({ className = "" }: { className?: string }) {
 export default function Page() {
   return (
     <>
-      <PageHeader title="Files te corrige" subtitle="Conseils IA sur ta posture (démo)" />
+      <PageHeader title="Files te corrige" subtitle="Conseils IA sur ta posture — silhouette corrigée (démo)" />
       <Section title="Filmer / Notes">
         <p className="text-sm text-muted-foreground mb-4">
-          Enregistre une vidéo, ajoute ton ressenti, puis lance l’analyse IA.
+          Enregistre une vidéo, ajoute ton ressenti, puis lance l’analyse IA. <br />
+          ✨ Nous t’affichons ensuite une <span className="font-medium">silhouette grise</span> qui rejoue le mouvement en version corrigée — <i>sans afficher ta vidéo</i>.
         </p>
         <CoachAnalyzer />
       </Section>
@@ -252,6 +262,7 @@ function CoachAnalyzer() {
             : [],
         objects: Array.isArray((data as any)?.objects) ? (data as any).objects : [],
         movement_pattern: typeof (data as any)?.movement_pattern === "string" ? (data as any).movement_pattern : undefined,
+        skeleton_cues: Array.isArray((data as any)?.skeleton_cues) ? (data as any).skeleton_cues : [],
       };
 
       // 3) Proposer la confirmation avant d'afficher les détails
@@ -315,7 +326,7 @@ function CoachAnalyzer() {
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       {/* Col 1: capture / upload */}
       <Card className="lg:col-span-1">
-        <CardHeader><CardTitle className="flex items-center gap-2">🎥 Capture / Import</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="flex items-center gap-2">🎥 Import / Enregistrement</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <Tabs defaultValue="record">
             <TabsList className="grid grid-cols-2">
@@ -334,9 +345,9 @@ function CoachAnalyzer() {
 
           {blobUrl && (
             <div className="space-y-2">
-              <label className="text-xs text-muted-foreground">Aperçu</label>
-              <video src={blobUrl} controls className="w-full rounded-2xl border" />
-              <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <label className="text-xs text-muted-foreground">Fichier chargé</label>
+              {/* On n'affiche PAS la vidéo du client */}
+              <div className="rounded-xl border p-2 text-xs text-muted-foreground flex items-center justify-between">
                 <span className="truncate flex items-center gap-1">🎞️ {fileName ?? "clip.webm"}</span>
                 <button className="inline-flex items-center gap-1 hover:text-foreground" onClick={reset}>↺ Réinitialiser</button>
               </div>
@@ -377,7 +388,7 @@ function CoachAnalyzer() {
 
       {/* Col 3: choix + résultats */}
       <Card className="lg:col-span-1">
-        <CardHeader><CardTitle className="flex items-center gap-2">🧠 Files te dit tout</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="flex items-center gap-2">🧠 Résumé IA</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           {!analysis && (<EmptyState />)}
 
@@ -459,41 +470,30 @@ function CoachAnalyzer() {
                   </AccordionItem>
                 </Accordion>
               )}
-
-              <div className="space-y-2">
-                <h4 className="text-sm font-medium">Repères dans la vidéo</h4>
-                {analysis.timeline?.length ? (
-                  <div className="space-y-2">
-                    {analysis.timeline.map((p, idx) => (<TimelineRow key={`${p.time}-${idx}`} point={p} />))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground">— aucun repère temporel —</p>
-                )}
-              </div>
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Démonstration — aperçu corrigé par l’IA (version squelette) */}
+      {/* Silhouette corrigée — remplace toute visualisation de la vidéo */}
       <div className="lg:col-span-3">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              ▶️ Démonstration — animation squelette (pas ta vidéo)
+              ▶️ Silhouette corrigée (sans ta vidéo)
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {analysis ? (
-              <div className="space-y-2">
-                <SkeletonCoach analysis={analysis} />
+              <>
+                <GrayCoach analysis={analysis} />
                 <p className="text-xs text-muted-foreground">
-                  Cette animation illustre la posture à viser d'après l'analyse, sans afficher ta vidéo.
+                  Cette animation illustre la posture à viser d'après l'analyse, <b>sans afficher ta vidéo</b>.
                 </p>
-              </div>
+              </>
             ) : (
               <div className="text-sm text-muted-foreground">
-                Aucune analyse. Enregistre ou importe un clip pour lancer l’analyse et voir l’animation squelette.
+                Aucune analyse. Enregistre ou importe un clip pour lancer l’analyse et voir la silhouette corrigée.
               </div>
             )}
           </CardContent>
@@ -510,20 +510,6 @@ function EmptyState() {
       <div className="mt-3 flex flex-wrap gap-2">
         <Badge>Posture</Badge><Badge>Amplitudes</Badge><Badge>Symétrie</Badge><Badge>Rythme</Badge>
       </div>
-    </div>
-  );
-}
-
-/* ===================== Timeline Row ===================== */
-/** En mode squelette (pas de vrai player), on affiche juste le repère. */
-function TimelineRow({ point }: { point: AnalysisPoint }) {
-  return (
-    <div className="w-full text-left rounded-xl border p-3 bg-background">
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-medium">{fmtTime(point.time)} – {point.label}</span>
-        <span className="text-xs text-muted-foreground">Repère</span>
-      </div>
-      {point.detail && <p className="text-xs text-muted-foreground mt-1">{point.detail}</p>}
     </div>
   );
 }
@@ -600,6 +586,7 @@ function VideoRecorder({ onRecorded }: { onRecorded: (file: File) => void }) {
   return (
     <div className="space-y-3">
       <div className="relative">
+        {/* Aperçu caméra temps réel (pas enregistré côté UI) */}
         <video ref={videoRef} className="w-full rounded-2xl border" muted playsInline />
         {!hasStream && (<div className="absolute inset-0 grid place-items-center text-xs text-muted-foreground">Prépare ta caméra puis clique « Démarrer »</div>)}
       </div>
