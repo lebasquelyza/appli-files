@@ -1,4 +1,3 @@
-
 // apps/web/app/dashboard/corrector/page.tsx
 "use client";
 
@@ -13,7 +12,6 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import SkeletonCoach from "@/components/SkeletonCoach";
-
 
 /* ===================== Types ===================== */
 interface AnalysisPoint { time: number; label: string; detail?: string; }
@@ -78,9 +76,6 @@ function CoachAnalyzer() {
   const [showChoiceGate, setShowChoiceGate] = useState(false);
   const [overrideOpen, setOverrideOpen] = useState(false);
   const [overrideName, setOverrideName] = useState("");
-
-  // Aperçu corrigé (toujours affiché dans Démonstration)
-  const showAIPreview = true;
 
   // cooldown (429, 504)
   const [cooldown, setCooldown] = useState<number>(0);
@@ -469,7 +464,7 @@ function CoachAnalyzer() {
                 <h4 className="text-sm font-medium">Repères dans la vidéo</h4>
                 {analysis.timeline?.length ? (
                   <div className="space-y-2">
-                    {analysis.timeline.map((p, idx) => (<TimelineRow key={`${p.time}-${idx}`} point={p} videoSelector="#analysis-player" />))}
+                    {analysis.timeline.map((p, idx) => (<TimelineRow key={`${p.time}-${idx}`} point={p} />))}
                   </div>
                 ) : (
                   <p className="text-xs text-muted-foreground">— aucun repère temporel —</p>
@@ -480,263 +475,56 @@ function CoachAnalyzer() {
         </CardContent>
       </Card>
 
-    {analysis ? (
-  <div className="space-y-2">
-    <SkeletonCoach analysis={analysis} />
-    <p className="text-xs text-muted-foreground">
-      Cette animation illustre la posture à viser d'après l'analyse, sans afficher ta vidéo.
-    </p>
-  </div>
-) : (
-  <div className="text-sm text-muted-foreground">
-    Aucune analyse. Enregistre ou importe un clip pour lancer l’analyse et voir l’animation squelette.
-  </div>
-)}
-
-
-/* ===================== Player avec overlays IA (fix iOS) ===================== */
-function VideoWithOverlay({
-  id,
-  src,
-  analysis,
-  showAIPreview,
-}: {
-  id: string;
-  src: string;
-  analysis: AIAnalysis | null;
-  showAIPreview: boolean;
-}) {
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const rafRef = useRef<number | null>(null);
-
-  // Ajuste le canvas à la taille visible (net sur HiDPI)
-  const syncCanvasSize = () => {
-    const v = videoRef.current;
-    const c = canvasRef.current;
-    if (!v || !c) return;
-
-    const rect = v.getBoundingClientRect();
-    const cssW = Math.max(1, rect.width || v.clientWidth || v.videoWidth || 640);
-    const cssH = Math.max(1, rect.height || v.clientHeight || (v.videoHeight ? (cssW * v.videoHeight) / v.videoWidth : 360));
-
-    const dpr = Math.max(1, window.devicePixelRatio || 1);
-    c.width = Math.floor(cssW * dpr);
-    c.height = Math.floor(cssH * dpr);
-    c.style.width = `${cssW}px`;
-    c.style.height = `${cssH}px`;
-
-    const ctx = c.getContext("2d");
-    if (ctx) {
-      // @ts-ignore
-      ctx.reset?.();
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    }
-  };
-
-  const drawOverlay = () => {
-    const c = canvasRef.current;
-    if (!c) return;
-    const ctx = c.getContext("2d");
-    if (!ctx) return;
-
-    ctx.clearRect(0, 0, c.width, c.height);
-    if (!showAIPreview) return;
-
-    // voile léger + titre
-    ctx.fillStyle = "rgba(0,0,0,0.08)";
-    ctx.fillRect(0, 0, c.width, c.height);
-    ctx.fillStyle = "rgba(0,0,0,0.55)";
-    ctx.fillRect(12, 12, 220, 28);
-    ctx.fillStyle = "#fff";
-    ctx.font = "bold 13px system-ui, -apple-system, Segoe UI, Roboto, Arial";
-    ctx.fillText("IA : aperçu corrigé", 20, 31);
-
-    const issues = (analysis?.faults || []).map(f => (f?.issue || "").toLowerCase());
-    if (issues.some(i => /dos|lordose|cambr/.test(i))) drawSpineGuide(ctx as CanvasRenderingContext2D, c.width, c.height);
-    if (issues.some(i => /genou|valgus|jambes? trop tendu|verrouill/.test(i))) drawKneeGuide(ctx as CanvasRenderingContext2D, c.width, c.height, { suggestBend: true });
-    if (issues.some(i => /tête|nuque|cou/.test(i))) drawHeadGuide(ctx as CanvasRenderingContext2D, c.width, c.height);
-    if (issues.some(i => /pieds|talons?/.test(i))) drawFeetGuide(ctx as CanvasRenderingContext2D, c.width, c.height);
-  };
-
-  const loop = () => {
-    drawOverlay();
-    rafRef.current = requestAnimationFrame(loop);
-  };
-
-  useEffect(() => {
-    const onResize = () => syncCanvasSize();
-    window.addEventListener("resize", onResize);
-    syncCanvasSize();
-    rafRef.current = requestAnimationFrame(loop);
-    return () => {
-      window.removeEventListener("resize", onResize);
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showAIPreview, analysis, src]);
-
-  return (
-    <div
-      className="relative w-full overflow-hidden rounded-2xl border"
-      style={{ aspectRatio: "16 / 9" }}
-    >
-      <video
-        id={id}
-        ref={videoRef}
-        src={src}
-        controls
-        playsInline
-        style={{
-          display: "block",
-          width: "100%",
-          height: "100%",
-          objectFit: "contain",
-          position: "relative",
-          zIndex: 1, // la vidéo est sous le canvas
-        }}
-        onLoadedMetadata={syncCanvasSize}
-      />
-      <canvas
-        ref={canvasRef}
-        style={{
-          position: "absolute",
-          inset: 0,
-          zIndex: 2, // canvas au-dessus
-          pointerEvents: "none",
-        }}
-        aria-hidden="true"
-      />
+      {/* Démonstration — aperçu corrigé par l’IA (version squelette) */}
+      <div className="lg:col-span-3">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              ▶️ Démonstration — animation squelette (pas ta vidéo)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {analysis ? (
+              <div className="space-y-2">
+                <SkeletonCoach analysis={analysis} />
+                <p className="text-xs text-muted-foreground">
+                  Cette animation illustre la posture à viser d'après l'analyse, sans afficher ta vidéo.
+                </p>
+              </div>
+            ) : (
+              <div className="text-sm text-muted-foreground">
+                Aucune analyse. Enregistre ou importe un clip pour lancer l’analyse et voir l’animation squelette.
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
 
-/* === Fonctions de dessin simples (visualisation “corrigée”) === */
-function drawSpineGuide(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  const x = Math.round(w * 0.5);
-  ctx.strokeStyle = "#22c55e"; // vert
-  ctx.lineWidth = 4;
-  ctx.setLineDash([8, 8]);
-  ctx.beginPath();
-  ctx.moveTo(x, Math.round(h * 0.2));
-  ctx.lineTo(x, Math.round(h * 0.85));
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  drawArrow(ctx, x - Math.round(w * 0.18), Math.round(h * 0.45), x - Math.round(w * 0.04), Math.round(h * 0.45), "#22c55e");
-  drawArrow(ctx, x + Math.round(w * 0.18), Math.round(h * 0.45), x + Math.round(w * 0.04), Math.round(h * 0.45), "#22c55e");
-
-  drawTag(ctx, x + 10, Math.round(h * 0.22), "Dos neutre / gaine le tronc");
-}
-
-function drawKneeGuide(ctx: CanvasRenderingContext2D, w: number, h: number, opts: { suggestBend?: boolean } = {}) {
-  const left = Math.round(w * 0.35);
-  const right = Math.round(w * 0.65);
-  const footY = Math.round(h * 0.88);
-  const kneeY = Math.round(h * 0.68);
-
-  ctx.strokeStyle = "#3b82f6"; // bleu
-  ctx.lineWidth = 3;
-
-  // Pieds (base)
-  ctx.beginPath();
-  ctx.moveTo(left - 30, footY);
-  ctx.lineTo(left + 30, footY);
-  ctx.moveTo(right - 30, footY);
-  ctx.lineTo(right + 30, footY);
-  ctx.stroke();
-
-  // Genoux (corrigé : au-dessus et alignés)
-  ctx.beginPath();
-  ctx.moveTo(left, kneeY);
-  ctx.lineTo(left, footY);
-  ctx.moveTo(right, kneeY);
-  ctx.lineTo(right, footY);
-  ctx.stroke();
-
-  if (opts.suggestBend) {
-    drawArrow(ctx, left, kneeY - 30, left, kneeY + 5, "#3b82f6");
-    drawArrow(ctx, right, kneeY - 30, right, kneeY + 5, "#3b82f6");
-    drawTag(ctx, right + 12, kneeY - 24, "Fléchis légèrement les genoux");
-  } else {
-    drawTag(ctx, right + 12, kneeY - 24, "Genoux alignés sur pieds");
-  }
-}
-
-function drawHeadGuide(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  const y = Math.round(h * 0.18);
-  ctx.strokeStyle = "#f59e0b"; // orange
-  ctx.lineWidth = 3;
-  ctx.setLineDash([6, 6]);
-  ctx.beginPath();
-  ctx.moveTo(Math.round(w * 0.1), y);
-  ctx.lineTo(Math.round(w * 0.9), y);
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  drawArrow(ctx, Math.round(w * 0.55), y - 20, Math.round(w * 0.5), y + 6, "#f59e0b");
-  drawTag(ctx, Math.round(w * 0.56), y + 10, "Rentre légèrement le menton");
-}
-
-function drawFeetGuide(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  const x = Math.round(w * 0.25);
-  const y = Math.round(h * 0.86);
-  const width = Math.round(w * 0.5);
-  const height = Math.round(h * 0.06);
-  ctx.fillStyle = "rgba(250, 204, 21, 0.25)";
-  ctx.fillRect(x, y, width, height);
-  ctx.strokeStyle = "#eab308";
-  ctx.lineWidth = 2;
-  ctx.strokeRect(x, y, width, height);
-  drawTag(ctx, x + width + 10, y + 6, "Reste ancré dans le sol");
-}
-
-function drawArrow(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number, color = "#22c55e") {
-  const headlen = 10;
-  const dx = x2 - x1;
-  const dy = y2 - y1;
-  const angle = Math.atan2(dy, dx);
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(x1, y1);
-  ctx.lineTo(x2, y2);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(x2, y2);
-  ctx.lineTo(x2 - headlen * Math.cos(angle - Math.PI / 6), y2 - headlen * Math.sin(angle - Math.PI / 6));
-  ctx.lineTo(x2 - headlen * Math.cos(angle + Math.PI / 6), y2 - headlen * Math.sin(angle + Math.PI / 6));
-  ctx.lineTo(x2, y2);
-  ctx.fillStyle = color;
-  ctx.fill();
-}
-
-function drawTag(ctx: CanvasRenderingContext2D, x: number, y: number, text: string) {
-  ctx.font = "12px system-ui, -apple-system, Segoe UI, Roboto, Arial";
-  const padX = 8, padY = 6;
-  const textW = Math.ceil(ctx.measureText(text).width);
-  const boxW = textW + padX * 2;
-  const boxH = 24;
-  ctx.fillStyle = "rgba(0,0,0,0.55)";
-  ctx.fillRect(x, y, boxW, boxH);
-  ctx.fillStyle = "#fff";
-  ctx.fillText(text, x + padX, y + boxH - padY - 2);
+function EmptyState() {
+  return (
+    <div className="rounded-2xl border p-4 text-sm text-muted-foreground">
+      Aucune analyse pour l'instant. Ajoute une vidéo et ton ressenti, puis clique <span className="font-medium">Lancer l'analyse IA</span>.
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Badge>Posture</Badge><Badge>Amplitudes</Badge><Badge>Symétrie</Badge><Badge>Rythme</Badge>
+      </div>
+    </div>
+  );
 }
 
 /* ===================== Timeline Row ===================== */
-function TimelineRow({ point, videoSelector }: { point: AnalysisPoint; videoSelector: string }) {
-  const onSeek = () => {
-    const video = document.querySelector<HTMLVideoElement>(videoSelector);
-    if (video) { video.currentTime = point.time; video.play(); }
-  };
+/** En mode squelette (pas de vrai player), on affiche juste le repère. */
+function TimelineRow({ point }: { point: AnalysisPoint }) {
   return (
-    <button onClick={onSeek} className="w-full text-left rounded-xl border p-3 hover:bg-accent transition">
+    <div className="w-full text-left rounded-xl border p-3 bg-background">
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium">{fmtTime(point.time)} – {point.label}</span>
-        <span className="text-xs text-muted-foreground">Aller au moment</span>
+        <span className="text-xs text-muted-foreground">Repère</span>
       </div>
       {point.detail && <p className="text-xs text-muted-foreground mt-1">{point.detail}</p>}
-    </button>
+    </div>
   );
 }
 
