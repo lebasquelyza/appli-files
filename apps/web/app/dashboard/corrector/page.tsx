@@ -557,15 +557,30 @@ function VideoWithOverlay({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rafRef = useRef<number | null>(null);
 
-  // Ajuste le canvas à la taille de la vidéo
+  // Ajuste le canvas à la taille de la vidéo (net sur écrans HiDPI)
   const syncCanvasSize = () => {
     const v = videoRef.current;
     const c = canvasRef.current;
     if (!v || !c) return;
-    const w = v.clientWidth || v.videoWidth || 640;
-    const h = v.clientHeight || (v.videoHeight ? (w * v.videoHeight) / v.videoWidth : 360);
-    c.width = w;
-    c.height = h;
+
+    // Taille CSS de la zone d’affichage
+    const cssW = v.clientWidth || v.videoWidth || 640;
+    const cssH = v.clientHeight || (v.videoHeight ? (cssW * v.videoHeight) / v.videoWidth : 360);
+
+    // Bitmap 1:1 pixels réels pour éviter le flou (rétine / zoom)
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    c.width = Math.floor(cssW * dpr);
+    c.height = Math.floor(cssH * dpr);
+    c.style.width = `${cssW}px`;
+    c.style.height = `${cssH}px`;
+
+    const ctx = c.getContext("2d");
+    if (ctx) {
+      // remet la matrice et applique le scale DPR
+      // @ts-ignore
+      ctx.reset?.();
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
   };
 
   const drawOverlay = () => {
@@ -596,24 +611,24 @@ function VideoWithOverlay({
 
     // 1) Dos trop cambré → ligne vertébrale corrigée + flèches
     if (issues.some(i => /dos|lordose|cambr/.test(i))) {
-      drawSpineGuide(ctx, c.width, c.height);
+      drawSpineGuide(ctx as CanvasRenderingContext2D, c.width, c.height);
     }
 
     // 2) Genoux qui rentrent / jambes trop tendues → guides genoux
     if (issues.some(i => /genou|valgus/.test(i))) {
-      drawKneeGuide(ctx, c.width, c.height, { suggestBend: true });
+      drawKneeGuide(ctx as CanvasRenderingContext2D, c.width, c.height, { suggestBend: true });
     } else if (issues.some(i => /jambes? trop tendu|verrouill/.test(i))) {
-      drawKneeGuide(ctx, c.width, c.height, { suggestBend: true });
+      drawKneeGuide(ctx as CanvasRenderingContext2D, c.width, c.height, { suggestBend: true });
     }
 
     // 3) Tête projetée / nuque cassée → guide tête/nuque
     if (issues.some(i => /tête|nuque|cou/.test(i))) {
-      drawHeadGuide(ctx, c.width, c.height);
+      drawHeadGuide(ctx as CanvasRenderingContext2D, c.width, c.height);
     }
 
     // 4) Pieds instables / talons qui se décollent → base de support
     if (issues.some(i => /pieds|talons?/.test(i))) {
-      drawFeetGuide(ctx, c.width, c.height);
+      drawFeetGuide(ctx as CanvasRenderingContext2D, c.width, c.height);
     }
   };
 
@@ -639,19 +654,19 @@ function VideoWithOverlay({
   }, [showAIPreview, analysis]);
 
   return (
-    <div className="relative">
+    <div className="relative w-full aspect-video overflow-hidden rounded-2xl border">
       <video
         id={id}
         ref={videoRef}
         src={src}
         controls
-        className="w-full rounded-2xl border"
+        className="block h-full w-full object-contain"
         onLoadedMetadata={syncCanvasSize}
       />
       <canvas
         ref={canvasRef}
-        className="pointer-events-none absolute inset-0 rounded-2xl"
-        aria-hidden
+        className="pointer-events-none absolute inset-0 z-10"
+        aria-hidden="true"
       />
     </div>
   );
