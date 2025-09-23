@@ -12,6 +12,8 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import SkeletonCoach from "@/components/SkeletonCoach";
+
 
 /* ===================== Types ===================== */
 interface AnalysisPoint { time: number; label: string; detail?: string; }
@@ -478,44 +480,19 @@ function CoachAnalyzer() {
         </CardContent>
       </Card>
 
-      {/* Démonstration — overlay IA permanent */}
-      <div className="lg:col-span-3">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              ▶️ Démonstration — aperçu corrigé par l’IA
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {blobUrl ? (
-              <VideoWithOverlay
-                id="analysis-player"
-                src={blobUrl}
-                analysis={analysis}
-                showAIPreview={showAIPreview}
-              />
-            ) : (
-              <div className="text-sm text-muted-foreground">
-                Aucune vidéo. Enregistre ou importe un clip pour voir la démonstration.
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  );
-}
+    {analysis ? (
+  <div className="space-y-2">
+    <SkeletonCoach analysis={analysis} />
+    <p className="text-xs text-muted-foreground">
+      Cette animation illustre la posture à viser d'après l'analyse, sans afficher ta vidéo.
+    </p>
+  </div>
+) : (
+  <div className="text-sm text-muted-foreground">
+    Aucune analyse. Enregistre ou importe un clip pour lancer l’analyse et voir l’animation squelette.
+  </div>
+)}
 
-function EmptyState() {
-  return (
-    <div className="rounded-2xl border p-4 text-sm text-muted-foreground">
-      Aucune analyse pour l'instant. Ajoute une vidéo et ton ressenti, puis clique <span className="font-medium">Lancer l'analyse IA</span>.
-      <div className="mt-3 flex flex-wrap gap-2">
-        <Badge>Posture</Badge><Badge>Amplitudes</Badge><Badge>Symétrie</Badge><Badge>Rythme</Badge>
-      </div>
-    </div>
-  );
-}
 
 /* ===================== Player avec overlays IA (fix iOS) ===================== */
 function VideoWithOverlay({
