@@ -11,7 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import GrayCoach3D from "@/components/GrayCoach3D";
+import GrayCoach3DGLTF from "@/components/GrayCoach3DGLTF";
+
 /* ===================== Types ===================== */
 interface AnalysisPoint { time: number; label: string; detail?: string; }
 interface Fault { issue: string; severity: "faible"|"moyenne"|"élevée"; evidence?: string; correction?: string; }
@@ -59,7 +60,7 @@ export default function Page() {
       <Section title="Filmer / Notes">
         <p className="text-sm text-muted-foreground mb-4">
           Enregistre une vidéo, ajoute ton ressenti, puis lance l’analyse IA. <br />
-          ✨ Nous t’affichons ensuite une <span className="font-medium">silhouette grise</span> qui rejoue le mouvement en version corrigée — <i>sans afficher ta vidéo</i>.
+          ✨ Nous t’affichons ensuite un <span className="font-medium">mannequin 3D gris</span> qui rejoue le mouvement en version corrigée — <i>sans afficher ta vidéo</i>.
         </p>
         <CoachAnalyzer />
       </Section>
@@ -85,7 +86,7 @@ function CoachAnalyzer() {
   const [overrideOpen, setOverrideOpen] = useState(false);
   const [overrideName, setOverrideName] = useState("");
 
-  // *** NOUVEAU: Exercice confirmé par l'utilisateur ***
+  // Exercice confirmé par l'utilisateur (pour piloter le mannequin)
   const [confirmedExercise, setConfirmedExercise] = useState<string | null>(null);
 
   // cooldown (429, 504)
@@ -110,7 +111,7 @@ function CoachAnalyzer() {
     setShowChoiceGate(false);
     setOverrideOpen(false);
     setOverrideName("");
-    setConfirmedExercise(null); // reset confirmé
+    setConfirmedExercise(null);
   };
 
   async function uploadWithProxy(f: File): Promise<string> {
@@ -270,7 +271,6 @@ function CoachAnalyzer() {
       // 3) Proposer la confirmation avant d'afficher les détails
       setAnalysis(safe);
       setPredictedExercise(safe.exercise || "exercice_inconnu");
-      // si c'était une saisie manuelle, on considère déjà que c'est "confirmé"
       if (userExercise && userExercise.trim()) {
         setConfirmedExercise(userExercise.trim());
         setShowChoiceGate(false);
@@ -299,8 +299,8 @@ function CoachAnalyzer() {
   const openOverride = () => { setOverrideOpen(true); setOverrideName(""); };
   const submitOverride = async () => {
     if (!overrideName.trim()) return;
-    setConfirmedExercise(overrideName.trim()); // on fige le choix utilisateur
-    await onAnalyze(overrideName.trim());      // on relance l'analyse avec le contexte
+    setConfirmedExercise(overrideName.trim());
+    await onAnalyze(overrideName.trim());
     setShowChoiceGate(false);
     setOverrideOpen(false);
   };
@@ -360,7 +360,7 @@ function CoachAnalyzer() {
             <div className="space-y-2">
               <label className="text-xs text-muted-foreground">Fichier chargé</label>
               {/* On n'affiche PAS la vidéo du client */}
-              <div className="rounded-xl border p-2 text-xs text-muted-foreground flex items-center justify-between">
+              <div className="rounded-2xl border p-2 text-xs text-muted-foreground flex items-center justify-between">
                 <span className="truncate flex items-center gap-1">🎞️ {fileName ?? "clip.webm"}</span>
                 <button className="inline-flex items-center gap-1 hover:text-foreground" onClick={reset}>↺ Réinitialiser</button>
               </div>
@@ -424,7 +424,7 @@ function CoachAnalyzer() {
               </div>
 
               {overrideOpen && (
-                <div className="mt-2 rounded-xl border p-3 space-y-2">
+                <div className="mt-2 rounded-2xl border p-3 space-y-2">
                   <label className="text-xs text-muted-foreground">Quel exercice fais-tu ?</label>
                   <div className="flex items-center gap-2">
                     <Input
@@ -490,30 +490,28 @@ function CoachAnalyzer() {
         </CardContent>
       </Card>
 
-      {/* Silhouette corrigée — remplace toute visualisation de la vidéo */}
+      {/* Mannequin 3D — démonstration (sans ta vidéo) */}
       <div className="lg:col-span-3">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              ▶️ Silhouette corrigée (sans ta vidéo)
+              ▶️ Mannequin 3D (démo) — sans ta vidéo
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {analysis ? (
               <>
-                {/* ==> On force le mannequin à suivre l'exercice CONFIRMÉ */}
-                <GrayCoach
+                <GrayCoach3DGLTF
                   analysis={analysis}
-                  // @ts-ignore: prop prise en charge dans le composant
                   exerciseOverride={confirmedExercise || undefined}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Cette animation illustre la posture à viser d'après l'analyse, <b>sans afficher ta vidéo</b>.
+                  Le mannequin rejoue l’exercice confirmé, en version corrigée, <b>sans afficher ta vidéo</b>.
                 </p>
               </>
             ) : (
               <div className="text-sm text-muted-foreground">
-                Aucune analyse. Enregistre ou importe un clip pour lancer l’analyse et voir la silhouette corrigée.
+                Aucune analyse. Enregistre ou importe un clip pour lancer l’analyse et voir le mannequin 3D.
               </div>
             )}
           </CardContent>
@@ -753,5 +751,3 @@ function loadImage(src: string): Promise<HTMLImageElement> {
     img.src = src;
   });
 }
-
-
