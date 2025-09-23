@@ -981,5 +981,4 @@ function loadImage(src: string): Promise<HTMLImageElement> {
     img.src = src;
   });
 }
-```
 
