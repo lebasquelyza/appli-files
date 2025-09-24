@@ -4,16 +4,55 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-import { Menu, Activity, Settings, Video, Home } from "lucide-react";
+
+// Petites icônes SVG inline (pas de lucide-react)
+function IconMenu(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden {...props}>
+      <path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+function IconHome(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden {...props}>
+      <path d="M3 10.5 12 3l9 7.5V21a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1v-10.5Z" fill="none" stroke="currentColor" strokeWidth="2" />
+    </svg>
+  );
+}
+function IconVideo(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden {...props}>
+      <path d="M3 7a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1l4-2.5V18.5L15 16v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" fill="none" stroke="currentColor" strokeWidth="2" />
+    </svg>
+  );
+}
+function IconChart(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden {...props}>
+      <path d="M4 20V4M20 20H4M8 16v-5M12 20V8M16 20v-7" fill="none" stroke="currentColor" strokeWidth="2" />
+    </svg>
+  );
+}
+function IconSettings(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden {...props}>
+      <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm-9 2.5 2.2-.9a8 8 0 0 0 1.5 0l.8 2.2h6l.8-2.2a8 8 0 0 0 1.5 0l2.2.9 3-5-2-1.5a8 8 0 0 0 0-1.5l2-1.5-3-5-2.2.9a8 8 0 0 0-1.5 0L13 2H7l-.8 2.2a8 8 0 0 0-1.5 0L2.5 3.3l-3 5L1.5 10a8 8 0 0 0 0 1.5L-.5 13l3 5Z" fill="none" stroke="currentColor" strokeWidth="1.5" />
+    </svg>
+  );
+}
+
+// Petite séparation sans Radix
+function Separator({ className = "" }: { className?: string }) {
+  return <div className={`h-px w-full bg-border ${className}`} />;
+}
 
 const NAV = [
-  { href: "/dashboard", label: "Accueil", icon: Home },
-  { href: "/dashboard/corrector", label: "Correcteur", icon: Video },
-  { href: "/dashboard/progress", label: "Progression", icon: Activity },
-  { href: "/dashboard/settings", label: "Paramètres", icon: Settings },
+  { href: "/dashboard", label: "Accueil", icon: IconHome },
+  { href: "/dashboard/corrector", label: "Correcteur", icon: IconVideo },
+  { href: "/dashboard/progress", label: "Progression", icon: IconChart },
+  { href: "/dashboard/settings", label: "Paramètres", icon: IconSettings },
 ] as const;
 
 function useActiveTitle(pathname: string | null) {
@@ -29,56 +68,68 @@ function useActiveTitle(pathname: string | null) {
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const title = useActiveTitle(pathname);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [open, setOpen] = useState(false);
 
   return (
     <div className="min-h-[calc(var(--vh,1vh)*100)] flex flex-col">
       {/* TOP BAR */}
       <div className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/70">
         <div className="h-14 px-3 sm:px-4 flex items-center gap-2">
-          <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
-            <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="rounded-xl">
-                <Menu className="h-5 w-5" />
-              </Button>
-            </SheetTrigger>
-
-            <SheetContent side="left" className="w-[84%] sm:w-80 p-0">
-              <div className="p-4">
-                <SheetHeader>
-                  <SheetTitle className="text-base">Navigation</SheetTitle>
-                </SheetHeader>
-              </div>
-              <Separator />
-              <nav className="p-2 space-y-1">
-                {NAV.map((item) => {
-                  const ActiveIcon = item.icon;
-                  const active = pathname?.startsWith(item.href);
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      onClick={() => setMenuOpen(false)}
-                      className={[
-                        "flex items-center gap-3 px-4 py-3 rounded-lg transition",
-                        active ? "bg-accent text-accent-foreground" : "hover:bg-muted",
-                      ].join(" ")}
-                    >
-                      <ActiveIcon className="h-4 w-4 shrink-0" />
-                      <span className="truncate">{item.label}</span>
-                      {active && <Badge variant="secondary" className="ml-auto">actif</Badge>}
-                    </Link>
-                  );
-                })}
-              </nav>
-            </SheetContent>
-          </Sheet>
-
-          <div className="flex-1 truncate text-base font-medium">
-            {title}
-          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="rounded-xl"
+            onClick={() => setOpen(true)}
+            aria-label="Ouvrir la navigation"
+          >
+            <IconMenu />
+          </Button>
+          <div className="flex-1 truncate text-base font-medium">{title}</div>
         </div>
       </div>
+
+      {/* DRAWER (sans Radix) */}
+      {open && (
+        <>
+          {/* Overlay */}
+          <div
+            className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm animate-in fade-in-0"
+            onClick={() => setOpen(false)}
+          />
+          {/* Panel */}
+          <aside
+            className="fixed inset-y-0 left-0 z-50 w-[84%] sm:w-80 bg-background border-r shadow-lg animate-in slide-in-from-left"
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="p-4">
+              <div className="text-base font-medium">Navigation</div>
+            </div>
+            <Separator />
+            <nav className="p-2 space-y-1">
+              {NAV.map((item) => {
+                const ActiveIcon = item.icon;
+                const active = pathname?.startsWith(item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setOpen(false)}
+                    className={[
+                      "flex items-center gap-3 px-4 py-3 rounded-lg transition",
+                      active ? "bg-accent text-accent-foreground" : "hover:bg-muted",
+                    ].join(" ")}
+                  >
+                    <ActiveIcon />
+                    <span className="truncate">{item.label}</span>
+                    {active && <Badge variant="secondary" className="ml-auto">actif</Badge>}
+                  </Link>
+                );
+              })}
+            </nav>
+          </aside>
+        </>
+      )}
 
       {/* CONTENU */}
       <main className="flex-1 px-3 sm:px-4 py-4">
