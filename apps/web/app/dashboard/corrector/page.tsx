@@ -11,7 +11,9 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import GrayCoach from "../../../components/GrayCoach";
+import dynamic from "next/dynamic";
+const GrayCoach3DGLTF = dynamic(() => import("@/components/GrayCoach3DGLTF"), { ssr: false });
+
 
 /* ===================== Types ===================== */
 interface AnalysisPoint { time: number; label: string; detail?: string; }
