@@ -1,393 +1,423 @@
 // apps/web/components/GrayCoach3DGLTF.tsx
 "use client";
 
+/**
+ * Mannequin 3D "démo" sans R3F : pur Three.js sur <canvas>.
+ * - Pas de dépendances @react-three/fiber / drei.
+ * - Sûr pour Netlify/SSR : tout est côté client.
+ * - Animation simple selon l'exercice (squat, deadlift/hinge, lunge, pushup, ohp, traction/pull-up).
+ */
+
 import React, { useEffect, useRef } from "react";
-import * as THREE from "three";
+
+// Import Three.js dynamiquement pour éviter tout souci SSR.
+let THREE: typeof import("three") | null = null;
 
 type Fault = { issue: string; severity: "faible" | "moyenne" | "élevée"; correction?: string };
+type SkeletonCue = {
+  phase?: "setup" | "descente" | "bas" | "montée" | "lockout";
+  spine?: { neutral?: boolean; tilt_deg?: number };
+  knees?: { valgus_level?: 0 | 1 | 2; should_bend?: boolean };
+  head?: { chin_tuck?: boolean };
+  feet?: { anchor?: "talons" | "milieu" | "avant"; unstable?: boolean };
+  notes?: string;
+};
 type AIAnalysis = {
   exercise: string;
   movement_pattern?: string;
   faults?: Fault[];
+  corrections?: string[];
+  skeleton_cues?: SkeletonCue[];
 };
 
-type Props = {
-  analysis: AIAnalysis;
-  /** Permet d’imposer l’exercice confirmé par l’utilisateur côté page */
-  exerciseOverride?: string;
-  /** Hauteur en px de la zone 3D (largeur = 100%) */
-  height?: number;
-};
-
-/**
- * Mannequin 3D "démo"
- * - Pas de R3F/Drei → pur Three.js pour éviter les problèmes de typings sur Netlify
- * - Taille minimale forcée pour éviter un canvas 0x0 (écran noir)
- * - Boucle d’animation requestAnimationFrame + resize observer
- */
 export default function GrayCoach3DGLTF({
   analysis,
   exerciseOverride,
   height = 420,
-}: Props) {
-  const mountRef = useRef<HTMLDivElement | null>(null);
+}: {
+  analysis: AIAnalysis;
+  /** Si fourni, force l’animation sur cet exercice (ex: "Tractions") */
+  exerciseOverride?: string;
+  height?: number;
+}) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const rafRef = useRef<number | null>(null);
 
   useEffect(() => {
-    const container = mountRef.current;
-    if (!container) return;
+    let mounted = true;
+    let renderer: import("three").WebGLRenderer | null = null;
+    let scene: import("three").Scene | null = null;
+    let camera: import("three").PerspectiveCamera | null = null;
 
-    // ⚠️ Taille sûre (fallback si clientWidth/Height === 0)
-    const initialW = container.clientWidth || 640;
-    const initialH = container.clientHeight || height || 420;
+    // objets du mannequin
+    let torso: any, head: any;
+    let upperArmL: any, lowerArmL: any, handL: any;
+    let upperArmR: any, lowerArmR: any, handR: any;
+    let upperLegL: any, lowerLegL: any, footL: any;
+    let upperLegR: any, lowerLegR: any, footR: any;
+    let bar: any; // barre de traction / haltère virtuel selon exo
+    let floor: any, rig: any;
 
-    // Rendu
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    renderer.setSize(initialW, initialH, false);
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.setClearColor(0x0b0b0b, 1);
+    // états anim
+    let t0 = performance.now();
 
-    // Caméra
-    const camera = new THREE.PerspectiveCamera(45, initialW / initialH, 0.1, 100);
-    camera.position.set(0, 1.4, 3);
+    (async () => {
+      if (!mounted) return;
 
-    // Scène
-    const scene = new THREE.Scene();
+      // Charger Three côté client
+      if (!THREE) {
+        THREE = await import("three");
+      }
+      if (!mounted || !THREE) return;
 
-    // Lumières
-    const amb = new THREE.AmbientLight(0xffffff, 0.6);
-    scene.add(amb);
-    const dir = new THREE.DirectionalLight(0xffffff, 1);
-    dir.position.set(5, 8, 5);
-    dir.castShadow = false;
-    scene.add(dir);
-
-    // Sol
-    const floorGeo = new THREE.PlaneGeometry(6, 6);
-    const floorMat = new THREE.MeshStandardMaterial({
-      color: 0x111111,
-      metalness: 0.1,
-      roughness: 0.9,
-    });
-    const floor = new THREE.Mesh(floorGeo, floorMat);
-    floor.rotation.x = -Math.PI / 2;
-    floor.position.y = 0;
-    scene.add(floor);
-
-    // Mannequin simple (capsules+sphères)
-    const mannequin = buildMannequin();
-    mannequin.position.y = 0.05;
-    scene.add(mannequin);
-
-    // Ajout au DOM
-    container.appendChild(renderer.domElement);
-
-    // Resize (observe le conteneur)
-    const resize = () => {
-      const w = container.clientWidth || initialW;
-      const h = container.clientHeight || initialH;
-      renderer.setSize(w, h, false);
-      camera.aspect = w / h;
-      camera.updateProjectionMatrix();
-    };
-    const ro = new ResizeObserver(resize);
-    ro.observe(container);
-
-    // Animation en fonction de l’exercice confirmé / détecté
-    const exercise = (exerciseOverride || analysis?.exercise || analysis?.movement_pattern || "squat").toLowerCase();
-
-    let raf = 0;
-    const clock = new THREE.Clock();
-
-    const loop = () => {
-      const t = clock.getElapsedTime();
-      animateMannequin(mannequin, exercise, t);
-      renderer.render(scene, camera);
-      raf = requestAnimationFrame(loop);
-    };
-    loop();
-
-    // Cleanup
-    return () => {
-      cancelAnimationFrame(raf);
-      ro.disconnect();
-      container.removeChild(renderer.domElement);
-      // Libère géométries / matériaux
-      scene.traverse((obj) => {
-        const m = obj as THREE.Mesh;
-        if (m.geometry) m.geometry.dispose?.();
-        if ((m.material as any)?.dispose) (m.material as any).dispose();
+      const container = containerRef.current!;
+      const canvas = canvasRef.current!;
+      // Renderer
+      renderer = new THREE.WebGLRenderer({
+        canvas,
+        antialias: true,
+        alpha: false,
+        powerPreference: "high-performance",
       });
-      renderer.dispose();
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.setClearColor(0x0b0b0b, 1);
+
+      // Scene + Camera
+      scene = new THREE.Scene();
+
+      camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+      camera.position.set(0, 1.5, 4);
+      camera.lookAt(0, 1.0, 0);
+      scene.add(camera);
+
+      // Lumières
+      const ambLight = new THREE.AmbientLight(0xffffff, 0.7);
+      scene.add(ambLight);
+
+      const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+      dirLight.position.set(3, 5, 3);
+      dirLight.castShadow = false;
+      scene.add(dirLight);
+
+      // Sol
+      const floorGeo = new THREE.PlaneGeometry(20, 20);
+      const floorMat = new THREE.MeshStandardMaterial({
+        color: 0x111111,
+        roughness: 0.9,
+        metalness: 0.0,
+      });
+      floor = new THREE.Mesh(floorGeo, floorMat);
+      floor.rotation.x = -Math.PI / 2;
+      floor.position.y = 0;
+      scene.add(floor);
+
+      // Rig général pour bouger le corps d'un bloc
+      rig = new THREE.Group();
+      rig.position.y = 0; // 0 = pieds sur le sol
+      scene.add(rig);
+
+      // Matériaux gris
+      const gray = new THREE.MeshStandardMaterial({ color: 0xbdbdbd, metalness: 0.1, roughness: 0.6 });
+      const darkGray = new THREE.MeshStandardMaterial({ color: 0x8f8f8f, metalness: 0.2, roughness: 0.5 });
+
+      // Utility
+      const makeBone = (geo: import("three").BufferGeometry, mat = gray) => new THREE!.Mesh(geo, mat);
+
+      // Torse (boîte)
+      torso = makeBone(new THREE!.BoxGeometry(0.5, 0.7, 0.25), gray);
+      torso.position.set(0, 1.3, 0);
+      rig.add(torso);
+
+      // Tête (sphère)
+      head = new THREE!.Mesh(new THREE!.SphereGeometry(0.16, 24, 24), gray);
+      head.position.set(0, 1.75, 0);
+      rig.add(head);
+
+      // Bras
+      upperArmL = makeBone(new THREE!.CylinderGeometry(0.08, 0.08, 0.38, 16), darkGray);
+      upperArmL.position.set(-0.35, 1.45, 0);
+      upperArmL.rotation.z = Math.PI / 2.4;
+      rig.add(upperArmL);
+
+      lowerArmL = makeBone(new THREE!.CylinderGeometry(0.07, 0.07, 0.34, 16), gray);
+      lowerArmL.position.set(-0.62, 1.35, 0);
+      lowerArmL.rotation.z = Math.PI / 2.8;
+      rig.add(lowerArmL);
+
+      handL = makeBone(new THREE!.BoxGeometry(0.12, 0.1, 0.1), gray);
+      handL.position.set(-0.78, 1.28, 0);
+      rig.add(handL);
+
+      upperArmR = upperArmL.clone();
+      upperArmR.position.x = 0.35;
+      upperArmR.rotation.z = -Math.PI / 2.4;
+      rig.add(upperArmR);
+
+      lowerArmR = lowerArmL.clone();
+      lowerArmR.position.x = 0.62;
+      lowerArmR.rotation.z = -Math.PI / 2.8;
+      rig.add(lowerArmR);
+
+      handR = handL.clone();
+      handR.position.x = 0.78;
+      rig.add(handR);
+
+      // Jambes
+      upperLegL = makeBone(new THREE!.CylinderGeometry(0.1, 0.1, 0.5, 16), darkGray);
+      upperLegL.position.set(-0.16, 0.9, 0);
+      rig.add(upperLegL);
+
+      lowerLegL = makeBone(new THREE!.CylinderGeometry(0.09, 0.09, 0.48, 16), gray);
+      lowerLegL.position.set(-0.16, 0.55, 0.02);
+      rig.add(lowerLegL);
+
+      footL = makeBone(new THREE!.BoxGeometry(0.22, 0.08, 0.35), gray);
+      footL.position.set(-0.16, 0.15, 0.12);
+      rig.add(footL);
+
+      upperLegR = upperLegL.clone();
+      upperLegR.position.x = 0.16;
+      rig.add(upperLegR);
+
+      lowerLegR = lowerLegL.clone();
+      lowerLegR.position.x = 0.16;
+      rig.add(lowerLegR);
+
+      footR = footL.clone();
+      footR.position.x = 0.16;
+      rig.add(footR);
+
+      // Barre (utile pour tractions / OHP / deadlift)
+      bar = new THREE!.Mesh(new THREE!.CylinderGeometry(0.03, 0.03, 1.2, 16), new THREE!.MeshStandardMaterial({ color: 0xcccccc }));
+      bar.rotation.z = Math.PI / 2;
+      bar.visible = false; // par défaut
+      scene.add(bar);
+
+      // Ajuster taille renderer
+      const onResize = () => {
+        if (!renderer || !camera || !container) return;
+        const w = container.clientWidth;
+        const h = container.clientHeight;
+        renderer.setSize(w, h, false);
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+      };
+      onResize();
+      window.addEventListener("resize", onResize);
+
+      // Animation
+      const exo = normalizeExercise(exerciseOverride || analysis.exercise || analysis.movement_pattern || "");
+      const animate = (now: number) => {
+        const dt = (now - t0) / 1000;
+        t0 = now;
+
+        // phase de cycle (2.2s)
+        const cycle = 2.2;
+        const phase = (now / 1000) % cycle;
+        const t = easeInOut((phase / cycle) % 1);
+
+        // Reset de base (posture neutre)
+        resetPose();
+
+        // Appliquer mouvement selon exo
+        switch (exo) {
+          case "pullup":
+            bar.visible = true;
+            bar.position.set(0, 2.3, 0);
+            pullUp(t);
+            break;
+          case "squat":
+            squat(t);
+            break;
+          case "hinge":
+            deadliftHinge(t);
+            break;
+          case "lunge":
+            lunge(t);
+            break;
+          case "pushup":
+            pushup(t);
+            break;
+          case "ohp":
+            bar.visible = true;
+            bar.position.set(0, 1.55, 0.25);
+            overheadPress(t);
+            break;
+          default:
+            squat(t);
+            break;
+        }
+
+        renderer!.render(scene!, camera!);
+        rafRef.current = requestAnimationFrame(animate);
+      };
+
+      rafRef.current = requestAnimationFrame(animate);
+
+      // Nettoyage
+      return () => {
+        mounted = false;
+        if (rafRef.current) cancelAnimationFrame(rafRef.current);
+        window.removeEventListener("resize", onResize);
+        if (scene) {
+          // libère géométries/matériaux
+          scene.traverse((obj) => {
+            const m = obj as any;
+            if (m.geometry) m.geometry.dispose?.();
+            if (m.material) {
+              if (Array.isArray(m.material)) m.material.forEach((mm: any) => mm.dispose?.());
+              else m.material.dispose?.();
+            }
+          });
+        }
+        renderer?.dispose();
+        // let le GC faire son boulot
+        scene = null;
+        camera = null;
+        renderer = null;
+      };
+
+      // ==== Helpers d’anim ====
+
+      function resetPose() {
+        // positions verticales neutres
+        rig.position.y = 0;
+        torso.rotation.set(0, 0, 0);
+        head.position.set(0, 1.75, 0);
+
+        // bras neutres
+        upperArmL.rotation.set(0, 0, Math.PI / 2.4);
+        lowerArmL.rotation.set(0, 0, Math.PI / 2.8);
+        handL.rotation.set(0, 0, 0);
+
+        upperArmR.rotation.set(0, 0, -Math.PI / 2.4);
+        lowerArmR.rotation.set(0, 0, -Math.PI / 2.8);
+        handR.rotation.set(0, 0, 0);
+
+        // jambes neutres
+        upperLegL.rotation.set(0, 0, 0);
+        lowerLegL.rotation.set(0, 0, 0);
+        footL.rotation.set(0, 0, 0);
+
+        upperLegR.rotation.set(0, 0, 0);
+        lowerLegR.rotation.set(0, 0, 0);
+        footR.rotation.set(0, 0, 0);
+      }
+
+      function squat(t: number) {
+        // t : 0 -> haut / 1 -> bas
+        const depth = mix(0, 0.55, t < 0.5 ? t * 2 : (1 - t) * 2); // descente puis montée
+        rig.position.y = -depth * 0.5; // abaisse le corps
+        upperLegL.rotation.x = depth * 1.0;
+        lowerLegL.rotation.x = depth * 0.6;
+        upperLegR.rotation.x = depth * 1.0;
+        lowerLegR.rotation.x = depth * 0.6;
+
+        // torse légèrement penché (neutre si neutralSpine)
+        torso.rotation.x = depth * 0.25;
+      }
+
+      function deadliftHinge(t: number) {
+        // bis repetita : hinge = flexion hanche + dos incliné, jambes semi-tendues
+        const bend = mix(0.0, 0.9, t < 0.5 ? t * 2 : (1 - t) * 2);
+        torso.rotation.x = bend * 0.6;
+        upperLegL.rotation.x = bend * 0.2;
+        lowerLegL.rotation.x = bend * 0.15;
+        upperLegR.rotation.x = bend * 0.2;
+        lowerLegR.rotation.x = bend * 0.15;
+
+        // barre près des cuisses
+        bar.visible = true;
+        bar.position.set(0, 1.0 - bend * 0.4, 0.15);
+      }
+
+      function lunge(t: number) {
+        // fente alternée légère
+        const step = Math.sin(t * Math.PI * 2);
+        upperLegL.rotation.x = Math.max(0, step) * 0.9; // jambe avant plie
+        lowerLegL.rotation.x = Math.max(0, step) * 0.6;
+        upperLegR.rotation.x = Math.max(0, -step) * 0.9;
+        lowerLegR.rotation.x = Math.max(0, -step) * 0.6;
+
+        rig.position.y = -Math.abs(step) * 0.25;
+      }
+
+      function pushup(t: number) {
+        // pompes : on bouge le rig comme si c’était le torse vers le sol
+        const depth = mix(0.0, 0.45, t < 0.5 ? t * 2 : (1 - t) * 2);
+        rig.position.y = -depth * 0.35;
+        torso.rotation.x = depth * 0.15;
+
+        // “plier” les coudes
+        upperArmL.rotation.z = Math.PI / 2.4 + depth * 0.3;
+        lowerArmL.rotation.z = Math.PI / 2.8 + depth * 0.4;
+        upperArmR.rotation.z = -Math.PI / 2.4 - depth * 0.3;
+        lowerArmR.rotation.z = -Math.PI / 2.8 - depth * 0.4;
+      }
+
+      function overheadPress(t: number) {
+        // développé militaire : bras qui montent, barre au-dessus
+        const lift = mix(0.0, 1.0, t < 0.5 ? t * 2 : (1 - t) * 2);
+        upperArmL.rotation.z = Math.PI / 2.4 - lift * 1.0;
+        lowerArmL.rotation.z = Math.PI / 2.8 - lift * 0.8;
+        upperArmR.rotation.z = -Math.PI / 2.4 + lift * 1.0;
+        lowerArmR.rotation.z = -Math.PI / 2.8 + lift * 0.8;
+
+        bar.position.y = 1.1 + lift * 0.6;
+      }
+
+      function pullUp(t: number) {
+        // tractions : le corps monte vers la barre
+        const up = mix(0.0, 1.0, t < 0.5 ? t * 2 : (1 - t) * 2);
+        const rise = up * 0.9;
+
+        rig.position.y = rise * 0.9; // monter le corps
+        // bras qui se plient
+        upperArmL.rotation.z = Math.PI / 2.4 - up * 0.7;
+        lowerArmL.rotation.z = Math.PI / 2.8 - up * 0.9;
+        upperArmR.rotation.z = -Math.PI / 2.4 + up * 0.7;
+        lowerArmR.rotation.z = -Math.PI / 2.8 + up * 0.9;
+
+        // légère fermeture hanche/genoux
+        upperLegL.rotation.x = up * 0.15;
+        upperLegR.rotation.x = up * 0.15;
+      }
+    })();
+
+    return () => {
+      mounted = false;
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-    // on relance si l’exercice confirmé change
-  }, [analysis?.exercise, analysis?.movement_pattern, exerciseOverride, height]);
+  }, [analysis, exerciseOverride]);
 
   return (
-    <div className="w-full">
-      <div className="text-sm text-muted-foreground mb-2">
-        Démo 3D — <span className="font-medium">{labelize(exerciseOverride || analysis?.exercise || analysis?.movement_pattern || "Exercice")}</span>
+    <div ref={containerRef} className="w-full border rounded-2xl overflow-hidden relative" style={{ height }}>
+      <canvas ref={canvasRef} className="w-full h-full block" />
+      <div className="absolute top-2 left-2 rounded bg-black/60 text-white text-[11px] px-2 py-1">
+        Mannequin 3D (démo)
       </div>
-      <div
-        ref={mountRef}
-        // ⚠️ on force une hauteur non nulle pour éviter le 0x0
-        style={{ width: "100%", height, minHeight: height, background: "#0b0b0b", borderRadius: 12, overflow: "hidden" }}
-        className="border"
-      />
-      <p className="text-xs text-muted-foreground mt-2">
-        Le mannequin rejoue l’exercice confirmé, en version corrigée, <b>sans afficher ta vidéo</b>.
-      </p>
     </div>
   );
 }
 
-/* ======================= Mannequin ======================= */
+/* ====================== Helpers ====================== */
 
-function buildMannequin(): THREE.Group {
-  const grp = new THREE.Group();
-
-  const gray = new THREE.MeshStandardMaterial({ color: 0xbfbfbf, roughness: 0.6, metalness: 0.05 });
-
-  // utilitaires géométrie
-  const sphere = (r: number) => new THREE.SphereGeometry(r, 24, 24);
-  const capsule = (r: number, h: number) => new THREE.CapsuleGeometry(r, h, 8, 16);
-
-  // Segments
-  const head = new THREE.Mesh(sphere(0.12), gray);
-
-  const chest = new THREE.Mesh(capsule(0.16, 0.14), gray);
-  chest.rotation.z = Math.PI / 2;
-
-  const pelvis = new THREE.Mesh(capsule(0.18, 0.1), gray);
-  pelvis.rotation.z = Math.PI / 2;
-
-  const upperArmL = new THREE.Mesh(capsule(0.07, 0.18), gray);
-  const upperArmR = new THREE.Mesh(capsule(0.07, 0.18), gray);
-  const forearmL = new THREE.Mesh(capsule(0.06, 0.18), gray);
-  const forearmR = new THREE.Mesh(capsule(0.06, 0.18), gray);
-
-  const thighL = new THREE.Mesh(capsule(0.09, 0.22), gray);
-  const thighR = new THREE.Mesh(capsule(0.09, 0.22), gray);
-  const shinL = new THREE.Mesh(capsule(0.08, 0.22), gray);
-  const shinR = new THREE.Mesh(capsule(0.08, 0.22), gray);
-
-  // Groupes articulations (pivot)
-  const root = new THREE.Group();
-  const spine = new THREE.Group();
-  const neck = new THREE.Group();
-  const shoulderL = new THREE.Group();
-  const shoulderR = new THREE.Group();
-  const elbowL = new THREE.Group();
-  const elbowR = new THREE.Group();
-  const hipL = new THREE.Group();
-  const hipR = new THREE.Group();
-  const kneeL = new THREE.Group();
-  const kneeR = new THREE.Group();
-
-  // Hiérarchie
-  root.add(pelvis);
-  root.add(spine);
-  spine.position.y = 0.28;
-  spine.add(chest);
-  chest.position.y = 0.0;
-
-  spine.add(neck);
-  neck.position.y = 0.24;
-  neck.add(head);
-  head.position.y = 0.14;
-
-  spine.add(shoulderL);
-  spine.add(shoulderR);
-  shoulderL.position.set(-0.22, 0.18, 0);
-  shoulderR.position.set(0.22, 0.18, 0);
-
-  shoulderL.add(upperArmL);
-  shoulderR.add(upperArmR);
-  upperArmL.rotation.z = Math.PI / 2;
-  upperArmR.rotation.z = Math.PI / 2;
-  upperArmL.position.x = -0.14;
-  upperArmR.position.x = 0.14;
-
-  shoulderL.add(elbowL);
-  shoulderR.add(elbowR);
-  elbowL.position.x = -0.28;
-  elbowR.position.x = 0.28;
-
-  elbowL.add(forearmL);
-  elbowR.add(forearmR);
-  forearmL.rotation.z = Math.PI / 2;
-  forearmR.rotation.z = Math.PI / 2;
-  forearmL.position.x = -0.14;
-  forearmR.position.x = 0.14;
-
-  root.add(hipL);
-  root.add(hipR);
-  hipL.position.set(-0.13, 0.08, 0);
-  hipR.position.set(0.13, 0.08, 0);
-
-  hipL.add(thighL);
-  hipR.add(thighR);
-  thighL.rotation.z = Math.PI / 2;
-  thighR.rotation.z = Math.PI / 2;
-  thighL.position.x = -0.16;
-  thighR.position.x = 0.16;
-
-  hipL.add(kneeL);
-  hipR.add(kneeR);
-  kneeL.position.x = -0.32;
-  kneeR.position.x = 0.32;
-
-  kneeL.add(shinL);
-  kneeR.add(shinR);
-  shinL.rotation.z = Math.PI / 2;
-  shinR.rotation.z = Math.PI / 2;
-  shinL.position.x = -0.14;
-  shinR.position.x = 0.14;
-
-  grp.add(root);
-  grp.userData = {
-    nodes: {
-      root,
-      spine,
-      neck,
-      shoulderL,
-      shoulderR,
-      elbowL,
-      elbowR,
-      hipL,
-      hipR,
-      kneeL,
-      kneeR,
-      // segments utiles si besoin plus tard
-      head,
-      chest,
-      pelvis,
-      upperArmL,
-      upperArmR,
-      forearmL,
-      forearmR,
-      thighL,
-      thighR,
-      shinL,
-      shinR,
-    },
-  };
-
-  return grp;
+function easeInOut(t: number) {
+  return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+}
+function mix(a: number, b: number, t: number) {
+  return a + (b - a) * t;
+}
+function normalizeExercise(raw: string) {
+  const s = (raw || "").toLowerCase();
+  if (/(pull-?up|traction|trac?tion)/.test(s)) return "pullup";
+  if (/(squat|goblet|front\s*squat)/.test(s)) return "squat";
+  if (/(deadlift|soulev|hinge|rdl|hip)/.test(s)) return "hinge";
+  if (/(lunge|fente)/.test(s)) return "lunge";
+  if (/(push-?up|pompe)/.test(s)) return "pushup";
+  if (/(overhead|ohp|militaire|shoulder\s*press)/.test(s)) return "ohp";
+  return "squat";
 }
 
-/* ======================= Animation ======================= */
-
-function animateMannequin(group: THREE.Group, exercise: string, t: number) {
-  const n = (group.userData?.nodes || {}) as any;
-
-  // Rythmes communs
-  const s = Math.sin;
-  const c = Math.cos;
-
-  // Réduire amplitude si nécessaire
-  const clamp = (v: number, a = -1, b = 1) => Math.min(b, Math.max(a, v));
-
-  // RESET léger (revient vers 0 pour éviter la dérive)
-  [n.spine, n.neck, n.shoulderL, n.shoulderR, n.elbowL, n.elbowR, n.hipL, n.hipR, n.kneeL, n.kneeR].forEach((g: THREE.Group) => {
-    if (!g) return;
-    g.rotation.x *= 0.9;
-    g.rotation.y *= 0.9;
-    g.rotation.z *= 0.9;
-  });
-
-  if (/pull|traction|chin|barre\s*fixe/.test(exercise)) {
-    // Tractions : coudes qui tirent vers le bas, épaules en abaissement, genoux légèrement fléchis
-    const r = (s(t * 2) * 0.6 + 0.6) * 0.9; // 0→~1.1
-    if (n.shoulderL && n.shoulderR) {
-      n.shoulderL.rotation.z = clamp(-r * 0.6, -1.2, 0);
-      n.shoulderR.rotation.z = clamp(r * 0.6, 0, 1.2);
-    }
-    if (n.elbowL && n.elbowR) {
-      n.elbowL.rotation.z = clamp(-r * 1.2, -1.8, 0);
-      n.elbowR.rotation.z = clamp(r * 1.2, 0, 1.8);
-    }
-    if (n.kneeL && n.kneeR) {
-      const k = (s(t * 2) * 0.3 + 0.3) * 0.4;
-      n.kneeL.rotation.z = -k;
-      n.kneeR.rotation.z = k;
-    }
-  } else if (/squat|goblet|front/.test(exercise)) {
-    // Squat : flexion/extension genoux/hanches
-    const d = (s(t * 2) * 0.5 + 0.5); // 0→1
-    const hip = -d * 1.0;
-    const knee = -d * 1.4;
-    if (n.hipL && n.hipR) {
-      n.hipL.rotation.z = hip;
-      n.hipR.rotation.z = -hip;
-    }
-    if (n.kneeL && n.kneeR) {
-      n.kneeL.rotation.z = knee;
-      n.kneeR.rotation.z = -knee;
-    }
-    if (n.spine) n.spine.rotation.x = d * 0.15; // buste légèrement penché
-  } else if (/deadlift|soulev|hinge|rdl|romanian/.test(exercise)) {
-    // Hinge : charnière de hanches + genoux peu fléchis
-    const d = (s(t * 2) * 0.5 + 0.5);
-    if (n.spine) n.spine.rotation.x = d * 0.5;
-    if (n.hipL && n.hipR) {
-      n.hipL.rotation.z = -d * 0.8;
-      n.hipR.rotation.z = d * 0.8;
-    }
-    if (n.kneeL && n.kneeR) {
-      n.kneeL.rotation.z = -d * 0.3;
-      n.kneeR.rotation.z = d * 0.3;
-    }
-  } else if (/push-?up|pompes?/.test(exercise)) {
-    // Pompes : coudes fléchissent/extend, buste qui descend
-    const d = (s(t * 2.2) * 0.5 + 0.5);
-    if (n.elbowL && n.elbowR) {
-      n.elbowL.rotation.z = -d * 1.2;
-      n.elbowR.rotation.z = d * 1.2;
-    }
-    if (n.spine) n.spine.rotation.x = d * 0.2;
-  } else if (/lunge|fente/.test(exercise)) {
-    // Fentes : alternance jambe avant/arrière
-    const d = s(t * 2);
-    if (n.hipL && n.hipR) {
-      n.hipL.rotation.z = -Math.max(0, d) * 1.0;
-      n.hipR.rotation.z = Math.max(0, -d) * 1.0;
-    }
-    if (n.kneeL && n.kneeR) {
-      n.kneeL.rotation.z = -Math.max(0, d) * 1.5;
-      n.kneeR.rotation.z = Math.max(0, -d) * 1.5;
-    }
-    if (n.spine) n.spine.rotation.y = d * 0.1;
-  } else if (/ohp|overhead|shoulder|développé/.test(exercise)) {
-    // Développé militaire : épaules + coudes poussent vers le haut
-    const d = (s(t * 2) * 0.5 + 0.5);
-    if (n.shoulderL && n.shoulderR) {
-      n.shoulderL.rotation.z = -d * 0.6;
-      n.shoulderR.rotation.z = d * 0.6;
-    }
-    if (n.elbowL && n.elbowR) {
-      n.elbowL.rotation.z = -d * 0.8;
-      n.elbowR.rotation.z = d * 0.8;
-    }
-    if (n.spine) n.spine.rotation.x = -d * 0.05;
-  } else {
-    // Par défaut : petit squat doux (toujours mieux que rien)
-    const d = (s(t * 2) * 0.5 + 0.5);
-    if (n.hipL && n.hipR) {
-      n.hipL.rotation.z = -d * 0.8;
-      n.hipR.rotation.z = d * 0.8;
-    }
-    if (n.kneeL && n.kneeR) {
-      n.kneeL.rotation.z = -d * 1.2;
-      n.kneeR.rotation.z = d * 1.2;
-    }
-  }
-}
-
-/* ======================= Helpers ======================= */
-
-function labelize(s: string) {
-  const x = s.trim();
-  return x ? x.charAt(0).toUpperCase() + x.slice(1) : x;
-}
