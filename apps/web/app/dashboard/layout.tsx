@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useMemo, useState } from "react";
@@ -6,7 +7,7 @@ import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
-// Petites icônes SVG inline (pas de lucide-react)
+// Icônes SVG inline (pas de librairies)
 function IconMenu(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden {...props}>
@@ -43,7 +44,7 @@ function IconSettings(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-// Petite séparation sans Radix
+// Séparateur simple
 function Separator({ className = "" }: { className?: string }) {
   return <div className={`h-px w-full bg-border ${className}`} />;
 }
@@ -77,8 +78,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="h-14 px-3 sm:px-4 flex items-center gap-2">
           <Button
             variant="ghost"
-            size="icon"
-            className="rounded-xl"
+            className="rounded-xl h-9 w-9 p-0 inline-grid place-items-center"
             onClick={() => setOpen(true)}
             aria-label="Ouvrir la navigation"
           >
@@ -88,7 +88,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
       </div>
 
-      {/* DRAWER (sans Radix) */}
+      {/* DRAWER */}
       {open && (
         <>
           {/* Overlay */}
