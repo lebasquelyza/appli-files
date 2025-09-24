@@ -12,9 +12,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import dynamic from "next/dynamic";
-
-// 👇 Humanoïde GLTF animé (charge un GLB avec clips)
 const GrayCoachHumanoid = dynamic(() => import("@/components/GrayCoachHumanoid"), { ssr: false });
+
 
 /* ===================== Types ===================== */
 interface AnalysisPoint { time: number; label: string; detail?: string; }
