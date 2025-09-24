@@ -12,8 +12,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import dynamic from "next/dynamic";
-const GrayCoach3DGLTF = dynamic(() => import("@/components/GrayCoach3DGLTF"), { ssr: false });
 
+const GrayCoach3DGLTF = dynamic(() => import("@/components/GrayCoach3DGLTF"), { ssr: false });
 
 /* ===================== Types ===================== */
 interface AnalysisPoint { time: number; label: string; detail?: string; }
@@ -492,34 +492,37 @@ function CoachAnalyzer() {
         </CardContent>
       </Card>
 
-     {/* Mannequin 3D — démo, ne montre jamais la vidéo du client */}
-<div className="lg:col-span-3">
-  <Card>
-    <CardHeader>
-      <CardTitle className="flex items-center gap-2">
-        ▶️ Mannequin 3D (démo)
-      </CardTitle>
-    </CardHeader>
-    <CardContent className="space-y-3">
-      {analysis ? (
-        <>
-          <GrayCoach3DGLTF
-            analysis={analysis}
-            exerciseOverride={confirmedExercise || undefined}
-            height={420}
-          />
-          <p className="text-xs text-muted-foreground">
-            Mannequin 3D qui rejoue l’exercice confirmé — ta vidéo n’est jamais affichée.
-          </p>
-        </>
-      ) : (
-        <div className="text-sm text-muted-foreground">
-          Aucune analyse. Lance l’analyse pour voir le mannequin 3D.
-        </div>
-      )}
-    </CardContent>
-  </Card>
-</div>
+      {/* Mannequin 3D — démo, ne montre jamais la vidéo du client */}
+      <div className="lg:col-span-3">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              ▶️ Mannequin 3D (démo)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {analysis ? (
+              <>
+                <GrayCoach3DGLTF
+                  analysis={analysis}
+                  exerciseOverride={confirmedExercise || undefined}
+                  height={420}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Mannequin 3D qui rejoue l’exercice confirmé — ta vidéo n’est jamais affichée.
+                </p>
+              </>
+            ) : (
+              <div className="text-sm text-muted-foreground">
+                Aucune analyse. Lance l’analyse pour voir le mannequin 3D.
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+} // ←←← FIN de CoachAnalyzer ✅
 
 /* ===================== Upload/Record ===================== */
 function UploadDrop({ onFile }: { onFile: (file: File) => void }) {
@@ -740,3 +743,12 @@ function loadImage(src: string): Promise<HTMLImageElement> {
     img.src = src;
   });
 }
+
+function EmptyState() {
+  return (
+    <div className="text-sm text-muted-foreground">
+      Importe une vidéo puis lance l’analyse pour obtenir le résumé ici.
+    </div>
+  );
+}
+
