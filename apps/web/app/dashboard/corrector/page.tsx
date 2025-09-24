@@ -11,7 +11,10 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import GrayCoach3DGLTF from "@/components/GrayCoach3DGLTF";
+// Si tu utilises le mannequin 2D (ancien) :
+// import GrayCoach from "@/components/GrayCoach";
+// Si tu utilises TON mannequin 3D démo : décommente l’import ci-dessous et la section d’affichage.
+// import GrayCoach3DGLTF from "@/components/GrayCoach3DGLTF";
 
 /* ===================== Types ===================== */
 interface AnalysisPoint { time: number; label: string; detail?: string; }
@@ -60,7 +63,7 @@ export default function Page() {
       <Section title="Filmer / Notes">
         <p className="text-sm text-muted-foreground mb-4">
           Enregistre une vidéo, ajoute ton ressenti, puis lance l’analyse IA. <br />
-          ✨ Nous t’affichons ensuite un <span className="font-medium">mannequin 3D gris</span> qui rejoue le mouvement en version corrigée — <i>sans afficher ta vidéo</i>.
+          ✨ Nous t’affichons ensuite une <span className="font-medium">silhouette grise</span> qui rejoue le mouvement en version corrigée — <i>sans afficher ta vidéo</i>.
         </p>
         <CoachAnalyzer />
       </Section>
@@ -86,7 +89,7 @@ function CoachAnalyzer() {
   const [overrideOpen, setOverrideOpen] = useState(false);
   const [overrideName, setOverrideName] = useState("");
 
-  // Exercice confirmé par l'utilisateur (pour piloter le mannequin)
+  // Exercice confirmé par l'utilisateur
   const [confirmedExercise, setConfirmedExercise] = useState<string | null>(null);
 
   // cooldown (429, 504)
@@ -161,6 +164,27 @@ function CoachAnalyzer() {
     return { path, readUrl: url as string };
   }
 
+  /** Petit helper : POST avec timeout et retry (504/429) */
+  async function postAnalyze(body: any, tries = 2) {
+    for (let i = 0; i < tries; i++) {
+      const res = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+        // abandon côté client si ça dépasse 25s
+        signal: AbortSignal.timeout(25_000),
+      });
+      if (res.ok) return res;
+      if (res.status !== 504 && res.status !== 429) {
+        const txt = await res.text().catch(() => "");
+        throw new Error(`analyze: HTTP ${res.status} ${txt}`);
+      }
+      // backoff avant retry
+      await new Promise((r) => setTimeout(r, 1500 * (i + 1)));
+    }
+    throw new Error("analyze: 504 retry épuisé");
+  }
+
   /** Lance l'analyse. Si `userExercise` est fourni, il est passé au backend pour forcer le contexte. */
   const onAnalyze = async (userExercise?: string) => {
     if (!file || isAnalyzing || cooldown > 0) return;
@@ -171,14 +195,14 @@ function CoachAnalyzer() {
     setErrorMsg("");
 
     try {
-      // 0) EXTRACTION — 12 frames -> 2 mosaïques 1280×720 (JPEG 0.6)
-      const { frames, timestamps } = await extractFramesFromFile(file, 12);
+      // 0) EXTRACTION — 8 frames -> 2 mosaïques 960×540 (JPEG 0.5)
+      const { frames, timestamps } = await extractFramesFromFile(file, 8);
       if (!frames.length) throw new Error("Impossible d’extraire des images de la vidéo.");
       setProgress(12);
 
       const half = Math.ceil(frames.length / 2);
-      const mosaic1 = await makeMosaic(frames.slice(0, half), 3, 2, 1280, 720, 0.6);
-      const mosaic2 = await makeMosaic(frames.slice(half), 3, 2, 1280, 720, 0.6);
+      const mosaic1 = await makeMosaic(frames.slice(0, half), 3, 2, 960, 540, 0.5);
+      const mosaic2 = await makeMosaic(frames.slice(half), 3, 2, 960, 540, 0.5);
       const mosaics = [mosaic1, mosaic2];
       const midTime = timestamps[Math.floor(timestamps.length / 2)] || 0;
 
@@ -216,37 +240,13 @@ function CoachAnalyzer() {
 
       const overrideHint = userExercise ? `Exercice exécuté indiqué par l'utilisateur : "${userExercise}".` : "";
 
-      const res = await fetch("/api/analyze", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          frames: mosaics,
-          timestamps: [midTime],
-          feeling,
-          economyMode: true,
-          promptHints: [baseHints, overrideHint].filter(Boolean).join(" "),
-        }),
+      const res = await postAnalyze({
+        frames: mosaics,
+        timestamps: [midTime],
+        feeling,
+        economyMode: true,
+        promptHints: [baseHints, overrideHint].filter(Boolean).join(" "),
       });
-
-      if (!res.ok) {
-        const retryAfterHdr = res.headers.get("retry-after");
-        const retryAfter = parseInt(retryAfterHdr || "", 10);
-        const seconds = Number.isFinite(retryAfter)
-          ? retryAfter
-          : res.status === 504
-          ? 12
-          : res.status === 429
-          ? 20
-          : 0;
-
-        if (res.status === 429 || res.status === 504) {
-          setCooldown(seconds);
-          setStatus(`Réessaie dans ${seconds}s…`);
-        }
-
-        const txt = await res.text().catch(() => "");
-        throw new Error(`analyze: HTTP ${res.status} ${txt}`);
-      }
 
       const data: Partial<AIAnalysis> = await res.json();
 
@@ -285,6 +285,8 @@ function CoachAnalyzer() {
       const msg = e?.message || String(e);
       setErrorMsg(msg);
       setStatus("");
+      // si 504 => petit cooldown pour éviter le spam
+      if (/504/.test(msg)) setCooldown(15);
       alert(`Erreur pendant l'analyse: ${msg}`);
     } finally {
       setIsAnalyzing(false);
@@ -299,8 +301,8 @@ function CoachAnalyzer() {
   const openOverride = () => { setOverrideOpen(true); setOverrideName(""); };
   const submitOverride = async () => {
     if (!overrideName.trim()) return;
-    setConfirmedExercise(overrideName.trim());
-    await onAnalyze(overrideName.trim());
+    setConfirmedExercise(overrideName.trim()); // fige le choix utilisateur
+    await onAnalyze(overrideName.trim());      // relance l'analyse avec le contexte
     setShowChoiceGate(false);
     setOverrideOpen(false);
   };
@@ -360,7 +362,7 @@ function CoachAnalyzer() {
             <div className="space-y-2">
               <label className="text-xs text-muted-foreground">Fichier chargé</label>
               {/* On n'affiche PAS la vidéo du client */}
-              <div className="rounded-2xl border p-2 text-xs text-muted-foreground flex items-center justify-between">
+              <div className="rounded-xl border p-2 text-xs text-muted-foreground flex items-center justify-between">
                 <span className="truncate flex items-center gap-1">🎞️ {fileName ?? "clip.webm"}</span>
                 <button className="inline-flex items-center gap-1 hover:text-foreground" onClick={reset}>↺ Réinitialiser</button>
               </div>
@@ -424,7 +426,7 @@ function CoachAnalyzer() {
               </div>
 
               {overrideOpen && (
-                <div className="mt-2 rounded-2xl border p-3 space-y-2">
+                <div className="mt-2 rounded-xl border p-3 space-y-2">
                   <label className="text-xs text-muted-foreground">Quel exercice fais-tu ?</label>
                   <div className="flex items-center gap-2">
                     <Input
@@ -490,28 +492,31 @@ function CoachAnalyzer() {
         </CardContent>
       </Card>
 
-      {/* Mannequin 3D — démonstration (sans ta vidéo) */}
+      {/* Silhouette / Mannequin — garde ta section existante */}
       <div className="lg:col-span-3">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              ▶️ Mannequin 3D (démo) — sans ta vidéo
+              ▶️ Silhouette corrigée (sans ta vidéo)
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {analysis ? (
               <>
-                <GrayCoach3DGLTF
-                  analysis={analysis}
-                  exerciseOverride={confirmedExercise || undefined}
-                />
+                {/* ----
+                  Laisse ici la version que tu utilises déjà.
+                  - Pour ton mannequin 3D démo :
+                      <GrayCoach3DGLTF analysis={analysis} exerciseOverride={confirmedExercise || undefined} />
+                  - Pour l’ancien 2D :
+                      <GrayCoach analysis={analysis} />
+                ---- */}
                 <p className="text-xs text-muted-foreground">
-                  Le mannequin rejoue l’exercice confirmé, en version corrigée, <b>sans afficher ta vidéo</b>.
+                  Cette animation illustre la posture à viser d'après l'analyse, <b>sans afficher ta vidéo</b>.
                 </p>
               </>
             ) : (
               <div className="text-sm text-muted-foreground">
-                Aucune analyse. Enregistre ou importe un clip pour lancer l’analyse et voir le mannequin 3D.
+                Aucune analyse. Enregistre ou importe un clip pour lancer l’analyse et voir la silhouette corrigée.
               </div>
             )}
           </CardContent>
@@ -630,7 +635,7 @@ function getBestMimeType() {
   const candidates = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm", "video/mp4"];
   for (const c of candidates) {
     // @ts-ignore
-    if (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(c)) return c;
+    if (typeof MediaRecorder !== "undefined" && (MediaRecorder as any).isTypeSupported && (MediaRecorder as any).isTypeSupported(c)) return c;
   }
   return "video/webm";
 }
@@ -645,7 +650,7 @@ async function fakeProgress(setter: (v: number) => void, from: number, to: numbe
 }
 
 /** ➜ Extrait N frames JPEG (dataURL) d’un fichier vidéo local. */
-async function extractFramesFromFile(file: File, nFrames = 12): Promise<{ frames: string[]; timestamps: number[] }> {
+async function extractFramesFromFile(file: File, nFrames = 8): Promise<{ frames: string[]; timestamps: number[] }> {
   const videoURL = URL.createObjectURL(file);
   try {
     const video = document.createElement("video");
@@ -686,7 +691,7 @@ async function extractFramesFromFile(file: File, nFrames = 12): Promise<{ frames
       canvas.width = width;
       canvas.height = height;
       ctx.drawImage(video as any, 0, 0, width, height);
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.6);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.5); // qualité réduite
       frames.push(dataUrl);
       timestamps.push(Math.round(t));
     }
@@ -718,7 +723,7 @@ function bestFit(w: number, h: number, maxW: number, maxH: number) {
 }
 
 /** Construit une mosaïque WxH depuis une liste d’images (dataURL). */
-async function makeMosaic(images: string[], gridW = 3, gridH = 2, outW = 1280, outH = 720, quality = 0.6): Promise<string> {
+async function makeMosaic(images: string[], gridW = 3, gridH = 2, outW = 960, outH = 540, quality = 0.5): Promise<string> {
   const cvs = document.createElement("canvas");
   const ctx = cvs.getContext("2d")!;
   cvs.width = outW;
