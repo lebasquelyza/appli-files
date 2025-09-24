@@ -51,11 +51,411 @@ function Spinner({ className = "" }: { className?: string }) {
   );
 }
 
+/* ===================== Vocabulaire & Variations (étendu) ===================== */
+
+// --- Random helpers ---
+function randInt(max: number) {
+  if (typeof crypto !== "undefined" && "getRandomValues" in crypto) {
+    const a = new Uint32Array(1);
+    crypto.getRandomValues(a);
+    return a[0] % max;
+  }
+  return Math.floor(Math.random() * max);
+}
+function pick<T>(arr: T[]): T { return arr[randInt(arr.length)]; }
+
+// --- Lexique FR (style coach) ---
+const LEX = {
+  core: ["gainage", "sangle abdominale", "ceinture abdominale"],
+  braceVerb: ["gaine", "serre", "verrouille", "contracte"],
+  neutralSpine: ["rachis neutre", "dos plat", "alignement lombaire neutre"],
+  chestUp: ["poitrine fière", "sternum haut", "buste ouvert"],
+  shoulderPack: ["épaules abaissées/serrées", "omoplates basses/rétractées", "pack scapulaire"],
+  avoidMomentum: ["évite l’élan", "pas d’à-coups", "contrôle le mouvement"],
+  controlCue: ["amplitude contrôlée", "mouvement maîtrisé", "contrôle sur toute l’amplitude"],
+  rangeCue: ["amplitude utile", "range complet sans douleur", "aller-retour propre"],
+  tempoIntro: ["Tempo", "Cadence", "Rythme"],
+  tempo201: ["2–0–1", "2-0-1", "2s-0-1s"],
+  tempo311: ["3–1–1", "3-1-1", "3s-1-1s"],
+  breathe: ["souffle sur l’effort", "expire à la phase concentrique", "inspire au retour"],
+  footTripod: ["appuis trépied (talon + base gros/petit orteil)", "ancre tes pieds"],
+  kneeTrack: ["genoux dans l’axe", "genoux suivent la pointe de pieds", "pas de valgus"],
+  hipBack: ["hanche en arrière", "charnière franche", "pense fesses loin derrière"],
+  gluteCue: ["pousse le talon", "chasse le talon", "guide le talon"],
+  holdTop: ["marque 1 s en contraction", "pause 1 s en pic de contraction", "garde 1 s en haut"],
+  grip: ["prise ferme", "serre la barre", "poignées verrouillées"],
+  elbowPathPush: ["coudes ~45° du buste", "coudes sous la barre", "coudes ni trop ouverts ni collés"],
+  elbowPathPull: ["coudes près du buste", "coudes vers la hanche", "coudes sous la ligne d’épaule"],
+  latDepress: ["abaisse les épaules", "déprime les scapulas", "descends les omoplates"],
+  scapRetract: ["rétracte les omoplates", "serre les omoplates", "omoplates tirées en arrière"],
+  wristNeutral: ["poignets neutres", "poignets alignés", "pas cassés"],
+  headNeutral: ["regard neutre", "nuque longue", "évite l’hyperextension cervicale"],
+};
+
+// --- Catégories d’exos ---
+type Category =
+  | "squat" | "lunge" | "hinge" | "hipthrust" | "legpress"
+  | "quad_iso" | "ham_iso" | "calf"
+  | "pull_vertical" | "pull_horizontal" | "row_chest" | "face_pull"
+  | "push_horizontal" | "push_vertical" | "dip" | "pushup" | "fly" | "lateral_raise" | "front_raise" | "rear_delt"
+  | "biceps" | "triceps"
+  | "core_plank" | "core_anti_rotation" | "core_flexion"
+  | "carry" | "sled"
+  | "unknown";
+
+// --- Aliases d’exercices -> catégories (regex en minuscules) ---
+const EXO_ALIASES: Array<{ rx: RegExp; cat: Category }> = [
+  // Bas du corps – genou dominant
+  { rx: /(squat|front\s*squat|goblet|hack\s*squat|sissy)/, cat: "squat" },
+  { rx: /(lunge|fente|split\s*squat|walking\s*lunge|bulgarian)/, cat: "lunge" },
+  { rx: /(leg\s*press|presse\s*à\s*jambes)/, cat: "legpress" },
+  { rx: /(leg\s*extension|extension\s*quadriceps)/, cat: "quad_iso" },
+
+  // Bas du corps – hanche dominante
+  { rx: /(deadlift|soulev|hinge|rdl|romanian|good\s*morning|hip\s*hinge)/, cat: "hinge" },
+  { rx: /(hip\s*thrust|pont\s*de\s*hanches|glute\s*bridge)/, cat: "hipthrust" },
+  { rx: /(leg\s*curl|ischio|hamstring\s*curl)/, cat: "ham_iso" },
+  { rx: /(calf|mollet|élévation\s*mollets|standing\s*calf|seated\s*calf)/, cat: "calf" },
+
+  // Dos – tirages
+  { rx: /(pull[-\s]?up|traction)/, cat: "pull_vertical" },
+  { rx: /(lat\s*pulldown|tirage\s*vertical)/, cat: "pull_vertical" },
+  { rx: /(row|tirage\s*horizontal|barbell\s*row|pendlay|cable\s*row|seated\s*row)/, cat: "pull_horizontal" },
+  { rx: /(chest\s*supported\s*row|row\s*appui\s*pector)/, cat: "row_chest" },
+  { rx: /(face\s*pull)/, cat: "face_pull" },
+
+  // Pecs/épaules – poussées
+  { rx: /(bench|développé\s*couché|décliné|incliné)/, cat: "push_horizontal" },
+  { rx: /(ohp|overhead|militaire|shoulder\s*press|arnold)/, cat: "push_vertical" },
+  { rx: /(push[-\s]?up|pompe)/, cat: "pushup" },
+  { rx: /(dip|dips)/, cat: "dip" },
+  { rx: /(fly|écarté|pec\s*deck)/, cat: "fly" },
+  { rx: /(lateral\s*raise|élévation\s*latérale)/, cat: "lateral_raise" },
+  { rx: /(front\s*raise|élévation\s*frontale)/, cat: "front_raise" },
+  { rx: /(rear\s*delt|oiseau|reverse\s*fly)/, cat: "rear_delt" },
+
+  // Bras
+  { rx: /(curl|biceps)/, cat: "biceps" },
+  { rx: /(triceps|pushdown|extension\s*triceps|kickback|overhead\s*extension)/, cat: "triceps" },
+
+  // Core
+  { rx: /(plank|planche|side\s*plank|gainage\s*latéral|hollow)/, cat: "core_plank" },
+  { rx: /(pallof|anti[-\s]?rotation|carry\s*offset)/, cat: "core_anti_rotation" },
+  { rx: /(crunch|sit[-\s]?up|leg\s*raise|mountain\s*climber|russian\s*twist)/, cat: "core_flexion" },
+
+  // Conditioning/fortifiants
+  { rx: /(farmer|carry)/, cat: "carry" },
+  { rx: /(sled|prowler|traîneau)/, cat: "sled" },
+];
+
+function getCategory(exo: string): Category {
+  const s = (exo || "").toLowerCase();
+  for (const { rx, cat } of EXO_ALIASES) if (rx.test(s)) return cat;
+  return "unknown";
+}
+
+// Assainir/varier certains termes
+function varyTerms(s: string) {
+  if (!s) return s;
+  let out = s;
+
+  // bannir "tronc"
+  out = out.replace(/\btronc\b/gi, pick(LEX.core));
+
+  // standardiser quelques mots en version coach (variations)
+  out = out
+    .replace(/\bcolonne\b/gi, pick(LEX.neutralSpine))
+    .replace(/\bdos droit\b/gi, pick(LEX.neutralSpine))
+    .replace(/\bdos plat\b/gi, pick(LEX.neutralSpine))
+    .replace(/\bcore\b/gi, pick(LEX.core))
+    .replace(/\btenez\b/gi, "garde")
+    .replace(/\bmaintenez\b/gi, "garde");
+
+  return out;
+}
+
+// Déduplique + mélange
+function uniqueShuffle(arr: string[]) {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const s of arr) {
+    const key = s.toLowerCase().trim();
+    if (!seen.has(key)) { seen.add(key); out.push(s); }
+  }
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = randInt(i + 1);
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+// Génération de corrections variées selon la catégorie
+function makeCorrections(exo: string) {
+  const cat = getCategory(exo);
+  const tips: string[] = [];
+
+  // Universels posture & respiration
+  const universal = [
+    `Garde un ${pick(LEX.neutralSpine)} avec ${pick(LEX.chestUp)}.`,
+    `${pick(LEX.breathe)}.`,
+    `${pick(LEX.wristNeutral)} et ${pick(LEX.headNeutral)}.`,
+  ];
+
+  // Stabilité ceinture scapulaire/prise (haut du corps)
+  const upperStab = [
+    `${pick(LEX.shoulderPack)}.`,
+    `${pick(LEX.grip)}.`,
+  ];
+
+  // Stabilité bassin & pieds (bas du corps)
+  const lowerStab = [
+    `${pick(LEX.footTripod)}.`,
+    `${pick(LEX.kneeTrack)}.`,
+  ];
+
+  // Catégories
+  switch (cat) {
+    case "squat":
+      tips.push(
+        `${pick(LEX.kneeTrack)}.`,
+        `${pick(LEX.footTripod)}.`,
+        `${pick(LEX.chestUp)}; descends en ${pick(LEX.controlCue)}.`,
+        `${pick(LEX.avoidMomentum)} — ${pick(LEX.tempoIntro)} ${pick(LEX.tempo311)}.`
+      );
+      break;
+
+    case "lunge":
+      tips.push(
+        `Fais un grand pas, ${pick(LEX.kneeTrack)}.`,
+        `Tronc haut, ${pick(LEX.neutralSpine)}; ${pick(LEX.controlCue)}.`,
+        `Stabilise le bassin (${pick(LEX.core)[0]}).`,
+        `${pick(LEX.tempoIntro)} ${pick(LEX.tempo201)}.`
+      );
+      break;
+
+    case "hinge":
+      tips.push(
+        `${pick(LEX.hipBack)}; genoux souples.`,
+        `${pick(LEX.neutralSpine)}; ${pick(LEX.scapRetract)}.`,
+        `${pick(LEX.grip)} et barre proche du corps.`,
+        `${pick(LEX.tempoIntro)} ${pick(LEX.tempo311)}.`
+      );
+      break;
+
+    case "hipthrust":
+      tips.push(
+        `Roule le bassin en rétroversion en haut; ${pick(LEX.holdTop)}.`,
+        `${pick(LEX.neutralSpine)} au point haut.`,
+        `${pick(LEX.controlCue)}; ${pick(LEX.breathe)}.`
+      );
+      break;
+
+    case "legpress":
+      tips.push(
+        `${pick(LEX.kneeTrack)}; pieds ni trop hauts ni trop bas.`,
+        `${pick(LEX.controlCue)}, colle le bas du dos au dossier (${pick(LEX.neutralSpine)}).`,
+        `${pick(LEX.avoidMomentum)}.`
+      );
+      break;
+
+    case "quad_iso":
+      tips.push(
+        `${pick(LEX.controlCue)}; verrou en haut sans claquer le genou.`,
+        `${pick(LEX.tempoIntro)} ${pick(LEX.tempo311)}.`,
+        `${pick(LEX.breathe)}.`
+      );
+      break;
+
+    case "ham_iso":
+      tips.push(
+        `${pick(LEX.controlCue)}; hanches stables.`,
+        `${pick(LEX.tempoIntro)} ${pick(LEX.tempo311)}.`,
+        `Pas d’à-coups, ressens l’ischio sur toute l’amplitude.`
+      );
+      break;
+
+    case "calf":
+      tips.push(
+        `${pick(LEX.controlCue)}; arrêt net en bas, ${pick(LEX.holdTop)}.`,
+        `${pick(LEX.rangeCue)}.`,
+        `${pick(LEX.tempoIntro)} ${pick(LEX.tempo311)}.`
+      );
+      break;
+
+    case "pull_vertical":
+      tips.push(
+        `${pick(LEX.latDepress)} avant de tirer; ${pick(LEX.elbowPathPull)}.`,
+        `${pick(LEX.shoulderPack)}.`,
+        `${pick(LEX.avoidMomentum)}.`
+      );
+      break;
+
+    case "pull_horizontal":
+    case "row_chest":
+      tips.push(
+        `${pick(LEX.scapRetract)}; ${pick(LEX.elbowPathPull)}.`,
+        `${pick(LEX.wristNeutral)}.`,
+        `${pick(LEX.controlCue)}, concentre-toi sur le dos.`
+      );
+      break;
+
+    case "face_pull":
+      tips.push(
+        `Coudes hauts, tire vers le visage; vise l’extern rot.`,
+        `${pick(LEX.shoulderPack)}.`,
+        `${pick(LEX.controlCue)}.`
+      );
+      break;
+
+    case "push_horizontal":
+      tips.push(
+        `${pick(LEX.elbowPathPush)}.`,
+        `${pick(LEX.shoulderPack)} sur le banc.`,
+        `${pick(LEX.wristNeutral)}; ${pick(LEX.avoidMomentum)}.`
+      );
+      break;
+
+    case "push_vertical":
+      tips.push(
+        `${pick(LEX.elbowPathPush)} (barre au-dessus de la ligne d’oreilles).`,
+        `${pick(LEX.core)[0]} solide; fessiers contractés.`,
+        `${pick(LEX.wristNeutral)}; ${pick(LEX.controlCue)}.`
+      );
+      break;
+
+    case "dip":
+      tips.push(
+        `Corps légèrement penché; coudes suivent la trajectoire, pas d’épaules qui montent.`,
+        `${pick(LEX.shoulderPack)}.`,
+        `${pick(LEX.controlCue)}.`
+      );
+      break;
+
+    case "pushup":
+      tips.push(
+        `${pick(LEX.elbowPathPush)}; ${pick(LEX.neutralSpine)} (pas de bassin qui s’affaisse).`,
+        `${pick(LEX.core)[0]} serrée tout du long.`,
+        `${pick(LEX.avoidMomentum)} — ${pick(LEX.tempoIntro)} ${pick(LEX.tempo201)}.`
+      );
+      break;
+
+    case "fly":
+      tips.push(
+        `${pick(LEX.controlCue)}; coudes légèrement fléchis constants.`,
+        `${pick(LEX.shoulderPack)}.`,
+        `${pick(LEX.rangeCue)} sans douleur.`
+      );
+      break;
+
+    case "lateral_raise":
+      tips.push(
+        `Élévation par le côté, pouces légèrement vers le sol/ neutres.`,
+        `${pick(LEX.shoulderPack)}; évite de “tricher” avec l’élan.`,
+        `${pick(LEX.tempoIntro)} ${pick(LEX.tempo311)}.`
+      );
+      break;
+
+    case "front_raise":
+      tips.push(
+        `Montée frontale sans cambrer; ${pick(LEX.core)[0]} active.`,
+        `${pick(LEX.controlCue)}.`,
+        `${pick(LEX.wristNeutral)}.`
+      );
+      break;
+
+    case "rear_delt":
+      tips.push(
+        `Buste penché, tire par les coudes, pas par les mains.`,
+        `${pick(LEX.scapRetract)} sans hausser les épaules.`,
+        `${pick(LEX.controlCue)}.`
+      );
+      break;
+
+    case "biceps":
+      tips.push(
+        `${pick(LEX.wristNeutral)}; coudes fixes près du buste.`,
+        `${pick(LEX.avoidMomentum)}.`,
+        `${pick(LEX.tempoIntro)} ${pick(LEX.tempo311)}.`
+      );
+      break;
+
+    case "triceps":
+      tips.push(
+        `Coudes stables, près de la tête/du buste selon la variante.`,
+        `${pick(LEX.wristNeutral)}; ${pick(LEX.controlCue)}.`,
+        `${pick(LEX.breathe)}.`
+      );
+      break;
+
+    case "core_plank":
+      tips.push(
+        `${pick(LEX.neutralSpine)}; rétroversion légère du bassin.`,
+        `${pick(LEX.braceVerb)} ta ${pick(LEX.core)}.`,
+        `Respiration calme, tension constante.`
+      );
+      break;
+
+    case "core_anti_rotation":
+      tips.push(
+        `Résiste à la rotation; épaules et hanches carrées.`,
+        `${pick(LEX.braceVerb)} la ${pick(LEX.core)}.`,
+        `${pick(LEX.controlCue)}.`
+      );
+      break;
+
+    case "core_flexion":
+      tips.push(
+        `Roulement vertèbre par vertèbre; pas de tirage nuque.`,
+        `${pick(LEX.braceVerb)} la ${pick(LEX.core)} et souffle en montée.`,
+        `${pick(LEX.controlCue)}.`
+      );
+      break;
+
+    case "carry":
+      tips.push(
+        `${pick(LEX.braceVerb)} la ${pick(LEX.core)}; épaules basses.`,
+        `Démarche contrôlée, projection verticale haute.`,
+        `${pick(LEX.grip)}.`
+      );
+      break;
+
+    case "sled":
+      tips.push(
+        `Inclinaison du buste selon la charge; poussée continue.`,
+        `${pick(LEX.footTripod)}; ${pick(LEX.kneeTrack)}.`,
+        `${pick(LEX.avoidMomentum)}.`
+      );
+      break;
+
+    default:
+      tips.push(
+        `Contrôle l’amplitude et garde un ${pick(LEX.neutralSpine)}.`,
+        `${pick(LEX.braceVerb)} ta ${pick(LEX.core)} pour rester stable.`,
+        `${pick(LEX.avoidMomentum)}.`
+      );
+      break;
+  }
+
+  // Ajoute 1–2 universels contextuels
+  if (["pull_vertical","pull_horizontal","row_chest","face_pull","push_horizontal","push_vertical","dip","pushup","fly","lateral_raise","front_raise","rear_delt","biceps","triceps"].includes(cat)) {
+    tips.push(pick(upperStab));
+  } else if (["squat","lunge","hinge","hipthrust","legpress","quad_iso","ham_iso","calf"].includes(cat)) {
+    tips.push(pick(lowerStab));
+  } else {
+    tips.push(pick(universal));
+  }
+
+  // Une phrase “tempo/contrôle” bonus au hasard
+  if (randInt(2) === 0) tips.push(`${pick(LEX.tempoIntro)} ${pick(randInt(2) ? LEX.tempo201 : LEX.tempo311)}.`);
+
+  return uniqueShuffle(tips);
+}
+
 /* ===================== Page ===================== */
 export default function Page() {
   return (
     <>
-      <PageHeader title="Files te corrige" subtitle="Conseils IA sur ta posture — sans 3D" />
+      <PageHeader title="Files te corrige" subtitle="Conseils IA sur ta technique — sans 3D" />
       <Section title="Filmer / Notes">
         <p className="text-sm text-muted-foreground mb-4">
           Enregistre une vidéo, ajoute ton ressenti, puis lance l’analyse IA. <br />
@@ -212,7 +612,6 @@ function CoachAnalyzer() {
       const baseHints =
         `Tu reçois des mosaïques issues d’une VIDEO (pas une photo). ` +
         `Identifie l'exercice et détecte les ERREURS TECHNIQUES. Réponds en FRANÇAIS.`;
-
       const overrideHint = userExercise ? `Exercice exécuté indiqué par l'utilisateur : "${userExercise}".` : "";
 
       const res = await fetch("/api/analyze", {
@@ -266,6 +665,26 @@ function CoachAnalyzer() {
         movement_pattern: typeof (data as any)?.movement_pattern === "string" ? (data as any).movement_pattern : undefined,
         skeleton_cues: Array.isArray((data as any)?.skeleton_cues) ? (data as any).skeleton_cues : [],
       };
+
+      /* ===== Post-traitement "style coach" + variations ===== */
+      // 1) Variations sur le texte brut
+      safe.overall = varyTerms(safe.overall);
+
+      // 2) Variations sur les fautes/corrections IA
+      safe.faults = (safe.faults || []).map((f) => ({
+        ...f,
+        issue: varyTerms(f.issue || ""),
+        correction: varyTerms(f.correction || ""),
+      }));
+
+      // 3) Génère un lot de corrections variées et mélange avec celles de l’IA
+      safe.corrections = uniqueShuffle([
+        ...makeCorrections(safe.exercise || ""),
+        ...(safe.corrections || []).map(varyTerms),
+      ]).slice(0, 5); // 3–5 lignes lisibles
+
+      // 4) Optionnel : reformater les muscles
+      safe.muscles = (safe.muscles || []).map(varyTerms);
 
       // 3) Proposer la confirmation avant d'afficher les détails
       setAnalysis(safe);
@@ -468,7 +887,7 @@ function CoachAnalyzer() {
               {(issuesLine || correctionsLine) && (
                 <div className="space-y-1">
                   {issuesLine && <p className="text-sm"><span className="font-medium">Erreur détectée :</span> {issuesLine}</p>}
-                  {correctionsLine && <p className="text-sm"><span className="font-medium">Correction :</span> {correctionsLine}</p>}
+                  {correctionsLine && <p className="text-sm"><span className="font-medium">Corrections :</span> {correctionsLine}</p>}
                 </div>
               )}
 
