@@ -1,3 +1,4 @@
+// apps/web/components/GrayCoach3DGLTF.tsx
 "use client";
 
 /**
@@ -84,8 +85,9 @@ export default function GrayCoach3DGLTF({
       // Scene + Camera
       scene = new THREE.Scene();
       camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
-      camera.position.set(0, 1.5, 4);
-      camera.lookAt(0, 1.0, 0);
+      // cadrage plus naturel et un chouïa en plongée
+      camera.position.set(0.8, 1.8, 4.6);
+      camera.lookAt(0, 1.4, 0);
       scene.add(camera);
 
       // Lumières
@@ -185,7 +187,7 @@ export default function GrayCoach3DGLTF({
 
       // Barre (traction / OHP / deadlift)
       bar = new THREE!.Mesh(
-        new THREE!.CylinderGeometry(0.03, 0.03, 1.2, 16),
+        new THREE!.CylinderGeometry(0.03, 0.03, 1.25, 20),
         new THREE!.MeshStandardMaterial({ color: 0xcccccc })
       );
       bar.rotation.z = Math.PI / 2;
@@ -200,6 +202,13 @@ export default function GrayCoach3DGLTF({
         renderer.setSize(w, h, false);
         camera.aspect = w / h;
         camera.updateProjectionMatrix();
+
+        // recadrage mobile: si très étroit, recule un peu
+        if (w < 420) {
+          camera.position.set(0.9, 1.9, 5.2);
+        } else {
+          camera.position.set(0.8, 1.8, 4.6);
+        }
       };
       onResize();
       window.addEventListener("resize", onResize);
@@ -228,7 +237,6 @@ export default function GrayCoach3DGLTF({
       }
 
       function squat(t: number) {
-        // t : 0 -> haut / 1 -> bas, puis remonte
         const d = mix(0, 0.55, t < 0.5 ? t * 2 : (1 - t) * 2);
         rig.position.y = -d * 0.5;
         upperLegL.rotation.x = d * 1.0;
@@ -279,17 +287,43 @@ export default function GrayCoach3DGLTF({
       }
 
       function pullUp(t: number) {
+        // t: 0 -> bas (bras presque tendus) ; 1 -> menton au-dessus de la barre
         const up = mix(0.0, 1.0, t < 0.5 ? t * 2 : (1 - t) * 2);
-        const rise = up * 0.9;
-        rig.position.y = rise * 0.9;
-        upperArmL.rotation.z = Math.PI / 2.4 - up * 0.7;
-        lowerArmL.rotation.z = Math.PI / 2.8 - up * 0.9;
-        upperArmR.rotation.z = -Math.PI / 2.4 + up * 0.7;
-        lowerArmR.rotation.z = -Math.PI / 2.8 + up * 0.9;
-        upperLegL.rotation.x = up * 0.15;
-        upperLegR.rotation.x = up * 0.15;
+
+        // barre visible, au-dessus de la tête
         bar.visible = true;
-        bar.position.set(0, 2.3, 0);
+        bar.position.set(0, 2.35, 0.0);
+
+        // légère extension thoracique (dépression scapulaire)
+        torso.rotation.x = -0.06;
+
+        // bras au-dessus de la tête : de 1.35rad (début) à 0.65rad (haut)
+        const startUpper = 1.35;
+        const endUpper = 0.65;
+        upperArmL.rotation.z = mix(startUpper, endUpper, up);
+        upperArmR.rotation.z = -mix(startUpper, endUpper, up);
+
+        // coudes de ~1.05rad vers ~0 (très fléchi)
+        const startLower = 1.05;
+        const endLower = 0.0;
+        lowerArmL.rotation.z = mix(startLower, endLower, up);
+        lowerArmR.rotation.z = -mix(startLower, endLower, up);
+
+        // corps qui monte
+        const rise = up * 0.95;
+        rig.position.y = rise * 0.85;
+
+        // hollow body léger
+        const hollow = 0.12 * up;
+        upperLegL.rotation.x = hollow * 0.8;
+        upperLegR.rotation.x = hollow * 0.8;
+
+        // tout en haut : petite adduction scapulaire
+        if (up > 0.85) {
+          torso.rotation.x = -0.02;
+          upperArmL.rotation.z -= 0.06;
+          upperArmR.rotation.z += 0.06;
+        }
       }
 
       // ====== Animation loop ======
@@ -303,6 +337,17 @@ export default function GrayCoach3DGLTF({
         const t = easeInOut((phase / cycle) % 1);
 
         resetPose();
+
+        // pose “ready” pour pull-up: bras au-dessus, prise largeur épaules
+        if (exo === "pullup") {
+          bar.visible = true;
+          bar.position.set(0, 2.35, 0.0);
+          upperArmL.rotation.z = 1.35;
+          lowerArmL.rotation.z = 1.05;
+          upperArmR.rotation.z = -1.35;
+          lowerArmR.rotation.z = -1.05;
+          torso.rotation.x = -0.06;
+        }
 
         switch (exo) {
           case "pullup":
@@ -354,17 +399,12 @@ export default function GrayCoach3DGLTF({
         camera = null;
       };
 
-      // Assure le cleanup si l'effet est démonté très vite
       if (!mounted) cleanup();
-
-      // Enregistre le cleanup sur window pour debug éventuel (facultatif)
-      (window as any).__grayCoachCleanup = cleanup;
     })();
 
     return () => {
       mounted = false;
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      // le reste du cleanup est appelé par la IIFE si nécessaire
     };
   }, [analysis, exerciseOverride]);
 
