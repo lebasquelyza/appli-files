@@ -501,7 +501,7 @@ function CoachAnalyzer() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {analysis ? (
+            {analysis && !showChoiceGate ? (
               <>
                 <GrayCoach3DGLTF
                   analysis={analysis}
@@ -514,7 +514,7 @@ function CoachAnalyzer() {
               </>
             ) : (
               <div className="text-sm text-muted-foreground">
-                Aucune analyse. Lance l’analyse pour voir le mannequin 3D.
+                Confirme d’abord l’exercice pour afficher la démo 3D.
               </div>
             )}
           </CardContent>
@@ -522,7 +522,7 @@ function CoachAnalyzer() {
       </div>
     </div>
   );
-} // ←←← FIN de CoachAnalyzer ✅
+} // ← FIN de CoachAnalyzer
 
 /* ===================== Upload/Record ===================== */
 function UploadDrop({ onFile }: { onFile: (file: File) => void }) {
@@ -751,4 +751,3 @@ function EmptyState() {
     </div>
   );
 }
-
