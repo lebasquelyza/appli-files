@@ -492,50 +492,34 @@ function CoachAnalyzer() {
         </CardContent>
       </Card>
 
-      {/* Silhouette corrigée — remplace toute visualisation de la vidéo */}
-      <div className="lg:col-span-3">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              ▶️ Silhouette corrigée (sans ta vidéo)
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {analysis ? (
-              <>
-                {/* On force le mannequin à suivre l'exercice CONFIRMÉ */}
-                <GrayCoach
-                  analysis={{
-                    ...analysis,
-                    exercise: (confirmedExercise || analysis.exercise || "inconnu")
-                  }}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Cette animation illustre la posture à viser d'après l'analyse, <b>sans afficher ta vidéo</b>.
-                </p>
-              </>
-            ) : (
-              <div className="text-sm text-muted-foreground">
-                Aucune analyse. Enregistre ou importe un clip pour lancer l’analyse et voir la silhouette corrigée.
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  );
-}
-
-function EmptyState() {
-  return (
-    <div className="rounded-2xl border p-4 text-sm text-muted-foreground">
-      Aucune analyse pour l'instant. Ajoute une vidéo et ton ressenti, puis clique <span className="font-medium">Lancer l'analyse IA</span>.
-      <div className="mt-3 flex flex-wrap gap-2">
-        <Badge>Posture</Badge><Badge>Amplitudes</Badge><Badge>Symétrie</Badge><Badge>Rythme</Badge>
-      </div>
-    </div>
-  );
-}
+     {/* Mannequin 3D — démo, ne montre jamais la vidéo du client */}
+<div className="lg:col-span-3">
+  <Card>
+    <CardHeader>
+      <CardTitle className="flex items-center gap-2">
+        ▶️ Mannequin 3D (démo)
+      </CardTitle>
+    </CardHeader>
+    <CardContent className="space-y-3">
+      {analysis ? (
+        <>
+          <GrayCoach3DGLTF
+            analysis={analysis}
+            exerciseOverride={confirmedExercise || undefined}
+            height={420}
+          />
+          <p className="text-xs text-muted-foreground">
+            Mannequin 3D qui rejoue l’exercice confirmé — ta vidéo n’est jamais affichée.
+          </p>
+        </>
+      ) : (
+        <div className="text-sm text-muted-foreground">
+          Aucune analyse. Lance l’analyse pour voir le mannequin 3D.
+        </div>
+      )}
+    </CardContent>
+  </Card>
+</div>
 
 /* ===================== Upload/Record ===================== */
 function UploadDrop({ onFile }: { onFile: (file: File) => void }) {
