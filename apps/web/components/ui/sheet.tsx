@@ -7,7 +7,6 @@ import { cn } from "@/lib/utils";
 const Sheet = DialogPrimitive.Root;
 const SheetTrigger = DialogPrimitive.Trigger;
 const SheetClose = DialogPrimitive.Close;
-
 const SheetPortal = DialogPrimitive.Portal;
 
 const SheetOverlay = React.forwardRef<
@@ -26,7 +25,6 @@ const SheetOverlay = React.forwardRef<
 SheetOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
 type SheetSide = "top" | "bottom" | "left" | "right";
-
 const sideClasses: Record<SheetSide, string> = {
   top: "inset-x-0 top-0 border-b data-[state=open]:slide-in-from-top data-[state=closed]:slide-out-to-top",
   bottom: "inset-x-0 bottom-0 border-t data-[state=open]:slide-in-from-bottom data-[state=closed]:slide-out-to-bottom",
@@ -63,7 +61,6 @@ SheetContent.displayName = DialogPrimitive.Content.displayName;
 const SheetHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
   <div className={cn("flex flex-col space-y-1.5 text-center sm:text-left", className)} {...props} />
 );
-
 const SheetFooter = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
   <div className={cn("flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2", className)} {...props} />
 );
