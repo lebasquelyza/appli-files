@@ -13,7 +13,8 @@ import { Progress } from "@/components/ui/progress";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import dynamic from "next/dynamic";
 
-const GrayCoach3DGLTF = dynamic(() => import("@/components/GrayCoach3DGLTF"), { ssr: false });
+// 👇 Humanoïde GLTF animé (charge un GLB avec clips)
+const GrayCoachHumanoid = dynamic(() => import("@/components/GrayCoachHumanoid"), { ssr: false });
 
 /* ===================== Types ===================== */
 interface AnalysisPoint { time: number; label: string; detail?: string; }
@@ -62,7 +63,7 @@ export default function Page() {
       <Section title="Filmer / Notes">
         <p className="text-sm text-muted-foreground mb-4">
           Enregistre une vidéo, ajoute ton ressenti, puis lance l’analyse IA. <br />
-          ✨ Nous t’affichons ensuite une <span className="font-medium">silhouette grise</span> qui rejoue le mouvement en version corrigée — <i>sans afficher ta vidéo</i>.
+          ✨ Nous t’affichons ensuite un <span className="font-medium">humanoïde 3D</span> qui rejoue l’exercice confirmé — <i>sans afficher ta vidéo</i>.
         </p>
         <CoachAnalyzer />
       </Section>
@@ -328,10 +329,10 @@ function CoachAnalyzer() {
   // ===== Helpers "Erreur détectée / Correction" =====
   function faultsToLines(a: AIAnalysis | null) {
     if (!a) return { issuesLine: "", correctionsLine: "" };
-    const issues = (a.faults || []).map(f => (f?.issue || "").trim()).filter(Boolean);
-    const faultCorrections = (a.faults || []).map(f => (f?.correction || "").trim()).filter(Boolean);
+    const issues = (a?.faults || []).map(f => (f?.issue || "").trim()).filter(Boolean);
+    const faultCorrections = (a?.faults || []).map(f => (f?.correction || "").trim()).filter(Boolean);
     const issuesLine = issues.join(" - ");
-    const correctionsBase = faultCorrections.length ? faultCorrections : (a.corrections || []);
+    const correctionsBase = faultCorrections.length ? faultCorrections : (a?.corrections || []);
     const correctionsLine = (correctionsBase || []).join(" - ");
     return { issuesLine, correctionsLine };
   }
@@ -492,24 +493,25 @@ function CoachAnalyzer() {
         </CardContent>
       </Card>
 
-      {/* Mannequin 3D — démo, ne montre jamais la vidéo du client */}
+      {/* Humanoïde 3D — n’apparaît qu’après confirmation */}
       <div className="lg:col-span-3">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              ▶️ Mannequin 3D (démo)
+              ▶️ Humanoïde 3D (démo)
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {analysis && !showChoiceGate ? (
               <>
-                <GrayCoach3DGLTF
+                <GrayCoachHumanoid
                   analysis={analysis}
                   exerciseOverride={confirmedExercise || undefined}
                   height={420}
+                  // modelUrl="/models/humanoid.glb" // change si besoin
                 />
                 <p className="text-xs text-muted-foreground">
-                  Mannequin 3D qui rejoue l’exercice confirmé — ta vidéo n’est jamais affichée.
+                  Humanoïde animé sur l’exercice confirmé — ta vidéo n’est jamais affichée.
                 </p>
               </>
             ) : (
