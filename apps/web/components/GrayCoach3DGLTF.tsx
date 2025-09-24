@@ -2,154 +2,177 @@
 
 import React, { useEffect, useRef } from "react";
 import * as THREE from "three";
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 
 type Props = {
   analysis: any;
-  /** Nom confirmé par l’utilisateur (prioritaire) */
+  /** Exercice confirmé prioritaire */
   exerciseOverride?: string;
+  /** Optionnel: "athletic" | "slim" | "curvy" */
+  bodyType?: "athletic" | "slim" | "curvy";
 };
 
 /**
- * GrayCoach3DGLTF (démo améliorée)
- * - Silhouette “humaine” athlétique (épaules/pecs/lats/bassin + segments)
- * - Mains et pieds simples
- * - Animations dédiées (pull-up, squat, hinge, fente, pompes, OHP) plus réalistes
- * - Three.js pur (pas de @react-three/*) -> OK en build Netlify
+ * Mannequin 3D “humain”
+ * - Morphologie lisible: tête/cou, tronc (pecs + lats), bassin,
+ *   bras/avant-bras + mains, cuisses/mollets + pieds.
+ * - Lignes d’arêtes (wire) pour renforcer la lecture “humain”.
+ * - Animations démos crédibles: pull-up, squat, hinge, lunge, push-up, OHP.
+ * - Three.js pur (aucune dépendance R3F) => compatible build Netlify.
  */
-export default function GrayCoach3DGLTF({ analysis, exerciseOverride }: Props) {
+export default function GrayCoach3DGLTF({
+  analysis,
+  exerciseOverride,
+  bodyType = "athletic",
+}: Props) {
   const mountRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (!mountRef.current) return;
     const container = mountRef.current;
+    if (!container) return;
 
     // ---------- Renderer / Scene / Camera ----------
-    const width = container.clientWidth || 640;
-    const height = container.clientHeight || 420;
+    const w = container.clientWidth || 640;
+    const h = container.clientHeight || 440;
+
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x0b0b0b);
 
-    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 200);
-    camera.position.set(2.9, 1.9, 3.9);
+    const camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 200);
+    camera.position.set(2.8, 1.9, 3.8);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
-    renderer.setSize(width, height);
+    renderer.setSize(w, h);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     container.appendChild(renderer.domElement);
 
-    // ---------- Lights ----------
-    const amb = new THREE.AmbientLight(0xffffff, 0.8);
-    scene.add(amb);
+    // ---------- Lights (key + rim + hemi) ----------
+    scene.add(new THREE.AmbientLight(0xffffff, 0.5));
     const key = new THREE.DirectionalLight(0xffffff, 1.1);
     key.position.set(4, 6, 3);
-    key.castShadow = false;
     scene.add(key);
-    const rim = new THREE.DirectionalLight(0xffffff, 0.55);
-    rim.position.set(-4, 5, -3);
+    const rim = new THREE.DirectionalLight(0xffffff, 0.45);
+    rim.position.set(-4, 4.5, -3);
     scene.add(rim);
+    const hemi = new THREE.HemisphereLight(0xeeeeff, 0x111118, 0.35);
+    scene.add(hemi);
 
-    // ---------- Ground ----------
-    const groundGeo = new THREE.PlaneGeometry(40, 40);
-    const groundMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 1, metalness: 0 });
-    const ground = new THREE.Mesh(groundGeo, groundMat);
+    // ---------- Sol + horizon ----------
+    const floorY = -1.12;
+    const ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(40, 40),
+      new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 1 })
+    );
     ground.rotation.x = -Math.PI / 2;
-    ground.position.y = -1.12;
+    ground.position.y = floorY;
     scene.add(ground);
 
-    const grid = new THREE.GridHelper(40, 40, 0x2b2b2b, 0x1a1a1a);
-    (grid.material as THREE.LineBasicMaterial).opacity = 0.25;
-    (grid.material as THREE.LineBasicMaterial).transparent = true;
-    grid.position.y = -1.119;
-    scene.add(grid);
+    const horizon = new THREE.Mesh(
+      new THREE.PlaneGeometry(50, 20),
+      new THREE.MeshBasicMaterial({ color: 0x0e0e0e })
+    );
+    horizon.position.set(0, 2.2, -6.5);
+    scene.add(horizon);
 
-    // ---------- Materials ----------
-    const skin = new THREE.Color(0xb9b9b9);
-    const darker = new THREE.Color(0x969696);
-    const bodyMat = new THREE.MeshStandardMaterial({ color: skin, roughness: 0.7, metalness: 0.15 });
-    const jointMat = new THREE.MeshStandardMaterial({ color: darker, roughness: 0.7, metalness: 0.25 });
-    const barMat = new THREE.MeshStandardMaterial({ color: 0x6d6d6d, roughness: 0.4, metalness: 0.7 });
+    // ---------- Matériaux ----------
+    const base = new THREE.Color(0xbdbdbd);     // peau grise claire
+    const joint = new THREE.Color(0x969696);    // articulations
+    const dark = new THREE.Color(0x6a6a6a);     // accessoires
+    const bodyMat = new THREE.MeshStandardMaterial({ color: base, roughness: 0.6, metalness: 0.15 });
+    const jointMat = new THREE.MeshStandardMaterial({ color: joint, roughness: 0.6, metalness: 0.2 });
+    const accentMat = new THREE.MeshStandardMaterial({ color: dark, roughness: 0.5, metalness: 0.4 });
 
-    // ---------- Geometry helpers ----------
-    const Capsule = (r = 0.2, h = 1, sr = 12, sh = 18) =>
+    // ---------- Helper geom ----------
+    const Capsule =
       (THREE as any).CapsuleGeometry
-        ? new (THREE as any).CapsuleGeometry(r, Math.max(h - 2 * r, 0.0001), sr, sh)
-        : new THREE.CylinderGeometry(r, r, h, Math.max(16, sh));
+        ? (r = 0.2, h = 1, sr = 14, sh = 18) => new (THREE as any).CapsuleGeometry(r, Math.max(h - 2 * r, 0.0001), sr, sh)
+        : (r = 0.2, h = 1, seg = 24) => new THREE.CylinderGeometry(r, r, h, seg);
 
-    // ---------- Rig (proportions athlétiques ~1m80) ----------
+    // ---------- Proportions selon bodyType ----------
+    const scaleMul =
+      bodyType === "slim" ? 0.92 :
+      bodyType === "curvy" ? 1.08 : 1.0;
+
+    // hauteurs/longueurs de base (taille ~1.78 m fictive)
+    const headR = 0.115 * scaleMul;
+    const neckLen = 0.11 * scaleMul;
+    const chestLen = 0.30 * scaleMul;
+    const spineLen = 0.50 * scaleMul;
+    const pelvisDrop = -0.12 * scaleMul;
+
+    const upperArm = 0.32 * scaleMul;
+    const foreArm = 0.29 * scaleMul;
+    const thighLen = 0.45 * scaleMul;
+    const shinLen = 0.44 * scaleMul;
+
+    // ---------- Rig complet ----------
     const mannequin = new THREE.Group();
     scene.add(mannequin);
 
-    const headR = 0.11;
-    const neckLen = 0.11;
-    const chestLen = 0.28;
-    const spineLen = 0.50;
-    const pelvisDrop = -0.12;
-
-    const upperArm = 0.32;
-    const foreArm = 0.29;
-    const thighLen = 0.44;
-    const shinLen = 0.43;
-    const footL = 0.24;
-    const footH = 0.07;
-
-    // Pelvis (visuel “bassin” plus large)
+    // Bassin (forme lisible)
     const pelvis = new THREE.Object3D();
     pelvis.position.set(0, pelvisDrop, 0);
     mannequin.add(pelvis);
 
-    const pelvisMesh = new THREE.Mesh(Capsule(0.23, 0.22), bodyMat);
-    pelvisMesh.scale.set(1.15, 1, 1); // un peu plus de largeur bassin
-    pelvisMesh.position.y = 0.12;
+    const pelvisMesh = new THREE.Mesh(Capsule(0.24 * scaleMul, 0.22 * scaleMul), bodyMat);
+    pelvisMesh.scale.set(1.15, 1, 1.05); // largeur bassin
+    pelvisMesh.position.y = 0.12 * scaleMul;
     pelvis.add(pelvisMesh);
 
-    // Spine + chest (pecs + lats subtils)
+    // Colonne + cage thoracique “athlétique” (pecs/lats)
     const spine = new THREE.Object3D();
-    spine.position.set(0, 0.02, 0);
+    spine.position.y = 0.02 * scaleMul;
     pelvis.add(spine);
 
-    const spineMesh = new THREE.Mesh(Capsule(0.18, spineLen), bodyMat);
+    const spineMesh = new THREE.Mesh(Capsule(0.18 * scaleMul, spineLen), bodyMat);
     spineMesh.position.y = spineLen / 2;
     spine.add(spineMesh);
 
     const chest = new THREE.Object3D();
-    chest.position.set(0, spineLen, 0);
+    chest.position.y = spineLen;
     spine.add(chest);
 
-    // Thorax plus “athlétique”
-    const ribcage = new THREE.Mesh(Capsule(0.22, chestLen), bodyMat);
+    const ribcage = new THREE.Mesh(Capsule(0.23 * scaleMul, chestLen), bodyMat);
     ribcage.position.y = chestLen / 2;
-    ribcage.scale.set(1.12, 1, 1.06); // épaules/pecs un peu plus larges
+    ribcage.scale.set(1.18, 1, 1.06); // épaules
     chest.add(ribcage);
 
-    // Pectoraux (léger volume)
-    const pecs = new THREE.Mesh(new THREE.SphereGeometry(0.17, 18, 14), bodyMat);
-    pecs.scale.set(1.25, 0.6, 0.9);
-    pecs.position.set(0, chestLen * 0.65, 0.09);
+    // Pectoraux (volume lisible)
+    const pecs = new THREE.Mesh(new THREE.SphereGeometry(0.17 * scaleMul, 20, 16), bodyMat);
+    pecs.scale.set(1.35, 0.6, 0.9);
+    pecs.position.set(0, chestLen * 0.62, 0.10);
     chest.add(pecs);
 
-    // Lats (dos en V léger)
-    const lats = new THREE.Mesh(new THREE.SphereGeometry(0.2, 16, 12), bodyMat);
-    lats.scale.set(1.35, 0.6, 0.8);
-    lats.position.set(0, chestLen * 0.35, -0.05);
+    // Lats (dos en V)
+    const lats = new THREE.Mesh(new THREE.SphereGeometry(0.2 * scaleMul, 18, 14), bodyMat);
+    lats.scale.set(1.4, 0.6, 0.8);
+    lats.position.set(0, chestLen * 0.35, -0.06);
     chest.add(lats);
 
-    // Neck + head
+    // Cou + tête + traits (yeux) pour “humain”
     const neck = new THREE.Object3D();
-    neck.position.set(0, chestLen, 0);
+    neck.position.y = chestLen;
     chest.add(neck);
 
-    const neckMesh = new THREE.Mesh(Capsule(0.10, neckLen), bodyMat);
+    const neckMesh = new THREE.Mesh(Capsule(0.10 * scaleMul, neckLen), bodyMat);
     neckMesh.position.y = neckLen / 2;
     neck.add(neckMesh);
 
-    const head = new THREE.Mesh(new THREE.SphereGeometry(headR, 24, 20), bodyMat);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(headR, 28, 22), bodyMat);
     head.position.y = neckLen + headR;
     neck.add(head);
 
-    // Shoulders attachment
-    const shoulderW = 0.44;
+    // yeux (deux disques sombres)
+    const eyeGeo = new THREE.CircleGeometry(0.018 * scaleMul, 16);
+    const eyeMat = new THREE.MeshBasicMaterial({ color: 0x3f3f3f });
+    const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
+    const eyeR = new THREE.Mesh(eyeGeo, eyeMat);
+    eyeL.position.set(-0.035 * scaleMul, headR * 0.15, headR * 0.96);
+    eyeR.position.set( 0.035 * scaleMul, headR * 0.15, headR * 0.96);
+    head.add(eyeL, eyeR);
+
+    // Épaules
+    const shoulderW = 0.46 * scaleMul;
     const shoulderY = chestLen * 0.78;
 
     const shoulderL = new THREE.Object3D();
@@ -160,18 +183,15 @@ export default function GrayCoach3DGLTF({ analysis, exerciseOverride }: Props) {
     shoulderR.position.set(shoulderW / 2, shoulderY, 0);
     chest.add(shoulderR);
 
-    // Arms (upper+forearm) + hands
+    // Bras
     function buildArm(side: "L" | "R") {
-      const s = side === "L" ? -1 : 1;
-
       const upper = new THREE.Object3D();
-      const upperMesh = new THREE.Mesh(Capsule(0.095, upperArm), jointMat);
+      const upperMesh = new THREE.Mesh(Capsule(0.10 * scaleMul, upperArm), jointMat);
       upperMesh.position.y = -upperArm / 2;
       upper.add(upperMesh);
 
-      // deltoïde (épaule) – visuel musclé
-      const delt = new THREE.Mesh(new THREE.SphereGeometry(0.12, 14, 12), jointMat);
-      delt.scale.set(1.1, 0.95, 1.1);
+      // deltoïde (boule épaissie)
+      const delt = new THREE.Mesh(new THREE.SphereGeometry(0.13 * scaleMul, 16, 14), jointMat);
       upper.add(delt);
 
       const elbow = new THREE.Object3D();
@@ -179,7 +199,7 @@ export default function GrayCoach3DGLTF({ analysis, exerciseOverride }: Props) {
       upper.add(elbow);
 
       const fore = new THREE.Object3D();
-      const foreMesh = new THREE.Mesh(Capsule(0.09, foreArm), jointMat);
+      const foreMesh = new THREE.Mesh(Capsule(0.095 * scaleMul, foreArm), jointMat);
       foreMesh.position.y = -foreArm / 2;
       fore.add(foreMesh);
 
@@ -187,35 +207,39 @@ export default function GrayCoach3DGLTF({ analysis, exerciseOverride }: Props) {
       wrist.position.y = -foreArm;
       fore.add(wrist);
 
-      // main simple (pour “saisir” la barre)
-      const hand = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.06, 0.08), jointMat);
-      hand.position.set(0, -0.03, 0);
-      wrist.add(hand);
+      // main (paume + phalanges simples)
+      const palm = new THREE.Mesh(new THREE.BoxGeometry(0.13 * scaleMul, 0.06 * scaleMul, 0.085 * scaleMul), jointMat);
+      palm.position.set(0, -0.03 * scaleMul, 0.0);
+      wrist.add(palm);
+
+      // pouce indicatif
+      const thumb = new THREE.Mesh(new THREE.CylinderGeometry(0.018 * scaleMul, 0.018 * scaleMul, 0.08 * scaleMul, 10), jointMat);
+      thumb.rotation.z = -Math.PI / 3;
+      thumb.position.set(0.06 * scaleMul * (side === "L" ? -1 : 1), -0.02 * scaleMul, 0.03 * scaleMul);
+      wrist.add(thumb);
 
       (side === "L" ? shoulderL : shoulderR).add(upper);
       elbow.add(fore);
 
-      return { upper, elbow, fore, wrist, hand, sideSign: s };
+      return { upper, elbow, fore, wrist, hand: palm, side: side === "L" ? -1 : 1 };
     }
 
     const armL = buildArm("L");
     const armR = buildArm("R");
 
-    // Hips & legs
-    const hipW = 0.28;
+    // Hanches & jambes
+    const hipW = 0.30 * scaleMul;
     const hipL = new THREE.Object3D();
-    hipL.position.set(-hipW / 2, 0.08, 0);
+    hipL.position.set(-hipW / 2, 0.09 * scaleMul, 0);
     pelvis.add(hipL);
 
     const hipR = new THREE.Object3D();
-    hipR.position.set(hipW / 2, 0.08, 0);
+    hipR.position.set( hipW / 2, 0.09 * scaleMul, 0);
     pelvis.add(hipR);
 
     function buildLeg(side: "L" | "R") {
-      const s = side === "L" ? -1 : 1;
-
       const thigh = new THREE.Object3D();
-      const thighMesh = new THREE.Mesh(Capsule(0.12, thighLen), jointMat);
+      const thighMesh = new THREE.Mesh(Capsule(0.13 * scaleMul, thighLen), jointMat);
       thighMesh.position.y = -thighLen / 2;
       thigh.add(thighMesh);
 
@@ -224,7 +248,7 @@ export default function GrayCoach3DGLTF({ analysis, exerciseOverride }: Props) {
       thigh.add(knee);
 
       const shin = new THREE.Object3D();
-      const shinMesh = new THREE.Mesh(Capsule(0.105, shinLen), jointMat);
+      const shinMesh = new THREE.Mesh(Capsule(0.11 * scaleMul, shinLen), jointMat);
       shinMesh.position.y = -shinLen / 2;
       shin.add(shinMesh);
 
@@ -232,80 +256,86 @@ export default function GrayCoach3DGLTF({ analysis, exerciseOverride }: Props) {
       ankle.position.y = -shinLen;
       shin.add(ankle);
 
-      const foot = new THREE.Mesh(new THREE.BoxGeometry(footL, footH, 0.11), jointMat);
-      foot.position.set(footL / 2 - 0.03, -footH / 2, 0);
+      // pied (forme “sneaker”)
+      const footLen = 0.26 * scaleMul;
+      const footH = 0.075 * scaleMul;
+      const foot = new THREE.Mesh(new THREE.BoxGeometry(footLen, footH, 0.12 * scaleMul), jointMat);
+      foot.position.set(footLen / 2 - 0.04 * scaleMul, -footH / 2, 0);
       ankle.add(foot);
 
       (side === "L" ? hipL : hipR).add(thigh);
       knee.add(shin);
 
-      return { thigh, knee, shin, ankle, foot, sideSign: s };
+      return { thigh, knee, shin, ankle, foot, side: side === "L" ? -1 : 1 };
     }
 
     const legL = buildLeg("L");
     const legR = buildLeg("R");
 
-    // Pull-up bar (visible seulement pour tractions)
-    const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.95, 24), barMat);
+    // Barre pour tractions
+    const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.03 * scaleMul, 0.03 * scaleMul, 2.0, 24), accentMat);
     bar.rotation.z = Math.PI / 2;
-    bar.position.set(0, 2.42, 0);
+    bar.position.set(0, 2.45 * scaleMul, 0);
     bar.visible = false;
     scene.add(bar);
 
-    // ---------- Camera controls ----------
-    const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.minDistance = 2.2;
-    controls.maxDistance = 6.0;
-    controls.target.set(0, 0.7, 0);
-    controls.update();
+    // ---------- Edges overlay (renforce silhouette humaine) ----------
+    function addEdges(mesh: THREE.Mesh, color = 0x2c2c2c, opacity = 0.35) {
+      const e = new THREE.EdgesGeometry(mesh.geometry, 40);
+      const l = new THREE.LineSegments(
+        e,
+        new THREE.LineBasicMaterial({ color, transparent: true, opacity })
+      );
+      mesh.add(l);
+    }
+    [pelvisMesh, spineMesh, ribcage, pecs, lats, head].forEach((m) => addEdges(m as THREE.Mesh));
 
-    // ---------- Pose helpers ----------
-    const toRad = (d: number) => (d * Math.PI) / 180;
-    const ease = (x: number) => 0.5 - 0.5 * Math.cos(Math.min(1, Math.max(0, x)) * Math.PI); // ease-in-out
-    const lerp = THREE.MathUtils.lerp;
+    // ---------- Helpers pose ----------
+    const rad = (d: number) => (d * Math.PI) / 180;
+    const ease = (x: number) => 0.5 - 0.5 * Math.cos(Math.min(1, Math.max(0, x)) * Math.PI);
+    const L = THREE.MathUtils.lerp;
 
     function setArm(
       arm: ReturnType<typeof buildArm>,
-      shFlex: number, // + = vers l’avant
-      shAbd: number,  // + = vers l’extérieur
-      shRot: number,  // rot interne/extern visuelle
+      shFlex: number, // + vers l’avant
+      shAbd: number,  // + écarter
+      shRot: number,  // rotation interne/externe
       elbowFlex: number
     ) {
-      arm.upper.rotation.set(toRad(-shFlex), toRad(shRot * arm.sideSign), toRad(shAbd * arm.sideSign));
-      arm.fore.rotation.set(toRad(-elbowFlex), 0, 0);
+      arm.upper.rotation.set(-rad(shFlex), rad(shRot * arm.side), rad(shAbd * arm.side));
+      arm.fore.rotation.set(-rad(elbowFlex), 0, 0);
     }
 
     function setLeg(
       leg: ReturnType<typeof buildLeg>,
-      hipFlex: number,  // + flex
-      hipAbd: number,   // + abd
-      kneeFlex: number, // + flex
-      dorsiflex: number // + tibia vers l’avant
+      hipFlex: number,
+      hipAbd: number,
+      kneeFlex: number,
+      dorsiflex: number
     ) {
-      leg.thigh.rotation.set(toRad(-hipFlex), 0, toRad(hipAbd * leg.sideSign));
-      leg.shin.rotation.set(toRad(kneeFlex), 0, 0);
-      leg.ankle.rotation.set(toRad(-dorsiflex), 0, 0);
+      leg.thigh.rotation.set(-rad(hipFlex), 0, rad(hipAbd * leg.side));
+      leg.shin.rotation.set(rad(kneeFlex), 0, 0);
+      leg.ankle.rotation.set(-rad(dorsiflex), 0, 0);
     }
 
     function neutral() {
       mannequin.position.set(0, 0, 0);
-      mannequin.rotation.set(0, 0.12, 0);
+      mannequin.rotation.set(0, 0.1, 0);
 
       pelvis.rotation.set(0, 0, 0);
       spine.rotation.set(0, 0, 0);
       chest.rotation.set(0, 0, 0);
       neck.rotation.set(0, 0, 0);
 
-      setArm(armL, 10, 8, 0, 15);
-      setArm(armR, 10, -8, 0, 15);
+      setArm(armL, 10, 10, 0, 12);
+      setArm(armR, 10, -10, 0, 12);
 
-      setLeg(legL, 0, 2, 0, 0);
-      setLeg(legR, 0, -2, 0, 0);
+      setLeg(legL, 0, 2, 5, 0);
+      setLeg(legR, 0, -2, 5, 0);
     }
     neutral();
 
-    // ---------- Exercise selection ----------
+    // ---------- Choix d’exercice ----------
     const label = (exerciseOverride || analysis?.exercise || "").toLowerCase();
     const isPullup = /(traction|pull[\s-]?up|chin[\s-]?up)/.test(label);
     const isSquat = /(squat|goblet)/.test(label);
@@ -316,180 +346,145 @@ export default function GrayCoach3DGLTF({ analysis, exerciseOverride }: Props) {
 
     bar.visible = isPullup;
 
-    // Position des mains sur barre (espacement épaules)
-    const handSpread = 0.42;
-    function attachHandsToBar() {
+    // largeur de prise pour la traction
+    const grip = 0.42 * scaleMul;
+
+    function handsToBar() {
       armL.wrist.position.set(0, -foreArm, 0);
       armR.wrist.position.set(0, -foreArm, 0);
-      // on “aligne” les mains sur la hauteur de la barre (en animation on ajuste les angles)
-      armL.hand.position.set(0, -0.03, 0);
-      armR.hand.position.set(0, -0.03, 0);
+      armL.upper.position.x = -grip / 2;
+      armR.upper.position.x = grip / 2;
     }
 
-    // ---------- Animate ----------
+    // ---------- Animation ----------
     const t0 = performance.now();
     let raf = 0;
 
-    const animate = () => {
+    const render = () => {
       const t = (performance.now() - t0) / 1000;
 
-      // reset pose
       neutral();
 
       if (isPullup) {
-        // cycle up/down
-        const cyc = (t * 0.85) % 2; // 0..2
-        const up = cyc < 1 ? ease(cyc) : ease(2 - cyc); // 0->1->0
-        const scapSet = ease(Math.min(1, cyc * 1.3)); // engagement scapulaire en début de montée
+        const cyc = (t * 0.85) % 2;
+        const up = cyc < 1 ? ease(cyc) : ease(2 - cyc);
+        const scap = ease(Math.min(1, cyc * 1.2));
 
-        // mains “sur” la barre visuellement
-        attachHandsToBar();
+        handsToBar();
 
-        // bras quasi tendus en bas -> forts coudes fléchis en haut
-        const elbow = lerp(10, 130, up);
-        // épaules en légère dépression + adduction quand on tire
-        const shAbd = lerp(25, 10, up); // mains largeur épaules
-        const shFlex = lerp(20, 35, up); // un peu de flexion à la montée
-        const shRot = lerp(0, -10, up);
+        const elbow = L(10, 130, up);
+        const shAbd = L(20, 10, up);
+        const shFlex = L(20, 40, up);
+        const shRot = L(0, -10, up);
 
         setArm(armL, shFlex, shAbd, shRot, elbow);
         setArm(armR, shFlex, -shAbd, -shRot, elbow);
 
-        // translation du corps : menton au-dessus de la barre au pic
-        mannequin.position.y = lerp(-0.35, 0.2, up);
+        // translation corps pour menton au-dessus de la barre
+        mannequin.position.y = L(-0.35 * scaleMul, 0.2 * scaleMul, up);
 
-        // scapular depression/retraction: baisser épaules + gonfler poitrine
-        chest.position.y = spineLen + lerp(0, 0.03, scapSet);
-        chest.rotation.x = -toRad(lerp(2, 6, up));
-        spine.rotation.x = -toRad(lerp(2, 6, up));
+        // poitrine ouverte + dépression scapulaire
+        chest.position.y = spineLen + L(0, 0.03, scap);
+        chest.rotation.x = -rad(L(2, 6, up));
+        spine.rotation.x = -rad(L(2, 6, up));
 
         // jambes tendues, pieds légèrement croisés
         setLeg(legL, 5, 2, 5, 0);
         setLeg(legR, 5, -2, 5, 0);
-        legR.thigh.rotation.z = toRad(4);
-        legL.thigh.rotation.z = toRad(-4);
-
-        // place les mains sous la barre visuellement (alignement Z)
-        const barY = bar.position.y;
-        const worldToLocal = (y: number) => y - mannequin.position.y;
-        armL.upper.parent!.updateMatrixWorld();
-        armR.upper.parent!.updateMatrixWorld();
-        // aligne l’extrémité du poignet proche de la barre sans calcul IK (démo simple)
-        armL.upper.rotation.x = -toRad(shFlex);
-        armR.upper.rotation.x = -toRad(shFlex);
-        armL.upper.rotation.z = toRad(shAbd);
-        armR.upper.rotation.z = toRad(-shAbd);
-        armL.fore.rotation.x = -toRad(elbow);
-        armR.fore.rotation.x = -toRad(elbow);
-
-        // move wrists roughly to bar height (petit ajustement visuel)
-        const wristY = worldToLocal(barY - 0.02);
-        armL.wrist.position.y = -foreArm + (wristY - (chest.position.y + shoulderY));
-        armR.wrist.position.y = -foreArm + (wristY - (chest.position.y + shoulderY));
-        // écarte les mains sur X pour correspondre à la largeur de prise
-        armL.upper.position.x = -handSpread / 2;
-        armR.upper.position.x = handSpread / 2;
+        legR.thigh.rotation.z = rad(4);
+        legL.thigh.rotation.z = rad(-4);
       } else if (isSquat) {
         const cyc = (t * 0.9) % 2;
         const depth = cyc < 1 ? ease(cyc) : ease(2 - cyc);
-        const knee = lerp(5, 100, depth);
-        const hip = lerp(0, 40, depth);
-        const ankle = lerp(0, 12, depth);
+        const knee = L(8, 105, depth);
+        const hip = L(0, 42, depth);
+        const ankle = L(0, 12, depth);
         setLeg(legL, hip, 2, knee, ankle);
         setLeg(legR, hip, -2, knee, ankle);
-        spine.rotation.x = -toRad(lerp(4, 14, depth));
-        chest.rotation.x = -toRad(lerp(2, 10, depth));
-        // bras en contrepoids
-        setArm(armL, lerp(10, 40, depth), 8, 0, 15);
-        setArm(armR, lerp(10, 40, depth), -8, 0, 15);
+        spine.rotation.x = -rad(L(4, 16, depth));
+        chest.rotation.x = -rad(L(2, 12, depth));
+        setArm(armL, L(10, 38, depth), 10, 0, 12);
+        setArm(armR, L(10, 38, depth), -10, 0, 12);
       } else if (isHinge) {
         const cyc = (t * 0.9) % 2;
         const amt = cyc < 1 ? ease(cyc) : ease(2 - cyc);
-        const hip = lerp(5, 60, amt);
-        const knee = lerp(5, 20, amt);
-        const ankle = lerp(0, 8, amt);
-        setLeg(legL, hip, 1, knee, ankle);
-        setLeg(legR, hip, -1, knee, ankle);
-        spine.rotation.x = -toRad(lerp(6, 26, amt));
-        chest.rotation.x = -toRad(lerp(6, 20, amt));
+        const hip = L(6, 62, amt);
+        const knee = L(6, 20, amt);
+        setLeg(legL, hip, 1, knee, 6);
+        setLeg(legR, hip, -1, knee, 6);
+        spine.rotation.x = -rad(L(8, 28, amt));
+        chest.rotation.x = -rad(L(6, 22, amt));
         setArm(armL, 8, 4, 0, 10);
         setArm(armR, 8, -4, 0, 10);
       } else if (isLunge) {
-        const alt = 0.5 + 0.5 * Math.sin(t * 1.2); // alterne jambe avant
-        const kneeF = lerp(10, 95, alt);
-        const hipF = lerp(0, 34, alt);
-        const ankleF = lerp(0, 12, alt);
+        const alt = 0.5 + 0.5 * Math.sin(t * 1.15);
+        const kneeF = L(12, 98, alt);
+        const hipF = L(0, 36, alt);
+        const ankleF = L(0, 12, alt);
         setLeg(legL, hipF, 1, kneeF, ankleF);
-        setLeg(legR, 10, -1, 15, 0);
-        spine.rotation.y = toRad(6 * Math.sin(t * 0.8));
-        setArm(armL, 18, 6, 0, 15);
+        setLeg(legR, 12, -1, 16, 3);
+        spine.rotation.y = rad(6 * Math.sin(t * 0.9));
+        setArm(armL, 18, 6, 0, 14);
         setArm(armR, 6, -6, 0, 12);
       } else if (isPushup) {
-        const cyc = (t * 1.4) % 2;
+        const cyc = (t * 1.35) % 2;
         const press = cyc < 1 ? ease(cyc) : ease(2 - cyc);
-        const elbow = lerp(10, 115, press);
-        setArm(armL, 28, 18, 0, elbow);
-        setArm(armR, 28, -18, 0, elbow);
-        spine.rotation.x = -toRad(lerp(12, 26, press));
-        chest.rotation.x = -toRad(lerp(8, 20, press));
+        const elbow = L(10, 115, press);
+        setArm(armL, 30, 18, 0, elbow);
+        setArm(armR, 30, -18, 0, elbow);
+        spine.rotation.x = -rad(L(10, 26, press));
+        chest.rotation.x = -rad(L(8, 20, press));
         setLeg(legL, 6, 1, 10, 5);
         setLeg(legR, 6, -1, 10, 5);
       } else if (isOHP) {
-        const cyc = (t * 1.1) % 2;
+        const cyc = (t * 1.05) % 2;
         const raise = cyc < 1 ? ease(cyc) : ease(2 - cyc);
-        const shoulderFlex = lerp(30, 165, raise);
-        const elbowFlex = lerp(20, 5, raise);
-        setArm(armL, shoulderFlex, 12, 0, elbowFlex);
-        setArm(armR, shoulderFlex, -12, 0, elbowFlex);
-        spine.rotation.x = -toRad(lerp(0, 6, raise));
+        const shoulderFlex = L(32, 170, raise);
+        const elbowFlex = L(20, 8, raise);
+        setArm(armL, shoulderFlex, 10, 0, elbowFlex);
+        setArm(armR, shoulderFlex, -10, 0, elbowFlex);
+        spine.rotation.x = -rad(L(0, 6, raise));
         setLeg(legL, 6, 2, 8, 3);
         setLeg(legR, 6, -2, 8, 3);
       } else {
-        // idle respiratoire léger
+        // respiration subtile (idle)
         const r = 0.5 + 0.5 * Math.sin(t * 0.9);
-        chest.position.y = spineLen + r * 0.01;
-        chest.rotation.x = -toRad(2 + r * 2);
+        chest.position.y = spineLen + r * 0.012;
+        chest.rotation.x = -rad(2 + r * 2.5);
       }
 
-      controls.update();
       renderer.render(scene, camera);
-      raf = requestAnimationFrame(animate);
+      raf = requestAnimationFrame(render);
     };
 
     // ---------- Resize ----------
     const onResize = () => {
-      if (!container) return;
-      const w = container.clientWidth || 640;
-      const h = container.clientHeight || 420;
-      renderer.setSize(w, h);
-      camera.aspect = w / h;
+      const W = container.clientWidth || 640;
+      const H = container.clientHeight || 440;
+      renderer.setSize(W, H);
+      camera.aspect = W / H;
       camera.updateProjectionMatrix();
     };
     window.addEventListener("resize", onResize);
 
-    animate();
+    render();
 
     // ---------- Cleanup ----------
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", onResize);
-      controls.dispose();
-      groundGeo.dispose();
-      (groundMat as any).dispose?.();
-      (grid.geometry as any).dispose?.();
-      (grid.material as any).dispose?.();
       renderer.dispose();
       container.removeChild(renderer.domElement);
     };
-  }, [analysis, exerciseOverride]);
+  }, [analysis, exerciseOverride, bodyType]);
 
-  const label = (exerciseOverride || analysis?.exercise || "exercice").trim();
+  const label = (exerciseOverride || analysis?.exercise || "exercice").trim() || "exercice";
 
   return (
     <div className="w-full">
-      <div ref={mountRef} className="w-full h-[440px] rounded-xl border overflow-hidden" />
+      <div ref={mountRef} className="w-full h-[460px] rounded-xl border overflow-hidden" />
       <p className="text-xs text-muted-foreground mt-2">
-        Mannequin 3D (démo) — <b>{label || "exercice"}</b>
+        Mannequin 3D (démo) — <b>{label}</b>
       </p>
     </div>
   );
