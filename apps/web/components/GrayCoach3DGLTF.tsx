@@ -1,11 +1,10 @@
-// apps/web/components/GrayCoach3DGLTF.tsx
 "use client";
 
 /**
  * Mannequin 3D "démo" sans R3F : pur Three.js sur <canvas>.
  * - Pas de dépendances @react-three/fiber / drei.
  * - Sûr pour Netlify/SSR : tout est côté client.
- * - Animation simple selon l'exercice (squat, deadlift/hinge, lunge, pushup, ohp, traction/pull-up).
+ * - Animation simple selon l'exercice (squat, hinge, lunge, pushup, ohp, pullup).
  */
 
 import React, { useEffect, useRef } from "react";
@@ -59,20 +58,18 @@ export default function GrayCoach3DGLTF({
     let bar: any; // barre de traction / haltère virtuel selon exo
     let floor: any, rig: any;
 
-    // états anim
     let t0 = performance.now();
 
     (async () => {
       if (!mounted) return;
 
       // Charger Three côté client
-      if (!THREE) {
-        THREE = await import("three");
-      }
+      if (!THREE) THREE = await import("three");
       if (!mounted || !THREE) return;
 
       const container = containerRef.current!;
       const canvas = canvasRef.current!;
+
       // Renderer
       renderer = new THREE.WebGLRenderer({
         canvas,
@@ -86,7 +83,6 @@ export default function GrayCoach3DGLTF({
 
       // Scene + Camera
       scene = new THREE.Scene();
-
       camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
       camera.position.set(0, 1.5, 4);
       camera.lookAt(0, 1.0, 0);
@@ -95,7 +91,6 @@ export default function GrayCoach3DGLTF({
       // Lumières
       const ambLight = new THREE.AmbientLight(0xffffff, 0.7);
       scene.add(ambLight);
-
       const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
       dirLight.position.set(3, 5, 3);
       dirLight.castShadow = false;
@@ -115,22 +110,21 @@ export default function GrayCoach3DGLTF({
 
       // Rig général pour bouger le corps d'un bloc
       rig = new THREE.Group();
-      rig.position.y = 0; // 0 = pieds sur le sol
+      rig.position.y = 0;
       scene.add(rig);
 
       // Matériaux gris
       const gray = new THREE.MeshStandardMaterial({ color: 0xbdbdbd, metalness: 0.1, roughness: 0.6 });
       const darkGray = new THREE.MeshStandardMaterial({ color: 0x8f8f8f, metalness: 0.2, roughness: 0.5 });
 
-      // Utility
+      // util
       const makeBone = (geo: import("three").BufferGeometry, mat = gray) => new THREE!.Mesh(geo, mat);
 
-      // Torse (boîte)
+      // Torse + tête
       torso = makeBone(new THREE!.BoxGeometry(0.5, 0.7, 0.25), gray);
       torso.position.set(0, 1.3, 0);
       rig.add(torso);
 
-      // Tête (sphère)
       head = new THREE!.Mesh(new THREE!.SphereGeometry(0.16, 24, 24), gray);
       head.position.set(0, 1.75, 0);
       rig.add(head);
@@ -189,13 +183,16 @@ export default function GrayCoach3DGLTF({
       footR.position.x = 0.16;
       rig.add(footR);
 
-      // Barre (utile pour tractions / OHP / deadlift)
-      bar = new THREE!.Mesh(new THREE!.CylinderGeometry(0.03, 0.03, 1.2, 16), new THREE!.MeshStandardMaterial({ color: 0xcccccc }));
+      // Barre (traction / OHP / deadlift)
+      bar = new THREE!.Mesh(
+        new THREE!.CylinderGeometry(0.03, 0.03, 1.2, 16),
+        new THREE!.MeshStandardMaterial({ color: 0xcccccc })
+      );
       bar.rotation.z = Math.PI / 2;
-      bar.visible = false; // par défaut
+      bar.visible = false;
       scene.add(bar);
 
-      // Ajuster taille renderer
+      // Resize
       const onResize = () => {
         if (!renderer || !camera || !container) return;
         const w = container.clientWidth;
@@ -207,25 +204,108 @@ export default function GrayCoach3DGLTF({
       onResize();
       window.addEventListener("resize", onResize);
 
-      // Animation
+      // ====== Fonctions d'animation — DÉFINIES AVANT UTILISATION ======
+      function resetPose() {
+        rig.position.y = 0;
+        torso.rotation.set(0, 0, 0);
+        head.position.set(0, 1.75, 0);
+
+        upperArmL.rotation.set(0, 0, Math.PI / 2.4);
+        lowerArmL.rotation.set(0, 0, Math.PI / 2.8);
+        handL.rotation.set(0, 0, 0);
+
+        upperArmR.rotation.set(0, 0, -Math.PI / 2.4);
+        lowerArmR.rotation.set(0, 0, -Math.PI / 2.8);
+        handR.rotation.set(0, 0, 0);
+
+        upperLegL.rotation.set(0, 0, 0);
+        lowerLegL.rotation.set(0, 0, 0);
+        footL.rotation.set(0, 0, 0);
+
+        upperLegR.rotation.set(0, 0, 0);
+        lowerLegR.rotation.set(0, 0, 0);
+        footR.rotation.set(0, 0, 0);
+      }
+
+      function squat(t: number) {
+        // t : 0 -> haut / 1 -> bas, puis remonte
+        const d = mix(0, 0.55, t < 0.5 ? t * 2 : (1 - t) * 2);
+        rig.position.y = -d * 0.5;
+        upperLegL.rotation.x = d * 1.0;
+        lowerLegL.rotation.x = d * 0.6;
+        upperLegR.rotation.x = d * 1.0;
+        lowerLegR.rotation.x = d * 0.6;
+        torso.rotation.x = d * 0.25;
+      }
+
+      function deadliftHinge(t: number) {
+        const bend = mix(0.0, 0.9, t < 0.5 ? t * 2 : (1 - t) * 2);
+        torso.rotation.x = bend * 0.6;
+        upperLegL.rotation.x = bend * 0.2;
+        lowerLegL.rotation.x = bend * 0.15;
+        upperLegR.rotation.x = bend * 0.2;
+        lowerLegR.rotation.x = bend * 0.15;
+        bar.visible = true;
+        bar.position.set(0, 1.0 - bend * 0.4, 0.15);
+      }
+
+      function lunge(t: number) {
+        const step = Math.sin(t * Math.PI * 2);
+        upperLegL.rotation.x = Math.max(0, step) * 0.9;
+        lowerLegL.rotation.x = Math.max(0, step) * 0.6;
+        upperLegR.rotation.x = Math.max(0, -step) * 0.9;
+        lowerLegR.rotation.x = Math.max(0, -step) * 0.6;
+        rig.position.y = -Math.abs(step) * 0.25;
+      }
+
+      function pushup(t: number) {
+        const d = mix(0.0, 0.45, t < 0.5 ? t * 2 : (1 - t) * 2);
+        rig.position.y = -d * 0.35;
+        torso.rotation.x = d * 0.15;
+        upperArmL.rotation.z = Math.PI / 2.4 + d * 0.3;
+        lowerArmL.rotation.z = Math.PI / 2.8 + d * 0.4;
+        upperArmR.rotation.z = -Math.PI / 2.4 - d * 0.3;
+        lowerArmR.rotation.z = -Math.PI / 2.8 - d * 0.4;
+      }
+
+      function overheadPress(t: number) {
+        const lift = mix(0.0, 1.0, t < 0.5 ? t * 2 : (1 - t) * 2);
+        upperArmL.rotation.z = Math.PI / 2.4 - lift * 1.0;
+        lowerArmL.rotation.z = Math.PI / 2.8 - lift * 0.8;
+        upperArmR.rotation.z = -Math.PI / 2.4 + lift * 1.0;
+        lowerArmR.rotation.z = -Math.PI / 2.8 + lift * 0.8;
+        bar.visible = true;
+        bar.position.set(0, 1.1 + lift * 0.6, 0.25);
+      }
+
+      function pullUp(t: number) {
+        const up = mix(0.0, 1.0, t < 0.5 ? t * 2 : (1 - t) * 2);
+        const rise = up * 0.9;
+        rig.position.y = rise * 0.9;
+        upperArmL.rotation.z = Math.PI / 2.4 - up * 0.7;
+        lowerArmL.rotation.z = Math.PI / 2.8 - up * 0.9;
+        upperArmR.rotation.z = -Math.PI / 2.4 + up * 0.7;
+        lowerArmR.rotation.z = -Math.PI / 2.8 + up * 0.9;
+        upperLegL.rotation.x = up * 0.15;
+        upperLegR.rotation.x = up * 0.15;
+        bar.visible = true;
+        bar.position.set(0, 2.3, 0);
+      }
+
+      // ====== Animation loop ======
       const exo = normalizeExercise(exerciseOverride || analysis.exercise || analysis.movement_pattern || "");
       const animate = (now: number) => {
         const dt = (now - t0) / 1000;
         t0 = now;
 
-        // phase de cycle (2.2s)
         const cycle = 2.2;
         const phase = (now / 1000) % cycle;
         const t = easeInOut((phase / cycle) % 1);
 
-        // Reset de base (posture neutre)
         resetPose();
 
-        // Appliquer mouvement selon exo
         switch (exo) {
           case "pullup":
-            bar.visible = true;
-            bar.position.set(0, 2.3, 0);
             pullUp(t);
             break;
           case "squat":
@@ -241,8 +321,6 @@ export default function GrayCoach3DGLTF({
             pushup(t);
             break;
           case "ohp":
-            bar.visible = true;
-            bar.position.set(0, 1.55, 0.25);
             overheadPress(t);
             break;
           default:
@@ -256,7 +334,7 @@ export default function GrayCoach3DGLTF({
 
       rafRef.current = requestAnimationFrame(animate);
 
-      // Nettoyage à la fin du composant
+      // Cleanup
       const cleanup = () => {
         window.removeEventListener("resize", onResize);
         if (rafRef.current) cancelAnimationFrame(rafRef.current);
@@ -271,19 +349,22 @@ export default function GrayCoach3DGLTF({
           });
         }
         renderer?.dispose();
-        // laisser le GC nettoyer
         renderer = null;
         scene = null;
         camera = null;
       };
 
-      // Quand l'effet est démonté
-      (cleanup as any).noop = true; // pas utilisé ailleurs, juste pour le linter
+      // Assure le cleanup si l'effet est démonté très vite
+      if (!mounted) cleanup();
+
+      // Enregistre le cleanup sur window pour debug éventuel (facultatif)
+      (window as any).__grayCoachCleanup = cleanup;
     })();
 
     return () => {
       mounted = false;
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      // le reste du cleanup est appelé par la IIFE si nécessaire
     };
   }, [analysis, exerciseOverride]);
 
