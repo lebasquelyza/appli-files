@@ -1,8 +1,6 @@
-// apps/web/app/dashboard/corrector/page.tsx
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { PageHeader, Section } from "@/components/ui/Page";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -51,9 +49,7 @@ function Spinner({ className = "" }: { className?: string }) {
   );
 }
 
-/* ===================== Vocabulaire & Variations (étendu) ===================== */
-
-// --- Random helpers ---
+/* ===================== Vocabulaire & Variations ===================== */
 function randInt(max: number) {
   if (typeof crypto !== "undefined" && "getRandomValues" in crypto) {
     const a = new Uint32Array(1);
@@ -64,7 +60,6 @@ function randInt(max: number) {
 }
 function pick<T>(arr: T[]): T { return arr[randInt(arr.length)]; }
 
-// --- Lexique FR (style coach) ---
 const LEX = {
   core: ["gainage", "sangle abdominale", "ceinture abdominale"],
   braceVerb: ["gaine", "serre", "verrouille", "contracte"],
@@ -92,7 +87,6 @@ const LEX = {
   headNeutral: ["regard neutre", "nuque longue", "évite l’hyperextension cervicale"],
 };
 
-// --- Catégories d’exos ---
 type Category =
   | "squat" | "lunge" | "hinge" | "hipthrust" | "legpress"
   | "quad_iso" | "ham_iso" | "calf"
@@ -103,28 +97,20 @@ type Category =
   | "carry" | "sled"
   | "unknown";
 
-// --- Aliases d’exercices -> catégories (regex en minuscules) ---
 const EXO_ALIASES: Array<{ rx: RegExp; cat: Category }> = [
-  // Bas du corps – genou dominant
   { rx: /(squat|front\s*squat|goblet|hack\s*squat|sissy)/, cat: "squat" },
   { rx: /(lunge|fente|split\s*squat|walking\s*lunge|bulgarian)/, cat: "lunge" },
   { rx: /(leg\s*press|presse\s*à\s*jambes)/, cat: "legpress" },
   { rx: /(leg\s*extension|extension\s*quadriceps)/, cat: "quad_iso" },
-
-  // Bas du corps – hanche dominante
   { rx: /(deadlift|soulev|hinge|rdl|romanian|good\s*morning|hip\s*hinge)/, cat: "hinge" },
   { rx: /(hip\s*thrust|pont\s*de\s*hanches|glute\s*bridge)/, cat: "hipthrust" },
   { rx: /(leg\s*curl|ischio|hamstring\s*curl)/, cat: "ham_iso" },
   { rx: /(calf|mollet|élévation\s*mollets|standing\s*calf|seated\s*calf)/, cat: "calf" },
-
-  // Dos – tirages
   { rx: /(pull[-\s]?up|traction)/, cat: "pull_vertical" },
   { rx: /(lat\s*pulldown|tirage\s*vertical)/, cat: "pull_vertical" },
   { rx: /(row|tirage\s*horizontal|barbell\s*row|pendlay|cable\s*row|seated\s*row)/, cat: "pull_horizontal" },
   { rx: /(chest\s*supported\s*row|row\s*appui\s*pector)/, cat: "row_chest" },
   { rx: /(face\s*pull)/, cat: "face_pull" },
-
-  // Pecs/épaules – poussées
   { rx: /(bench|développé\s*couché|décliné|incliné)/, cat: "push_horizontal" },
   { rx: /(ohp|overhead|militaire|shoulder\s*press|arnold)/, cat: "push_vertical" },
   { rx: /(push[-\s]?up|pompe)/, cat: "pushup" },
@@ -133,17 +119,11 @@ const EXO_ALIASES: Array<{ rx: RegExp; cat: Category }> = [
   { rx: /(lateral\s*raise|élévation\s*latérale)/, cat: "lateral_raise" },
   { rx: /(front\s*raise|élévation\s*frontale)/, cat: "front_raise" },
   { rx: /(rear\s*delt|oiseau|reverse\s*fly)/, cat: "rear_delt" },
-
-  // Bras
   { rx: /(curl|biceps)/, cat: "biceps" },
   { rx: /(triceps|pushdown|extension\s*triceps|kickback|overhead\s*extension)/, cat: "triceps" },
-
-  // Core
   { rx: /(plank|planche|side\s*plank|gainage\s*latéral|hollow)/, cat: "core_plank" },
   { rx: /(pallof|anti[-\s]?rotation|carry\s*offset)/, cat: "core_anti_rotation" },
   { rx: /(crunch|sit[-\s]?up|leg\s*raise|mountain\s*climber|russian\s*twist)/, cat: "core_flexion" },
-
-  // Conditioning/fortifiants
   { rx: /(farmer|carry)/, cat: "carry" },
   { rx: /(sled|prowler|traîneau)/, cat: "sled" },
 ];
@@ -154,15 +134,10 @@ function getCategory(exo: string): Category {
   return "unknown";
 }
 
-// Assainir/varier certains termes
 function varyTerms(s: string) {
   if (!s) return s;
   let out = s;
-
-  // bannir "tronc"
   out = out.replace(/\btronc\b/gi, pick(LEX.core));
-
-  // standardiser quelques mots en version coach (variations)
   out = out
     .replace(/\bcolonne\b/gi, pick(LEX.neutralSpine))
     .replace(/\bdos droit\b/gi, pick(LEX.neutralSpine))
@@ -170,11 +145,8 @@ function varyTerms(s: string) {
     .replace(/\bcore\b/gi, pick(LEX.core))
     .replace(/\btenez\b/gi, "garde")
     .replace(/\bmaintenez\b/gi, "garde");
-
   return out;
 }
-
-// Déduplique + mélange
 function uniqueShuffle(arr: string[]) {
   const seen = new Set<string>();
   const out: string[] = [];
@@ -188,255 +160,103 @@ function uniqueShuffle(arr: string[]) {
   }
   return out;
 }
-
-// Génération de corrections variées selon la catégorie
 function makeCorrections(exo: string) {
   const cat = getCategory(exo);
   const tips: string[] = [];
 
-  // Universels posture & respiration
   const universal = [
     `Garde un ${pick(LEX.neutralSpine)} avec ${pick(LEX.chestUp)}.`,
     `${pick(LEX.breathe)}.`,
     `${pick(LEX.wristNeutral)} et ${pick(LEX.headNeutral)}.`,
   ];
+  const upperStab = [`${pick(LEX.shoulderPack)}.`, `${pick(LEX.grip)}.`];
+  const lowerStab = [`${pick(LEX.footTripod)}.`, `${pick(LEX.kneeTrack)}.`];
 
-  // Stabilité ceinture scapulaire/prise (haut du corps)
-  const upperStab = [
-    `${pick(LEX.shoulderPack)}.`,
-    `${pick(LEX.grip)}.`,
-  ];
-
-  // Stabilité bassin & pieds (bas du corps)
-  const lowerStab = [
-    `${pick(LEX.footTripod)}.`,
-    `${pick(LEX.kneeTrack)}.`,
-  ];
-
-  // Catégories
   switch (cat) {
     case "squat":
-      tips.push(
-        `${pick(LEX.kneeTrack)}.`,
-        `${pick(LEX.footTripod)}.`,
-        `${pick(LEX.chestUp)}; descends en ${pick(LEX.controlCue)}.`,
-        `${pick(LEX.avoidMomentum)} — ${pick(LEX.tempoIntro)} ${pick(LEX.tempo311)}.`
-      );
+      tips.push(`${pick(LEX.kneeTrack)}.`, `${pick(LEX.footTripod)}.`, `${pick(LEX.chestUp)}; descends en ${pick(LEX.controlCue)}.`, `${pick(LEX.avoidMomentum)} — ${pick(LEX.tempoIntro)} ${pick(LEX.tempo311)}.`);
       break;
-
     case "lunge":
-      tips.push(
-        `Fais un grand pas, ${pick(LEX.kneeTrack)}.`,
-        `Tronc haut, ${pick(LEX.neutralSpine)}; ${pick(LEX.controlCue)}.`,
-        `Stabilise le bassin (${pick(LEX.core)[0]}).`,
-        `${pick(LEX.tempoIntro)} ${pick(LEX.tempo201)}.`
-      );
+      tips.push(`Grand pas, ${pick(LEX.kneeTrack)}.`, `Buste haut, ${pick(LEX.neutralSpine)}; ${pick(LEX.controlCue)}.`, `Stabilise le bassin (${pick(LEX.core)[0]}).`, `${pick(LEX.tempoIntro)} ${pick(LEX.tempo201)}.`);
       break;
-
     case "hinge":
-      tips.push(
-        `${pick(LEX.hipBack)}; genoux souples.`,
-        `${pick(LEX.neutralSpine)}; ${pick(LEX.scapRetract)}.`,
-        `${pick(LEX.grip)} et barre proche du corps.`,
-        `${pick(LEX.tempoIntro)} ${pick(LEX.tempo311)}.`
-      );
+      tips.push(`${pick(LEX.hipBack)}; genoux souples.`, `${pick(LEX.neutralSpine)}; ${pick(LEX.scapRetract)}.`, `${pick(LEX.grip)} et barre proche du corps.`, `${pick(LEX.tempoIntro)} ${pick(LEX.tempo311)}.`);
       break;
-
     case "hipthrust":
-      tips.push(
-        `Roule le bassin en rétroversion en haut; ${pick(LEX.holdTop)}.`,
-        `${pick(LEX.neutralSpine)} au point haut.`,
-        `${pick(LEX.controlCue)}; ${pick(LEX.breathe)}.`
-      );
+      tips.push(`Rétroversion en haut; ${pick(LEX.holdTop)}.`, `${pick(LEX.neutralSpine)} au point haut.`, `${pick(LEX.controlCue)}; ${pick(LEX.breathe)}.`);
       break;
-
     case "legpress":
-      tips.push(
-        `${pick(LEX.kneeTrack)}; pieds ni trop hauts ni trop bas.`,
-        `${pick(LEX.controlCue)}, colle le bas du dos au dossier (${pick(LEX.neutralSpine)}).`,
-        `${pick(LEX.avoidMomentum)}.`
-      );
+      tips.push(`${pick(LEX.kneeTrack)}; placement pieds médian.`, `${pick(LEX.controlCue)}, bas du dos au dossier (${pick(LEX.neutralSpine)}).`, `${pick(LEX.avoidMomentum)}.`);
       break;
-
     case "quad_iso":
-      tips.push(
-        `${pick(LEX.controlCue)}; verrou en haut sans claquer le genou.`,
-        `${pick(LEX.tempoIntro)} ${pick(LEX.tempo311)}.`,
-        `${pick(LEX.breathe)}.`
-      );
+      tips.push(`${pick(LEX.controlCue)}; verrou en haut sans claquer le genou.`, `${pick(LEX.tempoIntro)} ${pick(LEX.tempo311)}.`, `${pick(LEX.breathe)}.`);
       break;
-
     case "ham_iso":
-      tips.push(
-        `${pick(LEX.controlCue)}; hanches stables.`,
-        `${pick(LEX.tempoIntro)} ${pick(LEX.tempo311)}.`,
-        `Pas d’à-coups, ressens l’ischio sur toute l’amplitude.`
-      );
+      tips.push(`${pick(LEX.controlCue)}; hanches stables.`, `${pick(LEX.tempoIntro)} ${pick(LEX.tempo311)}.`, `Pas d’à-coups, ressens l’ischio sur toute l’amplitude.`);
       break;
-
     case "calf":
-      tips.push(
-        `${pick(LEX.controlCue)}; arrêt net en bas, ${pick(LEX.holdTop)}.`,
-        `${pick(LEX.rangeCue)}.`,
-        `${pick(LEX.tempoIntro)} ${pick(LEX.tempo311)}.`
-      );
+      tips.push(`${pick(LEX.controlCue)}; arrêt net en bas, ${pick(LEX.holdTop)}.`, `${pick(LEX.rangeCue)}.`, `${pick(LEX.tempoIntro)} ${pick(LEX.tempo311)}.`);
       break;
-
     case "pull_vertical":
-      tips.push(
-        `${pick(LEX.latDepress)} avant de tirer; ${pick(LEX.elbowPathPull)}.`,
-        `${pick(LEX.shoulderPack)}.`,
-        `${pick(LEX.avoidMomentum)}.`
-      );
+      tips.push(`${pick(LEX.latDepress)} avant de tirer; ${pick(LEX.elbowPathPull)}.`, `${pick(LEX.shoulderPack)}.`, `${pick(LEX.avoidMomentum)}.`);
       break;
-
     case "pull_horizontal":
     case "row_chest":
-      tips.push(
-        `${pick(LEX.scapRetract)}; ${pick(LEX.elbowPathPull)}.`,
-        `${pick(LEX.wristNeutral)}.`,
-        `${pick(LEX.controlCue)}, concentre-toi sur le dos.`
-      );
+      tips.push(`${pick(LEX.scapRetract)}; ${pick(LEX.elbowPathPull)}.`, `${pick(LEX.wristNeutral)}.`, `${pick(LEX.controlCue)}, focus dos.`);
       break;
-
     case "face_pull":
-      tips.push(
-        `Coudes hauts, tire vers le visage; vise l’extern rot.`,
-        `${pick(LEX.shoulderPack)}.`,
-        `${pick(LEX.controlCue)}.`
-      );
+      tips.push(`Coudes hauts, tire vers le visage; vise l’extern rot.`, `${pick(LEX.shoulderPack)}.`, `${pick(LEX.controlCue)}.`);
       break;
-
     case "push_horizontal":
-      tips.push(
-        `${pick(LEX.elbowPathPush)}.`,
-        `${pick(LEX.shoulderPack)} sur le banc.`,
-        `${pick(LEX.wristNeutral)}; ${pick(LEX.avoidMomentum)}.`
-      );
+      tips.push(`${pick(LEX.elbowPathPush)}.`, `${pick(LEX.shoulderPack)} sur le banc.`, `${pick(LEX.wristNeutral)}; ${pick(LEX.avoidMomentum)}.`);
       break;
-
     case "push_vertical":
-      tips.push(
-        `${pick(LEX.elbowPathPush)} (barre au-dessus de la ligne d’oreilles).`,
-        `${pick(LEX.core)[0]} solide; fessiers contractés.`,
-        `${pick(LEX.wristNeutral)}; ${pick(LEX.controlCue)}.`
-      );
+      tips.push(`${pick(LEX.elbowPathPush)} (barre ligne d’oreilles).`, `${pick(LEX.core)[0]} solide; fessiers contractés.`, `${pick(LEX.wristNeutral)}; ${pick(LEX.controlCue)}.`);
       break;
-
     case "dip":
-      tips.push(
-        `Corps légèrement penché; coudes suivent la trajectoire, pas d’épaules qui montent.`,
-        `${pick(LEX.shoulderPack)}.`,
-        `${pick(LEX.controlCue)}.`
-      );
+      tips.push(`Légère inclinaison, coudes suivent; évite de hausser les épaules.`, `${pick(LEX.shoulderPack)}.`, `${pick(LEX.controlCue)}.`);
       break;
-
     case "pushup":
-      tips.push(
-        `${pick(LEX.elbowPathPush)}; ${pick(LEX.neutralSpine)} (pas de bassin qui s’affaisse).`,
-        `${pick(LEX.core)[0]} serrée tout du long.`,
-        `${pick(LEX.avoidMomentum)} — ${pick(LEX.tempoIntro)} ${pick(LEX.tempo201)}.`
-      );
+      tips.push(`${pick(LEX.elbowPathPush)}; ${pick(LEX.neutralSpine)} (pas de bassin qui tombe).`, `${pick(LEX.core)[0]} serrée.`, `${pick(LEX.avoidMomentum)} — ${pick(LEX.tempoIntro)} ${pick(LEX.tempo201)}.`);
       break;
-
     case "fly":
-      tips.push(
-        `${pick(LEX.controlCue)}; coudes légèrement fléchis constants.`,
-        `${pick(LEX.shoulderPack)}.`,
-        `${pick(LEX.rangeCue)} sans douleur.`
-      );
+      tips.push(`${pick(LEX.controlCue)}; coudes légèrement fléchis constants.`, `${pick(LEX.shoulderPack)}.`, `${pick(LEX.rangeCue)} sans douleur.`);
       break;
-
     case "lateral_raise":
-      tips.push(
-        `Élévation par le côté, pouces légèrement vers le sol/ neutres.`,
-        `${pick(LEX.shoulderPack)}; évite de “tricher” avec l’élan.`,
-        `${pick(LEX.tempoIntro)} ${pick(LEX.tempo311)}.`
-      );
+      tips.push(`Élévation latérale, pouces neutres/légèrement vers le bas.`, `${pick(LEX.shoulderPack)}; évite l’élan.`, `${pick(LEX.tempoIntro)} ${pick(LEX.tempo311)}.`);
       break;
-
     case "front_raise":
-      tips.push(
-        `Montée frontale sans cambrer; ${pick(LEX.core)[0]} active.`,
-        `${pick(LEX.controlCue)}.`,
-        `${pick(LEX.wristNeutral)}.`
-      );
+      tips.push(`Montée frontale sans cambrer; ${pick(LEX.core)[0]} active.`, `${pick(LEX.controlCue)}.`, `${pick(LEX.wristNeutral)}.`);
       break;
-
     case "rear_delt":
-      tips.push(
-        `Buste penché, tire par les coudes, pas par les mains.`,
-        `${pick(LEX.scapRetract)} sans hausser les épaules.`,
-        `${pick(LEX.controlCue)}.`
-      );
+      tips.push(`Buste penché, tire par les coudes.`, `${pick(LEX.scapRetract)} sans hausser.`, `${pick(LEX.controlCue)}.`);
       break;
-
     case "biceps":
-      tips.push(
-        `${pick(LEX.wristNeutral)}; coudes fixes près du buste.`,
-        `${pick(LEX.avoidMomentum)}.`,
-        `${pick(LEX.tempoIntro)} ${pick(LEX.tempo311)}.`
-      );
+      tips.push(`${pick(LEX.wristNeutral)}; coudes fixes près du buste.`, `${pick(LEX.avoidMomentum)}.`, `${pick(LEX.tempoIntro)} ${pick(LEX.tempo311)}.`);
       break;
-
     case "triceps":
-      tips.push(
-        `Coudes stables, près de la tête/du buste selon la variante.`,
-        `${pick(LEX.wristNeutral)}; ${pick(LEX.controlCue)}.`,
-        `${pick(LEX.breathe)}.`
-      );
+      tips.push(`Coudes stables (près tête/buste selon variante).`, `${pick(LEX.wristNeutral)}; ${pick(LEX.controlCue)}.`, `${pick(LEX.breathe)}.`);
       break;
-
     case "core_plank":
-      tips.push(
-        `${pick(LEX.neutralSpine)}; rétroversion légère du bassin.`,
-        `${pick(LEX.braceVerb)} ta ${pick(LEX.core)}.`,
-        `Respiration calme, tension constante.`
-      );
+      tips.push(`${pick(LEX.neutralSpine)}; légère rétroversion bassin.`, `${pick(LEX.braceVerb)} ta ${pick(LEX.core)}.`, `Respiration calme, tension constante.`);
       break;
-
     case "core_anti_rotation":
-      tips.push(
-        `Résiste à la rotation; épaules et hanches carrées.`,
-        `${pick(LEX.braceVerb)} la ${pick(LEX.core)}.`,
-        `${pick(LEX.controlCue)}.`
-      );
+      tips.push(`Résiste à la rotation; épaules/hanches carrées.`, `${pick(LEX.braceVerb)} la ${pick(LEX.core)}.`, `${pick(LEX.controlCue)}.`);
       break;
-
     case "core_flexion":
-      tips.push(
-        `Roulement vertèbre par vertèbre; pas de tirage nuque.`,
-        `${pick(LEX.braceVerb)} la ${pick(LEX.core)} et souffle en montée.`,
-        `${pick(LEX.controlCue)}.`
-      );
+      tips.push(`Enroule vertèbre par vertèbre; pas de tirage nuque.`, `${pick(LEX.braceVerb)} la ${pick(LEX.core)} et souffle en montée.`, `${pick(LEX.controlCue)}.`);
       break;
-
     case "carry":
-      tips.push(
-        `${pick(LEX.braceVerb)} la ${pick(LEX.core)}; épaules basses.`,
-        `Démarche contrôlée, projection verticale haute.`,
-        `${pick(LEX.grip)}.`
-      );
+      tips.push(`${pick(LEX.braceVerb)} la ${pick(LEX.core)}; épaules basses.`, `Marche contrôlée, verticalité.`, `${pick(LEX.grip)}.`);
       break;
-
     case "sled":
-      tips.push(
-        `Inclinaison du buste selon la charge; poussée continue.`,
-        `${pick(LEX.footTripod)}; ${pick(LEX.kneeTrack)}.`,
-        `${pick(LEX.avoidMomentum)}.`
-      );
+      tips.push(`Inclinaison adaptée; poussée continue.`, `${pick(LEX.footTripod)}; ${pick(LEX.kneeTrack)}.`, `${pick(LEX.avoidMomentum)}.`);
       break;
-
     default:
-      tips.push(
-        `Contrôle l’amplitude et garde un ${pick(LEX.neutralSpine)}.`,
-        `${pick(LEX.braceVerb)} ta ${pick(LEX.core)} pour rester stable.`,
-        `${pick(LEX.avoidMomentum)}.`
-      );
+      tips.push(`Contrôle l’amplitude et garde un ${pick(LEX.neutralSpine)}.`, `${pick(LEX.braceVerb)} ta ${pick(LEX.core)} pour rester stable.`, `${pick(LEX.avoidMomentum)}.`);
       break;
   }
 
-  // Ajoute 1–2 universels contextuels
   if (["pull_vertical","pull_horizontal","row_chest","face_pull","push_horizontal","push_vertical","dip","pushup","fly","lateral_raise","front_raise","rear_delt","biceps","triceps"].includes(cat)) {
     tips.push(pick(upperStab));
   } else if (["squat","lunge","hinge","hipthrust","legpress","quad_iso","ham_iso","calf"].includes(cat)) {
@@ -444,8 +264,6 @@ function makeCorrections(exo: string) {
   } else {
     tips.push(pick(universal));
   }
-
-  // Une phrase “tempo/contrôle” bonus au hasard
   if (randInt(2) === 0) tips.push(`${pick(LEX.tempoIntro)} ${pick(randInt(2) ? LEX.tempo201 : LEX.tempo311)}.`);
 
   return uniqueShuffle(tips);
@@ -454,16 +272,9 @@ function makeCorrections(exo: string) {
 /* ===================== Page ===================== */
 export default function Page() {
   return (
-    <>
-      <PageHeader title="Files te corrige" subtitle="Conseils IA sur ta technique — sans 3D" />
-      <Section title="Filmer / Notes">
-        <p className="text-sm text-muted-foreground mb-4">
-          Enregistre une vidéo, ajoute ton ressenti, puis lance l’analyse IA. <br />
-          📝 L’IA te donne un résumé et des corrections — <i>ta vidéo n’est jamais affichée</i>.
-        </p>
-        <CoachAnalyzer />
-      </Section>
-    </>
+    <div className="space-y-4">
+      <CoachAnalyzer />
+    </div>
   );
 }
 
@@ -479,16 +290,12 @@ function CoachAnalyzer() {
   const [status, setStatus] = useState<string>("");
   const [errorMsg, setErrorMsg] = useState<string>("");
 
-  // Flux de confirmation
   const [predictedExercise, setPredictedExercise] = useState<string | null>(null);
   const [showChoiceGate, setShowChoiceGate] = useState(false);
   const [overrideOpen, setOverrideOpen] = useState(false);
   const [overrideName, setOverrideName] = useState("");
-
-  // Exercice confirmé par l'utilisateur
   const [confirmedExercise, setConfirmedExercise] = useState<string | null>(null);
 
-  // cooldown (429, 504)
   const [cooldown, setCooldown] = useState<number>(0);
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -501,7 +308,6 @@ function CoachAnalyzer() {
     setBlobUrl(url);
     setFileName(f.name);
     setFile(f);
-    // reset
     setAnalysis(null);
     setErrorMsg("");
     setStatus("");
@@ -510,7 +316,7 @@ function CoachAnalyzer() {
     setShowChoiceGate(false);
     setOverrideOpen(false);
     setOverrideName("");
-    setConfirmedExercise(null); // reset confirmé
+    setConfirmedExercise(null);
   };
 
   async function uploadWithProxy(f: File): Promise<string> {
@@ -560,7 +366,6 @@ function CoachAnalyzer() {
     return { path, readUrl: url as string };
   }
 
-  /** Lance l'analyse. Si `userExercise` est fourni, il est passé au backend pour forcer le contexte. */
   const onAnalyze = async (userExercise?: string) => {
     if (!file || isAnalyzing || cooldown > 0) return;
 
@@ -570,7 +375,7 @@ function CoachAnalyzer() {
     setErrorMsg("");
 
     try {
-      // 0) EXTRACTION — 12 frames -> 2 mosaïques 1280×720 (JPEG 0.6)
+      // 0) EXTRACTION
       const { frames, timestamps } = await extractFramesFromFile(file, 12);
       if (!frames.length) throw new Error("Impossible d’extraire des images de la vidéo.");
       setProgress(12);
@@ -583,10 +388,9 @@ function CoachAnalyzer() {
 
       setProgress(20);
 
-      // 1) UPLOAD — proxy si < 5MB, sinon signed upload direct
+      // 1) UPLOAD
       setStatus("Upload de la vidéo…");
       let fileUrl: string | undefined;
-
       if (file.size > CLIENT_PROXY_MAX_BYTES) {
         setStatus("Fichier volumineux — upload signé…");
         const { readUrl } = await uploadWithSignedUrl(file);
@@ -666,27 +470,20 @@ function CoachAnalyzer() {
         skeleton_cues: Array.isArray((data as any)?.skeleton_cues) ? (data as any).skeleton_cues : [],
       };
 
-      /* ===== Post-traitement "style coach" + variations ===== */
-      // 1) Variations sur le texte brut
+      // Post-traitement “coach”
       safe.overall = varyTerms(safe.overall);
-
-      // 2) Variations sur les fautes/corrections IA
       safe.faults = (safe.faults || []).map((f) => ({
         ...f,
         issue: varyTerms(f.issue || ""),
         correction: varyTerms(f.correction || ""),
       }));
-
-      // 3) Génère un lot de corrections variées et mélange avec celles de l’IA
       safe.corrections = uniqueShuffle([
         ...makeCorrections(safe.exercise || ""),
         ...(safe.corrections || []).map(varyTerms),
-      ]).slice(0, 5); // 3–5 lignes lisibles
-
-      // 4) Optionnel : reformater les muscles
+      ]).slice(0, 5);
       safe.muscles = (safe.muscles || []).map(varyTerms);
 
-      // 3) Proposer la confirmation avant d'afficher les détails
+      // Gate de confirmation
       setAnalysis(safe);
       setPredictedExercise(safe.exercise || "exercice_inconnu");
       if (userExercise && userExercise.trim()) {
@@ -709,12 +506,7 @@ function CoachAnalyzer() {
     }
   };
 
-  // Actions de confirmation
-  const confirmPredicted = () => {
-    setConfirmedExercise(predictedExercise || null);
-    setShowChoiceGate(false);
-  };
-  const openOverride = () => { setOverrideOpen(true); setOverrideName(""); };
+  const confirmPredicted = () => { setConfirmedExercise(predictedExercise || null); setShowChoiceGate(false); };
   const submitOverride = async () => {
     if (!overrideName.trim()) return;
     setConfirmedExercise(overrideName.trim());
@@ -722,26 +514,16 @@ function CoachAnalyzer() {
     setShowChoiceGate(false);
     setOverrideOpen(false);
   };
-
   const reset = () => {
     if (blobUrl) URL.revokeObjectURL(blobUrl);
-    setBlobUrl(null);
-    setFileName(null);
-    setFile(null);
-    setAnalysis(null);
-    setFeeling("");
-    setProgress(0);
-    setStatus("");
-    setErrorMsg("");
-    setCooldown(0);
-    setPredictedExercise(null);
-    setShowChoiceGate(false);
-    setOverrideOpen(false);
-    setOverrideName("");
+    setBlobUrl(null); setFileName(null); setFile(null);
+    setAnalysis(null); setFeeling(""); setProgress(0); setStatus("");
+    setErrorMsg(""); setCooldown(0);
+    setPredictedExercise(null); setShowChoiceGate(false);
+    setOverrideOpen(false); setOverrideName("");
     setConfirmedExercise(null);
   };
 
-  // ===== Helpers "Erreur détectée / Correction" =====
   function faultsToLines(a: AIAnalysis | null) {
     if (!a) return { issuesLine: "", correctionsLine: "" };
     const issues = (a?.faults || []).map(f => (f?.issue || "").trim()).filter(Boolean);
@@ -754,13 +536,15 @@ function CoachAnalyzer() {
   const { issuesLine, correctionsLine } = faultsToLines(analysis);
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      {/* Col 1: capture / upload */}
-      <Card className="lg:col-span-1">
-        <CardHeader><CardTitle className="flex items-center gap-2">🎥 Import / Enregistrement</CardTitle></CardHeader>
+    <div className="space-y-4">
+      {/* CAPTURE */}
+      <Card className="rounded-2xl shadow-sm border-border/60">
+        <CardHeader className="py-3">
+          <CardTitle className="text-base">🎥 Import / Enregistrement</CardTitle>
+        </CardHeader>
         <CardContent className="space-y-4">
-          <Tabs defaultValue="record">
-            <TabsList className="grid grid-cols-2">
+          <Tabs defaultValue="record" className="w-full">
+            <TabsList className="grid grid-cols-2 rounded-xl">
               <TabsTrigger value="record">Filmer</TabsTrigger>
               <TabsTrigger value="upload">Importer</TabsTrigger>
             </TabsList>
@@ -777,7 +561,6 @@ function CoachAnalyzer() {
           {blobUrl && (
             <div className="space-y-2">
               <label className="text-xs text-muted-foreground">Fichier chargé</label>
-              {/* On n'affiche PAS la vidéo du client */}
               <div className="rounded-xl border p-2 text-xs text-muted-foreground flex items-center justify-between">
                 <span className="truncate flex items-center gap-1">🎞️ {fileName ?? "clip.webm"}</span>
                 <button className="inline-flex items-center gap-1 hover:text-foreground" onClick={reset}>↺ Réinitialiser</button>
@@ -787,23 +570,25 @@ function CoachAnalyzer() {
         </CardContent>
       </Card>
 
-      {/* Col 2: Ton ressenti ? + envoi */}
-      <Card className="lg:col-span-1">
-        <CardHeader><CardTitle className="flex items-center gap-2">🎙️ Ton ressenti ?</CardTitle></CardHeader>
+      {/* RESSENTI + ACTION */}
+      <Card className="rounded-2xl shadow-sm border-border/60">
+        <CardHeader className="py-3">
+          <CardTitle className="text-base">🎙️ Ton ressenti</CardTitle>
+        </CardHeader>
         <CardContent className="space-y-3">
           <Textarea
             placeholder="Explique comment tu te sens (douleurs, fatigue, où tu as senti l'effort, RPE, etc.)."
             value={feeling}
             onChange={(e) => setFeeling(e.target.value)}
-            className="min-h-[140px]"
+            className="min-h-[140px] text-[15px] py-3"
           />
           <div className="flex items-center gap-2">
-            <Button disabled={!blobUrl || isAnalyzing || cooldown > 0} onClick={() => onAnalyze()}>
+            <Button className="h-11 rounded-xl text-[15px] flex-1" disabled={!blobUrl || isAnalyzing || cooldown > 0} onClick={() => onAnalyze()}>
               {isAnalyzing ? <Spinner className="mr-2" /> : <span className="mr-2">✨</span>}
               {isAnalyzing ? "Analyse en cours" : cooldown > 0 ? `Patiente ${cooldown}s` : "Lancer l'analyse IA"}
             </Button>
-            <Button variant="secondary" disabled={isAnalyzing || cooldown > 0} onClick={() => setFeeling(exampleFeeling)}>
-              Exemple de ressenti
+            <Button variant="secondary" className="h-11 rounded-xl text-[15px]" disabled={isAnalyzing || cooldown > 0} onClick={() => setFeeling(exampleFeeling)}>
+              Exemple
             </Button>
           </div>
 
@@ -817,13 +602,15 @@ function CoachAnalyzer() {
         </CardContent>
       </Card>
 
-      {/* Col 3: choix + résultats */}
-      <Card className="lg:col-span-1">
-        <CardHeader><CardTitle className="flex items-center gap-2">🧠 Résumé IA</CardTitle></CardHeader>
+      {/* RÉSUMÉ IA */}
+      <Card className="rounded-2xl shadow-sm border-border/60">
+        <CardHeader className="py-3">
+          <CardTitle className="text-base">🧠 Résumé IA</CardTitle>
+        </CardHeader>
         <CardContent className="space-y-4">
           {!analysis && (<EmptyState />)}
 
-          {/* --- GATE DE CONFIRMATION --- */}
+          {/* GATE DE CONFIRMATION */}
           {analysis && showChoiceGate && (
             <div className="space-y-3">
               <div className="flex items-center flex-wrap gap-2">
@@ -836,7 +623,7 @@ function CoachAnalyzer() {
                 <Button className="h-8 px-3 text-xs" onClick={confirmPredicted} disabled={isAnalyzing}>
                   Confirmer « {predictedExercise || "exercice_inconnu"} »
                 </Button>
-                <Button className="h-8 px-3 text-xs" variant="secondary" onClick={openOverride} disabled={isAnalyzing}>
+                <Button className="h-8 px-3 text-xs" variant="secondary" onClick={() => setOverrideOpen(true)} disabled={isAnalyzing}>
                   Autre
                 </Button>
               </div>
@@ -862,13 +649,11 @@ function CoachAnalyzer() {
             </div>
           )}
 
-          {/* --- RÉSULTATS APRÈS CONFIRMATION --- */}
+          {/* RÉSULTATS */}
           {analysis && !showChoiceGate && (
             <div className="space-y-4">
               <div className="flex items-center flex-wrap gap-2">
-                <Badge variant="secondary">
-                  Exercice : {confirmedExercise || analysis.exercise || "inconnu"}
-                </Badge>
+                <Badge variant="secondary">Exercice : {confirmedExercise || analysis.exercise || "inconnu"}</Badge>
               </div>
 
               {analysis.overall?.trim() && (
@@ -884,12 +669,15 @@ function CoachAnalyzer() {
                 )}
               </div>
 
-              {(issuesLine || correctionsLine) && (
-                <div className="space-y-1">
-                  {issuesLine && <p className="text-sm"><span className="font-medium">Erreur détectée :</span> {issuesLine}</p>}
-                  {correctionsLine && <p className="text-sm"><span className="font-medium">Corrections :</span> {correctionsLine}</p>}
-                </div>
-              )}
+              {(() => {
+                const { issuesLine, correctionsLine } = faultsToLines(analysis);
+                return (issuesLine || correctionsLine) ? (
+                  <div className="space-y-1">
+                    {issuesLine && <p className="text-sm"><span className="font-medium">Erreur détectée :</span> {issuesLine}</p>}
+                    {correctionsLine && <p className="text-sm"><span className="font-medium">Corrections :</span> {correctionsLine}</p>}
+                  </div>
+                ) : null;
+              })()}
 
               {analysis.extras && analysis.extras.length > 0 && (
                 <Accordion type="single" collapsible className="w-full">
@@ -924,8 +712,14 @@ function UploadDrop({ onFile }: { onFile: (file: File) => void }) {
       <div className="mx-auto h-8 w-8 mb-2">☁️</div>
       <p className="text-sm mb-2">Glisse une vidéo ici ou</p>
       <div className="flex items-center justify-center gap-2">
-        <Input ref={inputRef} type="file" accept="video/*" className="hidden"
-          onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); }} />
+        <Input
+          ref={inputRef}
+          type="file"
+          accept="video/*"
+          capture="environment"
+          className="hidden"
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); }}
+        />
         <Button variant="secondary" onClick={() => inputRef.current?.click()}>Choisir un fichier</Button>
       </div>
     </div>
@@ -983,7 +777,6 @@ function VideoRecorder({ onRecorded }: { onRecorded: (file: File) => void }) {
   return (
     <div className="space-y-3">
       <div className="relative">
-        {/* Aperçu caméra temps réel (pas enregistré côté UI) */}
         <video ref={videoRef} className="w-full rounded-2xl border" muted playsInline />
         {!hasStream && (<div className="absolute inset-0 grid place-items-center text-xs text-muted-foreground">Prépare ta caméra puis clique « Démarrer »</div>)}
       </div>
@@ -999,12 +792,6 @@ function VideoRecorder({ onRecorded }: { onRecorded: (file: File) => void }) {
 const exampleFeeling =
   "Séance de squats. RPE 8. Genou droit un peu instable, bas du dos fatigué, j'ai surtout senti les quadris brûler sur les dernières reps.";
 
-function fmtTime(s: number) {
-  const mm = Math.floor(s / 60).toString().padStart(2, "0");
-  const ss = Math.floor(s % 60).toString().padStart(2, "0");
-  return `${mm}:${ss}`;
-}
-
 function getBestMimeType() {
   const candidates = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm", "video/mp4"];
   for (const c of candidates) {
@@ -1013,7 +800,6 @@ function getBestMimeType() {
   }
   return "video/webm";
 }
-
 async function fakeProgress(setter: (v: number) => void, from: number, to: number) {
   let i = from;
   while (i < to) {
@@ -1022,14 +808,12 @@ async function fakeProgress(setter: (v: number) => void, from: number, to: numbe
     setter(Math.min(i, to));
   }
 }
-
 /** ➜ Extrait N frames JPEG (dataURL) d’un fichier vidéo local. */
 async function extractFramesFromFile(file: File, nFrames = 12): Promise<{ frames: string[]; timestamps: number[] }> {
   const videoURL = URL.createObjectURL(file);
   try {
     const video = document.createElement("video");
     video.src = videoURL;
-    video.crossOrigin = "anonymous";
     (video as any).muted = true;
     (video as any).playsInline = true;
 
@@ -1040,42 +824,33 @@ async function extractFramesFromFile(file: File, nFrames = 12): Promise<{ frames
 
     const duration = Math.max(0.001, (video as any).duration || 0);
     const times: number[] = [];
-    if (nFrames <= 1) {
-      times.push(Math.min(duration, 0.1));
-    } else {
-      for (let i = 0; i < nFrames; i++) {
-        const t = (duration * (i + 1)) / (nFrames + 1);
-        times.push(t);
-      }
+    for (let i = 0; i < nFrames; i++) {
+      const t = (duration * (i + 1)) / (nFrames + 1);
+      times.push(t);
     }
 
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
     const frames: string[] = [];
     const timestamps: number[] = [];
-
-    const targetW = 640;
-    const targetH = 360;
+    const targetW = 640, targetH = 360;
 
     for (const t of times) {
       await seek(video as any, t);
       const vw = (video as any).videoWidth || targetW;
       const vh = (video as any).videoHeight || targetH;
       const { width, height } = bestFit(vw, vh, targetW, targetH);
-      canvas.width = width;
-      canvas.height = height;
+      canvas.width = width; canvas.height = height;
       ctx.drawImage(video as any, 0, 0, width, height);
       const dataUrl = canvas.toDataURL("image/jpeg", 0.6);
       frames.push(dataUrl);
       timestamps.push(Math.round(t));
     }
-
     return { frames, timestamps };
   } finally {
     URL.revokeObjectURL(videoURL);
   }
 }
-
 function seek(video: HTMLVideoElement, time: number) {
   return new Promise<void>((resolve, reject) => {
     const onSeeked = () => { cleanup(); resolve(); };
@@ -1089,39 +864,29 @@ function seek(video: HTMLVideoElement, time: number) {
     try { (video as any).currentTime = Math.min(Math.max(0, time), (video as any).duration || time); } catch {}
   });
 }
-
 function bestFit(w: number, h: number, maxW: number, maxH: number) {
   if (!w || !h) return { width: maxW, height: maxH };
   const r = Math.min(maxW / w, maxH / h);
   return { width: Math.round(w * r), height: Math.round(h * r) };
 }
-
-/** Construit une mosaïque WxH depuis une liste d’images (dataURL). */
 async function makeMosaic(images: string[], gridW = 3, gridH = 2, outW = 1280, outH = 720, quality = 0.6): Promise<string> {
   const cvs = document.createElement("canvas");
   const ctx = cvs.getContext("2d")!;
-  cvs.width = outW;
-  cvs.height = outH;
-  ctx.fillStyle = "#000";
-  ctx.fillRect(0, 0, outW, outH);
-
+  cvs.width = outW; cvs.height = outH;
+  ctx.fillStyle = "#000"; ctx.fillRect(0, 0, outW, outH);
   const cellW = Math.floor(outW / gridW);
   const cellH = Math.floor(outH / gridH);
-
   for (let i = 0; i < Math.min(images.length, gridW * gridH); i++) {
     const img = await loadImage(images[i]);
     const x = (i % gridW) * cellW;
     const y = Math.floor(i / gridW) * cellH;
-
     const { width, height } = bestFit(img.width, img.height, cellW, cellH);
     const dx = x + Math.floor((cellW - width) / 2);
     const dy = y + Math.floor((cellH - height) / 2);
-    ctx.drawImage(img, dx, dy, width, height);
+    ctx.drawImage(img as any, dx, dy, width, height);
   }
-
   return cvs.toDataURL("image/jpeg", quality);
 }
-
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -1130,7 +895,6 @@ function loadImage(src: string): Promise<HTMLImageElement> {
     img.src = src;
   });
 }
-
 function EmptyState() {
   return (
     <div className="text-sm text-muted-foreground">
