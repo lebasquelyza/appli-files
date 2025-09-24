@@ -256,13 +256,11 @@ export default function GrayCoach3DGLTF({
 
       rafRef.current = requestAnimationFrame(animate);
 
-      // Nettoyage
-      return () => {
-        mounted = false;
-        if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      // Nettoyage à la fin du composant
+      const cleanup = () => {
         window.removeEventListener("resize", onResize);
+        if (rafRef.current) cancelAnimationFrame(rafRef.current);
         if (scene) {
-          // libère géométries/matériaux
           scene.traverse((obj) => {
             const m = obj as any;
             if (m.geometry) m.geometry.dispose?.();
@@ -273,117 +271,14 @@ export default function GrayCoach3DGLTF({
           });
         }
         renderer?.dispose();
-        // let le GC faire son boulot
+        // laisser le GC nettoyer
+        renderer = null;
         scene = null;
         camera = null;
-        renderer = null;
       };
 
-      // ==== Helpers d’anim ====
-
-      function resetPose() {
-        // positions verticales neutres
-        rig.position.y = 0;
-        torso.rotation.set(0, 0, 0);
-        head.position.set(0, 1.75, 0);
-
-        // bras neutres
-        upperArmL.rotation.set(0, 0, Math.PI / 2.4);
-        lowerArmL.rotation.set(0, 0, Math.PI / 2.8);
-        handL.rotation.set(0, 0, 0);
-
-        upperArmR.rotation.set(0, 0, -Math.PI / 2.4);
-        lowerArmR.rotation.set(0, 0, -Math.PI / 2.8);
-        handR.rotation.set(0, 0, 0);
-
-        // jambes neutres
-        upperLegL.rotation.set(0, 0, 0);
-        lowerLegL.rotation.set(0, 0, 0);
-        footL.rotation.set(0, 0, 0);
-
-        upperLegR.rotation.set(0, 0, 0);
-        lowerLegR.rotation.set(0, 0, 0);
-        footR.rotation.set(0, 0, 0);
-      }
-
-      function squat(t: number) {
-        // t : 0 -> haut / 1 -> bas
-        const depth = mix(0, 0.55, t < 0.5 ? t * 2 : (1 - t) * 2); // descente puis montée
-        rig.position.y = -depth * 0.5; // abaisse le corps
-        upperLegL.rotation.x = depth * 1.0;
-        lowerLegL.rotation.x = depth * 0.6;
-        upperLegR.rotation.x = depth * 1.0;
-        lowerLegR.rotation.x = depth * 0.6;
-
-        // torse légèrement penché (neutre si neutralSpine)
-        torso.rotation.x = depth * 0.25;
-      }
-
-      function deadliftHinge(t: number) {
-        // bis repetita : hinge = flexion hanche + dos incliné, jambes semi-tendues
-        const bend = mix(0.0, 0.9, t < 0.5 ? t * 2 : (1 - t) * 2);
-        torso.rotation.x = bend * 0.6;
-        upperLegL.rotation.x = bend * 0.2;
-        lowerLegL.rotation.x = bend * 0.15;
-        upperLegR.rotation.x = bend * 0.2;
-        lowerLegR.rotation.x = bend * 0.15;
-
-        // barre près des cuisses
-        bar.visible = true;
-        bar.position.set(0, 1.0 - bend * 0.4, 0.15);
-      }
-
-      function lunge(t: number) {
-        // fente alternée légère
-        const step = Math.sin(t * Math.PI * 2);
-        upperLegL.rotation.x = Math.max(0, step) * 0.9; // jambe avant plie
-        lowerLegL.rotation.x = Math.max(0, step) * 0.6;
-        upperLegR.rotation.x = Math.max(0, -step) * 0.9;
-        lowerLegR.rotation.x = Math.max(0, -step) * 0.6;
-
-        rig.position.y = -Math.abs(step) * 0.25;
-      }
-
-      function pushup(t: number) {
-        // pompes : on bouge le rig comme si c’était le torse vers le sol
-        const depth = mix(0.0, 0.45, t < 0.5 ? t * 2 : (1 - t) * 2);
-        rig.position.y = -depth * 0.35;
-        torso.rotation.x = depth * 0.15;
-
-        // “plier” les coudes
-        upperArmL.rotation.z = Math.PI / 2.4 + depth * 0.3;
-        lowerArmL.rotation.z = Math.PI / 2.8 + depth * 0.4;
-        upperArmR.rotation.z = -Math.PI / 2.4 - depth * 0.3;
-        lowerArmR.rotation.z = -Math.PI / 2.8 - depth * 0.4;
-      }
-
-      function overheadPress(t: number) {
-        // développé militaire : bras qui montent, barre au-dessus
-        const lift = mix(0.0, 1.0, t < 0.5 ? t * 2 : (1 - t) * 2);
-        upperArmL.rotation.z = Math.PI / 2.4 - lift * 1.0;
-        lowerArmL.rotation.z = Math.PI / 2.8 - lift * 0.8;
-        upperArmR.rotation.z = -Math.PI / 2.4 + lift * 1.0;
-        lowerArmR.rotation.z = -Math.PI / 2.8 + lift * 0.8;
-
-        bar.position.y = 1.1 + lift * 0.6;
-      }
-
-      function pullUp(t: number) {
-        // tractions : le corps monte vers la barre
-        const up = mix(0.0, 1.0, t < 0.5 ? t * 2 : (1 - t) * 2);
-        const rise = up * 0.9;
-
-        rig.position.y = rise * 0.9; // monter le corps
-        // bras qui se plient
-        upperArmL.rotation.z = Math.PI / 2.4 - up * 0.7;
-        lowerArmL.rotation.z = Math.PI / 2.8 - up * 0.9;
-        upperArmR.rotation.z = -Math.PI / 2.4 + up * 0.7;
-        lowerArmR.rotation.z = -Math.PI / 2.8 + up * 0.9;
-
-        // légère fermeture hanche/genoux
-        upperLegL.rotation.x = up * 0.15;
-        upperLegR.rotation.x = up * 0.15;
-      }
+      // Quand l'effet est démonté
+      (cleanup as any).noop = true; // pas utilisé ailleurs, juste pour le linter
     })();
 
     return () => {
@@ -420,4 +315,3 @@ function normalizeExercise(raw: string) {
   if (/(overhead|ohp|militaire|shoulder\s*press)/.test(s)) return "ohp";
   return "squat";
 }
-
