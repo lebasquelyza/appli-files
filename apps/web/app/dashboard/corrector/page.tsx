@@ -11,9 +11,6 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import dynamic from "next/dynamic";
-const GrayCoachHumanoid = dynamic(() => import("@/components/GrayCoachHumanoid"), { ssr: false });
-
 
 /* ===================== Types ===================== */
 interface AnalysisPoint { time: number; label: string; detail?: string; }
@@ -58,11 +55,11 @@ function Spinner({ className = "" }: { className?: string }) {
 export default function Page() {
   return (
     <>
-      <PageHeader title="Files te corrige" subtitle="Conseils IA sur ta posture — silhouette corrigée (démo)" />
+      <PageHeader title="Files te corrige" subtitle="Conseils IA sur ta posture — sans 3D" />
       <Section title="Filmer / Notes">
         <p className="text-sm text-muted-foreground mb-4">
           Enregistre une vidéo, ajoute ton ressenti, puis lance l’analyse IA. <br />
-          ✨ Nous t’affichons ensuite un <span className="font-medium">humanoïde 3D</span> qui rejoue l’exercice confirmé — <i>sans afficher ta vidéo</i>.
+          📝 L’IA te donne un résumé et des corrections — <i>ta vidéo n’est jamais affichée</i>.
         </p>
         <CoachAnalyzer />
       </Section>
@@ -491,39 +488,9 @@ function CoachAnalyzer() {
           )}
         </CardContent>
       </Card>
-
-      {/* Humanoïde 3D — n’apparaît qu’après confirmation */}
-      <div className="lg:col-span-3">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              ▶️ Humanoïde 3D (démo)
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {analysis && !showChoiceGate ? (
-              <>
-                <GrayCoachHumanoid
-                  analysis={analysis}
-                  exerciseOverride={confirmedExercise || undefined}
-                  height={420}
-                  // modelUrl="/models/humanoid.glb" // change si besoin
-                />
-                <p className="text-xs text-muted-foreground">
-                  Humanoïde animé sur l’exercice confirmé — ta vidéo n’est jamais affichée.
-                </p>
-              </>
-            ) : (
-              <div className="text-sm text-muted-foreground">
-                Confirme d’abord l’exercice pour afficher la démo 3D.
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
     </div>
   );
-} // ← FIN de CoachAnalyzer
+}
 
 /* ===================== Upload/Record ===================== */
 function UploadDrop({ onFile }: { onFile: (file: File) => void }) {
