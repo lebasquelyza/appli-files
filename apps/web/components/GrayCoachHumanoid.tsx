@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 let THREE: typeof import("three") | null = null;
 
 type AIAnalysis = { exercise: string; movement_pattern?: string };
@@ -19,6 +19,7 @@ export default function GrayCoachHumanoid({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rafRef = useRef<number | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -28,118 +29,135 @@ export default function GrayCoachHumanoid({
     let mixer: import("three").AnimationMixer | null = null;
     let clock: import("three").Clock | null = null;
     let model: import("three").Object3D | null = null;
+    let ro: ResizeObserver | null = null;
 
     (async () => {
-      if (!THREE) THREE = await import("three");
-      const { GLTFLoader } = await import("three/examples/jsm/loaders/GLTFLoader.js");
+      try {
+        if (!THREE) THREE = await import("three");
+        const { GLTFLoader } = await import("three/examples/jsm/loaders/GLTFLoader.js");
+        if (!mounted || !THREE) return;
 
-      if (!mounted || !THREE) return;
+        const container = containerRef.current!;
+        const canvas = canvasRef.current!;
 
-      const container = containerRef.current!;
-      const canvas = canvasRef.current!;
+        // Renderer
+        renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+        renderer.outputColorSpace = THREE.SRGBColorSpace;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.setClearColor(0x0b0b0b, 1);
 
-      renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
-      renderer.outputColorSpace = THREE.SRGBColorSpace;
-      renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      renderer.setClearColor(0x0b0b0b, 1);
+        // Scene + Camera
+        scene = new THREE.Scene();
+        camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+        camera.position.set(1.4, 1.7, 4.4);
+        camera.lookAt(0, 1.2, 0);
+        scene.add(camera);
 
-      scene = new THREE.Scene();
+        // Lights
+        scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+        const d = new THREE.DirectionalLight(0xffffff, 1);
+        d.position.set(3, 5, 3);
+        scene.add(d);
 
-      camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
-      camera.position.set(1.4, 1.7, 4.4);
-      camera.lookAt(0, 1.2, 0);
-      scene.add(camera);
+        // Floor (donne du contraste)
+        const floor = new THREE.Mesh(
+          new THREE.PlaneGeometry(20, 20),
+          new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.9 })
+        );
+        floor.rotation.x = -Math.PI / 2;
+        scene.add(floor);
 
-      scene.add(new THREE.AmbientLight(0xffffff, 0.7));
-      const d = new THREE.DirectionalLight(0xffffff, 1);
-      d.position.set(3, 5, 3);
-      scene.add(d);
+        // ——— Resize robuste (iOS Safari) ———
+        const setSize = () => {
+          if (!renderer || !camera || !container) return;
+          const w = Math.max(1, container.clientWidth);
+          const h = Math.max(1, container.clientHeight);
+          renderer.setSize(w, h, false);
+          camera.aspect = w / h;
+          camera.updateProjectionMatrix();
+          if (w < 420) camera.position.set(1.6, 1.8, 5.2);
+          else camera.position.set(1.4, 1.7, 4.4);
+        };
+        // 1er sizing à la frame suivante (quand le layout est stable)
+        requestAnimationFrame(setSize);
+        // Observe redimensionnements
+        ro = new ResizeObserver(setSize);
+        ro.observe(container);
 
-      const floor = new THREE.Mesh(
-        new THREE.PlaneGeometry(20, 20),
-        new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.9 })
-      );
-      floor.rotation.x = -Math.PI / 2;
-      scene.add(floor);
+        // === Load humanoid + animations ===
+        setLoadError(null);
+        const loader = new GLTFLoader();
+        let gltf;
+        try {
+          gltf = await loader.loadAsync(modelUrl);
+        } catch (e: any) {
+          setLoadError(`Modèle introuvable (${modelUrl}). Place un .glb avec animations dans /public/models.`);
+          return; // stop ici, on laisse l’overlay d’erreur
+        }
 
-      const onResize = () => {
-        if (!renderer || !camera || !container) return;
-        const w = container.clientWidth;
-        const h = container.clientHeight;
-        renderer.setSize(w, h, false);
-        camera.aspect = w / h;
-        camera.updateProjectionMatrix();
-        if (w < 420) camera.position.set(1.6, 1.8, 5.2);
-        else camera.position.set(1.4, 1.7, 4.4);
-      };
-      onResize();
-      window.addEventListener("resize", onResize);
+        model = gltf.scene;
+        model.traverse((o: any) => { o.castShadow = false; o.receiveShadow = false; });
+        scene.add(model);
 
-      // === Load humanoid + animations ===
-      const loader = new GLTFLoader();
-      const gltf = await loader.loadAsync(modelUrl);
-      model = gltf.scene;
-      model.traverse((o: any) => { o.castShadow = false; o.receiveShadow = false; });
-      scene.add(model);
+        mixer = new THREE.AnimationMixer(model);
+        clock = new THREE.Clock();
 
-      mixer = new THREE.AnimationMixer(model);
-      clock = new THREE.Clock();
+        const clips = gltf.animations || [];
+        const byName = new Map<string, import("three").AnimationClip>();
+        for (const c of clips) byName.set(c.name.toLowerCase(), c);
 
-      const clips = gltf.animations || [];
-      const byName = new Map<string, import("three").AnimationClip>();
-      for (const c of clips) byName.set(c.name.toLowerCase(), c);
+        const exoKey = normalizeExercise(exerciseOverride || analysis.exercise || analysis.movement_pattern || "");
+        const wanted = chooseClip(exoKey, byName);
 
-      // pick exercise
-      const exoKey = normalizeExercise(exerciseOverride || analysis.exercise || analysis.movement_pattern || "");
-      const wanted = chooseClip(exoKey, byName);
+        if (wanted) {
+          mixer.clipAction(wanted).reset().fadeIn(0.2).play();
+        } else {
+          const idle = byName.get("idle") || byName.get("tpose") || byName.get("idle_loop");
+          if (idle) mixer.clipAction(idle).play();
+        }
 
-      if (wanted) {
-        const action = mixer.clipAction(wanted);
-        action.reset().fadeIn(0.2).play();
-      } else {
-        // fallback: si pas de clip, on ne fait rien (reste idle si présent)
-        const idle = byName.get("idle") || byName.get("tpose") || byName.get("idle_loop");
-        if (idle) mixer.clipAction(idle).play();
-      }
-
-      const animate = () => {
-        const dt = clock!.getDelta();
-        mixer?.update(dt);
-        renderer!.render(scene!, camera!);
+        const animate = () => {
+          const dt = clock!.getDelta();
+          mixer?.update(dt);
+          renderer!.render(scene!, camera!);
+          rafRef.current = requestAnimationFrame(animate);
+        };
         rafRef.current = requestAnimationFrame(animate);
-      };
-      rafRef.current = requestAnimationFrame(animate);
-
-      return () => {
-        window.removeEventListener("resize", onResize);
-        if (rafRef.current) cancelAnimationFrame(rafRef.current);
-        mixer?.stopAllAction();
-        renderer?.dispose();
-        scene?.traverse((obj: any) => {
-          if (obj.geometry) obj.geometry.dispose?.();
-          if (obj.material) {
-            if (Array.isArray(obj.material)) obj.material.forEach((m: any) => m.dispose?.());
-            else obj.material.dispose?.();
-          }
-        });
-      };
+      } catch (err: any) {
+        console.error(err);
+        setLoadError(err?.message || "Erreur inconnue lors du rendu 3D.");
+      }
     })();
 
     return () => {
       mounted = false;
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      if (rafRef.current) cancelAnimationFrame(rafRef.current!);
+      try { ro?.disconnect(); } catch {}
     };
-  }, [analysis, exerciseOverride]);
+  }, [analysis, exerciseOverride, modelUrl]);
 
   return (
-    <div ref={containerRef} className="w-full border rounded-2xl overflow-hidden relative" style={{ height }}>
+    <div
+      ref={containerRef}
+      className="w-full border rounded-2xl overflow-hidden relative bg-black"
+      style={{ height }}
+    >
       <canvas ref={canvasRef} className="w-full h-full block" />
       <div className="absolute top-2 left-2 rounded bg-black/60 text-white text-[11px] px-2 py-1">
         Humanoïde (GLTF + animations)
       </div>
+      {loadError && (
+        <div className="absolute inset-0 grid place-items-center">
+          <div className="text-xs sm:text-sm text-white/90 bg-red-600/70 px-3 py-2 rounded">
+            {loadError}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+/* ====================== Helpers ====================== */
 
 function normalizeExercise(raw: string) {
   const s = (raw || "").toLowerCase();
@@ -150,15 +168,13 @@ function normalizeExercise(raw: string) {
   if (/(lunge|fente)/.test(s)) return "lunge";
   if (/(push-?up|pompe)/.test(s)) return "pushup";
   if (/(overhead|ohp|militaire|shoulder\s*press)/.test(s)) return "ohp";
-  // Ajoute ici: row, hip thrust, bench press, dips, etc.
-  return s.split(" ")[0]; // default: 1er mot
+  return s.split(" ")[0];
 }
 
 function chooseClip(
   key: string,
   byName: Map<string, import("three").AnimationClip>
 ): import("three").AnimationClip | undefined {
-  // mapping souple (synonymes)
   const aliases: Record<string, string[]> = {
     squat: ["squat", "back_squat", "front_squat", "goblet_squat"],
     deadlift: ["deadlift", "rdl", "hinge"],
@@ -173,6 +189,5 @@ function chooseClip(
     const c = byName.get(name.toLowerCase());
     if (c) return c;
   }
-  // essai direct si l’analyse renvoie le nom exact
   return byName.get(key.toLowerCase());
 }
