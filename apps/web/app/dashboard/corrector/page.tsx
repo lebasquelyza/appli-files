@@ -11,7 +11,9 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import GrayCoach from "@/components/GrayCoach";
+
+// ⬇️ Corrigé: import relatif, évite l'alias "@/"
+import GrayCoach from "../../../components/GrayCoach";
 
 /* ===================== Types ===================== */
 interface AnalysisPoint { time: number; label: string; detail?: string; }
@@ -42,48 +44,6 @@ const CLIENT_PROXY_MAX_BYTES =
   typeof process !== "undefined" && process.env.NEXT_PUBLIC_PROXY_UPLOAD_MAX_BYTES
     ? Number(process.env.NEXT_PUBLIC_PROXY_UPLOAD_MAX_BYTES)
     : 5 * 1024 * 1024; // 5MB par défaut
-
-// Timeout + retries côté client pour coller aux limites Netlify
-const ANALYZE_CLIENT_TIMEOUT_MS = 25_000; // 25s
-const ANALYZE_MAX_RETRIES = 3;            // 3 tentatives (1 initiale + 2 retries)
-
-/* ===================== Utils réseau ===================== */
-async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}, timeoutMs = ANALYZE_CLIENT_TIMEOUT_MS) {
-  const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const res = await fetch(input, { ...init, signal: controller.signal });
-    return res;
-  } finally {
-    clearTimeout(id);
-  }
-}
-
-async function analyzeRequest(body: any, maxRetries = ANALYZE_MAX_RETRIES): Promise<Response> {
-  let lastErr: any = null;
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
-    try {
-      const res = await fetchWithTimeout("/api/analyze", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-      });
-
-      // Si 429/504, on laisse la boucle gérer le retry (avec petite pause)
-      if (!res.ok && (res.status === 429 || res.status === 504)) {
-        lastErr = new Error(`HTTP ${res.status}`);
-      } else {
-        return res;
-      }
-    } catch (e: any) {
-      lastErr = e;
-    }
-    // backoff simple: 600ms, 1200ms, 1800ms…
-    const delay = 600 * (attempt + 1);
-    await new Promise((r) => setTimeout(r, delay));
-  }
-  throw new Error("analyze: retries épuisés" + (lastErr ? ` (${lastErr?.message || ""})` : ""));
-}
 
 function Spinner({ className = "" }: { className?: string }) {
   return (
@@ -213,15 +173,14 @@ function CoachAnalyzer() {
     setErrorMsg("");
 
     try {
-      // 0) EXTRACTION — *** allégé ***
-      // 8 frames -> 2 mosaïques 960×540 (JPEG 0.5)
-      const { frames, timestamps } = await extractFramesFromFile(file, 8);
+      // 0) EXTRACTION — 12 frames -> 2 mosaïques 1280×720 (JPEG 0.6)
+      const { frames, timestamps } = await extractFramesFromFile(file, 12);
       if (!frames.length) throw new Error("Impossible d’extraire des images de la vidéo.");
       setProgress(12);
 
       const half = Math.ceil(frames.length / 2);
-      const mosaic1 = await makeMosaic(frames.slice(0, half), 3, 2, 960, 540, 0.5);
-      const mosaic2 = await makeMosaic(frames.slice(half), 3, 2, 960, 540, 0.5);
+      const mosaic1 = await makeMosaic(frames.slice(0, half), 3, 2, 1280, 720, 0.6);
+      const mosaic2 = await makeMosaic(frames.slice(half), 3, 2, 1280, 720, 0.6);
       const mosaics = [mosaic1, mosaic2];
       const midTime = timestamps[Math.floor(timestamps.length / 2)] || 0;
 
@@ -249,7 +208,7 @@ function CoachAnalyzer() {
       if (!fileUrl) throw new Error("Upload échoué (aucune URL retournée)");
       setProgress(75);
 
-      // 2) APPEL IA — avec timeout + retries
+      // 2) APPEL IA
       void fakeProgress(setProgress, 80, 98);
       setStatus("Analyse IA…");
 
@@ -259,12 +218,16 @@ function CoachAnalyzer() {
 
       const overrideHint = userExercise ? `Exercice exécuté indiqué par l'utilisateur : "${userExercise}".` : "";
 
-      const res = await analyzeRequest({
-        frames: mosaics,
-        timestamps: [midTime],
-        feeling,
-        economyMode: true,
-        promptHints: [baseHints, overrideHint].filter(Boolean).join(" "),
+      const res = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          frames: mosaics,
+          timestamps: [midTime],
+          feeling,
+          economyMode: true,
+          promptHints: [baseHints, overrideHint].filter(Boolean).join(" "),
+        }),
       });
 
       if (!res.ok) {
@@ -338,8 +301,8 @@ function CoachAnalyzer() {
   const openOverride = () => { setOverrideOpen(true); setOverrideName(""); };
   const submitOverride = async () => {
     if (!overrideName.trim()) return;
-    setConfirmedExercise(overrideName.trim()); // on fige le choix utilisateur
-    await onAnalyze(overrideName.trim());      // on relance l'analyse avec le contexte
+    setConfirmedExercise(overrideName.trim());
+    await onAnalyze(overrideName.trim());
     setShowChoiceGate(false);
     setOverrideOpen(false);
   };
@@ -540,11 +503,12 @@ function CoachAnalyzer() {
           <CardContent className="space-y-3">
             {analysis ? (
               <>
-                {/* ==> On force le mannequin à suivre l'exercice CONFIRMÉ */}
+                {/* On force le mannequin à suivre l'exercice CONFIRMÉ */}
                 <GrayCoach
-                  analysis={analysis}
-                  // @ts-ignore: prop prise en charge dans le composant
-                  exerciseOverride={confirmedExercise || undefined}
+                  analysis={{
+                    ...analysis,
+                    exercise: (confirmedExercise || analysis.exercise || "inconnu")
+                  }}
                 />
                 <p className="text-xs text-muted-foreground">
                   Cette animation illustre la posture à viser d'après l'analyse, <b>sans afficher ta vidéo</b>.
@@ -686,7 +650,7 @@ async function fakeProgress(setter: (v: number) => void, from: number, to: numbe
 }
 
 /** ➜ Extrait N frames JPEG (dataURL) d’un fichier vidéo local. */
-async function extractFramesFromFile(file: File, nFrames = 8): Promise<{ frames: string[]; timestamps: number[] }> {
+async function extractFramesFromFile(file: File, nFrames = 12): Promise<{ frames: string[]; timestamps: number[] }> {
   const videoURL = URL.createObjectURL(file);
   try {
     const video = document.createElement("video");
@@ -716,9 +680,8 @@ async function extractFramesFromFile(file: File, nFrames = 8): Promise<{ frames:
     const frames: string[] = [];
     const timestamps: number[] = [];
 
-    // *** plus petit pour réduire la charge ***
-    const targetW = 480;
-    const targetH = 270;
+    const targetW = 640;
+    const targetH = 360;
 
     for (const t of times) {
       await seek(video as any, t);
@@ -728,7 +691,7 @@ async function extractFramesFromFile(file: File, nFrames = 8): Promise<{ frames:
       canvas.width = width;
       canvas.height = height;
       ctx.drawImage(video as any, 0, 0, width, height);
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.5); // qualité réduite
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.6);
       frames.push(dataUrl);
       timestamps.push(Math.round(t));
     }
@@ -760,7 +723,7 @@ function bestFit(w: number, h: number, maxW: number, maxH: number) {
 }
 
 /** Construit une mosaïque WxH depuis une liste d’images (dataURL). */
-async function makeMosaic(images: string[], gridW = 3, gridH = 2, outW = 960, outH = 540, quality = 0.5): Promise<string> {
+async function makeMosaic(images: string[], gridW = 3, gridH = 2, outW = 1280, outH = 720, quality = 0.6): Promise<string> {
   const cvs = document.createElement("canvas");
   const ctx = cvs.getContext("2d")!;
   cvs.width = outW;
