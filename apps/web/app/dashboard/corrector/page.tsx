@@ -11,10 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-// Si tu utilises le mannequin 2D (ancien) :
-// import GrayCoach from "@/components/GrayCoach";
-// Si tu utilises TON mannequin 3D démo : décommente l’import ci-dessous et la section d’affichage.
-// import GrayCoach3DGLTF from "@/components/GrayCoach3DGLTF";
+import GrayCoach3DGLTF from "@/components/GrayCoach3DGLTF";
 
 /* ===================== Types ===================== */
 interface AnalysisPoint { time: number; label: string; detail?: string; }
@@ -40,6 +37,43 @@ interface AIAnalysis {
   }>;
 }
 
+/* ===================== Config Timeout/Retries ===================== */
+const ANALYZE_CLIENT_TIMEOUT_MS = 60_000; // 60s (augmente si ton hébergeur est lent)
+async function postAnalyze(body: any, tries = 2, timeoutMs = ANALYZE_CLIENT_TIMEOUT_MS): Promise<Response> {
+  for (let i = 0; i < tries; i++) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const res = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+        signal: ctrl.signal,
+      });
+      clearTimeout(t);
+      if (res.ok) return res;
+
+      if (res.status === 429 || res.status === 504) {
+        await new Promise(r => setTimeout(r, 1500 * (i + 1)));
+        continue;
+      }
+      const txt = await res.text().catch(() => "");
+      throw new Error(`analyze: HTTP ${res.status} ${txt}`);
+    } catch (err: any) {
+      clearTimeout(t);
+      if (err?.name === "AbortError") {
+        if (i < tries - 1) {
+          await new Promise(r => setTimeout(r, 1500 * (i + 1)));
+          continue;
+        }
+        throw new Error(`analyze: client-timeout (${timeoutMs}ms)`);
+      }
+      throw err;
+    }
+  }
+  throw new Error("analyze: retries épuisés");
+}
+
 /* ===================== Constantes ===================== */
 const CLIENT_PROXY_MAX_BYTES =
   typeof process !== "undefined" && process.env.NEXT_PUBLIC_PROXY_UPLOAD_MAX_BYTES
@@ -59,11 +93,11 @@ function Spinner({ className = "" }: { className?: string }) {
 export default function Page() {
   return (
     <>
-      <PageHeader title="Files te corrige" subtitle="Conseils IA sur ta posture — silhouette corrigée (démo)" />
+      <PageHeader title="Files te corrige" subtitle="Conseils IA sur ta posture — silhouette corrigée (démo 3D)" />
       <Section title="Filmer / Notes">
         <p className="text-sm text-muted-foreground mb-4">
           Enregistre une vidéo, ajoute ton ressenti, puis lance l’analyse IA. <br />
-          ✨ Nous t’affichons ensuite une <span className="font-medium">silhouette grise</span> qui rejoue le mouvement en version corrigée — <i>sans afficher ta vidéo</i>.
+          ✨ Un <span className="font-medium">mannequin 3D gris</span> rejoue <i>l’exercice que tu confirmes</i> — sans afficher ta vidéo.
         </p>
         <CoachAnalyzer />
       </Section>
@@ -114,7 +148,7 @@ function CoachAnalyzer() {
     setShowChoiceGate(false);
     setOverrideOpen(false);
     setOverrideName("");
-    setConfirmedExercise(null);
+    setConfirmedExercise(null); // reset confirmé
   };
 
   async function uploadWithProxy(f: File): Promise<string> {
@@ -164,27 +198,6 @@ function CoachAnalyzer() {
     return { path, readUrl: url as string };
   }
 
-  /** Petit helper : POST avec timeout et retry (504/429) */
-  async function postAnalyze(body: any, tries = 2) {
-    for (let i = 0; i < tries; i++) {
-      const res = await fetch("/api/analyze", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-        // abandon côté client si ça dépasse 25s
-        signal: AbortSignal.timeout(25_000),
-      });
-      if (res.ok) return res;
-      if (res.status !== 504 && res.status !== 429) {
-        const txt = await res.text().catch(() => "");
-        throw new Error(`analyze: HTTP ${res.status} ${txt}`);
-      }
-      // backoff avant retry
-      await new Promise((r) => setTimeout(r, 1500 * (i + 1)));
-    }
-    throw new Error("analyze: 504 retry épuisé");
-  }
-
   /** Lance l'analyse. Si `userExercise` est fourni, il est passé au backend pour forcer le contexte. */
   const onAnalyze = async (userExercise?: string) => {
     if (!file || isAnalyzing || cooldown > 0) return;
@@ -195,14 +208,14 @@ function CoachAnalyzer() {
     setErrorMsg("");
 
     try {
-      // 0) EXTRACTION — 8 frames -> 2 mosaïques 960×540 (JPEG 0.5)
-      const { frames, timestamps } = await extractFramesFromFile(file, 8);
+      // 0) EXTRACTION — 12 frames -> 2 mosaïques 1280×720 (JPEG 0.6)
+      const { frames, timestamps } = await extractFramesFromFile(file, 12);
       if (!frames.length) throw new Error("Impossible d’extraire des images de la vidéo.");
       setProgress(12);
 
       const half = Math.ceil(frames.length / 2);
-      const mosaic1 = await makeMosaic(frames.slice(0, half), 3, 2, 960, 540, 0.5);
-      const mosaic2 = await makeMosaic(frames.slice(half), 3, 2, 960, 540, 0.5);
+      const mosaic1 = await makeMosaic(frames.slice(0, half), 3, 2, 1280, 720, 0.6);
+      const mosaic2 = await makeMosaic(frames.slice(half), 3, 2, 1280, 720, 0.6);
       const mosaics = [mosaic1, mosaic2];
       const midTime = timestamps[Math.floor(timestamps.length / 2)] || 0;
 
@@ -284,9 +297,12 @@ function CoachAnalyzer() {
       console.error(e);
       const msg = e?.message || String(e);
       setErrorMsg(msg);
-      setStatus("");
-      // si 504 => petit cooldown pour éviter le spam
-      if (/504/.test(msg)) setCooldown(15);
+      if (/client-timeout|504/.test(msg)) {
+        setCooldown(15);
+        setStatus("Le serveur met du temps — réessaie dans 15s.");
+      } else {
+        setStatus("");
+      }
       alert(`Erreur pendant l'analyse: ${msg}`);
     } finally {
       setIsAnalyzing(false);
@@ -301,8 +317,8 @@ function CoachAnalyzer() {
   const openOverride = () => { setOverrideOpen(true); setOverrideName(""); };
   const submitOverride = async () => {
     if (!overrideName.trim()) return;
-    setConfirmedExercise(overrideName.trim()); // fige le choix utilisateur
-    await onAnalyze(overrideName.trim());      // relance l'analyse avec le contexte
+    setConfirmedExercise(overrideName.trim()); // on fige le choix utilisateur
+    await onAnalyze(overrideName.trim());      // on relance l'analyse avec le contexte
     setShowChoiceGate(false);
     setOverrideOpen(false);
   };
@@ -492,31 +508,30 @@ function CoachAnalyzer() {
         </CardContent>
       </Card>
 
-      {/* Silhouette / Mannequin — garde ta section existante */}
+      {/* Mannequin 3D — démonstration (sans ta vidéo) */}
       <div className="lg:col-span-3">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              ▶️ Silhouette corrigée (sans ta vidéo)
+              ▶️ Mannequin 3D (démo) — rejoue l’exercice confirmé
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {analysis ? (
               <>
-                {/* ----
-                  Laisse ici la version que tu utilises déjà.
-                  - Pour ton mannequin 3D démo :
-                      <GrayCoach3DGLTF analysis={analysis} exerciseOverride={confirmedExercise || undefined} />
-                  - Pour l’ancien 2D :
-                      <GrayCoach analysis={analysis} />
-                ---- */}
+                <GrayCoach3DGLTF
+                  analysis={analysis}
+                  // le mannequin suit toujours l'exercice confirmé par l’utilisateur
+                  exerciseOverride={confirmedExercise || undefined}
+                  height={460}
+                />
                 <p className="text-xs text-muted-foreground">
-                  Cette animation illustre la posture à viser d'après l'analyse, <b>sans afficher ta vidéo</b>.
+                  Mannequin 3D gris — ta vidéo n’est jamais affichée.
                 </p>
               </>
             ) : (
               <div className="text-sm text-muted-foreground">
-                Aucune analyse. Enregistre ou importe un clip pour lancer l’analyse et voir la silhouette corrigée.
+                Aucune analyse. Lance l’analyse pour voir le mannequin 3D.
               </div>
             )}
           </CardContent>
@@ -635,7 +650,7 @@ function getBestMimeType() {
   const candidates = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm", "video/mp4"];
   for (const c of candidates) {
     // @ts-ignore
-    if (typeof MediaRecorder !== "undefined" && (MediaRecorder as any).isTypeSupported && (MediaRecorder as any).isTypeSupported(c)) return c;
+    if (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(c)) return c;
   }
   return "video/webm";
 }
@@ -650,7 +665,7 @@ async function fakeProgress(setter: (v: number) => void, from: number, to: numbe
 }
 
 /** ➜ Extrait N frames JPEG (dataURL) d’un fichier vidéo local. */
-async function extractFramesFromFile(file: File, nFrames = 8): Promise<{ frames: string[]; timestamps: number[] }> {
+async function extractFramesFromFile(file: File, nFrames = 12): Promise<{ frames: string[]; timestamps: number[] }> {
   const videoURL = URL.createObjectURL(file);
   try {
     const video = document.createElement("video");
@@ -691,7 +706,7 @@ async function extractFramesFromFile(file: File, nFrames = 8): Promise<{ frames:
       canvas.width = width;
       canvas.height = height;
       ctx.drawImage(video as any, 0, 0, width, height);
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.5); // qualité réduite
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.6);
       frames.push(dataUrl);
       timestamps.push(Math.round(t));
     }
@@ -723,7 +738,7 @@ function bestFit(w: number, h: number, maxW: number, maxH: number) {
 }
 
 /** Construit une mosaïque WxH depuis une liste d’images (dataURL). */
-async function makeMosaic(images: string[], gridW = 3, gridH = 2, outW = 960, outH = 540, quality = 0.5): Promise<string> {
+async function makeMosaic(images: string[], gridW = 3, gridH = 2, outW = 1280, outH = 720, quality = 0.6): Promise<string> {
   const cvs = document.createElement("canvas");
   const ctx = cvs.getContext("2d")!;
   cvs.width = outW;
