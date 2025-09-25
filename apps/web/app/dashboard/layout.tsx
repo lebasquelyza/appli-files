@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
-/** Icônes SVG inline (aucune lib externe) */
+/** Icônes SVG inline */
 function IconMenu(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden {...props}>
@@ -48,7 +48,7 @@ function Separator({ className = "" }: { className?: string }) {
   return <div className={`h-px w-full bg-border ${className}`} />;
 }
 
-/** NAV: toutes les entrées sous /dashboard/... */
+/** NAV */
 const NAV = [
   { href: "/dashboard/abonnement", label: "abonnement", icon: IconHome },
   { href: "/dashboard/bmi",        label: "bmi",        icon: IconChart },
@@ -59,7 +59,7 @@ const NAV = [
   { href: "/dashboard/music",      label: "music",      icon: IconVideo },
   { href: "/dashboard/pricing",    label: "pricing",    icon: IconChart },
   { href: "/dashboard/profile",    label: "profile",    icon: IconHome },
-  { href: "/dashboard/progress",   label: "progress",    icon: IconChart },
+  { href: "/dashboard/progress",   label: "progress",   icon: IconChart },
   { href: "/dashboard/recipes",    label: "recipes",    icon: IconHome },
   { href: "/dashboard/settings",   label: "settings",   icon: IconSettings },
 ] as const;
@@ -105,7 +105,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
-  /** iOS 100vh fix : --vh = 1% de la hauteur viewport */
+  /** iOS 100vh fix */
   useEffect(() => {
     const setVH = () => {
       const vh = window.innerHeight * 0.01;
@@ -116,12 +116,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("resize", setVH);
   }, []);
 
-  /** Fermer le menu quand la route a changé (page chargée) */
-  useEffect(() => {
-    if (open) setOpen(false);
-  }, [pathname, open]);
-
-  /** Lien de navigation : transition + barre de chargement */
+  /** NavLink : navigate + close menu au clic */
   const NavLink = ({
     href,
     children,
@@ -134,7 +129,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     return (
       <button
         onClick={() => {
-          startTransition(() => router.push(href));
+          startTransition(() => {
+            router.push(href);
+            setOpen(false); // ← ferme uniquement après sélection
+          });
         }}
         className={className}
       >
@@ -175,11 +173,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* DRAWER */}
       {open && (
         <>
-          {/* Overlay */}
-          <div
-            className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm"
-            onClick={() => setOpen(false)}
-          />
+          {/* Overlay (inert — ne ferme PAS le menu) */}
+          <div className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm pointer-events-none" />
+
           {/* Panel */}
           <aside
             className="fixed inset-y-0 left-0 z-50 w-[86%] max-w-[22rem] bg-gradient-to-b from-background to-muted/40 border-r shadow-xl rounded-r-2xl
@@ -236,4 +232,3 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
-
