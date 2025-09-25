@@ -5,14 +5,11 @@ import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
-/** Icône burger : carré vert + barres blanches */
+/** Icône burger : 3 barres blanches (le carré vert vient du bouton) */
 function IconMenu(props: React.SVGProps<SVGSVGElement>) {
   return (
-    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden {...props} className={props.className}>
-      {/* Carré vert (prend la couleur via currentColor) */}
-      <rect x="2" y="2" width="20" height="20" rx="4" fill="currentColor" />
-      {/* Barres blanches */}
-      <path d="M7 9.5h10M7 12h10M7 14.5h10" stroke="white" strokeWidth="2" strokeLinecap="round" />
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden {...props}>
+      <path d="M4 8h16M4 12h16M4 16h16" stroke="white" strokeWidth="2" strokeLinecap="round" />
     </svg>
   );
 }
@@ -40,7 +37,7 @@ function IconChart(props: React.SVGProps<SVGSVGElement>) {
 function IconSettings(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden {...props}>
-      <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm-9 2.5 2.2-.9a8 8 0 0 0 1.5 0l.8 2.2h6l.8-2.2a8 8 0 0 0 1.5 0l2.2.9 3-5-2-1.5a8 8 0 0 0 0-1.5l2-1.5-3-5-2.2.9a8 8 0 0 0-1.5 0L13 2H7l-.8 2.2a8 8 0 0 0-1.5 0L2.5 3.3l-3 5L1.5 10a8 8 0 0 0 0 1.5L-.5 13l3 5Z" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm-9 2.5 2.2-.9a8 8 0 0 0 1.5 0l.8 2.2h6l.8-2.2a8 8 0 0 0 1.5 0l2.2.9 3-5-2-1.5a8 8 0 0 0 0-1.5l2-1.5-3-5-2.2.9a8 8 0 0 0-1.5 0L13 2H7l-.8 2.2a8 8 0 0 0-1.5 0L2.5 3.3l-3 5Z" fill="none" stroke="currentColor" strokeWidth="1.5" />
     </svg>
   );
 }
@@ -133,7 +130,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         onClick={() => {
           startTransition(() => {
             router.push(href);
-            setOpen(false); // ← ferme uniquement après sélection d’un onglet
+            setOpen(false); // ferme uniquement après sélection d’un onglet
           });
         }}
         className={className}
@@ -156,15 +153,16 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* TOP BAR */}
       <div className="sticky top-0 z-40 border-b bg-background/75 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="h-14 px-3 sm:px-4 flex items-center gap-2">
-          {/* Bouton neutre + icône burger carré vert */}
+          {/* Bouton carré VERT (sans arrondi) */}
           <Button
             onClick={() => setOpen(true)}
             aria-label="Ouvrir la navigation"
-            className="h-10 w-10 p-0 inline-grid place-items-center rounded-2xl
-                       hover:bg-muted focus-visible:ring-2 focus-visible:ring-green-600/40
+            className="h-10 w-10 p-0 inline-grid place-items-center rounded-none
+                       bg-green-600 text-white hover:bg-green-600/90
+                       focus-visible:ring-2 focus-visible:ring-green-600/40
                        shadow-sm"
           >
-            <IconMenu className="text-green-600" />
+            <IconMenu />
           </Button>
 
           <div className="flex-1 truncate text-base font-medium">{title}</div>
