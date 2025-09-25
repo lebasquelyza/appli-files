@@ -2,12 +2,13 @@
   "name": "web",
   "private": true,
   "scripts": {
-    "prebuild": "node -e \"try{require.resolve('@radix-ui/react-separator');console.log('Separator OK')}catch(e){console.error('Separator MISSING');process.exit(1)}\"",
+    "prebuild": "node -e \"for (const m of ['@radix-ui/react-separator','@radix-ui/react-dialog']){try{require.resolve(m);console.log(m+' OK')}catch(e){console.error(m+' MISSING');process.exit(1)}}\"",
     "dev": "next dev -p 3000",
     "build": "next build",
     "start": "next start -p 3000"
   },
   "dependencies": {
+    "@radix-ui/react-dialog": "^1.0.5",
     "@radix-ui/react-separator": "^1.1.7",
     "@supabase/supabase-js": "^2.0.0",
     "axios": "^1.7.2",
