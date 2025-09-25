@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useMemo, useState } from "react";
@@ -7,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
-// Icônes SVG inline (pas de librairies)
+/** Icônes SVG inline (aucune lib externe) */
 function IconMenu(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden {...props}>
@@ -44,16 +43,25 @@ function IconSettings(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-// Séparateur simple
+/** Séparateur simple */
 function Separator({ className = "" }: { className?: string }) {
   return <div className={`h-px w-full bg-border ${className}`} />;
 }
 
+/** NAV: toutes les entrées demandées sous /dashboard/... */
 const NAV = [
-  { href: "/dashboard", label: "Accueil", icon: IconHome },
-  { href: "/dashboard/corrector", label: "Correcteur", icon: IconVideo },
-  { href: "/dashboard/progress", label: "Progression", icon: IconChart },
-  { href: "/dashboard/settings", label: "Paramètres", icon: IconSettings },
+  { href: "/dashboard/abonnement", label: "abonnement", icon: IconHome },
+  { href: "/dashboard/bmi",        label: "bmi",        icon: IconChart },
+  { href: "/dashboard/calories",   label: "calories",   icon: IconChart },
+  { href: "/dashboard/connect",    label: "connect",    icon: IconVideo },
+  { href: "/dashboard/corrector",  label: "corrector",  icon: IconVideo },
+  { href: "/dashboard/muscu",      label: "muscu",      icon: IconChart },
+  { href: "/dashboard/music",      label: "music",      icon: IconVideo },
+  { href: "/dashboard/pricing",    label: "pricing",    icon: IconChart },
+  { href: "/dashboard/profile",    label: "profile",    icon: IconHome },
+  { href: "/dashboard/progress",   label: "progress",   icon: IconChart },
+  { href: "/dashboard/recipes",    label: "recipes",    icon: IconHome },
+  { href: "/dashboard/settings",   label: "settings",   icon: IconSettings },
 ] as const;
 
 function useActiveTitle(pathname: string | null) {
