@@ -152,13 +152,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* TOP BAR */}
       <div className="sticky top-0 z-40 border-b bg-background/75 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="h-14 px-3 sm:px-4 flex items-center gap-3">
-          {/* BOUTON HAMBURGER — carré, dégradé vert, texte blanc */}
+          {/* BOUTON HAMBURGER — carré, VERT PLEIN, texte blanc */}
           <button
             onClick={() => setOpen(true)}
             aria-label="Ouvrir la navigation"
-            className="h-10 w-10 inline-grid place-items-center rounded-none
-                       bg-gradient-to-br from-[#22C55E] to-[#15803D]
-                       text-white hover:brightness-105
+            className="h-10 w-10 inline-grid place-items-center
+                       rounded-none text-white
+                       bg-[#16A34A] hover:bg-[#15803D]
                        focus-visible:ring-2 focus-visible:ring-[#22C55E]/40
                        shadow-sm"
           >
@@ -203,7 +203,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   : "hover:bg-muted text-foreground";
                 return (
                   <NavLink key={item.href} href={item.href} className={`${base} ${styles}`}>
-                    {/* Icônes héritent de la couleur de texte (plus de bleu) */}
+                    {/* Icônes héritent de la couleur de texte */}
                     <span className="text-current"><ActiveIcon /></span>
                     <span className="truncate capitalize">{item.label}</span>
                     {active && (
@@ -234,3 +234,4 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
+
