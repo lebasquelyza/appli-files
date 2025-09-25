@@ -98,6 +98,7 @@ function useActiveTitle(pathname: string | null) {
 export default function Layout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  // on calcule le titre mais on ne l’affiche plus
   const title = useActiveTitle(pathname);
 
   const [open, setOpen] = useState(false);
@@ -152,24 +153,25 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* TOP BAR */}
       <div className="sticky top-0 z-40 border-b bg-background/75 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="h-14 px-3 sm:px-4 flex items-center gap-3">
-          {/* BOUTON HAMBURGER — couleur forcée (vert plein + texte blanc) */}
+          {/* BOUTON HAMBURGER — vert plein + texte blanc */}
           <button
             onClick={() => setOpen(true)}
             aria-label="Ouvrir la navigation"
-            style={{ backgroundColor: "#16A34A", color: "#fff" }} // ← forçage de la couleur UNIQUEMENT ici
+            style={{ backgroundColor: "#16A34A", color: "#fff" }}
             className="h-10 w-10 inline-grid place-items-center rounded-none shadow-sm"
           >
             <IconMenu />
           </button>
 
-          <div className="flex-1 truncate text-base font-medium">{title}</div>
+          {/* On retire le texte de titre (ex: 'profile') */}
+          <div className="flex-1" />
         </div>
       </div>
 
       {/* DRAWER */}
       {open && (
         <>
-          {/* Overlay inactif (ne ferme pas au clic) */}
+          {/* Overlay inactif */}
           <div className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm pointer-events-none" />
 
           {/* Panneau */}
@@ -182,14 +184,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             aria-modal="true"
             style={{ paddingLeft: "env(safe-area-inset-left)" }}
           >
-            <div className="p-4 pb-3">
-              <div className="text-base font-semibold">Navigation</div>
-              <div className="text-xs text-muted-foreground">Accès rapide</div>
-            </div>
+            {/* En-tête supprimé : plus de 'Navigation' ni 'Accès rapide' */}
+            {/* <div className="p-4 pb-3">...</div> */}
+            {/* <Separator /> */}
 
-            <Separator />
-
-            <nav className="p-2 space-y-1">
+            <nav className="p-2 space-y-1 pt-4">
               {NAV.map((item) => {
                 const ActiveIcon = item.icon;
                 const active = pathname?.startsWith(item.href);
@@ -200,7 +199,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   : "hover:bg-muted text-foreground";
                 return (
                   <NavLink key={item.href} href={item.href} className={`${base} ${styles}`}>
-                    {/* Icônes héritent de la couleur de texte */}
                     <span className="text-current"><ActiveIcon /></span>
                     <span className="truncate capitalize">{item.label}</span>
                     {active && (
@@ -213,11 +211,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               })}
             </nav>
 
-            <Separator className="my-2" />
-
-            <div className="px-4 pb-4 text-xs text-muted-foreground">
-              Optimisé mobile • s’adapte à votre écran
-            </div>
+            {/* Séparateur et note bas de panneau retirés */}
           </aside>
         </>
       )}
@@ -231,4 +225,3 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
-
