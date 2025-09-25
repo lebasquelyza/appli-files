@@ -41,7 +41,7 @@ function IconSettings(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-/** Séparateur simple (si besoin ailleurs) */
+/** Séparateur simple (au cas où) */
 function Separator({ className = "" }: { className?: string }) {
   return <div className={`h-px w-full bg-border ${className}`} />;
 }
@@ -98,7 +98,7 @@ function useActiveTitle(pathname: string | null) {
 export default function Layout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  useActiveTitle(pathname); // on n’affiche pas le titre en haut
+  useActiveTitle(pathname); // on n'affiche pas le titre en haut
 
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -152,7 +152,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* TOP BAR (sans titre) */}
       <div className="sticky top-0 z-40 border-b bg-background/75 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="h-14 px-3 sm:px-4 flex items-center gap-3">
-          {/* BOUTON HAMBURGER — vert plein + texte blanc (forcé) */}
+          {/* HAMBURGER — vert plein + texte blanc (forcé) */}
           <button
             onClick={() => setOpen(true)}
             aria-label="Ouvrir la navigation"
@@ -171,34 +171,40 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           {/* Overlay inactif */}
           <div className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm pointer-events-none" />
 
-          {/* Panneau avec 2 colonnes : ruban à gauche, liste à droite */}
+          {/* Libellé vertical 'Dashboard' SOUS le carré vert, collé à gauche */}
+          <div
+            className="fixed left-0 z-[51] w-8 flex items-center justify-center select-none"
+            style={{
+              top: "56px" /* = h-14 */,
+              bottom: 0,
+            }}
+          >
+            <span
+              className="text-[12px] font-semibold tracking-wider text-foreground/80"
+              style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
+            >
+              Dashboard
+            </span>
+          </div>
+
+          {/* Panneau */}
           <aside
             className="fixed inset-y-0 left-0 z-50 w-[86%] max-w-[22rem]
                        bg-gradient-to-b from-background to-muted/40
                        border-r shadow-xl rounded-r-2xl
-                       animate-in slide-in-from-left duration-200
-                       grid grid-cols-[2rem_1fr]"
+                       animate-in slide-in-from-left duration-200"
             role="dialog"
             aria-modal="true"
             style={{ paddingLeft: "env(safe-area-inset-left)" }}
           >
-            {/* Ruban vertical 'Dashboard' (colonne gauche) */}
-            <div className="col-[1] row-[1] flex items-center justify-center bg-[#16A34A] text-white rounded-r-md shadow-sm">
-              <span
-                className="text-[11px] font-semibold tracking-wider select-none"
-                style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
-              >
-                Dashboard
-              </span>
-            </div>
-
-            {/* Liste (colonne droite) */}
-            <nav className="col-[2] row-[1] p-2 space-y-2 pt-3">
+            {/* Liste décalée à droite pour laisser la place au libellé vertical */}
+            <nav className="p-2 pt-3 pl-10 space-y-2">
               {NAV.map((item) => {
                 const ActiveIcon = item.icon;
                 const active = pathname?.startsWith(item.href);
 
-                // Styles: PAR DÉFAUT (blanc+vert), ACTIF (vert plein+blanc).
+                // FORCING COLORS:
+                // par défaut = fond blanc + texte vert ; actif = fond vert + texte blanc
                 const base =
                   "w-full text-left flex items-center gap-3 px-4 py-3 rounded-2xl transition outline-none border";
                 const styles = active
@@ -231,4 +237,3 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
-
