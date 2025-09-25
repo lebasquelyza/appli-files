@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
@@ -48,7 +48,7 @@ function Separator({ className = "" }: { className?: string }) {
   return <div className={`h-px w-full bg-border ${className}`} />;
 }
 
-/** NAV: toutes les entrées demandées sous /dashboard/... */
+/** NAV: toutes les entrées sous /dashboard/... */
 const NAV = [
   { href: "/dashboard/abonnement", label: "abonnement", icon: IconHome },
   { href: "/dashboard/bmi",        label: "bmi",        icon: IconChart },
@@ -64,6 +64,29 @@ const NAV = [
   { href: "/dashboard/settings",   label: "settings",   icon: IconSettings },
 ] as const;
 
+/** Petite barre de chargement top (sans lib) */
+function LoadingBar({ show }: { show: boolean }) {
+  return (
+    <div
+      className={[
+        "pointer-events-none fixed left-0 right-0 top-0 z-[60] h-[2px] overflow-hidden",
+        show ? "opacity-100" : "opacity-0",
+        "transition-opacity duration-200",
+      ].join(" ")}
+      aria-hidden
+    >
+      <div className="h-full w-1/2 animate-[loading_1.2s_ease-in-out_infinite] bg-foreground/80" />
+      <style jsx>{`
+        @keyframes loading {
+          0% { transform: translateX(-100%); }
+          50% { transform: translateX(50%); }
+          100% { transform: translateX(200%); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
 function useActiveTitle(pathname: string | null) {
   return useMemo(() => {
     if (!pathname) return "Dashboard";
@@ -75,18 +98,72 @@ function useActiveTitle(pathname: string | null) {
 }
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
   const pathname = usePathname();
   const title = useActiveTitle(pathname);
+
   const [open, setOpen] = useState(false);
+  const [isPending, startTransition] = useTransition();
+
+  /** iOS 100vh fix : --vh = 1% de la hauteur viewport */
+  useEffect(() => {
+    const setVH = () => {
+      const vh = window.innerHeight * 0.01;
+      document.documentElement.style.setProperty("--vh", `${vh}px`);
+    };
+    setVH();
+    window.addEventListener("resize", setVH);
+    return () => window.removeEventListener("resize", setVH);
+  }, []);
+
+  /** Fermer le menu et arrêter la barre de chargement quand la route a changé */
+  useEffect(() => {
+    if (open) setOpen(false);
+    // la transition s’arrête d’elle-même car pathname a changé :
+    // isPending est géré par startTransition
+    // (pas besoin de set explicit ici)
+  }, [pathname]); // ← se déclenche quand la nouvelle page est prête
+
+  /** Lien de navigation : lance une transition + affiche la barre */
+  const NavLink = ({
+    href,
+    children,
+    className,
+  }: {
+    href: string;
+    children: React.ReactNode;
+    className?: string;
+  }) => {
+    return (
+      <button
+        onClick={() => {
+          startTransition(() => {
+            router.push(href);
+          });
+        }}
+        className={className}
+      >
+        {children}
+      </button>
+    );
+  };
 
   return (
-    <div className="min-h-[calc(var(--vh,1vh)*100)] flex flex-col">
+    <div
+      className="flex min-h-[calc(var(--vh,1vh)*100)] flex-col"
+      style={{
+        paddingTop: "env(safe-area-inset-top)",
+        paddingBottom: "env(safe-area-inset-bottom)",
+      }}
+    >
+      <LoadingBar show={isPending} />
+
       {/* TOP BAR */}
-      <div className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/70">
+      <div className="sticky top-0 z-40 border-b bg-background/75 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="h-14 px-3 sm:px-4 flex items-center gap-2">
           <Button
             variant="ghost"
-            className="rounded-xl h-9 w-9 p-0 inline-grid place-items-center"
+            className="rounded-2xl h-10 w-10 p-0 inline-grid place-items-center shadow-sm"
             onClick={() => setOpen(true)}
             aria-label="Ouvrir la navigation"
           >
@@ -101,40 +178,51 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <>
           {/* Overlay */}
           <div
-            className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm animate-in fade-in-0"
+            className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out fade-in-0"
             onClick={() => setOpen(false)}
           />
           {/* Panel */}
           <aside
-            className="fixed inset-y-0 left-0 z-50 w-[84%] sm:w-80 bg-background border-r shadow-lg animate-in slide-in-from-left"
+            className="fixed inset-y-0 left-0 z-50 w-[86%] max-w-[22rem] bg-gradient-to-b from-background to-muted/40 border-r shadow-xl rounded-r-2xl
+                       animate-in slide-in-from-left duration-200"
             role="dialog"
             aria-modal="true"
+            style={{ paddingLeft: "env(safe-area-inset-left)" }}
           >
-            <div className="p-4">
-              <div className="text-base font-medium">Navigation</div>
+            <div className="p-4 pb-3">
+              <div className="text-base font-semibold">Navigation</div>
+              <div className="text-xs text-muted-foreground">Accès rapide</div>
             </div>
             <Separator />
+
             <nav className="p-2 space-y-1">
               {NAV.map((item) => {
                 const ActiveIcon = item.icon;
                 const active = pathname?.startsWith(item.href);
+                const base =
+                  "w-full text-left flex items-center gap-3 px-4 py-3 rounded-xl transition outline-none";
+                const styles = active
+                  ? "bg-accent text-accent-foreground shadow-sm"
+                  : "hover:bg-muted";
                 return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => setOpen(false)}
-                    className={[
-                      "flex items-center gap-3 px-4 py-3 rounded-lg transition",
-                      active ? "bg-accent text-accent-foreground" : "hover:bg-muted",
-                    ].join(" ")}
-                  >
+                  <NavLink key={item.href} href={item.href} className={`${base} ${styles}`}>
                     <ActiveIcon />
-                    <span className="truncate">{item.label}</span>
-                    {active && <Badge variant="secondary" className="ml-auto">actif</Badge>}
-                  </Link>
+                    <span className="truncate capitalize">{item.label}</span>
+                    {active && (
+                      <Badge variant="secondary" className="ml-auto">
+                        actif
+                      </Badge>
+                    )}
+                  </NavLink>
                 );
               })}
             </nav>
+
+            <Separator className="my-2" />
+
+            <div className="px-4 pb-4 text-xs text-muted-foreground">
+              Optimisé mobile • s’adapte à votre écran
+            </div>
           </aside>
         </>
       )}
