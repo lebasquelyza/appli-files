@@ -2,15 +2,17 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
-/** Icônes SVG inline */
+/** Icône burger : carré vert + barres blanches */
 function IconMenu(props: React.SVGProps<SVGSVGElement>) {
   return (
-    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden {...props}>
-      <path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden {...props} className={props.className}>
+      {/* Carré vert (prend la couleur via currentColor) */}
+      <rect x="2" y="2" width="20" height="20" rx="4" fill="currentColor" />
+      {/* Barres blanches */}
+      <path d="M7 9.5h10M7 12h10M7 14.5h10" stroke="white" strokeWidth="2" strokeLinecap="round" />
     </svg>
   );
 }
@@ -48,7 +50,7 @@ function Separator({ className = "" }: { className?: string }) {
   return <div className={`h-px w-full bg-border ${className}`} />;
 }
 
-/** NAV */
+/** NAV: toutes les entrées sous /dashboard/... */
 const NAV = [
   { href: "/dashboard/abonnement", label: "abonnement", icon: IconHome },
   { href: "/dashboard/bmi",        label: "bmi",        icon: IconChart },
@@ -116,7 +118,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("resize", setVH);
   }, []);
 
-  /** NavLink : navigate + close menu au clic */
+  /** NavLink : navigate + CLOSE menu au clic */
   const NavLink = ({
     href,
     children,
@@ -131,7 +133,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         onClick={() => {
           startTransition(() => {
             router.push(href);
-            setOpen(false); // ← ferme uniquement après sélection
+            setOpen(false); // ← ferme uniquement après sélection d’un onglet
           });
         }}
         className={className}
@@ -154,16 +156,15 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* TOP BAR */}
       <div className="sticky top-0 z-40 border-b bg-background/75 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="h-14 px-3 sm:px-4 flex items-center gap-2">
-          {/* Bouton hamburger vert (texte blanc) */}
+          {/* Bouton neutre + icône burger carré vert */}
           <Button
             onClick={() => setOpen(true)}
             aria-label="Ouvrir la navigation"
             className="h-10 w-10 p-0 inline-grid place-items-center rounded-2xl
-                       bg-green-600 text-white hover:bg-green-600/90
-                       focus-visible:ring-2 focus-visible:ring-green-600/40
+                       hover:bg-muted focus-visible:ring-2 focus-visible:ring-green-600/40
                        shadow-sm"
           >
-            <IconMenu />
+            <IconMenu className="text-green-600" />
           </Button>
 
           <div className="flex-1 truncate text-base font-medium">{title}</div>
@@ -173,7 +174,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* DRAWER */}
       {open && (
         <>
-          {/* Overlay (inert — ne ferme PAS le menu) */}
+          {/* Overlay inert (ne ferme PAS au clic) */}
           <div className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm pointer-events-none" />
 
           {/* Panel */}
