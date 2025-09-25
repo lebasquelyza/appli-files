@@ -1,3 +1,4 @@
+// app/dashboard/layout.tsx
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
@@ -64,7 +65,7 @@ const NAV = [
   { href: "/dashboard/settings",   label: "settings",   icon: IconSettings },
 ] as const;
 
-/** Petite barre de chargement top (sans lib) */
+/** Barre de chargement top (sans lib) */
 function LoadingBar({ show }: { show: boolean }) {
   return (
     <div
@@ -97,7 +98,7 @@ function useActiveTitle(pathname: string | null) {
   }, [pathname]);
 }
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+export default function Layout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const title = useActiveTitle(pathname);
@@ -116,15 +117,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return () => window.removeEventListener("resize", setVH);
   }, []);
 
-  /** Fermer le menu et arrêter la barre de chargement quand la route a changé */
+  /** Fermer le menu quand la route a changé (page chargée) */
   useEffect(() => {
     if (open) setOpen(false);
-    // la transition s’arrête d’elle-même car pathname a changé :
-    // isPending est géré par startTransition
-    // (pas besoin de set explicit ici)
-  }, [pathname]); // ← se déclenche quand la nouvelle page est prête
+  }, [pathname, open]);
 
-  /** Lien de navigation : lance une transition + affiche la barre */
+  /** Lien de navigation : transition + barre de chargement */
   const NavLink = ({
     href,
     children,
@@ -137,9 +135,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return (
       <button
         onClick={() => {
-          startTransition(() => {
-            router.push(href);
-          });
+          startTransition(() => router.push(href));
         }}
         className={className}
       >
@@ -161,14 +157,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* TOP BAR */}
       <div className="sticky top-0 z-40 border-b bg-background/75 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="h-14 px-3 sm:px-4 flex items-center gap-2">
+          {/* Bouton hamburger VERT + écriture blanche */}
           <Button
-            variant="ghost"
-            className="rounded-2xl h-10 w-10 p-0 inline-grid place-items-center shadow-sm"
             onClick={() => setOpen(true)}
             aria-label="Ouvrir la navigation"
+            className="h-10 w-10 p-0 inline-grid place-items-center rounded-2xl
+                       bg-green-600 text-white hover:bg-green-600/90
+                       focus-visible:ring-2 focus-visible:ring-green-600/40
+                       shadow-sm"
           >
             <IconMenu />
           </Button>
+
           <div className="flex-1 truncate text-base font-medium">{title}</div>
         </div>
       </div>
@@ -178,7 +178,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <>
           {/* Overlay */}
           <div
-            className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out fade-in-0"
+            className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm"
             onClick={() => setOpen(false)}
           />
           {/* Panel */}
@@ -193,6 +193,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <div className="text-base font-semibold">Navigation</div>
               <div className="text-xs text-muted-foreground">Accès rapide</div>
             </div>
+
             <Separator />
 
             <nav className="p-2 space-y-1">
@@ -236,3 +237,4 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     </div>
   );
 }
+
