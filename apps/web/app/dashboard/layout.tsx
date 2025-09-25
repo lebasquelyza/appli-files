@@ -2,10 +2,9 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
-/** Icône burger : 3 barres blanches (le carré vert vient du bouton) */
+/** Icône burger : 3 barres blanches (le fond vert est géré par le bouton) */
 function IconMenu(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden {...props}>
@@ -37,7 +36,7 @@ function IconChart(props: React.SVGProps<SVGSVGElement>) {
 function IconSettings(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden {...props}>
-      <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm-9 2.5 2.2-.9a8 8 0 0 0 1.5 0l.8 2.2h6l.8-2.2a8 8 0 0 0 1.5 0l2.2.9 3-5-2-1.5a8 8 0 0 0 0-1.5l2-1.5-3-5-2.2.9a8 8 0 0 0-1.5 0L13 2H7l-.8 2.2a8 8 0 0 0-1.5 0L2.5 3.3l-3 5Z" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm-9 2.5 2.2-.9a8 8 0 0 0 1.5 0l.8 2.2h6l.8-2.2a8 8 0 0 0 1.5 0l2.2.9 3-5-2-1.5a8 8 0 0 0 0-1.5l2-1.5-3-5-2.2.9a8 8 0 0 0-1.5 0L13 2H7l-.8 2.2a8 8 0 0 0-1.5 0L2.5 3.3l-3 5L1.5 10a8 8 0 0 0 0 1.5L-.5 13l3 5Z" fill="none" stroke="currentColor" strokeWidth="1.5" />
     </svg>
   );
 }
@@ -47,7 +46,7 @@ function Separator({ className = "" }: { className?: string }) {
   return <div className={`h-px w-full bg-border ${className}`} />;
 }
 
-/** NAV: toutes les entrées sous /dashboard/... */
+/** NAV */
 const NAV = [
   { href: "/dashboard/abonnement", label: "abonnement", icon: IconHome },
   { href: "/dashboard/bmi",        label: "bmi",        icon: IconChart },
@@ -63,24 +62,13 @@ const NAV = [
   { href: "/dashboard/settings",   label: "settings",   icon: IconSettings },
 ] as const;
 
-/** Barre de chargement top (sans lib) */
+/** Barre de chargement top */
 function LoadingBar({ show }: { show: boolean }) {
   return (
-    <div
-      className={[
-        "pointer-events-none fixed left-0 right-0 top-0 z-[60] h-[2px] overflow-hidden",
-        show ? "opacity-100" : "opacity-0",
-        "transition-opacity duration-200",
-      ].join(" ")}
-      aria-hidden
-    >
+    <div className={["pointer-events-none fixed left-0 right-0 top-0 z-[60] h-[2px] overflow-hidden", show ? "opacity-100" : "opacity-0", "transition-opacity duration-200"].join(" ")} aria-hidden>
       <div className="h-full w-1/2 animate-[loading_1.2s_ease-in-out_infinite] bg-foreground/80" />
       <style jsx>{`
-        @keyframes loading {
-          0% { transform: translateX(-100%); }
-          50% { transform: translateX(50%); }
-          100% { transform: translateX(200%); }
-        }
+        @keyframes loading { 0%{transform:translateX(-100%)} 50%{transform:translateX(50%)} 100%{transform:translateX(200%)} }
       `}</style>
     </div>
   );
@@ -89,9 +77,7 @@ function LoadingBar({ show }: { show: boolean }) {
 function useActiveTitle(pathname: string | null) {
   return useMemo(() => {
     if (!pathname) return "Dashboard";
-    const match =
-      [...NAV].sort((a, b) => b.href.length - a.href.length).find((r) => pathname.startsWith(r.href)) ||
-      null;
+    const match = [...NAV].sort((a, b) => b.href.length - a.href.length).find((r) => pathname.startsWith(r.href)) || null;
     return match?.label ?? "Dashboard";
   }, [pathname]);
 }
@@ -104,81 +90,60 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
-  /** iOS 100vh fix */
+  // iOS 100vh fix
   useEffect(() => {
-    const setVH = () => {
-      const vh = window.innerHeight * 0.01;
-      document.documentElement.style.setProperty("--vh", `${vh}px`);
-    };
+    const setVH = () => document.documentElement.style.setProperty("--vh", `${window.innerHeight * 0.01}px`);
     setVH();
     window.addEventListener("resize", setVH);
     return () => window.removeEventListener("resize", setVH);
   }, []);
 
-  /** NavLink : navigate + CLOSE menu au clic */
-  const NavLink = ({
-    href,
-    children,
-    className,
-  }: {
-    href: string;
-    children: React.ReactNode;
-    className?: string;
-  }) => {
-    return (
-      <button
-        onClick={() => {
-          startTransition(() => {
-            router.push(href);
-            setOpen(false); // ferme uniquement après sélection d’un onglet
-          });
-        }}
-        className={className}
-      >
-        {children}
-      </button>
-    );
-  };
+  // NavLink : navigate + close menu au clic
+  const NavLink = ({ href, children, className }: { href: string; children: React.ReactNode; className?: string }) => (
+    <button
+      onClick={() => {
+        startTransition(() => {
+          router.push(href);
+          setOpen(false);
+        });
+      }}
+      className={className}
+    >
+      {children}
+    </button>
+  );
 
   return (
-    <div
-      className="flex min-h-[calc(var(--vh,1vh)*100)] flex-col"
-      style={{
-        paddingTop: "env(safe-area-inset-top)",
-        paddingBottom: "env(safe-area-inset-bottom)",
-      }}
-    >
+    <div className="flex min-h-[calc(var(--vh,1vh)*100)] flex-col" style={{ paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)" }}>
       <LoadingBar show={isPending} />
 
       {/* TOP BAR */}
       <div className="sticky top-0 z-40 border-b bg-background/75 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="h-14 px-3 sm:px-4 flex items-center gap-2">
-          {/* Bouton carré VERT (sans arrondi) */}
-          <Button
+        <div className="h-14 px-3 sm:px-4 flex items-center gap-3">
+          {/* BOUTON CARRÉ VERT (pas de shadcn Button pour éviter tout override) */}
+          <button
             onClick={() => setOpen(true)}
             aria-label="Ouvrir la navigation"
-            className="h-10 w-10 p-0 inline-grid place-items-center rounded-none
-                       bg-green-600 text-white hover:bg-green-600/90
-                       focus-visible:ring-2 focus-visible:ring-green-600/40
-                       shadow-sm"
+            className="h-10 w-10 inline-grid place-items-center rounded-none bg-green-600 text-white hover:bg-green-600/90 focus-visible:ring-2 focus-visible:ring-green-600/40 shadow-sm"
           >
             <IconMenu />
-          </Button>
+          </button>
 
-          <div className="flex-1 truncate text-base font-medium">{title}</div>
+          <div className="flex-1 truncate text-base font-medium">
+            <span>Dashboard</span>
+            <span className="ml-2 text-muted-foreground">Navigation</span>
+          </div>
         </div>
       </div>
 
       {/* DRAWER */}
       {open && (
         <>
-          {/* Overlay inert (ne ferme PAS au clic) */}
+          {/* Overlay inactif */}
           <div className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm pointer-events-none" />
 
-          {/* Panel */}
           <aside
-            className="fixed inset-y-0 left-0 z-50 w-[86%] max-w-[22rem] bg-gradient-to-b from-background to-muted/40 border-r shadow-xl rounded-r-2xl
-                       animate-in slide-in-from-left duration-200"
+            className="fixed inset-y-0 left-0 z-50 w-[86%] max-w-[22rem] bg-gradient-to-b from-background to-muted/40 border-r shadow-xl rounded-r-2xl animate-in slide-in-from-left duration-200"
             role="dialog"
             aria-modal="true"
             style={{ paddingLeft: "env(safe-area-inset-left)" }}
@@ -194,20 +159,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               {NAV.map((item) => {
                 const ActiveIcon = item.icon;
                 const active = pathname?.startsWith(item.href);
-                const base =
-                  "w-full text-left flex items-center gap-3 px-4 py-3 rounded-xl transition outline-none";
-                const styles = active
-                  ? "bg-accent text-accent-foreground shadow-sm"
-                  : "hover:bg-muted";
+                const base = "w-full text-left flex items-center gap-3 px-4 py-3 rounded-xl transition outline-none";
+                const styles = active ? "bg-accent text-accent-foreground shadow-sm" : "hover:bg-muted text-foreground";
                 return (
                   <NavLink key={item.href} href={item.href} className={`${base} ${styles}`}>
-                    <ActiveIcon />
+                    {/* Icônes suivent la couleur du texte → plus de bleu par défaut */}
+                    <span className="text-current"><ActiveIcon /></span>
                     <span className="truncate capitalize">{item.label}</span>
-                    {active && (
-                      <Badge variant="secondary" className="ml-auto">
-                        actif
-                      </Badge>
-                    )}
+                    {active && <Badge variant="secondary" className="ml-auto">actif</Badge>}
                   </NavLink>
                 );
               })}
@@ -224,9 +183,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       {/* CONTENU */}
       <main className="flex-1 px-3 sm:px-4 py-4">
-        <div className="mx-auto w-full max-w-screen-sm sm:max-w-screen-md">
-          {children}
-        </div>
+        <div className="mx-auto w-full max-w-screen-sm sm:max-w-screen-md">{children}</div>
       </main>
     </div>
   );
