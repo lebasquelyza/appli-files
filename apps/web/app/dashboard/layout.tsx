@@ -1,4 +1,3 @@
-// app/dashboard/layout.tsx
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
@@ -60,7 +59,7 @@ const NAV = [
   { href: "/dashboard/music",      label: "music",      icon: IconVideo },
   { href: "/dashboard/pricing",    label: "pricing",    icon: IconChart },
   { href: "/dashboard/profile",    label: "profile",    icon: IconHome },
-  { href: "/dashboard/progress",   label: "progress",   icon: IconChart },
+  { href: "/dashboard/progress",   label: "progress",    icon: IconChart },
   { href: "/dashboard/recipes",    label: "recipes",    icon: IconHome },
   { href: "/dashboard/settings",   label: "settings",   icon: IconSettings },
 ] as const;
@@ -157,7 +156,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* TOP BAR */}
       <div className="sticky top-0 z-40 border-b bg-background/75 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="h-14 px-3 sm:px-4 flex items-center gap-2">
-          {/* Bouton hamburger VERT + écriture blanche */}
+          {/* Bouton hamburger vert (texte blanc) */}
           <Button
             onClick={() => setOpen(true)}
             aria-label="Ouvrir la navigation"
