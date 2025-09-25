@@ -41,7 +41,7 @@ function IconSettings(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-/** Séparateur simple */
+/** Séparateur simple (si besoin ailleurs) */
 function Separator({ className = "" }: { className?: string }) {
   return <div className={`h-px w-full bg-border ${className}`} />;
 }
@@ -98,7 +98,7 @@ function useActiveTitle(pathname: string | null) {
 export default function Layout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  useActiveTitle(pathname); // on n’affiche plus le titre
+  useActiveTitle(pathname); // on n’affiche pas le titre en haut
 
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -152,7 +152,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* TOP BAR (sans titre) */}
       <div className="sticky top-0 z-40 border-b bg-background/75 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="h-14 px-3 sm:px-4 flex items-center gap-3">
-          {/* BOUTON HAMBURGER — vert plein + texte blanc */}
+          {/* BOUTON HAMBURGER — vert plein + texte blanc (forcé) */}
           <button
             onClick={() => setOpen(true)}
             aria-label="Ouvrir la navigation"
@@ -171,42 +171,45 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           {/* Overlay inactif */}
           <div className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm pointer-events-none" />
 
-          {/* Panneau */}
+          {/* Panneau avec 2 colonnes : ruban à gauche, liste à droite */}
           <aside
             className="fixed inset-y-0 left-0 z-50 w-[86%] max-w-[22rem]
                        bg-gradient-to-b from-background to-muted/40
                        border-r shadow-xl rounded-r-2xl
-                       animate-in slide-in-from-left duration-200"
+                       animate-in slide-in-from-left duration-200
+                       grid grid-cols-[2rem_1fr]"
             role="dialog"
             aria-modal="true"
             style={{ paddingLeft: "env(safe-area-inset-left)" }}
           >
-            {/* Ruban vertical 'Dashboard' */}
-            <div className="absolute left-0 top-0 bottom-0 w-8 bg-[#16A34A] text-white flex items-center justify-center rounded-r-md shadow-sm">
+            {/* Ruban vertical 'Dashboard' (colonne gauche) */}
+            <div className="col-[1] row-[1] flex items-center justify-center bg-[#16A34A] text-white rounded-r-md shadow-sm">
               <span
-                className="text-[11px] font-semibold tracking-wider"
+                className="text-[11px] font-semibold tracking-wider select-none"
                 style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
               >
                 Dashboard
               </span>
             </div>
 
-            {/* Liste (décalée à droite du ruban) */}
-            <nav className="p-2 pl-10 space-y-2 pt-4">
+            {/* Liste (colonne droite) */}
+            <nav className="col-[2] row-[1] p-2 space-y-2 pt-3">
               {NAV.map((item) => {
                 const ActiveIcon = item.icon;
                 const active = pathname?.startsWith(item.href);
 
-                // Styles: par défaut blanc + vert, actif = vert plein + blanc
+                // Styles: PAR DÉFAUT (blanc+vert), ACTIF (vert plein+blanc).
                 const base =
                   "w-full text-left flex items-center gap-3 px-4 py-3 rounded-2xl transition outline-none border";
                 const styles = active
-                  ? "bg-[#16A34A] text-white border-[#16A34A]"
-                  : "bg-white text-[#15803D] border-green-100 hover:bg-green-50";
+                  ? "!bg-[#16A34A] !text-white !border-[#16A34A]"
+                  : "!bg-white !text-[#15803D] border-green-100 hover:!bg-green-50";
 
                 return (
                   <NavLink key={item.href} href={item.href} className={`${base} ${styles}`}>
-                    <span className="text-current"><ActiveIcon /></span>
+                    <span className="text-current">
+                      <ActiveIcon />
+                    </span>
                     <span className="truncate capitalize">{item.label}</span>
                     {active && (
                       <Badge className="ml-auto bg-white/15 text-white border-0">actif</Badge>
@@ -228,3 +231,4 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
+
