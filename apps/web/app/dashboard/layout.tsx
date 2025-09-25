@@ -98,8 +98,7 @@ function useActiveTitle(pathname: string | null) {
 export default function Layout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  // on calcule le titre mais on ne l’affiche plus
-  const title = useActiveTitle(pathname);
+  useActiveTitle(pathname); // on n’affiche plus le titre
 
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -130,7 +129,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         onClick={() => {
           startTransition(() => {
             router.push(href);
-            setOpen(false); // ← se ferme uniquement après sélection
+            setOpen(false); // se ferme après sélection
           });
         }}
         className={className}
@@ -150,7 +149,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     >
       <LoadingBar show={isPending} />
 
-      {/* TOP BAR */}
+      {/* TOP BAR (sans titre) */}
       <div className="sticky top-0 z-40 border-b bg-background/75 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="h-14 px-3 sm:px-4 flex items-center gap-3">
           {/* BOUTON HAMBURGER — vert plein + texte blanc */}
@@ -162,8 +161,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           >
             <IconMenu />
           </button>
-
-          {/* On retire le texte de titre (ex: 'profile') */}
           <div className="flex-1" />
         </div>
       </div>
@@ -184,34 +181,40 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             aria-modal="true"
             style={{ paddingLeft: "env(safe-area-inset-left)" }}
           >
-            {/* En-tête supprimé : plus de 'Navigation' ni 'Accès rapide' */}
-            {/* <div className="p-4 pb-3">...</div> */}
-            {/* <Separator /> */}
+            {/* Ruban vertical 'Dashboard' */}
+            <div className="absolute left-0 top-0 bottom-0 w-8 bg-[#16A34A] text-white flex items-center justify-center rounded-r-md shadow-sm">
+              <span
+                className="text-[11px] font-semibold tracking-wider"
+                style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
+              >
+                Dashboard
+              </span>
+            </div>
 
-            <nav className="p-2 space-y-1 pt-4">
+            {/* Liste (décalée à droite du ruban) */}
+            <nav className="p-2 pl-10 space-y-2 pt-4">
               {NAV.map((item) => {
                 const ActiveIcon = item.icon;
                 const active = pathname?.startsWith(item.href);
+
+                // Styles: par défaut blanc + vert, actif = vert plein + blanc
                 const base =
-                  "w-full text-left flex items-center gap-3 px-4 py-3 rounded-xl transition outline-none";
+                  "w-full text-left flex items-center gap-3 px-4 py-3 rounded-2xl transition outline-none border";
                 const styles = active
-                  ? "bg-accent text-accent-foreground shadow-sm"
-                  : "hover:bg-muted text-foreground";
+                  ? "bg-[#16A34A] text-white border-[#16A34A]"
+                  : "bg-white text-[#15803D] border-green-100 hover:bg-green-50";
+
                 return (
                   <NavLink key={item.href} href={item.href} className={`${base} ${styles}`}>
                     <span className="text-current"><ActiveIcon /></span>
                     <span className="truncate capitalize">{item.label}</span>
                     {active && (
-                      <Badge variant="secondary" className="ml-auto">
-                        actif
-                      </Badge>
+                      <Badge className="ml-auto bg-white/15 text-white border-0">actif</Badge>
                     )}
                   </NavLink>
                 );
               })}
             </nav>
-
-            {/* Séparateur et note bas de panneau retirés */}
           </aside>
         </>
       )}
