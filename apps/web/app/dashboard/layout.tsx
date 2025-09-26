@@ -6,35 +6,35 @@ import { usePathname, useRouter } from "next/navigation";
 /* ==== Icônes ==== */
 function IconMenu(props: React.SVGProps<SVGSVGElement>) {
   return (
-    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden {...props}>
-      <path d="M4 8h16M4 12h16M4 16h16" stroke="white" strokeWidth="2" strokeLinecap="round" />
+    <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden {...props}>
+      <path d="M4 8h16M4 12h16M4 16h16" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
     </svg>
   );
 }
 function IconHome(p: React.SVGProps<SVGSVGElement>) {
   return (
-    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden {...p}>
+    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden {...p}>
       <path d="M3 10.5 12 3l9 7.5V21a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1v-10.5Z" fill="none" stroke="currentColor" strokeWidth="2" />
     </svg>
   );
 }
 function IconVideo(p: React.SVGProps<SVGSVGElement>) {
   return (
-    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden {...p}>
+    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden {...p}>
       <path d="M3 7a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1l4-2.5V18.5L15 16v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" fill="none" stroke="currentColor" strokeWidth="2" />
     </svg>
   );
 }
 function IconChart(p: React.SVGProps<SVGSVGElement>) {
   return (
-    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden {...p}>
+    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden {...p}>
       <path d="M4 20V4M20 20H4M8 16v-5M12 20V8M16 20v-7" fill="none" stroke="currentColor" strokeWidth="2" />
     </svg>
   );
 }
 function IconSettings(p: React.SVGProps<SVGSVGElement>) {
   return (
-    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden {...p}>
+    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden {...p}>
       <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm-9 2.5 2.2-.9a8 8 0 0 0 1.5 0l.8 2.2h6l.8-2.2a8 8 0 0 0 1.5 0l2.2.9 3-5-2-1.5a8 8 0 0 0 0-1.5l2-1.5-3-5-2.2.9a8 8 0 0 0-1.5 0L13 2H7l-.8 2.2a8 8 0 0 0-1.5 0L2.5 3.3l-3 5L1.5 10a8 8 0 0 0 0 1.5L-.5 13l3 5Z" fill="none" stroke="currentColor" strokeWidth="1.5" />
     </svg>
   );
@@ -56,7 +56,7 @@ const NAV = [
   { href: "/dashboard/settings",   label: "settings",   icon: IconSettings },
 ] as const;
 
-/* ==== loading bar (optionnel) ==== */
+/* ==== Loading bar (optionnelle) ==== */
 function LoadingBar({ show }: { show: boolean }) {
   return (
     <div className={`pointer-events-none fixed left-0 right-0 top-0 z-[60] h-[2px] overflow-hidden transition-opacity duration-200 ${show ? "opacity-100" : "opacity-0"}`} aria-hidden>
@@ -89,15 +89,19 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("resize", setVH);
   }, []);
 
-  // couleurs
-  const brandGreen = "#16A34A"; // vert du hamburger (foncé)
-  const lightGreen = "#22C55E"; // vert plus clair, même teinte
+  // Couleurs
+  const brandGreen = "#16A34A"; // vert hamburger (foncé)
+  const lightGreen = "#22C55E"; // vert clair harmonisé
 
-  // lien nav : navigate + ferme le menu
-  const NavLink = ({ href, label, Icon, active }: { href: string; label: string; Icon: any; active: boolean }) => {
+  // Lien nav : navigate + ferme le menu
+  const NavLink = ({
+    href, label, Icon, active,
+  }: {
+    href: string; label: string; Icon: any; active: boolean;
+  }) => {
     const style: React.CSSProperties = active
-      ? { backgroundColor: brandGreen, color: "#FFFFFF", borderColor: brandGreen }
-      : { backgroundColor: lightGreen, color: "#FFFFFF", borderColor: lightGreen };
+      ? { background: brandGreen, color: "#FFFFFF", borderColor: brandGreen, boxShadow: "0 6px 14px rgba(22,163,74,0.18)" }
+      : { background: lightGreen, color: "#FFFFFF", borderColor: lightGreen, boxShadow: "0 6px 14px rgba(34,197,94,0.16)" };
 
     return (
       <button
@@ -108,10 +112,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           })
         }
         style={style}
-        className="w-full text-left flex items-center gap-3 px-3 py-3 rounded-2xl transition outline-none border shadow-sm active:scale-[0.99]"
+        className="group w-full text-left flex items-center gap-3 px-4 py-3 rounded-2xl border
+                   transition will-change-transform hover:translate-x-[2px] active:scale-[0.99]"
       >
-        <span className="text-current"><Icon /></span>
-        <span className="truncate capitalize flex-1">{label}</span>
+        <span className="text-current opacity-90 group-hover:opacity-100 transition">
+          <Icon />
+        </span>
+        <span className="truncate capitalize flex-1 font-medium tracking-wide">{label}</span>
+        <span className="opacity-60 group-hover:opacity-90 transition" aria-hidden>›</span>
       </button>
     );
   };
@@ -125,13 +133,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       {/* TOP BAR */}
       <div className="sticky top-0 z-40 border-b bg-background/75 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="h-14 px-3 sm:px-4 flex items-center gap-3">
-          {/* HAMBURGER — plus gros + très arrondi */}
+        <div className="h-16 px-3 sm:px-4 flex items-center gap-3">
+          {/* HAMBURGER — plus grand + arrondi */}
           <button
             onClick={() => setOpen(true)}
             aria-label="Ouvrir la navigation"
             style={{ backgroundColor: brandGreen, color: "#fff" }}
-            className="h-14 w-14 inline-grid place-items-center rounded-full shadow-lg active:scale-95 transition"
+            className="h-16 w-16 inline-grid place-items-center rounded-full shadow-xl
+                       hover:brightness-[1.05] active:scale-95 transition"
           >
             <IconMenu />
           </button>
@@ -143,20 +152,20 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {open && (
         <aside
           className="fixed left-0 top-0 bottom-0 z-50 w-[68%] sm:w-80
-                     bg-gradient-to-b from-background to-muted/40 border-r shadow-xl rounded-r-2xl
+                     bg-gradient-to-b from-background to-muted/40 border-r shadow-2xl rounded-r-2xl
                      animate-in slide-in-from-left duration-200 overflow-y-auto"
           role="dialog"
           aria-modal="true"
           style={{ paddingLeft: "env(safe-area-inset-left)" }}
         >
           {/* commence sous le header */}
-          <div className="pt-14">
-            {/* Titre visible avec le menu */}
-            <div className="px-3 pb-2 text-sm font-semibold text-foreground/80 select-none">
+          <div className="pt-16">
+            {/* Titre visible seulement quand le menu est ouvert */}
+            <div className="px-4 pb-2 text-sm font-semibold text-foreground/80 select-none">
               Dashboard
             </div>
 
-            {/* Onglets : vert clair + texte blanc ; actif vert foncé + blanc */}
+            {/* Onglets (design amélioré) */}
             <nav className="p-2 pt-0 space-y-2">
               {NAV.map((item) => {
                 const active = pathname?.startsWith(item.href);
@@ -185,5 +194,3 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
-
-
