@@ -59,7 +59,7 @@ const NAV = [
   { href: "/dashboard/profile",    label: "profile",    icon: IconHome },
   { href: "/dashboard/progress",   label: "progress",   icon: IconChart },
   { href: "/dashboard/recipes",    label: "recipes",    icon: IconHome },
-  { href: "/dashboard/settings",   label: "settings",    icon: IconSettings },
+  { href: "/dashboard/settings",   label: "settings",   icon: IconSettings },
 ] as const;
 
 /** Barre de chargement top */
@@ -98,7 +98,7 @@ function useActiveTitle(pathname: string | null) {
 export default function Layout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  useActiveTitle(pathname); // on n'affiche pas le titre
+  useActiveTitle(pathname); // on n'affiche pas le titre en haut
 
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -169,7 +169,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           {/* Overlay inactif */}
           <div className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm pointer-events-none" />
 
-          {/* Panneau : grille 2 colonnes → 'Dashboard' à gauche, onglets à droite, mêmes hauteurs */}
+          {/* Panneau : on garde une grille interne avec décalage égal à la hauteur du header */}
           <aside
             className="fixed inset-y-0 left-0 z-50 w-[86%] max-w-[22rem]
                        bg-gradient-to-b from-background to-muted/40
@@ -180,21 +180,23 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             aria-modal="true"
             style={{ paddingLeft: "env(safe-area-inset-left)" }}
           >
-            {/* Conteneur interne en grille pour aligner les hauteurs */}
-            <div className="h-full grid grid-cols-[2.2rem_1fr]">
-              {/* Colonne gauche : libellé vertical, même hauteur que la colonne de droite */}
-              <div className="col-[1] h-full flex items-center justify-center">
+            {/* === IMPORTANT ===
+                On ajoute un padding-top de 56px (= h-14) pour que tout commence sous le hamburger.
+            */}
+            <div className="h-full pt-14 grid grid-cols-[2.2rem_1fr]">
+              {/* Colonne gauche : libellé vertical exactement aligné avec la liste */}
+              <div className="col-[1] h-full flex items-start justify-center">
                 <span
-                  className="text-[12px] font-semibold tracking-wider text-foreground/80 select-none"
+                  className="mt-1 text-[12px] font-semibold tracking-wider text-foreground/80 select-none"
                   style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
                 >
                   Dashboard
                 </span>
               </div>
 
-              {/* Colonne droite : liste d’onglets */}
+              {/* Colonne droite : liste d’onglets (même pt-14 via conteneur parent) */}
               <div className="col-[2] h-full overflow-y-auto">
-                <nav className="p-2 space-y-2 pt-3">
+                <nav className="p-2 space-y-2">
                   {NAV.map((item) => {
                     const ActiveIcon = item.icon;
                     const active = pathname?.startsWith(item.href);
