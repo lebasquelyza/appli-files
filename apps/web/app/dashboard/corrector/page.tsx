@@ -1,18 +1,42 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Progress } from "@/components/ui/progress";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
-/* ===================== Types ===================== */
+/* ---------- Const ---------- */
+const TZ = "Europe/Paris";
+const CLIENT_PROXY_MAX_BYTES =
+  typeof process !== "undefined" && process.env.NEXT_PUBLIC_PROXY_UPLOAD_MAX_BYTES
+    ? Number(process.env.NEXT_PUBLIC_PROXY_UPLOAD_MAX_BYTES)
+    : 5 * 1024 * 1024; // 5MB par défaut
+
+/* ---------- Petites UI ---------- */
+function Spinner({ className = "" }: { className?: string }) {
+  return (
+    <span
+      className={`inline-block align-[-0.125em] h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent ${className}`}
+      aria-label="loading"
+    />
+  );
+}
+function ProgressBar({ value }: { value: number }) {
+  return (
+    <div style={{ height: 8, width: "100%", background: "#e5e7eb", borderRadius: 999 }}>
+      <div
+        style={{
+          height: 8,
+          width: `${Math.max(0, Math.min(100, value))}%`,
+          background: "linear-gradient(90deg,#22c55e,#16a34a)",
+          borderRadius: 999,
+          transition: "width .25s ease",
+        }}
+      />
+    </div>
+  );
+}
+
+/* ---------- Types ---------- */
 interface AnalysisPoint { time: number; label: string; detail?: string; }
-interface Fault { issue: string; severity: "faible"|"moyenne"|"élevée"; evidence?: string; correction?: string; }
+interface Fault { issue: string; severity: "faible" | "moyenne" | "élevée"; evidence?: string; correction?: string; }
 interface AIAnalysis {
   exercise: string;
   overall: string;
@@ -34,22 +58,7 @@ interface AIAnalysis {
   }>;
 }
 
-/* ===================== Constantes ===================== */
-const CLIENT_PROXY_MAX_BYTES =
-  typeof process !== "undefined" && process.env.NEXT_PUBLIC_PROXY_UPLOAD_MAX_BYTES
-    ? Number(process.env.NEXT_PUBLIC_PROXY_UPLOAD_MAX_BYTES)
-    : 5 * 1024 * 1024; // 5MB par défaut
-
-function Spinner({ className = "" }: { className?: string }) {
-  return (
-    <span
-      className={`inline-block align-[-0.125em] h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent ${className}`}
-      aria-label="loading"
-    />
-  );
-}
-
-/* ===================== Vocabulaire & Variations ===================== */
+/* ---------- Vocabulaire, variations & règles (raccourci de ta version) ---------- */
 function randInt(max: number) {
   if (typeof crypto !== "undefined" && "getRandomValues" in crypto) {
     const a = new Uint32Array(1);
@@ -59,237 +68,69 @@ function randInt(max: number) {
   return Math.floor(Math.random() * max);
 }
 function pick<T>(arr: T[]): T { return arr[randInt(arr.length)]; }
-
 const LEX = {
-  core: ["gainage", "sangle abdominale", "ceinture abdominale"],
-  braceVerb: ["gaine", "serre", "verrouille", "contracte"],
   neutralSpine: ["rachis neutre", "dos plat", "alignement lombaire neutre"],
   chestUp: ["poitrine fière", "sternum haut", "buste ouvert"],
-  shoulderPack: ["épaules abaissées/serrées", "omoplates basses/rétractées", "pack scapulaire"],
-  avoidMomentum: ["évite l’élan", "pas d’à-coups", "contrôle le mouvement"],
-  controlCue: ["amplitude contrôlée", "mouvement maîtrisé", "contrôle sur toute l’amplitude"],
-  rangeCue: ["amplitude utile", "range complet sans douleur", "aller-retour propre"],
-  tempoIntro: ["Tempo", "Cadence", "Rythme"],
-  tempo201: ["2–0–1", "2-0-1", "2s-0-1s"],
-  tempo311: ["3–1–1", "3-1-1", "3s-1-1s"],
+  wristNeutral: ["poignets neutres", "poignets alignés", "pas cassés"],
+  headNeutral: ["regard neutre", "nuque longue", "évite l’hyperextension cervicale"],
   breathe: ["souffle sur l’effort", "expire à la phase concentrique", "inspire au retour"],
   footTripod: ["appuis trépied (talon + base gros/petit orteil)", "ancre tes pieds"],
   kneeTrack: ["genoux dans l’axe", "genoux suivent la pointe de pieds", "pas de valgus"],
-  hipBack: ["hanche en arrière", "charnière franche", "pense fesses loin derrière"],
-  gluteCue: ["pousse le talon", "chasse le talon", "guide le talon"],
-  holdTop: ["marque 1 s en contraction", "pause 1 s en pic de contraction", "garde 1 s en haut"],
-  grip: ["prise ferme", "serre la barre", "poignées verrouillées"],
-  elbowPathPush: ["coudes ~45° du buste", "coudes sous la barre", "coudes ni trop ouverts ni collés"],
-  elbowPathPull: ["coudes près du buste", "coudes vers la hanche", "coudes sous la ligne d’épaule"],
-  latDepress: ["abaisse les épaules", "déprime les scapulas", "descends les omoplates"],
-  scapRetract: ["rétracte les omoplates", "serre les omoplates", "omoplates tirées en arrière"],
-  wristNeutral: ["poignets neutres", "poignets alignés", "pas cassés"],
-  headNeutral: ["regard neutre", "nuque longue", "évite l’hyperextension cervicale"],
+  controlCue: ["amplitude contrôlée", "mouvement maîtrisé", "contrôle sur toute l’amplitude"],
+  avoidMomentum: ["évite l’élan", "pas d’à-coups", "contrôle le mouvement"],
+  tempoIntro: ["Tempo", "Cadence", "Rythme"],
+  tempo201: ["2–0–1", "2-0-1", "2s-0-1s"],
+  tempo311: ["3–1–1", "3-1-1", "3s-1-1s"],
 };
-
-type Category =
-  | "squat" | "lunge" | "hinge" | "hipthrust" | "legpress"
-  | "quad_iso" | "ham_iso" | "calf"
-  | "pull_vertical" | "pull_horizontal" | "row_chest" | "face_pull"
-  | "push_horizontal" | "push_vertical" | "dip" | "pushup" | "fly" | "lateral_raise" | "front_raise" | "rear_delt"
-  | "biceps" | "triceps"
-  | "core_plank" | "core_anti_rotation" | "core_flexion"
-  | "carry" | "sled"
-  | "unknown";
-
-const EXO_ALIASES: Array<{ rx: RegExp; cat: Category }> = [
-  { rx: /(squat|front\s*squat|goblet|hack\s*squat|sissy)/, cat: "squat" },
-  { rx: /(lunge|fente|split\s*squat|walking\s*lunge|bulgarian)/, cat: "lunge" },
-  { rx: /(leg\s*press|presse\s*à\s*jambes)/, cat: "legpress" },
-  { rx: /(leg\s*extension|extension\s*quadriceps)/, cat: "quad_iso" },
-  { rx: /(deadlift|soulev|hinge|rdl|romanian|good\s*morning|hip\s*hinge)/, cat: "hinge" },
-  { rx: /(hip\s*thrust|pont\s*de\s*hanches|glute\s*bridge)/, cat: "hipthrust" },
-  { rx: /(leg\s*curl|ischio|hamstring\s*curl)/, cat: "ham_iso" },
-  { rx: /(calf|mollet|élévation\s*mollets|standing\s*calf|seated\s*calf)/, cat: "calf" },
-  { rx: /(pull[-\s]?up|traction)/, cat: "pull_vertical" },
-  { rx: /(lat\s*pulldown|tirage\s*vertical)/, cat: "pull_vertical" },
-  { rx: /(row|tirage\s*horizontal|barbell\s*row|pendlay|cable\s*row|seated\s*row)/, cat: "pull_horizontal" },
-  { rx: /(chest\s*supported\s*row|row\s*appui\s*pector)/, cat: "row_chest" },
-  { rx: /(face\s*pull)/, cat: "face_pull" },
-  { rx: /(bench|développé\s*couché|décliné|incliné)/, cat: "push_horizontal" },
-  { rx: /(ohp|overhead|militaire|shoulder\s*press|arnold)/, cat: "push_vertical" },
-  { rx: /(push[-\s]?up|pompe)/, cat: "pushup" },
-  { rx: /(dip|dips)/, cat: "dip" },
-  { rx: /(fly|écarté|pec\s*deck)/, cat: "fly" },
-  { rx: /(lateral\s*raise|élévation\s*latérale)/, cat: "lateral_raise" },
-  { rx: /(front\s*raise|élévation\s*frontale)/, cat: "front_raise" },
-  { rx: /(rear\s*delt|oiseau|reverse\s*fly)/, cat: "rear_delt" },
-  { rx: /(curl|biceps)/, cat: "biceps" },
-  { rx: /(triceps|pushdown|extension\s*triceps|kickback|overhead\s*extension)/, cat: "triceps" },
-  { rx: /(plank|planche|side\s*plank|gainage\s*latéral|hollow)/, cat: "core_plank" },
-  { rx: /(pallof|anti[-\s]?rotation|carry\s*offset)/, cat: "core_anti_rotation" },
-  { rx: /(crunch|sit[-\s]?up|leg\s*raise|mountain\s*climber|russian\s*twist)/, cat: "core_flexion" },
-  { rx: /(farmer|carry)/, cat: "carry" },
-  { rx: /(sled|prowler|traîneau)/, cat: "sled" },
-];
-
-function getCategory(exo: string): Category {
-  const s = (exo || "").toLowerCase();
-  for (const { rx, cat } of EXO_ALIASES) if (rx.test(s)) return cat;
-  return "unknown";
-}
-
-function varyTerms(s: string) {
-  if (!s) return s;
-  let out = s;
-  out = out.replace(/\btronc\b/gi, pick(LEX.core));
-  out = out
-    .replace(/\bcolonne\b/gi, pick(LEX.neutralSpine))
-    .replace(/\bdos droit\b/gi, pick(LEX.neutralSpine))
-    .replace(/\bdos plat\b/gi, pick(LEX.neutralSpine))
-    .replace(/\bcore\b/gi, pick(LEX.core))
-    .replace(/\btenez\b/gi, "garde")
-    .replace(/\bmaintenez\b/gi, "garde");
-  return out;
-}
+function varyTerms(s: string) { return s; } // on garde simple ici
 function uniqueShuffle(arr: string[]) {
   const seen = new Set<string>();
   const out: string[] = [];
-  for (const s of arr) {
-    const key = s.toLowerCase().trim();
-    if (!seen.has(key)) { seen.add(key); out.push(s); }
-  }
-  for (let i = out.length - 1; i > 0; i--) {
-    const j = randInt(i + 1);
-    [out[i], out[j]] = [out[j], out[i]];
-  }
+  for (const s of arr) { const k = s.toLowerCase().trim(); if (!seen.has(k)) { seen.add(k); out.push(s); } }
+  for (let i = out.length - 1; i > 0; i--) { const j = randInt(i + 1); [out[i], out[j]] = [out[j], out[i]]; }
   return out;
 }
-function makeCorrections(exo: string) {
-  const cat = getCategory(exo);
-  const tips: string[] = [];
-
-  const universal = [
+function makeCorrections(_exo: string) {
+  const tips = [
     `Garde un ${pick(LEX.neutralSpine)} avec ${pick(LEX.chestUp)}.`,
-    `${pick(LEX.breathe)}.`,
     `${pick(LEX.wristNeutral)} et ${pick(LEX.headNeutral)}.`,
+    `${pick(LEX.breathe)}.`,
+    `${pick(LEX.controlCue)}.`,
+    `${pick(LEX.avoidMomentum)} — ${pick(LEX.tempoIntro)} ${pick(randInt(2) ? LEX.tempo201 : LEX.tempo311)}.`,
+    `${pick(LEX.kneeTrack)}; ${pick(LEX.footTripod)}.`,
   ];
-  const upperStab = [`${pick(LEX.shoulderPack)}.`, `${pick(LEX.grip)}.`];
-  const lowerStab = [`${pick(LEX.footTripod)}.`, `${pick(LEX.kneeTrack)}.`];
-
-  switch (cat) {
-    case "squat":
-      tips.push(`${pick(LEX.kneeTrack)}.`, `${pick(LEX.footTripod)}.`, `${pick(LEX.chestUp)}; descends en ${pick(LEX.controlCue)}.`, `${pick(LEX.avoidMomentum)} — ${pick(LEX.tempoIntro)} ${pick(LEX.tempo311)}.`);
-      break;
-    case "lunge":
-      tips.push(`Grand pas, ${pick(LEX.kneeTrack)}.`, `Buste haut, ${pick(LEX.neutralSpine)}; ${pick(LEX.controlCue)}.`, `Stabilise le bassin (${pick(LEX.core)[0]}).`, `${pick(LEX.tempoIntro)} ${pick(LEX.tempo201)}.`);
-      break;
-    case "hinge":
-      tips.push(`${pick(LEX.hipBack)}; genoux souples.`, `${pick(LEX.neutralSpine)}; ${pick(LEX.scapRetract)}.`, `${pick(LEX.grip)} et barre proche du corps.`, `${pick(LEX.tempoIntro)} ${pick(LEX.tempo311)}.`);
-      break;
-    case "hipthrust":
-      tips.push(`Rétroversion en haut; ${pick(LEX.holdTop)}.`, `${pick(LEX.neutralSpine)} au point haut.`, `${pick(LEX.controlCue)}; ${pick(LEX.breathe)}.`);
-      break;
-    case "legpress":
-      tips.push(`${pick(LEX.kneeTrack)}; placement pieds médian.`, `${pick(LEX.controlCue)}, bas du dos au dossier (${pick(LEX.neutralSpine)}).`, `${pick(LEX.avoidMomentum)}.`);
-      break;
-    case "quad_iso":
-      tips.push(`${pick(LEX.controlCue)}; verrou en haut sans claquer le genou.`, `${pick(LEX.tempoIntro)} ${pick(LEX.tempo311)}.`, `${pick(LEX.breathe)}.`);
-      break;
-    case "ham_iso":
-      tips.push(`${pick(LEX.controlCue)}; hanches stables.`, `${pick(LEX.tempoIntro)} ${pick(LEX.tempo311)}.`, `Pas d’à-coups, ressens l’ischio sur toute l’amplitude.`);
-      break;
-    case "calf":
-      tips.push(`${pick(LEX.controlCue)}; arrêt net en bas, ${pick(LEX.holdTop)}.`, `${pick(LEX.rangeCue)}.`, `${pick(LEX.tempoIntro)} ${pick(LEX.tempo311)}.`);
-      break;
-    case "pull_vertical":
-      tips.push(`${pick(LEX.latDepress)} avant de tirer; ${pick(LEX.elbowPathPull)}.`, `${pick(LEX.shoulderPack)}.`, `${pick(LEX.avoidMomentum)}.`);
-      break;
-    case "pull_horizontal":
-    case "row_chest":
-      tips.push(`${pick(LEX.scapRetract)}; ${pick(LEX.elbowPathPull)}.`, `${pick(LEX.wristNeutral)}.`, `${pick(LEX.controlCue)}, focus dos.`);
-      break;
-    case "face_pull":
-      tips.push(`Coudes hauts, tire vers le visage; vise l’extern rot.`, `${pick(LEX.shoulderPack)}.`, `${pick(LEX.controlCue)}.`);
-      break;
-    case "push_horizontal":
-      tips.push(`${pick(LEX.elbowPathPush)}.`, `${pick(LEX.shoulderPack)} sur le banc.`, `${pick(LEX.wristNeutral)}; ${pick(LEX.avoidMomentum)}.`);
-      break;
-    case "push_vertical":
-      tips.push(`${pick(LEX.elbowPathPush)} (barre ligne d’oreilles).`, `${pick(LEX.core)[0]} solide; fessiers contractés.`, `${pick(LEX.wristNeutral)}; ${pick(LEX.controlCue)}.`);
-      break;
-    case "dip":
-      tips.push(`Légère inclinaison, coudes suivent; évite de hausser les épaules.`, `${pick(LEX.shoulderPack)}.`, `${pick(LEX.controlCue)}.`);
-      break;
-    case "pushup":
-      tips.push(`${pick(LEX.elbowPathPush)}; ${pick(LEX.neutralSpine)} (pas de bassin qui tombe).`, `${pick(LEX.core)[0]} serrée.`, `${pick(LEX.avoidMomentum)} — ${pick(LEX.tempoIntro)} ${pick(LEX.tempo201)}.`);
-      break;
-    case "fly":
-      tips.push(`${pick(LEX.controlCue)}; coudes légèrement fléchis constants.`, `${pick(LEX.shoulderPack)}.`, `${pick(LEX.rangeCue)} sans douleur.`);
-      break;
-    case "lateral_raise":
-      tips.push(`Élévation latérale, pouces neutres/légèrement vers le bas.`, `${pick(LEX.shoulderPack)}; évite l’élan.`, `${pick(LEX.tempoIntro)} ${pick(LEX.tempo311)}.`);
-      break;
-    case "front_raise":
-      tips.push(`Montée frontale sans cambrer; ${pick(LEX.core)[0]} active.`, `${pick(LEX.controlCue)}.`, `${pick(LEX.wristNeutral)}.`);
-      break;
-    case "rear_delt":
-      tips.push(`Buste penché, tire par les coudes.`, `${pick(LEX.scapRetract)} sans hausser.`, `${pick(LEX.controlCue)}.`);
-      break;
-    case "biceps":
-      tips.push(`${pick(LEX.wristNeutral)}; coudes fixes près du buste.`, `${pick(LEX.avoidMomentum)}.`, `${pick(LEX.tempoIntro)} ${pick(LEX.tempo311)}.`);
-      break;
-    case "triceps":
-      tips.push(`Coudes stables (près tête/buste selon variante).`, `${pick(LEX.wristNeutral)}; ${pick(LEX.controlCue)}.`, `${pick(LEX.breathe)}.`);
-      break;
-    case "core_plank":
-      tips.push(`${pick(LEX.neutralSpine)}; légère rétroversion bassin.`, `${pick(LEX.braceVerb)} ta ${pick(LEX.core)}.`, `Respiration calme, tension constante.`);
-      break;
-    case "core_anti_rotation":
-      tips.push(`Résiste à la rotation; épaules/hanches carrées.`, `${pick(LEX.braceVerb)} la ${pick(LEX.core)}.`, `${pick(LEX.controlCue)}.`);
-      break;
-    case "core_flexion":
-      tips.push(`Enroule vertèbre par vertèbre; pas de tirage nuque.`, `${pick(LEX.braceVerb)} la ${pick(LEX.core)} et souffle en montée.`, `${pick(LEX.controlCue)}.`);
-      break;
-    case "carry":
-      tips.push(`${pick(LEX.braceVerb)} la ${pick(LEX.core)}; épaules basses.`, `Marche contrôlée, verticalité.`, `${pick(LEX.grip)}.`);
-      break;
-    case "sled":
-      tips.push(`Inclinaison adaptée; poussée continue.`, `${pick(LEX.footTripod)}; ${pick(LEX.kneeTrack)}.`, `${pick(LEX.avoidMomentum)}.`);
-      break;
-    default:
-      tips.push(`Contrôle l’amplitude et garde un ${pick(LEX.neutralSpine)}.`, `${pick(LEX.braceVerb)} ta ${pick(LEX.core)} pour rester stable.`, `${pick(LEX.avoidMomentum)}.`);
-      break;
-  }
-
-  if (["pull_vertical","pull_horizontal","row_chest","face_pull","push_horizontal","push_vertical","dip","pushup","fly","lateral_raise","front_raise","rear_delt","biceps","triceps"].includes(cat)) {
-    tips.push(pick(upperStab));
-  } else if (["squat","lunge","hinge","hipthrust","legpress","quad_iso","ham_iso","calf"].includes(cat)) {
-    tips.push(pick(lowerStab));
-  } else {
-    tips.push(pick(universal));
-  }
-  if (randInt(2) === 0) tips.push(`${pick(LEX.tempoIntro)} ${pick(randInt(2) ? LEX.tempo201 : LEX.tempo311)}.`);
-
-  return uniqueShuffle(tips);
+  return uniqueShuffle(tips).slice(0, 5);
 }
 
-/* ===================== Page ===================== */
+/* ---------- Page ---------- */
 export default function Page() {
   return (
-    <div className="space-y-4">
-      <CoachAnalyzer />
+    <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
+      <div className="page-header">
+        <div>
+          <h1 className="h1">Import / Enregistrement</h1>
+          <p className="lead">Filme ou importe ta vidéo, ajoute ton ressenti puis lance l’analyse IA.</p>
+        </div>
+      </div>
+
+      <CorrectorBody />
     </div>
   );
 }
 
-/* ===================== Composant principal ===================== */
-function CoachAnalyzer() {
+/* ---------- Corps (2 colonnes comme Calories) ---------- */
+function CorrectorBody() {
+  const [tab, setTab] = useState<"record" | "upload">("record");
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [feeling, setFeeling] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analysis, setAnalysis] = useState<AIAnalysis | null>(null);
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState<string>("");
   const [errorMsg, setErrorMsg] = useState<string>("");
 
+  const [analysis, setAnalysis] = useState<AIAnalysis | null>(null);
   const [predictedExercise, setPredictedExercise] = useState<string | null>(null);
   const [showChoiceGate, setShowChoiceGate] = useState(false);
   const [overrideOpen, setOverrideOpen] = useState(false);
@@ -303,22 +144,23 @@ function CoachAnalyzer() {
     return () => clearInterval(id);
   }, [cooldown]);
 
-  const handleUpload = (f: File) => {
+  function handleUpload(f: File) {
     const url = URL.createObjectURL(f);
-    setBlobUrl(url);
-    setFileName(f.name);
-    setFile(f);
-    setAnalysis(null);
-    setErrorMsg("");
-    setStatus("");
-    setProgress(0);
-    setPredictedExercise(null);
-    setShowChoiceGate(false);
-    setOverrideOpen(false);
-    setOverrideName("");
-    setConfirmedExercise(null);
-  };
+    setBlobUrl(url); setFileName(f.name); setFile(f);
+    setAnalysis(null); setErrorMsg(""); setStatus(""); setProgress(0);
+    setPredictedExercise(null); setShowChoiceGate(false); setOverrideOpen(false);
+    setOverrideName(""); setConfirmedExercise(null);
+  }
+  function reset() {
+    if (blobUrl) URL.revokeObjectURL(blobUrl);
+    setBlobUrl(null); setFileName(null); setFile(null);
+    setAnalysis(null); setFeeling(""); setProgress(0); setStatus("");
+    setErrorMsg(""); setCooldown(0);
+    setPredictedExercise(null); setShowChoiceGate(false);
+    setOverrideOpen(false); setOverrideName(""); setConfirmedExercise(null);
+  }
 
+  /* ---- Upload helpers ---- */
   async function uploadWithProxy(f: File): Promise<string> {
     const fd = new FormData();
     fd.append("file", f);
@@ -336,7 +178,6 @@ function CoachAnalyzer() {
     const json = await res.json();
     return json.url as string;
   }
-
   async function uploadWithSignedUrl(f: File): Promise<{ path: string; readUrl: string }> {
     const r = await fetch("/api/videos/sign-upload", {
       method: "POST",
@@ -345,17 +186,12 @@ function CoachAnalyzer() {
     });
     if (!r.ok) throw new Error(`sign-upload: HTTP ${r.status} ${await r.text()}`);
     const { signedUrl, path } = await r.json();
-
     const put = await fetch(signedUrl, {
       method: "PUT",
-      headers: {
-        "content-type": f.type || "application/octet-stream",
-        "x-upsert": "false",
-      },
+      headers: { "content-type": f.type || "application/octet-stream", "x-upsert": "false" },
       body: f,
     });
     if (!put.ok) throw new Error(`upload PUT failed: ${put.status} ${await put.text()}`);
-
     const r2 = await fetch("/api/storage/sign-read", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -366,16 +202,16 @@ function CoachAnalyzer() {
     return { path, readUrl: url as string };
   }
 
+  /* ---- Analyse ---- */
   const onAnalyze = async (userExercise?: string) => {
     if (!file || isAnalyzing || cooldown > 0) return;
-
     setIsAnalyzing(true);
     setProgress(5);
     setStatus("Préparation des images…");
     setErrorMsg("");
 
     try {
-      // 0) EXTRACTION
+      // 0) Extraction
       const { frames, timestamps } = await extractFramesFromFile(file, 12);
       if (!frames.length) throw new Error("Impossible d’extraire des images de la vidéo.");
       setProgress(12);
@@ -388,7 +224,7 @@ function CoachAnalyzer() {
 
       setProgress(20);
 
-      // 1) UPLOAD
+      // 1) Upload
       setStatus("Upload de la vidéo…");
       let fileUrl: string | undefined;
       if (file.size > CLIENT_PROXY_MAX_BYTES) {
@@ -405,85 +241,52 @@ function CoachAnalyzer() {
           fileUrl = readUrl;
         }
       }
-
       if (!fileUrl) throw new Error("Upload échoué (aucune URL retournée)");
       setProgress(75);
 
-      // 2) APPEL IA
+      // 2) IA
       void fakeProgress(setProgress, 80, 98);
       setStatus("Analyse IA…");
 
-      const baseHints =
-        `Tu reçois des mosaïques issues d’une VIDEO (pas une photo). ` +
-        `Identifie l'exercice et détecte les ERREURS TECHNIQUES. Réponds en FRANÇAIS.`;
-      const overrideHint = userExercise ? `Exercice exécuté indiqué par l'utilisateur : "${userExercise}".` : "";
+      const baseHints = `Tu reçois des mosaïques issues d’une VIDEO. Identifie l'exercice et détecte les erreurs techniques. Réponds en FRANÇAIS.`;
+      const overrideHint = userExercise ? `Exercice indiqué par l'utilisateur : "${userExercise}".` : "";
 
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          frames: mosaics,
-          timestamps: [midTime],
-          feeling,
-          economyMode: true,
-          promptHints: [baseHints, overrideHint].filter(Boolean).join(" "),
-        }),
+        body: JSON.stringify({ frames: mosaics, timestamps: [midTime], feeling, economyMode: true, promptHints: [baseHints, overrideHint].filter(Boolean).join(" ") }),
       });
 
       if (!res.ok) {
         const retryAfterHdr = res.headers.get("retry-after");
         const retryAfter = parseInt(retryAfterHdr || "", 10);
-        const seconds = Number.isFinite(retryAfter)
-          ? retryAfter
-          : res.status === 504
-          ? 12
-          : res.status === 429
-          ? 20
-          : 0;
-
+        const seconds = Number.isFinite(retryAfter) ? retryAfter : res.status === 504 ? 12 : res.status === 429 ? 20 : 0;
         if (res.status === 429 || res.status === 504) {
           setCooldown(seconds);
           setStatus(`Réessaie dans ${seconds}s…`);
         }
-
         const txt = await res.text().catch(() => "");
         throw new Error(`analyze: HTTP ${res.status} ${txt}`);
       }
 
       const data: Partial<AIAnalysis> = await res.json();
-
       const safe: AIAnalysis = {
         exercise: String(data.exercise || "exercice_inconnu"),
-        overall:
-          (data.overall && data.overall.trim()) ||
-          "Analyse effectuée mais je manque d’indices visuels. Réessaie avec un angle plus net / cadrage entier.",
-        muscles: Array.isArray(data.muscles) && data.muscles.length ? data.muscles.slice(0, 8) : [],
+        overall: (data.overall && data.overall.trim()) || "Analyse effectuée mais je manque d’indices visuels.",
+        muscles: Array.isArray(data.muscles) ? data.muscles.slice(0, 8) : [],
         corrections: Array.isArray((data as any).corrections) ? (data as any).corrections : [],
         faults: Array.isArray((data as any).faults) ? (data as any).faults : [],
         extras: Array.isArray(data.extras) ? data.extras : [],
-        timeline:
-          Array.isArray(data.timeline)
-            ? data.timeline.filter(v => typeof v?.time === "number" && typeof v?.label === "string")
-            : [],
+        timeline: Array.isArray(data.timeline) ? data.timeline.filter(v => typeof v?.time === "number" && typeof v?.label === "string") : [],
         objects: Array.isArray((data as any)?.objects) ? (data as any).objects : [],
         movement_pattern: typeof (data as any)?.movement_pattern === "string" ? (data as any).movement_pattern : undefined,
         skeleton_cues: Array.isArray((data as any)?.skeleton_cues) ? (data as any).skeleton_cues : [],
       };
 
-      // Post-traitement “coach”
+      // Post-traitement coach
       safe.overall = varyTerms(safe.overall);
-      safe.faults = (safe.faults || []).map((f) => ({
-        ...f,
-        issue: varyTerms(f.issue || ""),
-        correction: varyTerms(f.correction || ""),
-      }));
-      safe.corrections = uniqueShuffle([
-        ...makeCorrections(safe.exercise || ""),
-        ...(safe.corrections || []).map(varyTerms),
-      ]).slice(0, 5);
-      safe.muscles = (safe.muscles || []).map(varyTerms);
+      safe.corrections = uniqueShuffle([...makeCorrections(safe.exercise || ""), ...(safe.corrections || []).map(varyTerms)]).slice(0, 5);
 
-      // Gate de confirmation
       setAnalysis(safe);
       setPredictedExercise(safe.exercise || "exercice_inconnu");
       if (userExercise && userExercise.trim()) {
@@ -514,192 +317,182 @@ function CoachAnalyzer() {
     setShowChoiceGate(false);
     setOverrideOpen(false);
   };
-  const reset = () => {
-    if (blobUrl) URL.revokeObjectURL(blobUrl);
-    setBlobUrl(null); setFileName(null); setFile(null);
-    setAnalysis(null); setFeeling(""); setProgress(0); setStatus("");
-    setErrorMsg(""); setCooldown(0);
-    setPredictedExercise(null); setShowChoiceGate(false);
-    setOverrideOpen(false); setOverrideName("");
-    setConfirmedExercise(null);
-  };
 
-  function faultsToLines(a: AIAnalysis | null) {
-    if (!a) return { issuesLine: "", correctionsLine: "" };
-    const issues = (a?.faults || []).map(f => (f?.issue || "").trim()).filter(Boolean);
-    const faultCorrections = (a?.faults || []).map(f => (f?.correction || "").trim()).filter(Boolean);
-    const issuesLine = issues.join(" - ");
-    const correctionsBase = faultCorrections.length ? faultCorrections : (a?.corrections || []);
-    const correctionsLine = (correctionsBase || []).join(" - ");
-    return { issuesLine, correctionsLine };
-  }
   const { issuesLine, correctionsLine } = faultsToLines(analysis);
 
   return (
-    <div className="space-y-4">
-      {/* CAPTURE */}
-      <Card className="rounded-2xl shadow-sm border-border/60">
-        <CardHeader className="py-3">
-          <CardTitle className="text-base">🎥 Import / Enregistrement</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Tabs defaultValue="record" className="w-full">
-            <TabsList className="grid grid-cols-2 rounded-xl">
-              <TabsTrigger value="record">Filmer</TabsTrigger>
-              <TabsTrigger value="upload">Importer</TabsTrigger>
-            </TabsList>
+    <>
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Colonne gauche : Capture */}
+        <article className="card">
+          <h3 style={{ marginTop: 0 }}>🎥 Import / Enregistrement</h3>
 
-            <TabsContent value="record" className="space-y-3">
-              <VideoRecorder onRecorded={(f) => handleUpload(f)} />
-            </TabsContent>
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <button
+              className={`btn ${tab === "record" ? "btn-dash" : "btn-outline"}`}
+              onClick={() => setTab("record")}
+              type="button"
+            >
+              Filmer
+            </button>
+            <button
+              className={`btn ${tab === "upload" ? "btn-dash" : "btn-outline"}`}
+              onClick={() => setTab("upload")}
+              type="button"
+            >
+              Importer
+            </button>
+          </div>
 
-            <TabsContent value="upload" className="space-y-3">
+          <div style={{ marginTop: 12 }}>
+            {tab === "record" ? (
+              <VideoRecorder onRecorded={handleUpload} />
+            ) : (
               <UploadDrop onFile={handleUpload} />
-            </TabsContent>
-          </Tabs>
+            )}
+          </div>
 
           {blobUrl && (
-            <div className="space-y-2">
-              <label className="text-xs text-muted-foreground">Fichier chargé</label>
-              <div className="rounded-xl border p-2 text-xs text-muted-foreground flex items-center justify-between">
-                <span className="truncate flex items-center gap-1">🎞️ {fileName ?? "clip.webm"}</span>
-                <button className="inline-flex items-center gap-1 hover:text-foreground" onClick={reset}>↺ Réinitialiser</button>
+            <div className="text-sm" style={{ marginTop: 12 }}>
+              <label className="label" style={{ marginBottom: 6 }}>Fichier chargé</label>
+              <div className="card" style={{ padding: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span className="truncate">🎞️ {fileName ?? "clip.webm"}</span>
+                <button className="btn btn-outline" onClick={reset} type="button">Réinitialiser</button>
               </div>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </article>
 
-      {/* RESSENTI + ACTION */}
-      <Card className="rounded-2xl shadow-sm border-border/60">
-        <CardHeader className="py-3">
-          <CardTitle className="text-base">🎙️ Ton ressenti</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <Textarea
-            placeholder="Explique comment tu te sens (douleurs, fatigue, où tu as senti l'effort, RPE, etc.)."
+        {/* Colonne droite : Ressenti + action */}
+        <article className="card">
+          <h3 style={{ marginTop: 0 }}>🎙️ Ton ressenti</h3>
+          <label className="label">Comment tu te sens ?</label>
+          <textarea
+            className="input"
+            placeholder="Explique douleurs, fatigue, où tu as senti l'effort, RPE, etc."
             value={feeling}
             onChange={(e) => setFeeling(e.target.value)}
-            className="min-h-[140px] text-[15px] py-3"
+            style={{ minHeight: 140 }}
           />
-          <div className="flex items-center gap-2">
-            <Button className="h-11 rounded-xl text-[15px] flex-1" disabled={!blobUrl || isAnalyzing || cooldown > 0} onClick={() => onAnalyze()}>
-              {isAnalyzing ? <Spinner className="mr-2" /> : <span className="mr-2">✨</span>}
+          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+            <button
+              className="btn btn-dash"
+              disabled={!blobUrl || isAnalyzing || cooldown > 0}
+              onClick={() => onAnalyze()}
+              type="button"
+            >
+              {isAnalyzing ? <Spinner className="mr-2" /> : "✨"}{" "}
               {isAnalyzing ? "Analyse en cours" : cooldown > 0 ? `Patiente ${cooldown}s` : "Lancer l'analyse IA"}
-            </Button>
-            <Button variant="secondary" className="h-11 rounded-xl text-[15px]" disabled={isAnalyzing || cooldown > 0} onClick={() => setFeeling(exampleFeeling)}>
+            </button>
+            <button
+              className="btn btn-outline"
+              disabled={isAnalyzing || cooldown > 0}
+              onClick={() => setFeeling(exampleFeeling)}
+              type="button"
+            >
               Exemple
-            </Button>
+            </button>
           </div>
 
           {(isAnalyzing || progress > 0 || errorMsg || status) && (
-            <div className="space-y-2">
-              <Progress value={progress} />
-              <p className="text-xs text-muted-foreground">{status}</p>
-              {errorMsg && <p className="text-xs text-red-600 break-all">Erreur : {errorMsg}</p>}
+            <div style={{ marginTop: 12 }}>
+              <ProgressBar value={progress} />
+              {status && <p className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>{status}</p>}
+              {errorMsg && <p className="text-xs" style={{ color: "#dc2626", marginTop: 6 }}>Erreur : {errorMsg}</p>}
             </div>
           )}
-        </CardContent>
-      </Card>
+        </article>
+      </div>
 
-      {/* RÉSUMÉ IA */}
-      <Card className="rounded-2xl shadow-sm border-border/60">
-        <CardHeader className="py-3">
-          <CardTitle className="text-base">🧠 Résumé IA</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {!analysis && (<EmptyState />)}
+      {/* Résumé IA */}
+      <article className="card" style={{ marginTop: 16 }}>
+        <h3 style={{ marginTop: 0 }}>🧠 Résumé IA</h3>
 
-          {/* GATE DE CONFIRMATION */}
-          {analysis && showChoiceGate && (
-            <div className="space-y-3">
-              <div className="flex items-center flex-wrap gap-2">
-                <Badge variant="secondary">Exercice proposé : {predictedExercise || "exercice_inconnu"}</Badge>
-              </div>
-              <p className="text-sm">
-                L’IA propose : <span className="font-medium">{predictedExercise || "exercice_inconnu"}</span>
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <Button className="h-8 px-3 text-xs" onClick={confirmPredicted} disabled={isAnalyzing}>
-                  Confirmer « {predictedExercise || "exercice_inconnu"} »
-                </Button>
-                <Button className="h-8 px-3 text-xs" variant="secondary" onClick={() => setOverrideOpen(true)} disabled={isAnalyzing}>
-                  Autre
-                </Button>
-              </div>
+        {!analysis && (
+          <p className="text-sm" style={{ color: "#6b7280" }}>
+            Importe une vidéo puis lance l’analyse pour obtenir le résumé ici.
+          </p>
+        )}
 
-              {overrideOpen && (
-                <div className="mt-2 rounded-xl border p-3 space-y-2">
-                  <label className="text-xs text-muted-foreground">Quel exercice fais-tu ?</label>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      placeholder="ex. Tractions, Fentes bulgares, Soulevé de terre…"
-                      value={overrideName}
-                      onChange={(e) => setOverrideName(e.target.value)}
-                    />
-                    <Button className="h-8 px-3 text-xs" onClick={submitOverride} disabled={isAnalyzing || !overrideName.trim()}>
-                      Ré-analyser
-                    </Button>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    L’IA va tenir compte de ce nom pour corriger plus précisément.
-                  </p>
+        {analysis && showChoiceGate && (
+          <div style={{ display: "grid", gap: 8 }}>
+            <div className="text-sm">
+              L’IA propose : <strong>{predictedExercise || "exercice_inconnu"}</strong>
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button className="btn btn-dash" onClick={confirmPredicted} disabled={isAnalyzing} type="button">
+                Confirmer « {predictedExercise || "exercice_inconnu"} »
+              </button>
+              <button className="btn btn-outline" onClick={() => setOverrideOpen(true)} disabled={isAnalyzing} type="button">
+                Autre
+              </button>
+            </div>
+
+            {overrideOpen && (
+              <div className="card" style={{ padding: 12 }}>
+                <label className="label">Quel exercice fais-tu ?</label>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <input
+                    className="input"
+                    placeholder="ex. Tractions, Fentes bulgares, Soulevé de terre…"
+                    value={overrideName}
+                    onChange={(e) => setOverrideName(e.target.value)}
+                  />
+                  <button className="btn btn-dash" onClick={submitOverride} disabled={isAnalyzing || !overrideName.trim()} type="button">
+                    Ré-analyser
+                  </button>
                 </div>
+                <p className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>
+                  L’IA tiendra compte de ce nom pour corriger plus précisément.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {analysis && !showChoiceGate && (
+          <div style={{ display: "grid", gap: 12 }}>
+            <div className="text-sm">
+              <span style={{ color: "#6b7280" }}>Exercice :</span>{" "}
+              <strong>{confirmedExercise || analysis.exercise || "inconnu"}</strong>
+            </div>
+
+            {analysis.overall?.trim() && (
+              <p className="text-sm" style={{ lineHeight: 1.6 }}>{analysis.overall.trim()}</p>
+            )}
+
+            <div>
+              <h4 className="h4" style={{ fontSize: 14, margin: "8px 0 4px" }}>Muscles principalement sollicités</h4>
+              {analysis.muscles?.length ? (
+                <p className="text-sm">{analysis.muscles.join(" - ")}</p>
+              ) : (
+                <p className="text-xs" style={{ color: "#6b7280" }}>— non détecté —</p>
               )}
             </div>
-          )}
 
-          {/* RÉSULTATS */}
-          {analysis && !showChoiceGate && (
-            <div className="space-y-4">
-              <div className="flex items-center flex-wrap gap-2">
-                <Badge variant="secondary">Exercice : {confirmedExercise || analysis.exercise || "inconnu"}</Badge>
+            {(issuesLine || correctionsLine) && (
+              <div style={{ display: "grid", gap: 4 }}>
+                {issuesLine && <p className="text-sm"><strong>Erreur détectée :</strong> {issuesLine}</p>}
+                {correctionsLine && <p className="text-sm"><strong>Corrections :</strong> {correctionsLine}</p>}
               </div>
+            )}
 
-              {analysis.overall?.trim() && (
-                <p className="text-sm leading-relaxed">{analysis.overall.trim()}</p>
-              )}
-
-              <div className="space-y-2">
-                <h4 className="text-sm font-medium">Muscles principalement sollicités</h4>
-                {analysis.muscles?.length ? (
-                  <p className="text-sm">{analysis.muscles.join(" - ")}</p>
-                ) : (
-                  <p className="text-xs text-muted-foreground">— non détecté —</p>
-                )}
-              </div>
-
-              {(() => {
-                const { issuesLine, correctionsLine } = faultsToLines(analysis);
-                return (issuesLine || correctionsLine) ? (
-                  <div className="space-y-1">
-                    {issuesLine && <p className="text-sm"><span className="font-medium">Erreur détectée :</span> {issuesLine}</p>}
-                    {correctionsLine && <p className="text-sm"><span className="font-medium">Corrections :</span> {correctionsLine}</p>}
-                  </div>
-                ) : null;
-              })()}
-
-              {analysis.extras && analysis.extras.length > 0 && (
-                <Accordion type="single" collapsible className="w-full">
-                  <AccordionItem value="more">
-                    <AccordionTrigger>Points complémentaires</AccordionTrigger>
-                    <AccordionContent>
-                      <ul className="list-disc pl-5 space-y-1 text-sm">
-                        {analysis.extras.map((x, i) => <li key={i}>{x}</li>)}
-                      </ul>
-                    </AccordionContent>
-                  </AccordionItem>
-                </Accordion>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+            {analysis.extras && analysis.extras.length > 0 && (
+              <details>
+                <summary style={{ cursor: "pointer" }}>Points complémentaires</summary>
+                <ul style={{ paddingLeft: 18, marginTop: 6 }} className="text-sm">
+                  {analysis.extras.map((x, i) => <li key={i} style={{ listStyle: "disc" }}>{x}</li>)}
+                </ul>
+              </details>
+            )}
+          </div>
+        )}
+      </article>
+    </>
   );
 }
 
-/* ===================== Upload/Record ===================== */
+/* ---------- Upload / Record ---------- */
 function UploadDrop({ onFile }: { onFile: (file: File) => void }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const onDrop = (e: React.DragEvent<HTMLDivElement>) => {
@@ -708,19 +501,25 @@ function UploadDrop({ onFile }: { onFile: (file: File) => void }) {
     if (f) onFile(f);
   };
   return (
-    <div onDragOver={(e) => e.preventDefault()} onDrop={onDrop} className="border-2 border-dashed rounded-2xl p-6 text-center">
-      <div className="mx-auto h-8 w-8 mb-2">☁️</div>
-      <p className="text-sm mb-2">Glisse une vidéo ici ou</p>
-      <div className="flex items-center justify-center gap-2">
-        <Input
+    <div
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={onDrop}
+      className="card"
+      style={{ borderStyle: "dashed", borderWidth: 2, padding: 16, textAlign: "center" }}
+    >
+      <div style={{ fontSize: 24, marginBottom: 6 }}>☁️</div>
+      <p className="text-sm" style={{ marginBottom: 8 }}>Glisse une vidéo ici ou</p>
+      <div>
+        <input
           ref={inputRef}
           type="file"
           accept="video/*"
           capture="environment"
-          className="hidden"
+          className="input"
+          style={{ display: "none" }}
           onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); }}
         />
-        <Button variant="secondary" onClick={() => inputRef.current?.click()}>Choisir un fichier</Button>
+        <button className="btn btn-outline" onClick={() => inputRef.current?.click()} type="button">Choisir un fichier</button>
       </div>
     </div>
   );
@@ -778,17 +577,24 @@ function VideoRecorder({ onRecorded }: { onRecorded: (file: File) => void }) {
     <div className="space-y-3">
       <div className="relative">
         <video ref={videoRef} className="w-full rounded-2xl border" muted playsInline />
-        {!hasStream && (<div className="absolute inset-0 grid place-items-center text-xs text-muted-foreground">Prépare ta caméra puis clique « Démarrer »</div>)}
+        {!hasStream && (
+          <div className="absolute inset-0 grid place-items-center text-xs" style={{ color: "#6b7280" }}>
+            Prépare ta caméra puis clique « Démarrer »
+          </div>
+        )}
       </div>
-      <div className="flex items-center gap-2">
-        {!isRecording ? (<Button onClick={start}>▶️ Démarrer</Button>) : (<Button variant="destructive" onClick={stop}>⏸️ Arrêter</Button>)}
+      <div style={{ display: "flex", gap: 8 }}>
+        {!isRecording ? (
+          <button className="btn btn-dash" onClick={start} type="button">▶️ Démarrer</button>
+        ) : (
+          <button className="btn btn-outline" onClick={stop} type="button">⏸️ Arrêter</button>
+        )}
       </div>
     </div>
   );
 }
 
-/* ===== Helpers vidéo / images ===== */
-
+/* ---------- Helpers vidéo / images ---------- */
 const exampleFeeling =
   "Séance de squats. RPE 8. Genou droit un peu instable, bas du dos fatigué, j'ai surtout senti les quadris brûler sur les dernières reps.";
 
@@ -808,7 +614,6 @@ async function fakeProgress(setter: (v: number) => void, from: number, to: numbe
     setter(Math.min(i, to));
   }
 }
-/** ➜ Extrait N frames JPEG (dataURL) d’un fichier vidéo local. */
 async function extractFramesFromFile(file: File, nFrames = 12): Promise<{ frames: string[]; timestamps: number[] }> {
   const videoURL = URL.createObjectURL(file);
   try {
@@ -895,10 +700,14 @@ function loadImage(src: string): Promise<HTMLImageElement> {
     img.src = src;
   });
 }
-function EmptyState() {
-  return (
-    <div className="text-sm text-muted-foreground">
-      Importe une vidéo puis lance l’analyse pour obtenir le résumé ici.
-    </div>
-  );
+
+/* ---------- Agg util ---------- */
+function faultsToLines(a: AIAnalysis | null) {
+  if (!a) return { issuesLine: "", correctionsLine: "" };
+  const issues = (a?.faults || []).map(f => (f?.issue || "").trim()).filter(Boolean);
+  const faultCorrections = (a?.faults || []).map(f => (f?.correction || "").trim()).filter(Boolean);
+  const issuesLine = issues.join(" - ");
+  const correctionsBase = faultCorrections.length ? faultCorrections : (a?.corrections || []);
+  const correctionsLine = (correctionsBase || []).join(" - ");
+  return { issuesLine, correctionsLine };
 }
