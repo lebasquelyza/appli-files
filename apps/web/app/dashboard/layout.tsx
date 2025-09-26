@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 /* ==== Icônes ==== */
 function IconMenu(props: React.SVGProps<SVGSVGElement>) {
   return (
-    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden {...props}>
+    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden {...props}>
       <path d="M4 8h16M4 12h16M4 16h16" stroke="white" strokeWidth="2" strokeLinecap="round" />
     </svg>
   );
@@ -59,10 +59,7 @@ const NAV = [
 /* ==== Loading bar ==== */
 function LoadingBar({ show }: { show: boolean }) {
   return (
-    <div
-      className={`pointer-events-none fixed left-0 right-0 top-0 z-[60] h-[2px] overflow-hidden transition-opacity duration-200 ${show ? "opacity-100" : "opacity-0"}`}
-      aria-hidden
-    >
+    <div className={`pointer-events-none fixed left-0 right-0 top-0 z-[60] h-[2px] overflow-hidden transition-opacity duration-200 ${show ? "opacity-100" : "opacity-0"}`} aria-hidden>
       <div className="h-full w-1/2 animate-[loading_1.2s_ease-in-out_infinite] bg-foreground/80" />
       <style jsx>{`@keyframes loading{0%{transform:translateX(-100%)}50%{transform:translateX(50%)}100%{transform:translateX(200%)}}`}</style>
     </div>
@@ -96,28 +93,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("resize", setVH);
   }, []);
 
-  // NavLink: navigate + ferme le menu
-  const NavLink = ({
-    href,
-    label,
-    Icon,
-    active,
-  }: {
-    href: string;
-    label: string;
-    Icon: any;
-    active: boolean;
-  }) => {
+  // lien nav : navigate + fermer le menu
+  const NavLink = ({ href, label, Icon, active }: { href: string; label: string; Icon: any; active: boolean }) => {
     const style: React.CSSProperties = active
       ? { backgroundColor: "#16A34A", color: "#FFFFFF", borderColor: "#16A34A" }
-      : { backgroundColor: "#FFFFFF", color: "#15803D", borderColor: "#d1fae5" }; // green-100 approx
+      : { backgroundColor: "#FFFFFF", color: "#15803D", borderColor: "#d1fae5" };
 
     return (
       <button
         onClick={() =>
           startTransition(() => {
             router.push(href);
-            setOpen(false); // ← ferme au clic
+            setOpen(false); // ferme au clic
           })
         }
         style={style}
@@ -125,7 +112,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       >
         <span className="text-current"><Icon /></span>
         <span className="truncate capitalize flex-1">{label}</span>
-        {/* ← plus de Badge "actif" */}
       </button>
     );
   };
@@ -140,12 +126,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* TOP BAR */}
       <div className="sticky top-0 z-40 border-b bg-background/75 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="h-14 px-3 sm:px-4 flex items-center gap-3">
-          {/* Hamburger vert forcé */}
+          {/* Hamburger : PLUS GROS + ARRONDI */}
           <button
             onClick={() => setOpen(true)}
             aria-label="Ouvrir la navigation"
             style={{ backgroundColor: "#16A34A", color: "#fff" }}
-            className="h-10 w-10 inline-grid place-items-center rounded-none shadow-sm"
+            className="h-12 w-12 inline-grid place-items-center rounded-full shadow-md active:scale-95 transition"
           >
             <IconMenu />
           </button>
@@ -153,27 +139,26 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </div>
 
-      {/* DRAWER */}
+      {/* DRAWER (ouvre par-dessus, la page reste visible dessous) */}
       {open && (
         <>
-          <div className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm pointer-events-none" />
-
+          {/* pas d’overlay sombre → la page reste “grande ouverte” */}
           <aside
-            className="fixed inset-y-0 left-0 z-50 w-[86%] max-w-[22rem]
+            className="fixed inset-y-0 left-0 z-50 w-[72%] sm:w-80  /* plus étroit pour laisser voir la page */
                        bg-gradient-to-b from-background to-muted/40 border-r shadow-xl rounded-r-2xl
                        animate-in slide-in-from-left duration-200 overflow-hidden"
             role="dialog"
             aria-modal="true"
             style={{ paddingLeft: "env(safe-area-inset-left)" }}
           >
-            {/* Tout commence sous le header (56px) */}
+            {/* commence sous le header */}
             <div className="h-full" style={{ paddingTop: 56 }}>
-              {/* Titre 'Dashboard' juste sous le hamburger */}
+              {/* “Dashboard” sous le hamburger (horizontal) */}
               <div className="px-3 pb-2 text-sm font-semibold text-foreground/80 select-none">
                 Dashboard
               </div>
 
-              {/* Liste des onglets (couleurs inchangées) */}
+              {/* Liste */}
               <nav className="p-2 pt-0 space-y-2">
                 {NAV.map((item) => {
                   const active = pathname?.startsWith(item.href);
