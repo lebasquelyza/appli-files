@@ -83,7 +83,6 @@ async function saveCalories(formData: FormData) {
 }
 
 /* ---------- Page ---------- */
-/* ---------- Page ---------- */
 export default async function Page({ searchParams }: { searchParams?: { saved?: string; err?: string } }) {
   const jar = cookies();
   const store = parseKcalStore(jar.get("app.kcals")?.value);
@@ -143,8 +142,21 @@ export default async function Page({ searchParams }: { searchParams?: { saved?: 
               <input className="input" type="text" name="note" placeholder="ex: Déj: poke bowl" />
             </div>
             <div style={{ display: "flex", gap: 8 }}>
+              {/* Principal = vert */}
               <button className="btn btn-dash" type="submit">Enregistrer</button>
-              <a className="btn btn-outline" href="/dashboard/calories">Actualiser</a>
+              {/* Secondaire = NOIR SUR BLANC */}
+              <a
+                href="/dashboard/calories"
+                className="btn"
+                style={{
+                  background: "#ffffff",
+                  color: "#111827",
+                  border: "1px solid #d1d5db",
+                  fontWeight: 500
+                }}
+              >
+                Actualiser
+              </a>
             </div>
           </form>
         </article>
@@ -202,4 +214,4 @@ export default async function Page({ searchParams }: { searchParams?: { saved?: 
       </div>
     </div>
   );
-} // <- NE PAS OUBLIER cette accolade !
+}
