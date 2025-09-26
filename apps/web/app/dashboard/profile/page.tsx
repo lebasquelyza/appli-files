@@ -189,16 +189,24 @@ export default async function Page({
 
   return (
     <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
-      {/* Header (même design que Recettes) */}
+      {/* Header */}
       <div className="page-header">
         <div>
           <h1 className="h1">Mon profil</h1>
           <p className="lead">Gérez vos séances et gardez un historique clair de votre entraînement.</p>
         </div>
+        {/* Bouton secondaire : noir sur blanc */}
         <a
           href="/dashboard"
-          className="btn btn-outline"
-          style={{ color: "#111", padding: "6px 10px", lineHeight: 1.2 }}
+          className="btn"
+          style={{
+            background: "#ffffff",
+            color: "#111827",
+            border: "1px solid #d1d5db",
+            fontWeight: 500,
+            padding: "6px 10px",
+            lineHeight: 1.2
+          }}
         >
           ← Retour
         </a>
@@ -228,7 +236,7 @@ export default async function Page({
         )}
       </div>
 
-      {/* Ajouter une séance (section) */}
+      {/* Ajouter une séance */}
       <div className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
           <h2>Ajouter une séance</h2>
@@ -274,6 +282,7 @@ export default async function Page({
 
             <input type="hidden" name="startNow" value="1" />
             <div className="lg:col-span-3" style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+              {/* Principal = vert */}
               <button className="btn btn-dash" type="submit">Démarrer maintenant</button>
             </div>
           </form>
@@ -316,11 +325,19 @@ export default async function Page({
                   <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
                     <form action={completeSessionAction}>
                       <input type="hidden" name="id" value={s.id} />
+                      {/* Principal = vert */}
                       <button className="btn btn-dash" type="submit">Marquer terminé</button>
                     </form>
                     <form action={deleteSessionAction}>
                       <input type="hidden" name="id" value={s.id} />
-                      <button className="btn btn-outline" type="submit" style={{ color: "#111" }}>Supprimer</button>
+                      {/* Secondaire = NOIR SUR BLANC */}
+                      <button
+                        className="btn"
+                        type="submit"
+                        style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
+                      >
+                        Supprimer
+                      </button>
                     </form>
                   </div>
                 </article>
@@ -372,7 +389,14 @@ export default async function Page({
                   <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
                     <form action={deleteSessionAction}>
                       <input type="hidden" name="id" value={s.id} />
-                      <button className="btn btn-outline" type="submit" style={{ color: "#111" }}>Supprimer</button>
+                      {/* Secondaire = NOIR SUR BLANC */}
+                      <button
+                        className="btn"
+                        type="submit"
+                        style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
+                      >
+                        Supprimer
+                      </button>
                     </form>
                   </div>
                 </article>
