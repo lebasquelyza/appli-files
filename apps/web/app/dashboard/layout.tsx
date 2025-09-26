@@ -56,7 +56,7 @@ const NAV = [
   { href: "/dashboard/settings",   label: "settings",   icon: IconSettings },
 ] as const;
 
-/* ==== Loading bar (facultatif) ==== */
+/* ==== barre de chargement (optionnelle) ==== */
 function LoadingBar({ show }: { show: boolean }) {
   return (
     <div className={`pointer-events-none fixed left-0 right-0 top-0 z-[60] h-[2px] overflow-hidden transition-opacity duration-200 ${show ? "opacity-100" : "opacity-0"}`} aria-hidden>
@@ -89,7 +89,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("resize", setVH);
   }, []);
 
-  // lien nav : navigate + fermer le menu
+  // lien nav : navigate + ferme le menu
   const NavLink = ({ href, label, Icon, active }: { href: string; label: string; Icon: any; active: boolean }) => {
     const style: React.CSSProperties = active
       ? { backgroundColor: "#16A34A", color: "#FFFFFF", borderColor: "#16A34A" }
@@ -131,15 +131,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           >
             <IconMenu />
           </button>
-
-          {/* “Dashboard” collé au hamburger (dans la barre, visible tout le temps) */}
-          <span className="text-sm font-semibold text-foreground/80 select-none">Dashboard</span>
-
+          {/* (Plus de titre ici — il apparaît dans le menu seulement) */}
           <div className="flex-1" />
         </div>
       </div>
 
-      {/* DRAWER — par-dessus la page (pas d’overlay), contenu collé en HAUT / GAUCHE */}
+      {/* DRAWER — par-dessus la page, sans overlay. 
+          Affiche "Dashboard" en haut du panneau et les onglets juste dessous. */}
       {open && (
         <aside
           className="fixed left-0 top-0 bottom-0 z-50 w-[68%] sm:w-80
@@ -149,22 +147,30 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           aria-modal="true"
           style={{ paddingLeft: "env(safe-area-inset-left)" }}
         >
-          {/* on colle tout en haut/à gauche : padding minimal */}
-          <nav className="p-2 pt-2 space-y-2">
-            {NAV.map((item) => {
-              const active = pathname?.startsWith(item.href);
-              const Icon = item.icon;
-              return (
-                <NavLink
-                  key={item.href}
-                  href={item.href}
-                  label={item.label}
-                  Icon={Icon}
-                  active={!!active}
-                />
-              );
-            })}
-          </nav>
+          {/* commence sous le header */}
+          <div className="pt-14">
+            {/* Titre visible seulement quand le menu est ouvert */}
+            <div className="px-3 pb-2 text-sm font-semibold text-foreground/80 select-none">
+              Dashboard
+            </div>
+
+            {/* Onglets collés juste en dessous */}
+            <nav className="p-2 pt-0 space-y-2">
+              {NAV.map((item) => {
+                const active = pathname?.startsWith(item.href);
+                const Icon = item.icon;
+                return (
+                  <NavLink
+                    key={item.href}
+                    href={item.href}
+                    label={item.label}
+                    Icon={Icon}
+                    active={!!active}
+                  />
+                );
+              })}
+            </nav>
+          </div>
         </aside>
       )}
 
@@ -177,4 +183,5 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
+
 
