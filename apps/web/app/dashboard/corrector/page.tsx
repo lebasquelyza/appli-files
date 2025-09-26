@@ -1,15 +1,38 @@
-"use client";
+  "use client";
 
 import { useEffect, useRef, useState } from "react";
 
-/* ---------- Const ---------- */
-const TZ = "Europe/Paris";
+/* ===================== Types ===================== */
+interface AnalysisPoint { time: number; label: string; detail?: string; }
+interface Fault { issue: string; severity: "faible"|"moyenne"|"élevée"; evidence?: string; correction?: string; }
+interface AIAnalysis {
+  exercise: string;
+  overall: string;
+  muscles: string[];
+  corrections: string[];
+  faults?: Fault[];
+  extras?: string[];
+  timeline: AnalysisPoint[];
+  objects?: string[];
+  movement_pattern?: string;
+  rawText?: string;
+  skeleton_cues?: Array<{
+    phase?: "setup"|"descente"|"bas"|"montée"|"lockout";
+    spine?: { neutral?: boolean; tilt_deg?: number };
+    knees?: { valgus_level?: 0|1|2; should_bend?: boolean };
+    head?: { chin_tuck?: boolean };
+    feet?: { anchor?: "talons"|"milieu"|"avant"; unstable?: boolean };
+    notes?: string;
+  }>;
+}
+
+/* ===================== Constantes ===================== */
 const CLIENT_PROXY_MAX_BYTES =
   typeof process !== "undefined" && process.env.NEXT_PUBLIC_PROXY_UPLOAD_MAX_BYTES
     ? Number(process.env.NEXT_PUBLIC_PROXY_UPLOAD_MAX_BYTES)
-    : 5 * 1024 * 1024; // 5MB par défaut
+    : 5 * 1024 * 1024; // 5MB
 
-/* ---------- Petites UI ---------- */
+/* ===================== Petites UI ===================== */
 function Spinner({ className = "" }: { className?: string }) {
   return (
     <span
@@ -34,75 +57,140 @@ function ProgressBar({ value }: { value: number }) {
   );
 }
 
-/* ---------- Types ---------- */
-interface AnalysisPoint { time: number; label: string; detail?: string; }
-interface Fault { issue: string; severity: "faible" | "moyenne" | "élevée"; evidence?: string; correction?: string; }
-interface AIAnalysis {
-  exercise: string;
-  overall: string;
-  muscles: string[];
-  corrections: string[];
-  faults?: Fault[];
-  extras?: string[];
-  timeline: AnalysisPoint[];
-  objects?: string[];
-  movement_pattern?: string;
-  rawText?: string;
-  skeleton_cues?: Array<{
-    phase?: "setup"|"descente"|"bas"|"montée"|"lockout";
-    spine?: { neutral?: boolean; tilt_deg?: number };
-    knees?: { valgus_level?: 0|1|2; should_bend?: boolean };
-    head?: { chin_tuck?: boolean };
-    feet?: { anchor?: "talons"|"milieu"|"avant"; unstable?: boolean };
-    notes?: string;
-  }>;
-}
-
-/* ---------- Vocabulaire, variations & règles (raccourci de ta version) ---------- */
+/* ===================== Vocabulaire & Variations ===================== */
 function randInt(max: number) {
   if (typeof crypto !== "undefined" && "getRandomValues" in crypto) {
-    const a = new Uint32Array(1);
-    crypto.getRandomValues(a);
-    return a[0] % max;
+    const a = new Uint32Array(1); crypto.getRandomValues(a); return a[0] % max;
   }
   return Math.floor(Math.random() * max);
 }
 function pick<T>(arr: T[]): T { return arr[randInt(arr.length)]; }
+
 const LEX = {
+  core: ["gainage", "sangle abdominale", "ceinture abdominale"],
+  braceVerb: ["gaine", "serre", "verrouille", "contracte"],
   neutralSpine: ["rachis neutre", "dos plat", "alignement lombaire neutre"],
   chestUp: ["poitrine fière", "sternum haut", "buste ouvert"],
-  wristNeutral: ["poignets neutres", "poignets alignés", "pas cassés"],
-  headNeutral: ["regard neutre", "nuque longue", "évite l’hyperextension cervicale"],
-  breathe: ["souffle sur l’effort", "expire à la phase concentrique", "inspire au retour"],
-  footTripod: ["appuis trépied (talon + base gros/petit orteil)", "ancre tes pieds"],
-  kneeTrack: ["genoux dans l’axe", "genoux suivent la pointe de pieds", "pas de valgus"],
-  controlCue: ["amplitude contrôlée", "mouvement maîtrisé", "contrôle sur toute l’amplitude"],
+  shoulderPack: ["épaules abaissées/serrées", "omoplates basses/rétractées", "pack scapulaire"],
   avoidMomentum: ["évite l’élan", "pas d’à-coups", "contrôle le mouvement"],
+  controlCue: ["amplitude contrôlée", "mouvement maîtrisé", "contrôle sur toute l’amplitude"],
+  rangeCue: ["amplitude utile", "range complet sans douleur", "aller-retour propre"],
   tempoIntro: ["Tempo", "Cadence", "Rythme"],
   tempo201: ["2–0–1", "2-0-1", "2s-0-1s"],
   tempo311: ["3–1–1", "3-1-1", "3s-1-1s"],
+  breathe: ["souffle sur l’effort", "expire à la phase concentrique", "inspire au retour"],
+  footTripod: ["appuis trépied (talon + base gros/petit orteil)", "ancre tes pieds"],
+  kneeTrack: ["genoux dans l’axe", "genoux suivent la pointe de pieds", "pas de valgus"],
+  hipBack: ["hanche en arrière", "charnière franche", "pense fesses loin derrière"],
+  gluteCue: ["pousse le talon", "chasse le talon", "guide le talon"],
+  holdTop: ["marque 1 s en contraction", "pause 1 s en pic de contraction", "garde 1 s en haut"],
+  grip: ["prise ferme", "serre la barre", "poignées verrouillées"],
+  elbowPathPush: ["coudes ~45° du buste", "coudes sous la barre", "coudes ni trop ouverts ni collés"],
+  elbowPathPull: ["coudes près du buste", "coudes vers la hanche", "coudes sous la ligne d’épaule"],
+  latDepress: ["abaisse les épaules", "déprime les scapulas", "descends les omoplates"],
+  scapRetract: ["rétracte les omoplates", "serre les omoplates", "omoplates tirées en arrière"],
+  wristNeutral: ["poignets neutres", "poignets alignés", "pas cassés"],
+  headNeutral: ["regard neutre", "nuque longue", "évite l’hyperextension cervicale"],
 };
-function varyTerms(s: string) { return s; } // on garde simple ici
+
+type Category =
+  | "squat" | "lunge" | "hinge" | "hipthrust" | "legpress"
+  | "quad_iso" | "ham_iso" | "calf"
+  | "pull_vertical" | "pull_horizontal" | "row_chest" | "face_pull"
+  | "push_horizontal" | "push_vertical" | "dip" | "pushup" | "fly" | "lateral_raise" | "front_raise" | "rear_delt"
+  | "biceps" | "triceps"
+  | "core_plank" | "core_anti_rotation" | "core_flexion"
+  | "carry" | "sled"
+  | "unknown";
+
+const EXO_ALIASES: Array<{ rx: RegExp; cat: Category }> = [
+  { rx: /(squat|front\s*squat|goblet|hack\s*squat|sissy)/i, cat: "squat" },
+  { rx: /(lunge|fente|split\s*squat|walking\s*lunge|bulgarian)/i, cat: "lunge" },
+  { rx: /(leg\s*press|presse\s*à\s*jambes)/i, cat: "legpress" },
+  { rx: /(leg\s*extension|extension\s*quadriceps)/i, cat: "quad_iso" },
+  { rx: /(deadlift|soulev|hinge|rdl|romanian|good\s*morning|hip\s*hinge)/i, cat: "hinge" },
+  { rx: /(hip\s*thrust|pont\s*de\s*hanches|glute\s*bridge)/i, cat: "hipthrust" },
+  { rx: /(leg\s*curl|ischio|hamstring\s*curl)/i, cat: "ham_iso" },
+  { rx: /(calf|mollet|élévation\s*mollets|standing\s*calf|seated\s*calf)/i, cat: "calf" },
+  { rx: /(pull[-\s]?up|traction)/i, cat: "pull_vertical" },
+  { rx: /(lat\s*pulldown|tirage\s*vertical)/i, cat: "pull_vertical" },
+  { rx: /(row|tirage\s*horizontal|barbell\s*row|pendlay|cable\s*row|seated\s*row)/i, cat: "pull_horizontal" },
+  { rx: /(chest\s*supported\s*row|row\s*appui\s*pector)/i, cat: "row_chest" },
+  { rx: /(face\s*pull)/i, cat: "face_pull" },
+  { rx: /(bench|développé\s*couché|décliné|incliné)/i, cat: "push_horizontal" },
+  { rx: /(ohp|overhead|militaire|shoulder\s*press|arnold)/i, cat: "push_vertical" },
+  { rx: /(push[-\s]?up|pompe)/i, cat: "pushup" },
+  { rx: /(dip|dips)/i, cat: "dip" },
+  { rx: /(fly|écarté|pec\s*deck)/i, cat: "fly" },
+  { rx: /(lateral\s*raise|élévation\s*latérale)/i, cat: "lateral_raise" },
+  { rx: /(front\s*raise|élévation\s*frontale)/i, cat: "front_raise" },
+  { rx: /(rear\s*delt|oiseau|reverse\s*fly)/i, cat: "rear_delt" },
+  { rx: /(curl|biceps)/i, cat: "biceps" },
+  { rx: /(triceps|pushdown|extension\s*triceps|kickback|overhead\s*extension)/i, cat: "triceps" },
+  { rx: /(plank|planche|side\s*plank|gainage\s*latéral|hollow)/i, cat: "core_plank" },
+  { rx: /(pallof|anti[-\s]?rotation|carry\s*offset)/i, cat: "core_anti_rotation" },
+  { rx: /(crunch|sit[-\s]?up|leg\s*raise|mountain\s*climber|russian\s*twist)/i, cat: "core_flexion" },
+  { rx: /(farmer|carry)/i, cat: "carry" },
+  { rx: /(sled|prowler|traîneau)/i, cat: "sled" },
+];
+
+function getCategory(exo: string): Category {
+  const s = (exo || "").toLowerCase();
+  for (const { rx, cat } of EXO_ALIASES) if (rx.test(s)) return cat;
+  return "unknown";
+}
+
+function varyTerms(s: string) {
+  if (!s) return s;
+  let out = s;
+  out = out.replace(/\bcore\b/gi, pick(LEX.core));
+  out = out.replace(/\bdos (plat|droit)\b/gi, pick(LEX.neutralSpine));
+  return out;
+}
 function uniqueShuffle(arr: string[]) {
-  const seen = new Set<string>();
-  const out: string[] = [];
+  const seen = new Set<string>(); const out: string[] = [];
   for (const s of arr) { const k = s.toLowerCase().trim(); if (!seen.has(k)) { seen.add(k); out.push(s); } }
   for (let i = out.length - 1; i > 0; i--) { const j = randInt(i + 1); [out[i], out[j]] = [out[j], out[i]]; }
   return out;
 }
-function makeCorrections(_exo: string) {
-  const tips = [
+function makeCorrections(exo: string) {
+  const cat = getCategory(exo);
+  const tips: string[] = [];
+  const universal = [
     `Garde un ${pick(LEX.neutralSpine)} avec ${pick(LEX.chestUp)}.`,
-    `${pick(LEX.wristNeutral)} et ${pick(LEX.headNeutral)}.`,
     `${pick(LEX.breathe)}.`,
-    `${pick(LEX.controlCue)}.`,
-    `${pick(LEX.avoidMomentum)} — ${pick(LEX.tempoIntro)} ${pick(randInt(2) ? LEX.tempo201 : LEX.tempo311)}.`,
-    `${pick(LEX.kneeTrack)}; ${pick(LEX.footTripod)}.`,
+    `${pick(LEX.wristNeutral)} et ${pick(LEX.headNeutral)}.`,
   ];
-  return uniqueShuffle(tips).slice(0, 5);
+  const upperStab = [`${pick(LEX.shoulderPack)}.`, `${pick(LEX.grip)}.`];
+  const lowerStab = [`${pick(LEX.footTripod)}.`, `${pick(LEX.kneeTrack)}.`];
+
+  switch (cat) {
+    case "squat":
+      tips.push(`${pick(LEX.kneeTrack)}.`, `${pick(LEX.footTripod)}.`, `${pick(LEX.chestUp)}; ${pick(LEX.controlCue)}.`, `${pick(LEX.tempoIntro)} ${pick(LEX.tempo311)}.`);
+      break;
+    case "hinge":
+      tips.push(`${pick(LEX.hipBack)}; genoux souples.`, `${pick(LEX.neutralSpine)}; ${pick(LEX.scapRetract)}.`, `${pick(LEX.tempoIntro)} ${pick(LEX.tempo311)}.`);
+      break;
+    case "push_vertical":
+      tips.push(`${pick(LEX.elbowPathPush)}.`, `${pick(LEX.core)[0]} solide; fessiers contractés.`, `${pick(LEX.controlCue)}.`);
+      break;
+    default:
+      tips.push(`Contrôle l’amplitude et garde un ${pick(LEX.neutralSpine)}.`, `${pick(LEX.braceVerb)} ta ${pick(LEX.core)}.`, `${pick(LEX.avoidMomentum)}.`);
+      break;
+  }
+
+  if (["pull_vertical","pull_horizontal","row_chest","face_pull","push_horizontal","push_vertical","dip","pushup","fly","lateral_raise","front_raise","rear_delt","biceps","triceps"].includes(cat)) {
+    tips.push(pick(upperStab));
+  } else if (["squat","lunge","hinge","hipthrust","legpress","quad_iso","ham_iso","calf"].includes(cat)) {
+    tips.push(pick(lowerStab));
+  } else {
+    tips.push(pick(universal));
+  }
+  if (randInt(2) === 0) tips.push(`${pick(LEX.tempoIntro)} ${pick(randInt(2) ? LEX.tempo201 : LEX.tempo311)}.`);
+  return uniqueShuffle(tips);
 }
 
-/* ---------- Page ---------- */
+/* ===================== Page ===================== */
 export default function Page() {
   return (
     <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
@@ -113,24 +201,24 @@ export default function Page() {
         </div>
       </div>
 
-      <CorrectorBody />
+      <CoachAnalyzer />
     </div>
   );
 }
 
-/* ---------- Corps (2 colonnes comme Calories) ---------- */
-function CorrectorBody() {
+/* ===================== Composant principal ===================== */
+function CoachAnalyzer() {
   const [tab, setTab] = useState<"record" | "upload">("record");
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [feeling, setFeeling] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysis, setAnalysis] = useState<AIAnalysis | null>(null);
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState<string>("");
   const [errorMsg, setErrorMsg] = useState<string>("");
 
-  const [analysis, setAnalysis] = useState<AIAnalysis | null>(null);
   const [predictedExercise, setPredictedExercise] = useState<string | null>(null);
   const [showChoiceGate, setShowChoiceGate] = useState(false);
   const [overrideOpen, setOverrideOpen] = useState(false);
@@ -144,23 +232,22 @@ function CorrectorBody() {
     return () => clearInterval(id);
   }, [cooldown]);
 
-  function handleUpload(f: File) {
+  const handleUpload = (f: File) => {
     const url = URL.createObjectURL(f);
-    setBlobUrl(url); setFileName(f.name); setFile(f);
-    setAnalysis(null); setErrorMsg(""); setStatus(""); setProgress(0);
-    setPredictedExercise(null); setShowChoiceGate(false); setOverrideOpen(false);
-    setOverrideName(""); setConfirmedExercise(null);
-  }
-  function reset() {
-    if (blobUrl) URL.revokeObjectURL(blobUrl);
-    setBlobUrl(null); setFileName(null); setFile(null);
-    setAnalysis(null); setFeeling(""); setProgress(0); setStatus("");
-    setErrorMsg(""); setCooldown(0);
-    setPredictedExercise(null); setShowChoiceGate(false);
-    setOverrideOpen(false); setOverrideName(""); setConfirmedExercise(null);
-  }
+    setBlobUrl(url);
+    setFileName(f.name);
+    setFile(f);
+    setAnalysis(null);
+    setErrorMsg("");
+    setStatus("");
+    setProgress(0);
+    setPredictedExercise(null);
+    setShowChoiceGate(false);
+    setOverrideOpen(false);
+    setOverrideName("");
+    setConfirmedExercise(null);
+  };
 
-  /* ---- Upload helpers ---- */
   async function uploadWithProxy(f: File): Promise<string> {
     const fd = new FormData();
     fd.append("file", f);
@@ -178,6 +265,7 @@ function CorrectorBody() {
     const json = await res.json();
     return json.url as string;
   }
+
   async function uploadWithSignedUrl(f: File): Promise<{ path: string; readUrl: string }> {
     const r = await fetch("/api/videos/sign-upload", {
       method: "POST",
@@ -186,12 +274,17 @@ function CorrectorBody() {
     });
     if (!r.ok) throw new Error(`sign-upload: HTTP ${r.status} ${await r.text()}`);
     const { signedUrl, path } = await r.json();
+
     const put = await fetch(signedUrl, {
       method: "PUT",
-      headers: { "content-type": f.type || "application/octet-stream", "x-upsert": "false" },
+      headers: {
+        "content-type": f.type || "application/octet-stream",
+        "x-upsert": "false",
+      },
       body: f,
     });
     if (!put.ok) throw new Error(`upload PUT failed: ${put.status} ${await put.text()}`);
+
     const r2 = await fetch("/api/storage/sign-read", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -202,16 +295,16 @@ function CorrectorBody() {
     return { path, readUrl: url as string };
   }
 
-  /* ---- Analyse ---- */
   const onAnalyze = async (userExercise?: string) => {
     if (!file || isAnalyzing || cooldown > 0) return;
+
     setIsAnalyzing(true);
     setProgress(5);
     setStatus("Préparation des images…");
     setErrorMsg("");
 
     try {
-      // 0) Extraction
+      // 0) EXTRACTION
       const { frames, timestamps } = await extractFramesFromFile(file, 12);
       if (!frames.length) throw new Error("Impossible d’extraire des images de la vidéo.");
       setProgress(12);
@@ -224,7 +317,7 @@ function CorrectorBody() {
 
       setProgress(20);
 
-      // 1) Upload
+      // 1) UPLOAD
       setStatus("Upload de la vidéo…");
       let fileUrl: string | undefined;
       if (file.size > CLIENT_PROXY_MAX_BYTES) {
@@ -241,52 +334,85 @@ function CorrectorBody() {
           fileUrl = readUrl;
         }
       }
+
       if (!fileUrl) throw new Error("Upload échoué (aucune URL retournée)");
       setProgress(75);
 
-      // 2) IA
+      // 2) APPEL IA
       void fakeProgress(setProgress, 80, 98);
       setStatus("Analyse IA…");
 
-      const baseHints = `Tu reçois des mosaïques issues d’une VIDEO. Identifie l'exercice et détecte les erreurs techniques. Réponds en FRANÇAIS.`;
-      const overrideHint = userExercise ? `Exercice indiqué par l'utilisateur : "${userExercise}".` : "";
+      const baseHints =
+        `Tu reçois des mosaïques issues d’une VIDEO (pas une photo). ` +
+        `Identifie l'exercice et détecte les ERREURS TECHNIQUES. Réponds en FRANÇAIS.`;
+      const overrideHint = userExercise ? `Exercice exécuté indiqué par l'utilisateur : "${userExercise}".` : "";
 
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ frames: mosaics, timestamps: [midTime], feeling, economyMode: true, promptHints: [baseHints, overrideHint].filter(Boolean).join(" ") }),
+        body: JSON.stringify({
+          frames: mosaics,
+          timestamps: [midTime],
+          feeling,
+          economyMode: true,
+          promptHints: [baseHints, overrideHint].filter(Boolean).join(" "),
+        }),
       });
 
       if (!res.ok) {
         const retryAfterHdr = res.headers.get("retry-after");
         const retryAfter = parseInt(retryAfterHdr || "", 10);
-        const seconds = Number.isFinite(retryAfter) ? retryAfter : res.status === 504 ? 12 : res.status === 429 ? 20 : 0;
+        const seconds = Number.isFinite(retryAfter)
+          ? retryAfter
+          : res.status === 504
+          ? 12
+          : res.status === 429
+          ? 20
+          : 0;
+
         if (res.status === 429 || res.status === 504) {
           setCooldown(seconds);
           setStatus(`Réessaie dans ${seconds}s…`);
         }
+
         const txt = await res.text().catch(() => "");
         throw new Error(`analyze: HTTP ${res.status} ${txt}`);
       }
 
       const data: Partial<AIAnalysis> = await res.json();
+
       const safe: AIAnalysis = {
         exercise: String(data.exercise || "exercice_inconnu"),
-        overall: (data.overall && data.overall.trim()) || "Analyse effectuée mais je manque d’indices visuels.",
-        muscles: Array.isArray(data.muscles) ? data.muscles.slice(0, 8) : [],
+        overall:
+          (data.overall && data.overall.trim()) ||
+          "Analyse effectuée mais je manque d’indices visuels. Réessaie avec un angle plus net / cadrage entier.",
+        muscles: Array.isArray(data.muscles) && data.muscles.length ? data.muscles.slice(0, 8) : [],
         corrections: Array.isArray((data as any).corrections) ? (data as any).corrections : [],
         faults: Array.isArray((data as any).faults) ? (data as any).faults : [],
         extras: Array.isArray(data.extras) ? data.extras : [],
-        timeline: Array.isArray(data.timeline) ? data.timeline.filter(v => typeof v?.time === "number" && typeof v?.label === "string") : [],
+        timeline:
+          Array.isArray(data.timeline)
+            ? data.timeline.filter(v => typeof v?.time === "number" && typeof v?.label === "string")
+            : [],
         objects: Array.isArray((data as any)?.objects) ? (data as any).objects : [],
         movement_pattern: typeof (data as any)?.movement_pattern === "string" ? (data as any).movement_pattern : undefined,
         skeleton_cues: Array.isArray((data as any)?.skeleton_cues) ? (data as any).skeleton_cues : [],
       };
 
-      // Post-traitement coach
+      // Post-traitement “coach”
       safe.overall = varyTerms(safe.overall);
-      safe.corrections = uniqueShuffle([...makeCorrections(safe.exercise || ""), ...(safe.corrections || []).map(varyTerms)]).slice(0, 5);
+      safe.faults = (safe.faults || []).map((f) => ({
+        ...f,
+        issue: varyTerms(f.issue || ""),
+        correction: varyTerms(f.correction || ""),
+      }));
+      safe.corrections = uniqueShuffle([
+        ...makeCorrections(safe.exercise || ""),
+        ...(safe.corrections || []).map(varyTerms),
+      ]).slice(0, 5);
+      safe.muscles = (safe.muscles || []).map(varyTerms);
 
+      // Gate de confirmation
       setAnalysis(safe);
       setPredictedExercise(safe.exercise || "exercice_inconnu");
       if (userExercise && userExercise.trim()) {
@@ -317,6 +443,15 @@ function CorrectorBody() {
     setShowChoiceGate(false);
     setOverrideOpen(false);
   };
+  const reset = () => {
+    if (blobUrl) URL.revokeObjectURL(blobUrl);
+    setBlobUrl(null); setFileName(null); setFile(null);
+    setAnalysis(null); setFeeling(""); setProgress(0); setStatus("");
+    setErrorMsg(""); setCooldown(0);
+    setPredictedExercise(null); setShowChoiceGate(false);
+    setOverrideOpen(false); setOverrideName("");
+    setConfirmedExercise(null);
+  };
 
   const { issuesLine, correctionsLine } = faultsToLines(analysis);
 
@@ -327,18 +462,32 @@ function CorrectorBody() {
         <article className="card">
           <h3 style={{ marginTop: 0 }}>🎥 Import / Enregistrement</h3>
 
+          {/* Onglets Filmer / Importer : actif vert, inactif NOIR SUR BLANC */}
           <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
             <button
-              className={`btn ${tab === "record" ? "btn-dash" : "btn-outline"}`}
               onClick={() => setTab("record")}
               type="button"
+              className="btn"
+              style={{
+                background: tab === "record" ? "#16a34a" : "#ffffff",
+                color: tab === "record" ? "#ffffff" : "#111827",
+                border: "1px solid #d1d5db",
+                fontWeight: 500
+              }}
             >
               Filmer
             </button>
+
             <button
-              className={`btn ${tab === "upload" ? "btn-dash" : "btn-outline"}`}
               onClick={() => setTab("upload")}
               type="button"
+              className="btn"
+              style={{
+                background: tab === "upload" ? "#16a34a" : "#ffffff",
+                color: tab === "upload" ? "#ffffff" : "#111827",
+                border: "1px solid #d1d5db",
+                fontWeight: 500
+              }}
             >
               Importer
             </button>
@@ -357,7 +506,19 @@ function CorrectorBody() {
               <label className="label" style={{ marginBottom: 6 }}>Fichier chargé</label>
               <div className="card" style={{ padding: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span className="truncate">🎞️ {fileName ?? "clip.webm"}</span>
-                <button className="btn btn-outline" onClick={reset} type="button">Réinitialiser</button>
+                <button
+                  className="btn"
+                  onClick={reset}
+                  type="button"
+                  style={{
+                    background: "#ffffff",
+                    color: "#111827",
+                    border: "1px solid #d1d5db",
+                    fontWeight: 500
+                  }}
+                >
+                  ↺ Réinitialiser
+                </button>
               </div>
             </div>
           )}
@@ -384,13 +545,21 @@ function CorrectorBody() {
               {isAnalyzing ? <Spinner className="mr-2" /> : "✨"}{" "}
               {isAnalyzing ? "Analyse en cours" : cooldown > 0 ? `Patiente ${cooldown}s` : "Lancer l'analyse IA"}
             </button>
+
+            {/* Reset du textarea : NOIR SUR BLANC */}
             <button
-              className="btn btn-outline"
-              disabled={isAnalyzing || cooldown > 0}
-              onClick={() => setFeeling(exampleFeeling)}
+              className="btn"
               type="button"
+              onClick={() => setFeeling("")}
+              style={{
+                background: "#ffffff",
+                color: "#111827",
+                border: "1px solid #d1d5db",
+                fontWeight: 500
+              }}
+              disabled={isAnalyzing}
             >
-              Exemple
+              Réinitialiser
             </button>
           </div>
 
@@ -414,6 +583,7 @@ function CorrectorBody() {
           </p>
         )}
 
+        {/* GATE de confirmation : "Confirmer" vert, "Autre" NOIR/BLANC */}
         {analysis && showChoiceGate && (
           <div style={{ display: "grid", gap: 8 }}>
             <div className="text-sm">
@@ -423,7 +593,13 @@ function CorrectorBody() {
               <button className="btn btn-dash" onClick={confirmPredicted} disabled={isAnalyzing} type="button">
                 Confirmer « {predictedExercise || "exercice_inconnu"} »
               </button>
-              <button className="btn btn-outline" onClick={() => setOverrideOpen(true)} disabled={isAnalyzing} type="button">
+              <button
+                className="btn"
+                onClick={() => setOverrideOpen(true)}
+                disabled={isAnalyzing}
+                type="button"
+                style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
+              >
                 Autre
               </button>
             </div>
@@ -438,7 +614,13 @@ function CorrectorBody() {
                     value={overrideName}
                     onChange={(e) => setOverrideName(e.target.value)}
                   />
-                  <button className="btn btn-dash" onClick={submitOverride} disabled={isAnalyzing || !overrideName.trim()} type="button">
+                  <button
+                    className="btn"
+                    onClick={submitOverride}
+                    disabled={isAnalyzing || !overrideName.trim()}
+                    type="button"
+                    style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
+                  >
                     Ré-analyser
                   </button>
                 </div>
@@ -450,6 +632,7 @@ function CorrectorBody() {
           </div>
         )}
 
+        {/* RÉSULTATS */}
         {analysis && !showChoiceGate && (
           <div style={{ display: "grid", gap: 12 }}>
             <div className="text-sm">
@@ -492,7 +675,7 @@ function CorrectorBody() {
   );
 }
 
-/* ---------- Upload / Record ---------- */
+/* ===================== Upload/Record ===================== */
 function UploadDrop({ onFile }: { onFile: (file: File) => void }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const onDrop = (e: React.DragEvent<HTMLDivElement>) => {
@@ -501,25 +684,26 @@ function UploadDrop({ onFile }: { onFile: (file: File) => void }) {
     if (f) onFile(f);
   };
   return (
-    <div
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={onDrop}
-      className="card"
-      style={{ borderStyle: "dashed", borderWidth: 2, padding: 16, textAlign: "center" }}
-    >
-      <div style={{ fontSize: 24, marginBottom: 6 }}>☁️</div>
-      <p className="text-sm" style={{ marginBottom: 8 }}>Glisse une vidéo ici ou</p>
-      <div>
+    <div onDragOver={(e) => e.preventDefault()} onDrop={onDrop} className="border-2 border-dashed rounded-2xl p-6 text-center">
+      <div className="mx-auto h-8 w-8 mb-2">☁️</div>
+      <p className="text-sm mb-2">Glisse une vidéo ici ou</p>
+      <div className="flex items-center justify-center gap-2">
         <input
           ref={inputRef}
           type="file"
           accept="video/*"
           capture="environment"
-          className="input"
-          style={{ display: "none" }}
+          className="hidden"
           onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); }}
         />
-        <button className="btn btn-outline" onClick={() => inputRef.current?.click()} type="button">Choisir un fichier</button>
+        <button
+          type="button"
+          className="btn"
+          onClick={() => inputRef.current?.click()}
+          style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
+        >
+          Choisir un fichier
+        </button>
       </div>
     </div>
   );
@@ -577,24 +761,21 @@ function VideoRecorder({ onRecorded }: { onRecorded: (file: File) => void }) {
     <div className="space-y-3">
       <div className="relative">
         <video ref={videoRef} className="w-full rounded-2xl border" muted playsInline />
-        {!hasStream && (
-          <div className="absolute inset-0 grid place-items-center text-xs" style={{ color: "#6b7280" }}>
-            Prépare ta caméra puis clique « Démarrer »
-          </div>
-        )}
+        {!hasStream && (<div className="absolute inset-0 grid place-items-center text-xs text-muted-foreground">Prépare ta caméra puis clique « Démarrer »</div>)}
       </div>
-      <div style={{ display: "flex", gap: 8 }}>
+      <div className="flex items-center gap-2">
         {!isRecording ? (
           <button className="btn btn-dash" onClick={start} type="button">▶️ Démarrer</button>
         ) : (
-          <button className="btn btn-outline" onClick={stop} type="button">⏸️ Arrêter</button>
+          <button className="btn" onClick={stop} type="button" style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}>⏸️ Arrêter</button>
         )}
       </div>
     </div>
   );
 }
 
-/* ---------- Helpers vidéo / images ---------- */
+/* ===== Helpers vidéo / images ===== */
+
 const exampleFeeling =
   "Séance de squats. RPE 8. Genou droit un peu instable, bas du dos fatigué, j'ai surtout senti les quadris brûler sur les dernières reps.";
 
@@ -614,6 +795,7 @@ async function fakeProgress(setter: (v: number) => void, from: number, to: numbe
     setter(Math.min(i, to));
   }
 }
+/** ➜ Extrait N frames JPEG (dataURL) d’un fichier vidéo local. */
 async function extractFramesFromFile(file: File, nFrames = 12): Promise<{ frames: string[]; timestamps: number[] }> {
   const videoURL = URL.createObjectURL(file);
   try {
