@@ -56,7 +56,7 @@ const NAV = [
   { href: "/dashboard/settings",   label: "settings",   icon: IconSettings },
 ] as const;
 
-/* ==== Loading bar ==== */
+/* ==== Loading bar (facultatif) ==== */
 function LoadingBar({ show }: { show: boolean }) {
   return (
     <div className={`pointer-events-none fixed left-0 right-0 top-0 z-[60] h-[2px] overflow-hidden transition-opacity duration-200 ${show ? "opacity-100" : "opacity-0"}`} aria-hidden>
@@ -84,12 +84,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   // iOS 100vh fix
   useEffect(() => {
-    const setVH = () => {
-      const vh = window.innerHeight * 0.01;
-      document.documentElement.style.setProperty("--vh", `${vh}px`);
-    };
-    setVH();
-    window.addEventListener("resize", setVH);
+    const setVH = () => document.documentElement.style.setProperty("--vh", `${window.innerHeight * 0.01}px`);
+    setVH(); window.addEventListener("resize", setVH);
     return () => window.removeEventListener("resize", setVH);
   }, []);
 
@@ -108,7 +104,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           })
         }
         style={style}
-        className="w-full text-left flex items-center gap-3 px-4 py-3 rounded-2xl transition outline-none border shadow-sm"
+        className="w-full text-left flex items-center gap-3 px-3 py-3 rounded-2xl transition outline-none border shadow-sm"
       >
         <span className="text-current"><Icon /></span>
         <span className="truncate capitalize flex-1">{label}</span>
@@ -125,8 +121,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       {/* TOP BAR */}
       <div className="sticky top-0 z-40 border-b bg-background/75 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="h-14 px-3 sm:px-4 flex items-center gap-3">
-          {/* Hamburger : PLUS GROS + ARRONDI */}
+        <div className="h-14 px-3 sm:px-4 flex items-center gap-2">
+          {/* HAMBURGER — plus gros + arrondi */}
           <button
             onClick={() => setOpen(true)}
             aria-label="Ouvrir la navigation"
@@ -135,48 +131,41 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           >
             <IconMenu />
           </button>
+
+          {/* “Dashboard” collé au hamburger (dans la barre, visible tout le temps) */}
+          <span className="text-sm font-semibold text-foreground/80 select-none">Dashboard</span>
+
           <div className="flex-1" />
         </div>
       </div>
 
-      {/* DRAWER (ouvre par-dessus, la page reste visible dessous) */}
+      {/* DRAWER — par-dessus la page (pas d’overlay), contenu collé en HAUT / GAUCHE */}
       {open && (
-        <>
-          {/* pas d’overlay sombre → la page reste “grande ouverte” */}
-          <aside
-            className="fixed inset-y-0 left-0 z-50 w-[72%] sm:w-80  /* plus étroit pour laisser voir la page */
-                       bg-gradient-to-b from-background to-muted/40 border-r shadow-xl rounded-r-2xl
-                       animate-in slide-in-from-left duration-200 overflow-hidden"
-            role="dialog"
-            aria-modal="true"
-            style={{ paddingLeft: "env(safe-area-inset-left)" }}
-          >
-            {/* commence sous le header */}
-            <div className="h-full" style={{ paddingTop: 56 }}>
-              {/* “Dashboard” sous le hamburger (horizontal) */}
-              <div className="px-3 pb-2 text-sm font-semibold text-foreground/80 select-none">
-                Dashboard
-              </div>
-
-              {/* Liste */}
-              <nav className="p-2 pt-0 space-y-2">
-                {NAV.map((item) => {
-                  const active = pathname?.startsWith(item.href);
-                  const Icon = item.icon;
-                  return (
-                    <NavLink
-                      key={item.href}
-                      href={item.href}
-                      label={item.label}
-                      Icon={Icon}
-                      active={!!active}
-                    />
-                  );
-                })}
-              </nav>
-            </div>
-          </aside>
-        </>
+        <aside
+          className="fixed left-0 top-0 bottom-0 z-50 w-[68%] sm:w-80
+                     bg-gradient-to-b from-background to-muted/40 border-r shadow-xl rounded-r-2xl
+                     animate-in slide-in-from-left duration-200 overflow-y-auto"
+          role="dialog"
+          aria-modal="true"
+          style={{ paddingLeft: "env(safe-area-inset-left)" }}
+        >
+          {/* on colle tout en haut/à gauche : padding minimal */}
+          <nav className="p-2 pt-2 space-y-2">
+            {NAV.map((item) => {
+              const active = pathname?.startsWith(item.href);
+              const Icon = item.icon;
+              return (
+                <NavLink
+                  key={item.href}
+                  href={item.href}
+                  label={item.label}
+                  Icon={Icon}
+                  active={!!active}
+                />
+              );
+            })}
+          </nav>
+        </aside>
       )}
 
       {/* CONTENU */}
@@ -188,3 +177,4 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
+
