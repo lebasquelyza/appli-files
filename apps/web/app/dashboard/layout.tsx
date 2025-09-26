@@ -91,9 +91,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   // lien nav : navigate + ferme le menu
   const NavLink = ({ href, label, Icon, active }: { href: string; label: string; Icon: any; active: boolean }) => {
+    // Vert clair lisible sur texte blanc : #34D399 (emerald-400)
+    const lightGreen = "#34D399";
+    const darkGreen  = "#16A34A";
+
     const style: React.CSSProperties = active
-      ? { backgroundColor: "#16A34A", color: "#FFFFFF", borderColor: "#16A34A" }
-      : { backgroundColor: "#FFFFFF", color: "#15803D", borderColor: "#d1fae5" };
+      ? { backgroundColor: darkGreen,  color: "#FFFFFF", borderColor: darkGreen }
+      : { backgroundColor: lightGreen, color: "#FFFFFF", borderColor: lightGreen };
 
     return (
       <button
@@ -104,7 +108,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           })
         }
         style={style}
-        className="w-full text-left flex items-center gap-3 px-3 py-3 rounded-2xl transition outline-none border shadow-sm"
+        className="w-full text-left flex items-center gap-3 px-3 py-3 rounded-2xl transition outline-none border shadow-sm active:scale-[0.99]"
       >
         <span className="text-current"><Icon /></span>
         <span className="truncate capitalize flex-1">{label}</span>
@@ -122,7 +126,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* TOP BAR */}
       <div className="sticky top-0 z-40 border-b bg-background/75 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="h-14 px-3 sm:px-4 flex items-center gap-2">
-          {/* HAMBURGER — plus gros + arrondi */}
+          {/* HAMBURGER — gros + arrondi */}
           <button
             onClick={() => setOpen(true)}
             aria-label="Ouvrir la navigation"
@@ -131,13 +135,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           >
             <IconMenu />
           </button>
-          {/* (Plus de titre ici — il apparaît dans le menu seulement) */}
           <div className="flex-1" />
         </div>
       </div>
 
-      {/* DRAWER — par-dessus la page, sans overlay. 
-          Affiche "Dashboard" en haut du panneau et les onglets juste dessous. */}
+      {/* DRAWER — par-dessus la page, sans overlay */}
       {open && (
         <aside
           className="fixed left-0 top-0 bottom-0 z-50 w-[68%] sm:w-80
@@ -149,12 +151,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         >
           {/* commence sous le header */}
           <div className="pt-14">
-            {/* Titre visible seulement quand le menu est ouvert */}
+            {/* Titre visible avec le menu */}
             <div className="px-3 pb-2 text-sm font-semibold text-foreground/80 select-none">
               Dashboard
             </div>
 
-            {/* Onglets collés juste en dessous */}
+            {/* Onglets (fond vert clair + texte blanc) */}
             <nav className="p-2 pt-0 space-y-2">
               {NAV.map((item) => {
                 const active = pathname?.startsWith(item.href);
@@ -183,5 +185,4 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
-
 
