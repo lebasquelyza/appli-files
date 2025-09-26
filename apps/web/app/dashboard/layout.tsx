@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 /* ==== Icônes ==== */
 function IconMenu(props: React.SVGProps<SVGSVGElement>) {
   return (
-    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden {...props}>
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden {...props}>
       <path d="M4 8h16M4 12h16M4 16h16" stroke="white" strokeWidth="2" strokeLinecap="round" />
     </svg>
   );
@@ -56,7 +56,7 @@ const NAV = [
   { href: "/dashboard/settings",   label: "settings",   icon: IconSettings },
 ] as const;
 
-/* ==== barre de chargement (optionnelle) ==== */
+/* ==== loading bar (optionnel) ==== */
 function LoadingBar({ show }: { show: boolean }) {
   return (
     <div className={`pointer-events-none fixed left-0 right-0 top-0 z-[60] h-[2px] overflow-hidden transition-opacity duration-200 ${show ? "opacity-100" : "opacity-0"}`} aria-hidden>
@@ -89,14 +89,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("resize", setVH);
   }, []);
 
+  // couleurs
+  const brandGreen = "#16A34A"; // vert du hamburger (foncé)
+  const lightGreen = "#22C55E"; // vert plus clair, même teinte
+
   // lien nav : navigate + ferme le menu
   const NavLink = ({ href, label, Icon, active }: { href: string; label: string; Icon: any; active: boolean }) => {
-    // Vert clair lisible sur texte blanc : #34D399 (emerald-400)
-    const lightGreen = "#34D399";
-    const darkGreen  = "#16A34A";
-
     const style: React.CSSProperties = active
-      ? { backgroundColor: darkGreen,  color: "#FFFFFF", borderColor: darkGreen }
+      ? { backgroundColor: brandGreen, color: "#FFFFFF", borderColor: brandGreen }
       : { backgroundColor: lightGreen, color: "#FFFFFF", borderColor: lightGreen };
 
     return (
@@ -125,13 +125,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       {/* TOP BAR */}
       <div className="sticky top-0 z-40 border-b bg-background/75 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="h-14 px-3 sm:px-4 flex items-center gap-2">
-          {/* HAMBURGER — gros + arrondi */}
+        <div className="h-14 px-3 sm:px-4 flex items-center gap-3">
+          {/* HAMBURGER — plus gros + très arrondi */}
           <button
             onClick={() => setOpen(true)}
             aria-label="Ouvrir la navigation"
-            style={{ backgroundColor: "#16A34A", color: "#fff" }}
-            className="h-12 w-12 inline-grid place-items-center rounded-full shadow-md active:scale-95 transition"
+            style={{ backgroundColor: brandGreen, color: "#fff" }}
+            className="h-14 w-14 inline-grid place-items-center rounded-full shadow-lg active:scale-95 transition"
           >
             <IconMenu />
           </button>
@@ -156,7 +156,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               Dashboard
             </div>
 
-            {/* Onglets (fond vert clair + texte blanc) */}
+            {/* Onglets : vert clair + texte blanc ; actif vert foncé + blanc */}
             <nav className="p-2 pt-0 space-y-2">
               {NAV.map((item) => {
                 const active = pathname?.startsWith(item.href);
@@ -185,4 +185,5 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
+
 
