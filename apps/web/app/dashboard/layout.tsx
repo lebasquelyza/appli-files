@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
-/* ==== Icônes ==== */
+/* ========= Icônes (inline, légères) ========= */
 function IconMenu(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden {...props}>
@@ -40,7 +40,7 @@ function IconSettings(p: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-/* ==== NAV ==== */
+/* ========= Navigation ========= */
 const NAV = [
   { href: "/dashboard/abonnement", label: "abonnement", icon: IconHome },
   { href: "/dashboard/bmi",        label: "bmi",        icon: IconChart },
@@ -56,10 +56,13 @@ const NAV = [
   { href: "/dashboard/settings",   label: "settings",   icon: IconSettings },
 ] as const;
 
-/* ==== Loading bar (optionnelle) ==== */
+/* ========= Barre de chargement (optionnelle) ========= */
 function LoadingBar({ show }: { show: boolean }) {
   return (
-    <div className={`pointer-events-none fixed left-0 right-0 top-0 z-[60] h-[2px] overflow-hidden transition-opacity duration-200 ${show ? "opacity-100" : "opacity-0"}`} aria-hidden>
+    <div
+      className={`pointer-events-none fixed left-0 right-0 top-0 z-[60] h-[2px] overflow-hidden transition-opacity duration-200 ${show ? "opacity-100" : "opacity-0"}`}
+      aria-hidden
+    >
       <div className="h-full w-1/2 animate-[loading_1.2s_ease-in-out_infinite] bg-foreground/80" />
       <style jsx>{`@keyframes loading{0%{transform:translateX(-100%)}50%{transform:translateX(50%)}100%{transform:translateX(200%)}}`}</style>
     </div>
@@ -74,6 +77,7 @@ function useActiveTitle(pathname: string | null) {
   }, [pathname]);
 }
 
+/* ========= Layout ========= */
 export default function Layout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -89,19 +93,29 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("resize", setVH);
   }, []);
 
-  // Couleurs
-  const brandGreen = "#16A34A"; // vert hamburger (foncé)
+  // Couleurs brand
+  const brandGreen = "#16A34A"; // vert bouton/hamburger
   const lightGreen = "#22C55E"; // vert clair harmonisé
 
-  // Lien nav : navigate + ferme le menu
-  const NavLink = ({
+  /* ---- Item de navigation (pastille moderne) ---- */
+  const NavItem = ({
     href, label, Icon, active,
   }: {
     href: string; label: string; Icon: any; active: boolean;
   }) => {
     const style: React.CSSProperties = active
-      ? { background: brandGreen, color: "#FFFFFF", borderColor: brandGreen, boxShadow: "0 6px 14px rgba(22,163,74,0.18)" }
-      : { background: lightGreen, color: "#FFFFFF", borderColor: lightGreen, boxShadow: "0 6px 14px rgba(34,197,94,0.16)" };
+      ? {
+          background: `linear-gradient(180deg, ${brandGreen} 0%, #0E7A35 100%)`,
+          color: "#FFFFFF",
+          borderColor: "transparent",
+          boxShadow: "0 10px 24px rgba(22,163,74,0.22)",
+        }
+      : {
+          background: `linear-gradient(180deg, ${lightGreen} 0%, #16B455 100%)`,
+          color: "#FFFFFF",
+          borderColor: "transparent",
+          boxShadow: "0 8px 18px rgba(34,197,94,0.20)",
+        };
 
     return (
       <button
@@ -112,14 +126,16 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           })
         }
         style={style}
-        className="group w-full text-left flex items-center gap-3 px-4 py-3 rounded-2xl border
+        className="group w-full text-left flex items-center gap-3 px-4 py-3 rounded-2xl
                    transition will-change-transform hover:translate-x-[2px] active:scale-[0.99]"
       >
-        <span className="text-current opacity-90 group-hover:opacity-100 transition">
+        <span className="grid h-8 w-8 place-items-center rounded-xl bg-white/15 text-current">
           <Icon />
         </span>
-        <span className="truncate capitalize flex-1 font-medium tracking-wide">{label}</span>
-        <span className="opacity-60 group-hover:opacity-90 transition" aria-hidden>›</span>
+        <span className="truncate capitalize flex-1 font-semibold tracking-wide">
+          {label}
+        </span>
+        <span className="opacity-80 group-hover:opacity-100 transition" aria-hidden>›</span>
       </button>
     );
   };
@@ -131,16 +147,16 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     >
       <LoadingBar show={isPending} />
 
-      {/* TOP BAR */}
+      {/* ---- Top bar ---- */}
       <div className="sticky top-0 z-40 border-b bg-background/75 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="h-16 px-3 sm:px-4 flex items-center gap-3">
-          {/* HAMBURGER — plus grand + arrondi */}
+          {/* Hamburger : 64px arrondi, proéminent */}
           <button
             onClick={() => setOpen(true)}
             aria-label="Ouvrir la navigation"
             style={{ backgroundColor: brandGreen, color: "#fff" }}
-            className="h-16 w-16 inline-grid place-items-center rounded-full shadow-xl
-                       hover:brightness-[1.05] active:scale-95 transition"
+            className="h-16 w-16 inline-grid place-items-center rounded-full shadow-2xl
+                       hover:brightness-[1.06] active:scale-95 transition"
           >
             <IconMenu />
           </button>
@@ -148,30 +164,40 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </div>
 
-      {/* DRAWER — par-dessus la page, sans overlay */}
+      {/* ---- Panneau Dashboard (flottant, verre dépoli) ---- */}
       {open && (
         <aside
           className="fixed left-0 top-0 bottom-0 z-50 w-[68%] sm:w-80
-                     bg-gradient-to-b from-background to-muted/40 border-r shadow-2xl rounded-r-2xl
+                     rounded-r-3xl border border-white/30 shadow-[0_24px_60px_rgba(0,0,0,0.2)]
+                     bg-white/70 backdrop-blur-xl
                      animate-in slide-in-from-left duration-200 overflow-y-auto"
           role="dialog"
           aria-modal="true"
           style={{ paddingLeft: "env(safe-area-inset-left)" }}
         >
-          {/* commence sous le header */}
+          {/* démarre sous le header */}
           <div className="pt-16">
-            {/* Titre visible seulement quand le menu est ouvert */}
-            <div className="px-4 pb-2 text-sm font-semibold text-foreground/80 select-none">
-              Dashboard
+            {/* En-tête Dashboard */}
+            <div className="px-4 pb-3 flex items-center gap-3">
+              <span
+                className="grid h-8 w-8 place-items-center rounded-xl"
+                style={{ backgroundColor: brandGreen, color: "#fff" }}
+              >
+                {/* petite icône "stat" */}
+                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden>
+                  <path d="M4 20V4M20 20H4M8 16v-5M12 20V8M16 20v-7" fill="none" stroke="currentColor" strokeWidth="2" />
+                </svg>
+              </span>
+              <span className="text-base font-semibold tracking-wide">Dashboard</span>
             </div>
 
-            {/* Onglets (design amélioré) */}
-            <nav className="p-2 pt-0 space-y-2">
+            {/* Liste des onglets – collés en haut/gauche, pastilles vertes */}
+            <nav className="px-3 pb-6 space-y-2">
               {NAV.map((item) => {
                 const active = pathname?.startsWith(item.href);
                 const Icon = item.icon;
                 return (
-                  <NavLink
+                  <NavItem
                     key={item.href}
                     href={item.href}
                     label={item.label}
@@ -185,7 +211,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </aside>
       )}
 
-      {/* CONTENU */}
+      {/* ---- Contenu de page ---- */}
       <main className="flex-1 px-3 sm:px-4 py-4">
         <div className="mx-auto w-full max-w-screen-sm sm:max-w-screen-md">
           {children}
