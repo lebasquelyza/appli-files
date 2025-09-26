@@ -132,14 +132,41 @@ export default async function Page({ searchParams }: { searchParams?: { saved?: 
             <input type="hidden" name="date" value={today} />
             <div>
               <label className="label">Calories à ajouter</label>
-              <input className="input" type="number" name="kcal" min={0} step={1} placeholder="ex: 650" required />
+              <input
+                className="input"
+                type="number"
+                name="kcal"
+                min={0}
+                step={1}
+                placeholder="ex: 650"
+                required
+                style={{
+                  background: "#ffffff",
+                  color: "#111827",
+                  border: "1px solid #d1d5db",
+                  caretColor: "#111827",
+                  WebkitTextFillColor: "#111827" as any
+                }}
+              />
               <div className="text-xs" style={{ color: "#6b7280", marginTop: 4 }}>
                 La valeur s’ajoute au total du jour (elle n’écrase pas).
               </div>
             </div>
             <div>
               <label className="label">Note (optionnel)</label>
-              <input className="input" type="text" name="note" placeholder="ex: Déj: poke bowl" />
+              <input
+                className="input"
+                type="text"
+                name="note"
+                placeholder="ex: Déj: poke bowl"
+                style={{
+                  background: "#ffffff",
+                  color: "#111827",
+                  border: "1px solid #d1d5db",
+                  caretColor: "#111827",
+                  WebkitTextFillColor: "#111827" as any
+                }}
+              />
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               {/* Principal = vert */}
