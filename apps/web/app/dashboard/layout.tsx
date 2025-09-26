@@ -2,9 +2,8 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Badge } from "@/components/ui/badge";
 
-/* ====== Icônes ====== */
+/* ==== Icônes ==== */
 function IconMenu(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden {...props}>
@@ -41,7 +40,7 @@ function IconSettings(p: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-/* ====== NAV ====== */
+/* ==== NAV ==== */
 const NAV = [
   { href: "/dashboard/abonnement", label: "abonnement", icon: IconHome },
   { href: "/dashboard/bmi",        label: "bmi",        icon: IconChart },
@@ -57,10 +56,13 @@ const NAV = [
   { href: "/dashboard/settings",   label: "settings",   icon: IconSettings },
 ] as const;
 
-/* ====== Loading bar ====== */
+/* ==== Loading bar ==== */
 function LoadingBar({ show }: { show: boolean }) {
   return (
-    <div className={`pointer-events-none fixed left-0 right-0 top-0 z-[60] h-[2px] overflow-hidden transition-opacity duration-200 ${show ? "opacity-100" : "opacity-0"}`} aria-hidden>
+    <div
+      className={`pointer-events-none fixed left-0 right-0 top-0 z-[60] h-[2px] overflow-hidden transition-opacity duration-200 ${show ? "opacity-100" : "opacity-0"}`}
+      aria-hidden
+    >
       <div className="h-full w-1/2 animate-[loading_1.2s_ease-in-out_infinite] bg-foreground/80" />
       <style jsx>{`@keyframes loading{0%{transform:translateX(-100%)}50%{transform:translateX(50%)}100%{transform:translateX(200%)}}`}</style>
     </div>
@@ -94,7 +96,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("resize", setVH);
   }, []);
 
-  const NavLink = ({ href, label, Icon, active }: { href: string; label: string; Icon: any; active: boolean }) => {
+  // NavLink: navigate + ferme le menu
+  const NavLink = ({
+    href,
+    label,
+    Icon,
+    active,
+  }: {
+    href: string;
+    label: string;
+    Icon: any;
+    active: boolean;
+  }) => {
     const style: React.CSSProperties = active
       ? { backgroundColor: "#16A34A", color: "#FFFFFF", borderColor: "#16A34A" }
       : { backgroundColor: "#FFFFFF", color: "#15803D", borderColor: "#d1fae5" }; // green-100 approx
@@ -104,27 +117,30 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         onClick={() =>
           startTransition(() => {
             router.push(href);
-            setOpen(false);
+            setOpen(false); // ← ferme au clic
           })
         }
-        // >>>> COULEUR APPLIQUÉE DIRECTEMENT SUR LE BOUTON (plus de noir)
         style={style}
         className="w-full text-left flex items-center gap-3 px-4 py-3 rounded-2xl transition outline-none border shadow-sm"
       >
         <span className="text-current"><Icon /></span>
         <span className="truncate capitalize flex-1">{label}</span>
-        {active && <Badge className="ml-auto border-0" style={{ backgroundColor: "rgba(255,255,255,.15)", color: "#fff" }}>actif</Badge>}
+        {/* ← plus de Badge "actif" */}
       </button>
     );
   };
 
   return (
-    <div className="flex min-h-[calc(var(--vh,1vh)*100)] flex-col" style={{ paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)" }}>
+    <div
+      className="flex min-h-[calc(var(--vh,1vh)*100)] flex-col"
+      style={{ paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)" }}
+    >
       <LoadingBar show={isPending} />
 
       {/* TOP BAR */}
       <div className="sticky top-0 z-40 border-b bg-background/75 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="h-14 px-3 sm:px-4 flex items-center gap-3">
+          {/* Hamburger vert forcé */}
           <button
             onClick={() => setOpen(true)}
             aria-label="Ouvrir la navigation"
@@ -150,36 +166,29 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             aria-modal="true"
             style={{ paddingLeft: "env(safe-area-inset-left)" }}
           >
-            {/* tout commence SOUS le header (56px) */}
-            <div className="h-full grid grid-cols-[2.2rem_1fr]" style={{ paddingTop: 56 }}>
-              {/* colonne gauche : Dashboard, aligné au 1er onglet */}
-              <div className="col-[1] h-full flex items-start justify-center">
-                <span
-                  className="mt-1 text-[12px] font-semibold tracking-wider text-foreground/80 select-none"
-                  style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
-                >
-                  Dashboard
-                </span>
+            {/* Tout commence sous le header (56px) */}
+            <div className="h-full" style={{ paddingTop: 56 }}>
+              {/* Titre 'Dashboard' juste sous le hamburger */}
+              <div className="px-3 pb-2 text-sm font-semibold text-foreground/80 select-none">
+                Dashboard
               </div>
 
-              {/* colonne droite : liste */}
-              <div className="col-[2] h-full overflow-y-auto">
-                <nav className="p-2 space-y-2">
-                  {NAV.map((item) => {
-                    const active = pathname?.startsWith(item.href);
-                    const Icon = item.icon;
-                    return (
-                      <NavLink
-                        key={item.href}
-                        href={item.href}
-                        label={item.label}
-                        Icon={Icon}
-                        active={!!active}
-                      />
-                    );
-                  })}
-                </nav>
-              </div>
+              {/* Liste des onglets (couleurs inchangées) */}
+              <nav className="p-2 pt-0 space-y-2">
+                {NAV.map((item) => {
+                  const active = pathname?.startsWith(item.href);
+                  const Icon = item.icon;
+                  return (
+                    <NavLink
+                      key={item.href}
+                      href={item.href}
+                      label={item.label}
+                      Icon={Icon}
+                      active={!!active}
+                    />
+                  );
+                })}
+              </nav>
             </div>
           </aside>
         </>
