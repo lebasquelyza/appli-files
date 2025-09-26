@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 
-/** Icône burger : 3 barres blanches */
+/** Icône burger */
 function IconMenu(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden {...props}>
@@ -41,11 +41,6 @@ function IconSettings(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-/** Séparateur simple (au cas où) */
-function Separator({ className = "" }: { className?: string }) {
-  return <div className={`h-px w-full bg-border ${className}`} />;
-}
-
 /** NAV */
 const NAV = [
   { href: "/dashboard/abonnement", label: "abonnement", icon: IconHome },
@@ -62,24 +57,13 @@ const NAV = [
   { href: "/dashboard/settings",   label: "settings",   icon: IconSettings },
 ] as const;
 
-/** Barre de chargement top */
+/** barre top (loading) */
 function LoadingBar({ show }: { show: boolean }) {
   return (
-    <div
-      className={[
-        "pointer-events-none fixed left-0 right-0 top-0 z-[60] h-[2px] overflow-hidden",
-        show ? "opacity-100" : "opacity-0",
-        "transition-opacity duration-200",
-      ].join(" ")}
-      aria-hidden
-    >
+    <div className={`pointer-events-none fixed left-0 right-0 top-0 z-[60] h-[2px] overflow-hidden transition-opacity duration-200 ${show ? "opacity-100" : "opacity-0"}`} aria-hidden>
       <div className="h-full w-1/2 animate-[loading_1.2s_ease-in-out_infinite] bg-foreground/80" />
       <style jsx>{`
-        @keyframes loading {
-          0% { transform: translateX(-100%); }
-          50% { transform: translateX(50%); }
-          100% { transform: translateX(200%); }
-        }
+        @keyframes loading { 0% {transform:translateX(-100%);} 50% {transform:translateX(50%);} 100% {transform:translateX(200%);} }
       `}</style>
     </div>
   );
@@ -88,9 +72,7 @@ function LoadingBar({ show }: { show: boolean }) {
 function useActiveTitle(pathname: string | null) {
   return useMemo(() => {
     if (!pathname) return "Dashboard";
-    const match =
-      [...NAV].sort((a, b) => b.href.length - a.href.length).find((r) => pathname.startsWith(r.href)) ||
-      null;
+    const match = [...NAV].sort((a,b)=>b.href.length-a.href.length).find(r=>pathname?.startsWith(r.href)) || null;
     return match?.label ?? "Dashboard";
   }, [pathname]);
 }
@@ -98,7 +80,7 @@ function useActiveTitle(pathname: string | null) {
 export default function Layout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  useActiveTitle(pathname); // on n'affiche pas le titre en haut
+  useActiveTitle(pathname); // on n’affiche pas le titre
 
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -114,16 +96,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("resize", setVH);
   }, []);
 
-  // NavLink : navigate + CLOSE menu au clic
-  const NavLink = ({
-    href,
-    children,
-    className,
-  }: {
-    href: string;
-    children: React.ReactNode;
-    className?: string;
-  }) => (
+  const NavLink = ({ href, children, className }: { href: string; children: React.ReactNode; className?: string }) => (
     <button
       onClick={() => {
         startTransition(() => {
@@ -138,19 +111,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <div
-      className="flex min-h-[calc(var(--vh,1vh)*100)] flex-col"
-      style={{
-        paddingTop: "env(safe-area-inset-top)",
-        paddingBottom: "env(safe-area-inset-bottom)",
-      }}
-    >
+    <div className="flex min-h-[calc(var(--vh,1vh)*100)] flex-col" style={{ paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)" }}>
       <LoadingBar show={isPending} />
 
       {/* TOP BAR */}
       <div className="sticky top-0 z-40 border-b bg-background/75 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="h-14 px-3 sm:px-4 flex items-center gap-3">
-          {/* HAMBURGER — vert plein + texte blanc (forcé) */}
+          {/* bouton hamburger (vert forcé) */}
           <button
             onClick={() => setOpen(true)}
             aria-label="Ouvrir la navigation"
@@ -166,25 +133,21 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* DRAWER */}
       {open && (
         <>
-          {/* Overlay inactif */}
+          {/* overlay (n’influe pas sur la fermeture) */}
           <div className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm pointer-events-none" />
 
-          {/* Panneau : on garde une grille interne avec décalage égal à la hauteur du header */}
+          {/* panneau : tout démarre SOUS le header (56px) */}
           <aside
             className="fixed inset-y-0 left-0 z-50 w-[86%] max-w-[22rem]
-                       bg-gradient-to-b from-background to-muted/40
-                       border-r shadow-xl rounded-r-2xl
-                       animate-in slide-in-from-left duration-200
-                       overflow-hidden"
+                       bg-gradient-to-b from-background to-muted/40 border-r shadow-xl rounded-r-2xl
+                       animate-in slide-in-from-left duration-200 overflow-hidden"
             role="dialog"
             aria-modal="true"
             style={{ paddingLeft: "env(safe-area-inset-left)" }}
           >
-            {/* === IMPORTANT ===
-                On ajoute un padding-top de 56px (= h-14) pour que tout commence sous le hamburger.
-            */}
-            <div className="h-full pt-14 grid grid-cols-[2.2rem_1fr]">
-              {/* Colonne gauche : libellé vertical exactement aligné avec la liste */}
+            {/* grille interne : colonne gauche (Dashboard) + colonne droite (onglets) */}
+            <div className="h-full grid grid-cols-[2.2rem_1fr]" style={{ paddingTop: 56 /* = h-14 */ }}>
+              {/* colonne gauche → libellé vertical, aligné EXACTEMENT avec la première ligne d’onglets */}
               <div className="col-[1] h-full flex items-start justify-center">
                 <span
                   className="mt-1 text-[12px] font-semibold tracking-wider text-foreground/80 select-none"
@@ -194,29 +157,35 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 </span>
               </div>
 
-              {/* Colonne droite : liste d’onglets (même pt-14 via conteneur parent) */}
+              {/* colonne droite → liste d’onglets */}
               <div className="col-[2] h-full overflow-y-auto">
                 <nav className="p-2 space-y-2">
                   {NAV.map((item) => {
                     const ActiveIcon = item.icon;
                     const active = pathname?.startsWith(item.href);
 
-                    // Couleurs FORCÉES : par défaut blanc/vert, actif vert/blanc
-                    const base =
-                      "w-full text-left flex items-center gap-3 px-4 py-3 rounded-2xl transition outline-none border";
+                    // FORCÉ : par défaut fond blanc + texte vert ; actif : fond vert + texte blanc
+                    const base = "w-full text-left flex items-center gap-3 px-4 py-3 rounded-2xl transition outline-none border";
                     const styles = active
-                      ? "!bg-[#16A34A] !text-white !border-[#16A34A]"
-                      : "!bg-white !text-[#15803D] border-green-100 hover:!bg-green-50";
+                      ? "" // on met tout en inline style ci-dessous
+                      : "";
+
+                    const defaultStyle: React.CSSProperties = active
+                      ? { backgroundColor: "#16A34A", color: "#FFFFFF", borderColor: "#16A34A" }
+                      : { backgroundColor: "#FFFFFF", color: "#15803D", borderColor: "#d1fae5" }; // green-100 approx
 
                     return (
                       <NavLink key={item.href} href={item.href} className={`${base} ${styles}`}>
-                        <span className="text-current">
-                          <ActiveIcon />
+                        {/* style inline sur le wrapper via span pour forcer couleurs sur tout le contenu */}
+                        <span className="flex w-full items-center gap-3" style={defaultStyle}>
+                          <span className="text-current"><ActiveIcon /></span>
+                          <span className="truncate capitalize flex-1">{item.label}</span>
+                          {active && (
+                            <Badge className="ml-auto border-0" style={{ backgroundColor: "rgba(255,255,255,0.15)", color: "#fff" }}>
+                              actif
+                            </Badge>
+                          )}
                         </span>
-                        <span className="truncate capitalize">{item.label}</span>
-                        {active && (
-                          <Badge className="ml-auto bg-white/15 text-white border-0">actif</Badge>
-                        )}
                       </NavLink>
                     );
                   })}
