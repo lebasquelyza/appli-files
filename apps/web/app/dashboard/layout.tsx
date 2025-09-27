@@ -44,10 +44,10 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         {children}
       </main>
 
-      {/* Tabbar mobile (bas de page) */}
-      <div className="lg:hidden sticky bottom-0 z-30">
-        <MobileTabbar />
-      </div>
+      {/* Pied de page mobile */}
+<div className="lg:hidden sticky bottom-0 z-30">
+  <MobileTabbar />
+</div>
     </div>
   );
 }
