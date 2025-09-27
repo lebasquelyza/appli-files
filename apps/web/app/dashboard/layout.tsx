@@ -49,7 +49,6 @@ const NAV = [
   { href: "/dashboard/corrector",  label: "corrector",  icon: IconVideo },
   { href: "/dashboard/muscu",      label: "muscu",      icon: IconChart },
   { href: "/dashboard/music",      label: "music",      icon: IconVideo },
-  { href: "/dashboard/pricing",    label: "pricing",    icon: IconChart },
   { href: "/dashboard/profile",    label: "profile",    icon: IconHome },
   { href: "/dashboard/progress",   label: "progress",   icon: IconChart },
   { href: "/dashboard/recipes",    label: "recipes",    icon: IconHome },
