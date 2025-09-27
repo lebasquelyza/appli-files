@@ -12,18 +12,18 @@ export default function ClientNav() {
     return (
       <Link
         href={href}
-        className={`flex items-center gap-2 px-3 py-2 rounded-lg font-medium transition ${
-          active ? "bg-emerald-100 text-emerald-800" : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
-        }`}
+        className={`group flex items-center gap-3 px-3 py-2 rounded-xl transition
+        ${active ? "bg-black text-white" : "hover:bg-gray-100 text-gray-800"}`}
+        aria-current={active ? "page" : undefined}
       >
-        <span className="text-base leading-none">{icon}</span>
-        <span>{label}</span>
+        <span className={`text-base leading-none ${active ? "" : "opacity-80 group-hover:opacity-100"}`}>{icon}</span>
+        <span className="font-medium">{label}</span>
       </Link>
     );
   };
 
   return (
-    <nav className="space-y-2">
+    <nav className="space-y-1">
       <Item href="/dashboard" label="Accueil" icon="🏠" />
       <Item href="/dashboard/calories" label="Calories" icon="🔥" />
       <Item href="/dashboard/corrector" label="Correcteur IA" icon="🧠" />
