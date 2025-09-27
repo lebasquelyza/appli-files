@@ -1,3 +1,4 @@
+// apps/web/app/dashboard/page.tsx
 import { cookies } from "next/headers";
 import Link from "next/link";
 import { getSession } from "@/lib/session";
@@ -10,11 +11,7 @@ type Workout = { status: "active" | "done"; startedAt?: string; endedAt?: string
 type Store = { sessions: Workout[] };
 
 function parseKcalStore(raw?: string): KcalStore {
-  try {
-    return JSON.parse(raw || "{}") || {};
-  } catch {
-    return {};
-  }
+  try { return JSON.parse(raw || "{}") || {}; } catch { return {}; }
 }
 function parseSessions(raw?: string): Store {
   try {
@@ -43,7 +40,7 @@ export default async function Page() {
 
   return (
     <div className="space-y-10">
-      {/* ---- En-tête ---- */}
+      {/* ---- En-tête (sans CTA à droite) ---- */}
       <div className="flex flex-col lg:flex-row items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-extrabold">Bienvenue 👋</h1>
@@ -51,20 +48,7 @@ export default async function Page() {
             Voici un aperçu de ta progression et de tes données d’aujourd’hui.
           </p>
         </div>
-        <div className="flex gap-3">
-          <Link
-            href="/dashboard/corrector"
-            className="px-4 py-2 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700 transition"
-          >
-            Analyser une vidéo
-          </Link>
-          <Link
-            href="/dashboard/abonnement"
-            className="px-4 py-2 rounded-lg border border-gray-300 bg-white font-semibold text-gray-800 hover:bg-gray-50"
-          >
-            Mon abonnement
-          </Link>
-        </div>
+        {/* (rien à droite) */}
       </div>
 
       {/* ---- Indicateurs clés ---- */}
