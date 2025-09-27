@@ -1,9 +1,10 @@
-// apps/web/app/dashboard/layout.tsx
 import Link from "next/link";
-import { ReactNode } from "react";
+import type { ReactNode } from "react";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+import ClientNav from "./_components/ClientNav";
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   return (
@@ -34,36 +35,5 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       {/* --- CONTENU --- */}
       <main className="p-6">{children}</main>
     </div>
-  );
-}
-
-/* -------- composant client pour l’état actif -------- */
-"use client";
-import { usePathname } from "next/navigation";
-
-function ClientNav() {
-  const pathname = usePathname();
-  const LinkItem = ({ href, children }: { href: string; children: React.ReactNode }) => {
-    const current = pathname === href || pathname.startsWith(href + "/");
-    return (
-      <Link
-        href={href}
-        className={`flex items-center gap-2 px-3 py-2 rounded-lg font-medium transition ${
-          current ? "bg-emerald-100 text-emerald-800" : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
-        }`}
-      >
-        {children}
-      </Link>
-    );
-  };
-
-  return (
-    <nav className="space-y-2">
-      <LinkItem href="/dashboard">🏠 Accueil</LinkItem>
-      <LinkItem href="/dashboard/calories">🔥 Calories</LinkItem>
-      <LinkItem href="/dashboard/corrector">🧠 Correcteur IA</LinkItem>
-      <LinkItem href="/dashboard/profile">💪 Profil</LinkItem>
-      <LinkItem href="/dashboard/abonnement">💳 Abonnement</LinkItem>
-    </nav>
   );
 }
