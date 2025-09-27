@@ -3,21 +3,12 @@
 
 export default function MobileTabbar() {
   return (
-    <footer
-      role="contentinfo"
-      className="
-        fixed inset-x-0 bottom-0 z-50 lg:hidden
-        border-t bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80
-      "
-    >
+    <footer className="fixed inset-x-0 bottom-0 z-40 border-t bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
       <div
-        className="
-          w-full max-w-none
-          flex items-center justify-center
-          px-4 pt-2 pb-[calc(env(safe-area-inset-bottom)+10px)]
-        "
+        className="mx-auto max-w-screen-sm h-14 flex items-center justify-center px-4"
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
-        <span className="text-xs text-gray-600 font-medium text-center">
+        <span className="text-xs font-semibold text-gray-800">
           Files Coaching 2025
         </span>
       </div>
