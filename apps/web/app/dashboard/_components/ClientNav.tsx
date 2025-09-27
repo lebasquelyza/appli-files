@@ -29,6 +29,8 @@ export default function ClientNav() {
       <Item href="/dashboard/corrector" label="Correcteur IA" icon="🧠" />
       <Item href="/dashboard/profile" label="Profil" icon="💪" />
       <Item href="/dashboard/abonnement" label="Abonnement" icon="💳" />
+      <div className="h-2" />
+      <Item href="/dashboard/files-coaching" label="Files Coaching" icon="📁" />
     </nav>
   );
 }
