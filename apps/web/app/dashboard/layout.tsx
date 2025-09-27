@@ -20,9 +20,14 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           </div>
           <ClientNav />
         </div>
+
+        {/* ↓↓↓ REMPLACÉ ICI ↓↓↓ */}
         <div className="text-[11px] text-gray-400">
-          © {new Date().getFullYear()} CoachFit • Tous droits réservés
+          <Link href="/dashboard/files-coaching" className="underline hover:text-gray-600">
+            Files Coaching
+          </Link>
         </div>
+        {/* ↑↑↑ REMPLACÉ ICI ↑↑↑ */}
       </aside>
 
       {/* Topbar */}
@@ -32,11 +37,13 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             <span className="font-semibold">Dashboard</span>
             <span className="lg:hidden text-xs text-gray-500">CoachFit</span>
           </div>
+
+          {/* Bouton entête (tu peux le laisser ou le changer au besoin) */}
           <Link
-            href="/dashboard/abonnement"
+            href="/dashboard/files-coaching"
             className="inline-flex items-center px-3 sm:px-4 py-2 rounded-xl border hover:bg-gray-50 transition"
           >
-            Mon abonnement
+            Files Coaching
           </Link>
         </div>
       </header>
@@ -46,10 +53,18 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         {children}
       </main>
 
-      {/* Tabbar mobile */}
+      {/* Tabbar mobile + mini pied de page mobile */}
       <div className="lg:hidden sticky bottom-0 z-30">
         <MobileTabbar />
+        {/* ↓↓↓ Ajout d'un petit lien en bas de page sur mobile ↓↓↓ */}
+        <div className="text-center text-[11px] text-gray-400 py-2 bg-white/90 backdrop-blur supports-[backdrop-filter]:bg-white/80 border-t">
+          <Link href="/dashboard/files-coaching" className="underline">
+            Files Coaching
+          </Link>
+        </div>
+        {/* ↑↑↑ Ajout mobile ↑↑↑ */}
       </div>
     </div>
   );
 }
+
