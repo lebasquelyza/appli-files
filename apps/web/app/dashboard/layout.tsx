@@ -1,29 +1,19 @@
-"use client";
-
+// apps/web/app/dashboard/layout.tsx
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { ReactNode } from "react";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
-
+export default function DashboardLayout({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen grid lg:grid-cols-[240px,1fr] grid-rows-[auto,1fr] lg:grid-rows-[1fr] bg-[#f9fafb]">
       {/* --- BARRE LATERALE --- */}
       <aside className="bg-white border-r p-4 flex flex-col justify-between">
         <div>
           <h1 className="text-2xl font-extrabold mb-6">CoachFit</h1>
-          <nav className="space-y-2">
-            <NavLink href="/dashboard" current={pathname === "/dashboard"}>🏠 Accueil</NavLink>
-            <NavLink href="/dashboard/calories" current={pathname.startsWith("/dashboard/calories")}>🔥 Calories</NavLink>
-            <NavLink href="/dashboard/corrector" current={pathname.startsWith("/dashboard/corrector")}>🧠 Correcteur IA</NavLink>
-            <NavLink href="/dashboard/profile" current={pathname.startsWith("/dashboard/profile")}>💪 Profil</NavLink>
-            <NavLink href="/dashboard/abonnement" current={pathname.startsWith("/dashboard/abonnement")}>💳 Abonnement</NavLink>
-          </nav>
+          <ClientNav />
         </div>
-
         <div className="text-xs text-gray-400 mt-8">
           © {new Date().getFullYear()} CoachFit<br />
           Tous droits réservés.
@@ -47,18 +37,33 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   );
 }
 
-function NavLink({ href, current, children }: { href: string; current: boolean; children: React.ReactNode }) {
+/* -------- composant client pour l’état actif -------- */
+"use client";
+import { usePathname } from "next/navigation";
+
+function ClientNav() {
+  const pathname = usePathname();
+  const LinkItem = ({ href, children }: { href: string; children: React.ReactNode }) => {
+    const current = pathname === href || pathname.startsWith(href + "/");
+    return (
+      <Link
+        href={href}
+        className={`flex items-center gap-2 px-3 py-2 rounded-lg font-medium transition ${
+          current ? "bg-emerald-100 text-emerald-800" : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+        }`}
+      >
+        {children}
+      </Link>
+    );
+  };
+
   return (
-    <Link
-      href={href}
-      className={`flex items-center gap-2 px-3 py-2 rounded-lg font-medium transition ${
-        current
-          ? "bg-emerald-100 text-emerald-800"
-          : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
-      }`}
-    >
-      {children}
-    </Link>
+    <nav className="space-y-2">
+      <LinkItem href="/dashboard">🏠 Accueil</LinkItem>
+      <LinkItem href="/dashboard/calories">🔥 Calories</LinkItem>
+      <LinkItem href="/dashboard/corrector">🧠 Correcteur IA</LinkItem>
+      <LinkItem href="/dashboard/profile">💪 Profil</LinkItem>
+      <LinkItem href="/dashboard/abonnement">💳 Abonnement</LinkItem>
+    </nav>
   );
 }
-
