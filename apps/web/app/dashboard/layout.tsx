@@ -38,14 +38,10 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           </Link>
         </div>
       </header>
+{/* Contenu */}
+<main className="p-4 sm:p-6 pb-24 lg:col-start-2">
+  {children}
+</main>
 
-      {/* Contenu */}
-      <main className="p-4 sm:p-6 lg:col-start-2">
-        {children}
-      </main>
-
-      {/* Pied de page mobile */}
-      <MobileTabbar />
-    </div>
-  );
-}
+{/* Pied de page mobile */}
+<MobileTabbar />
