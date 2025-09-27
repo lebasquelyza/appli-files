@@ -2,6 +2,8 @@
 import type { ReactNode } from "react";
 import ClientTopbar from "./_components/ClientTopbar";
 import MobileTabbar from "./_components/MobileTabbar";
+import ClientTopbar from "./_components/ClientTopbar";
+
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
