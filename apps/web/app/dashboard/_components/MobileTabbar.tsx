@@ -3,14 +3,17 @@
 
 export default function MobileTabbar() {
   return (
-    <footer className="fixed inset-x-0 bottom-0 z-40 border-t bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
+    <footer
+      className="fixed bottom-0 left-0 right-0 z-40 border-t bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80"
+      style={{ WebkitBackdropFilter: "saturate(180%) blur(8px)" }}
+    >
       <div
-        className="mx-auto max-w-screen-sm h-14 flex items-center justify-center px-4"
+        className="w-full h-14 flex items-center justify-center px-4"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
-        <span className="text-xs font-semibold text-gray-800">
+        <p className="w-full text-center text-xs font-semibold text-gray-900">
           Files Coaching 2025
-        </span>
+        </p>
       </div>
     </footer>
   );
