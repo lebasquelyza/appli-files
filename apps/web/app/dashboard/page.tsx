@@ -1,252 +1,123 @@
-// apps/web/app/dashboard/page.tsx
 import { cookies } from "next/headers";
-import { PageHeader, Section } from "@/components/ui/Page";
+import Link from "next/link";
 import { getSession } from "@/lib/session";
 
-export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-type Plan = "BASIC" | "PLUS" | "PREMIUM";
-type EntryType = "steps" | "load" | "weight";
+type KcalStore = Record<string, number>;
+type Workout = { status: "active" | "done"; startedAt?: string; endedAt?: string };
+type Store = { sessions: Workout[] };
 
-type ProgressEntry = {
-  id: string;
-  type: EntryType;
-  date: string;      // YYYY-MM-DD
-  value: number;     // pas / kg
-  reps?: number;
-  note?: string;
-  createdAt: string; // ISO
-};
-type Store = { entries: ProgressEntry[] };
-
-/* ---------- Utils ---------- */
-function parseProgress(val?: string | null): Store {
-  if (!val) return { entries: [] };
+function parseKcalStore(raw?: string): KcalStore {
   try {
-    const obj = JSON.parse(val);
-    if (Array.isArray(obj?.entries)) return { entries: obj.entries as ProgressEntry[] };
-  } catch {}
-  return { entries: [] };
+    return JSON.parse(raw || "{}") || {};
+  } catch {
+    return {};
+  }
 }
-function parseJson(val?: string | null): any {
-  try { return val ? JSON.parse(val) : null; } catch { return null; }
-}
-function todayYMD() {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth()+1).padStart(2,"0");
-  const da = String(d.getDate()).padStart(2,"0");
-  return `${y}-${m}-${da}`;
-}
-function fmtDate(dateISO: string) {
+function parseSessions(raw?: string): Store {
   try {
-    const d = new Date(dateISO);
-    if (!isNaN(d.getTime())) return d.toLocaleDateString("fr-FR", { year:"numeric", month:"long", day:"numeric" });
-  } catch {}
-  return dateISO;
+    const o = JSON.parse(raw || "{}");
+    return { sessions: Array.isArray(o?.sessions) ? o.sessions : [] };
+  } catch {
+    return { sessions: [] };
+  }
 }
-// semaine (lundi → dimanche)
-function startOfWeekMonday(d: Date) {
-  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const diff = (x.getDay() + 6) % 7; // Lundi=0
-  x.setDate(x.getDate() - diff);
-  return x;
-}
-function endOfWeekFromMonday(monday: Date) {
-  const s = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate());
-  s.setDate(s.getDate()+6);
-  return s;
-}
-function parseYMDLocal(s: string) {
-  const [y,m,d] = s.split("-").map(Number);
-  return new Date(y, (m||1)-1, d||1);
+function todayISO(tz = "Europe/Paris") {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date());
 }
 
-/* ---------- Page ---------- */
 export default async function Page() {
   const jar = cookies();
+  const kcals = parseKcalStore(jar.get("app.kcals")?.value);
+  const sessions = parseSessions(jar.get("app_sessions")?.value);
+  const s: any = await getSession().catch(() => ({}));
 
-  // Session (plan actif)
-  let sess: any = {};
-  try { sess = await getSession(); } catch {}
-  const plan: Plan = (sess?.plan as Plan) || "BASIC";
-
-  // Progress (pas/charges/poids)
-  const progress = parseProgress(jar.get("app_progress")?.value);
-  const lastWeight = progress.entries.find(e => e.type === "weight");
-  const lastLoad   = progress.entries.find(e => e.type === "load");
-
-  // Pas semaine en cours
-  const now = new Date();
-  const monday = startOfWeekMonday(now);
-  const sunday = endOfWeekFromMonday(monday);
-  const stepsThisWeek = progress.entries
-    .filter(e => e.type === "steps")
-    .filter(e => {
-      const d = parseYMDLocal(e.date);
-      return d >= monday && d <= sunday;
-    })
-    .reduce((sum, e) => sum + (Number(e.value) || 0), 0);
-
-  // Calories du jour (essaye plusieurs structures possibles)
-  const kcalsCookie = parseJson(jar.get("app.kcals")?.value) || {};
-  const ymd = todayYMD();
-  const kcalsToday =
-    (typeof kcalsCookie?.kcals?.[ymd] === "number" && kcalsCookie.kcals[ymd]) ??
-    (typeof kcalsCookie?.[ymd] === "number" && kcalsCookie[ymd]) ??
-    0;
-
-  // Idées recettes (teasers, cliquables)
-  const ideas = [
-    { id:"omelette-epinards", label:"Omelette épinards" },
-    { id:"yaourt-fruits",     label:"Yaourt grec + fruits" },
-    { id:"poulet-riz-brocoli",label:"Poulet + riz + brocoli" },
-    { id:"bowl-quinoa",       label:"Bowl quinoa" },
-  ];
-
-  // Exos rapides (statique)
-  const quick = ["20 squats lents", "3×30″ planche", "2′ mobilité hanches", "Marche 10′"];
+  const today = todayISO();
+  const todayKcal = kcals[today] || 0;
+  const activeCount = sessions.sessions.filter((s) => s.status === "active").length;
+  const lastDone = sessions.sessions
+    .filter((s) => s.status === "done")
+    .sort((a, b) => (b.endedAt || "").localeCompare(a.endedAt || ""))[0];
 
   return (
-    <>
-      {/* Bandeau d’accueil compact */}
-      <section className="section" style={{ marginTop: 0 }}>
-        <div className="card" style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:12 }}>
-          <div>
-            <h2 style={{ margin:0, fontSize:18, fontWeight:800 }}>Bienvenue 👋</h2>
-            <div className="text-sm" style={{ marginTop:6, color:"#6b7280" }}>
-              Exos simples, recettes et suivi — tout pour bouger aujourd’hui.
-            </div>
-          </div>
-          <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
-            <a className="btn btn-outline" href="/dashboard/recipes">Recettes</a>
-            <a className="btn btn-outline" href="/dashboard/progress">Mes progrès</a>
-            <a className="btn btn-dash" href="/dashboard/muscu">Commencer une séance</a>
-          </div>
+    <div className="space-y-10">
+      {/* ---- En-tête ---- */}
+      <div className="flex flex-col lg:flex-row items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-extrabold">Bienvenue 👋</h1>
+          <p className="text-gray-600 mt-1">
+            Voici un aperçu de ta progression et de tes données d’aujourd’hui.
+          </p>
         </div>
+        <div className="flex gap-3">
+          <Link
+            href="/dashboard/corrector"
+            className="px-4 py-2 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700 transition"
+          >
+            Analyser une vidéo
+          </Link>
+          <Link
+            href="/dashboard/abonnement"
+            className="px-4 py-2 rounded-lg border border-gray-300 bg-white font-semibold text-gray-800 hover:bg-gray-50"
+          >
+            Mon abonnement
+          </Link>
+        </div>
+      </div>
+
+      {/* ---- Indicateurs clés ---- */}
+      <section className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <Kpi title="Calories aujourd'hui" value={`${todayKcal.toLocaleString("fr-FR")} kcal`} href="/dashboard/calories" />
+        <Kpi title="Séances actives" value={`${activeCount}`} href="/dashboard/profile" />
+        <Kpi
+          title="Dernière séance"
+          value={lastDone?.endedAt ? new Date(lastDone.endedAt).toLocaleDateString("fr-FR") : "—"}
+          href="/dashboard/profile"
+        />
+        <Kpi title="Abonnement" value={s?.plan || "BASIC"} href="/dashboard/abonnement" />
       </section>
 
-      {/* Stats en un coup d’œil */}
-      <Section title="En un coup d’œil">
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          <article className="card">
-            <div className="flex items-center justify-between">
-              <h3 style={{ margin:0, fontSize:16, fontWeight:800 }}>Plan</h3>
-              <span className="badge">{plan}</span>
-            </div>
-            <p className="text-sm" style={{ color:"#6b7280", marginTop:6 }}>
-              Gérer mon offre, options et IA.
-            </p>
-            <div style={{ marginTop:10 }}>
-              <a className="btn btn-outline" href="/dashboard/pricing" style={{ color: "#111" }}>
-                Voir les offres
-              </a>
-            </div>
-          </article>
+      {/* ---- Actions rapides ---- */}
+      <section className="grid gap-6 lg:grid-cols-2">
+        <article className="card bg-white p-6 rounded-2xl shadow-sm">
+          <h3 className="font-bold text-lg mb-2">Calories</h3>
+          <p className="text-sm text-gray-600 mb-4">
+            Consulte ton historique ou ajoute ta consommation d’aujourd’hui.
+          </p>
+          <Link
+            href="/dashboard/calories"
+            className="inline-block px-4 py-2 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700"
+          >
+            Gérer mes calories →
+          </Link>
+        </article>
 
-          <article className="card">
-            <div className="flex items-center justify-between">
-              <h3 style={{ margin:0, fontSize:16, fontWeight:800 }}>Calories aujourd’hui</h3>
-              <span className="badge">Journal</span>
-            </div>
-            <div style={{ fontSize:22, fontWeight:900, marginTop:6 }}>{kcalsToday.toLocaleString("fr-FR")} kcal</div>
-            <div style={{ marginTop:10 }}>
-              <a className="btn btn-outline" href="/dashboard/calories" style={{ color: "#111" }}>
-                Enregistrer
-              </a>
-            </div>
-          </article>
+        <article className="card bg-white p-6 rounded-2xl shadow-sm">
+          <h3 className="font-bold text-lg mb-2">Entraînements</h3>
+          <p className="text-sm text-gray-600 mb-4">
+            Crée, démarre ou consulte tes séances d’entraînement passées.
+          </p>
+          <Link
+            href="/dashboard/profile"
+            className="inline-block px-4 py-2 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700"
+          >
+            Voir mes séances →
+          </Link>
+        </article>
+      </section>
+    </div>
+  );
+}
 
-          <article className="card">
-            <div className="flex items-center justify-between">
-              <h3 style={{ margin:0, fontSize:16, fontWeight:800 }}>Pas — semaine</h3>
-              <span className="badge">Lun→Dim</span>
-            </div>
-            <div style={{ fontSize:22, fontWeight:900, marginTop:6 }}>{stepsThisWeek.toLocaleString("fr-FR")} pas</div>
-            <div style={{ marginTop:10 }}>
-              <a className="btn btn-outline" href="/dashboard/progress" style={{ color: "#111" }}>
-                Ajouter des pas
-              </a>
-            </div>
-          </article>
-
-          <article className="card">
-            <div className="flex items-center justify-between">
-              <h3 style={{ margin:0, fontSize:16, fontWeight:800 }}>Dernières mesures</h3>
-              <span className="badge">Suivi</span>
-            </div>
-            <ul style={{ margin:"6px 0 0 16px" }}>
-              <li>Poids: <b>{lastWeight ? `${lastWeight.value} kg` : "—"}</b> {lastWeight && <span className="text-sm" style={{ color:"#6b7280" }}>({fmtDate(lastWeight.date)})</span>}</li>
-              <li>Charge: <b>{lastLoad ? `${lastLoad.value} kg${lastLoad.reps ? ` × ${lastLoad.reps}` : ""}` : "—"}</b> {lastLoad && <span className="text-sm" style={{ color:"#6b7280" }}>({fmtDate(lastLoad.date)})</span>}</li>
-            </ul>
-            <div style={{ marginTop:10 }}>
-              <a className="btn btn-outline" href="/dashboard/progress" style={{ color: "#111" }}>
-                Mettre à jour
-              </a>
-            </div>
-          </article>
-        </div>
-      </Section>
-
-      {/* Exercices simples */}
-      <Section title="Exercices simples">
-        <ul className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6" style={{ listStyle:"none", padding:0, margin:0 }}>
-          {quick.map((t) => (
-            <li key={t} className="card" style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10 }}>
-              <span>{t}</span>
-              <a className="btn btn-outline" href="/dashboard/muscu" style={{ color: "#111" }}>
-                Lancer
-              </a>
-            </li>
-          ))}
-        </ul>
-      </Section>
-
-      {/* Idées recettes */}
-      <Section title="Idées recettes">
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {ideas.map(r => (
-            <article key={r.id} className="card" style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10 }}>
-              <span>{r.label}</span>
-              <a className="btn btn-outline" href="/dashboard/recipes" style={{ color: "#111" }}>
-                Voir
-              </a>
-            </article>
-          ))}
-        </div>
-      </Section>
-
-      {/* Raccourcis utiles */}
-      <Section title="Raccourcis">
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          <a className="card" href="/dashboard/recipes" style={{ textDecoration:"none", color:"#111" }}>
-            <div className="flex items-center justify-between">
-              <b>Recettes</b><span className="badge">IA</span>
-            </div>
-            <p className="text-sm" style={{ color:"#6b7280", marginTop:6 }}>Filtrer par calories & allergènes.</p>
-          </a>
-          <a className="card" href="/dashboard/progress" style={{ textDecoration:"none", color:"#111" }}>
-            <div className="flex items-center justify-between">
-              <b>Mes progrès</b><span className="badge">Suivi</span>
-            </div>
-            <p className="text-sm" style={{ color:"#6b7280", marginTop:6 }}>Pas, charges, poids.</p>
-          </a>
-          <a className="card" href="/dashboard/calories" style={{ textDecoration:"none", color:"#111" }}>
-            <div className="flex items-center justify-between">
-              <b>Calories</b><span className="badge">Journal</span>
-            </div>
-            <p className="text-sm" style={{ color:"#6b7280", marginTop:6 }}>Saisir le total du jour.</p>
-          </a>
-          <a className="card" href="/dashboard/pricing" style={{ textDecoration:"none", color:"#111" }}>
-            <div className="flex items-center justify-between">
-              <b>Abonnement</b><span className="badge">{plan}</span>
-            </div>
-            <p className="text-sm" style={{ color:"#6b7280", marginTop:6 }}>Passer à PLUS/PREMIUM.</p>
-          </a>
-        </div>
-      </Section>
-    </>
+function Kpi({ title, value, href }: { title: string; value: string; href: string }) {
+  return (
+    <Link href={href}>
+      <div className="p-5 bg-white rounded-2xl shadow-sm hover:shadow-md transition cursor-pointer">
+        <p className="text-sm text-gray-500 mb-1">{title}</p>
+        <p className="text-2xl font-bold text-gray-900">{value}</p>
+      </div>
+    </Link>
   );
 }
