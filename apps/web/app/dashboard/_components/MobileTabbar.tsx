@@ -8,10 +8,10 @@ export default function MobileTabbar() {
       style={{ WebkitBackdropFilter: "saturate(180%) blur(8px)" }}
     >
       <div
-        className="w-full h-14 flex items-center justify-center px-4"
+        className="w-full h-14 flex items-center justify-start px-4"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
-        <p className="w-full text-center text-xs font-semibold text-gray-900">
+        <p className="text-xs font-semibold text-gray-900 text-left">
           Files Coaching 2025
         </p>
       </div>
