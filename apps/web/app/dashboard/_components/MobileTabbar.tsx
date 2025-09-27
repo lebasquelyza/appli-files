@@ -9,6 +9,7 @@ const TABS = [
   { href: "/dashboard/calories", label: "Calories", icon: "🔥" },
   { href: "/dashboard/corrector", label: "IA", icon: "🧠" },
   { href: "/dashboard/profile", label: "Profil", icon: "💪" },
+  { href: "/dashboard/files-coaching", label: "Files Coaching", icon: "📁" },
 ];
 
 export default function MobileTabbar() {
@@ -21,7 +22,7 @@ export default function MobileTabbar() {
       role="navigation"
       aria-label="Navigation principale"
     >
-      <div className="grid grid-cols-4 gap-1">
+      <div className="grid grid-cols-5">
         {TABS.map((t) => {
           const active = pathname === t.href || pathname.startsWith(t.href + "/");
           return (
@@ -30,18 +31,15 @@ export default function MobileTabbar() {
               href={t.href}
               className="flex flex-col items-center justify-center py-2 rounded-xl select-none"
               aria-current={active ? "page" : undefined}
+              aria-label={t.label}
+              title={t.label}
             >
-              <span className={`text-[18px] leading-none ${active ? "opacity-100" : "opacity-60"}`}>
+              <span className={`text-[20px] leading-none ${active ? "opacity-100" : "opacity-60"}`}>
                 {t.icon}
               </span>
-              <span
-                className={`mt-1 text-[11px] tracking-tight ${
-                  active ? "font-semibold text-black" : "text-gray-600"
-                }`}
-              >
-                {t.label}
-              </span>
-              {/* pastille active */}
+              {/* libellé masqué (accessibilité OK) */}
+              <span className="sr-only">{t.label}</span>
+              {/* petit indicateur d’activité */}
               <span
                 className={`mt-1 h-1 w-6 rounded-full transition-all ${
                   active ? "bg-black opacity-90" : "bg-transparent"
