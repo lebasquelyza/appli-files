@@ -3,7 +3,6 @@ import { cookies } from "next/headers";
 import Link from "next/link";
 import { getSession } from "@/lib/session";
 
-export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
@@ -15,10 +14,8 @@ function parseKcalStore(raw?: string): KcalStore {
   try { return JSON.parse(raw || "{}") || {}; } catch { return {}; }
 }
 function parseSessions(raw?: string): Store {
-  try {
-    const o = JSON.parse(raw || "{}");
-    return { sessions: Array.isArray(o?.sessions) ? o.sessions : [] };
-  } catch { return { sessions: [] }; }
+  try { const o = JSON.parse(raw || "{}"); return { sessions: Array.isArray(o?.sessions) ? o.sessions : [] }; }
+  catch { return { sessions: [] }; }
 }
 function todayISO(tz = "Europe/Paris") {
   return new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date());
@@ -38,76 +35,82 @@ export default async function Page() {
     .sort((a, b) => (b.endedAt || "").localeCompare(a.endedAt || ""))[0];
 
   return (
-    <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
-      {/* En-tête simple */}
-      <div className="page-header">
+    <div className="container" style={{ paddingTop: 20, paddingBottom: 28 }}>
+      {/* En-tête discret */}
+      <div className="page-header" style={{ marginBottom: 8 }}>
         <div>
-          <h1 className="h1">Aperçu</h1>
-          <p className="lead">Tes chiffres clés et tes raccourcis.</p>
+          <h1 className="h1" style={{ fontSize: 20, fontWeight: 800 }}>Aperçu du jour</h1>
+          <p className="lead" style={{ fontSize: 13 }}>
+            Tes chiffres clés et tes raccourcis.
+          </p>
         </div>
       </div>
 
-      {/* Indicateurs (cartes blanches) */}
-      <div className="grid gap-6 lg:grid-cols-4">
+      {/* KPI (cartes blanches, typo réduite) */}
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" style={{ marginBottom: 12 }}>
+        <KpiCard
+          title="Calories aujourd’hui"
+          value={`${todayKcal.toLocaleString("fr-FR")} kcal`}
+          href="/dashboard/calories"
+        />
+        <KpiCard title="Séances actives" value={String(activeCount)} href="/dashboard/profile" />
+        <KpiCard
+          title="Dernière séance"
+          value={lastDone?.endedAt ? new Date(lastDone.endedAt).toLocaleDateString("fr-FR") : "—"}
+          href="/dashboard/profile"
+        />
+        <KpiCard title="Abonnement" value={s?.plan || "BASIC"} href="/dashboard/abonnement" />
+      </section>
+
+      {/* Actions rapides (cards blanches) */}
+      <section className="grid gap-6 lg:grid-cols-2">
         <article className="card">
-          <div className="text-sm" style={{ color: "#6b7280" }}>🔥 Calories aujourd’hui</div>
-          <div style={{ fontSize: 24, fontWeight: 800, marginTop: 6 }}>
-            {todayKcal.toLocaleString("fr-FR")} kcal
-          </div>
-          <div style={{ marginTop: 12 }}>
-            <Link href="/dashboard/calories" className="btn btn-dash">Gérer</Link>
+          <div style={{ display: "grid", gap: 8 }}>
+            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>Calories</h3>
+            <p className="text-sm" style={{ color: "#6b7280", fontSize: 13, margin: 0 }}>
+              Ajoute ta conso d’aujourd’hui et consulte l’historique (14 jours).
+            </p>
+            <Link
+              href="/dashboard/calories"
+              className="btn btn-dash"
+              style={{ width: "fit-content", padding: "8px 12px", fontSize: 14, fontWeight: 700 }}
+            >
+              Gérer mes calories →
+            </Link>
           </div>
         </article>
 
         <article className="card">
-          <div className="text-sm" style={{ color: "#6b7280" }}>🏃 Séances actives</div>
-          <div style={{ fontSize: 24, fontWeight: 800, marginTop: 6 }}>{activeCount}</div>
-          <div style={{ marginTop: 12 }}>
-            <Link href="/dashboard/profile" className="btn">Ouvrir</Link>
+          <div style={{ display: "grid", gap: 8 }}>
+            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>Entraînements</h3>
+            <p className="text-sm" style={{ color: "#6b7280", fontSize: 13, margin: 0 }}>
+              Crée, démarre ou consulte tes séances d’entraînement passées.
+            </p>
+            <Link
+              href="/dashboard/profile"
+              className="btn btn-dash"
+              style={{ width: "fit-content", padding: "8px 12px", fontSize: 14, fontWeight: 700 }}
+            >
+              Voir mes séances →
+            </Link>
           </div>
         </article>
-
-        <article className="card">
-          <div className="text-sm" style={{ color: "#6b7280" }}>📅 Dernière séance</div>
-          <div style={{ fontSize: 24, fontWeight: 800, marginTop: 6 }}>
-            {lastDone?.endedAt ? new Date(lastDone.endedAt).toLocaleDateString("fr-FR") : "—"}
-          </div>
-          <div style={{ marginTop: 12 }}>
-            <Link href="/dashboard/profile" className="btn">Historique</Link>
-          </div>
-        </article>
-
-        <article className="card">
-          <div className="text-sm" style={{ color: "#6b7280" }}>💳 Abonnement</div>
-          <div style={{ fontSize: 24, fontWeight: 800, marginTop: 6 }}>{s?.plan || "BASIC"}</div>
-          <div style={{ marginTop: 12 }}>
-            <Link href="/dashboard/abonnement" className="btn">Gérer</Link>
-          </div>
-        </article>
-      </div>
-
-      {/* Deux grandes cartes comme les autres pages */}
-      <div className="grid gap-6 lg:grid-cols-2" style={{ marginTop: 16 }}>
-        <article className="card">
-          <h3 style={{ marginTop: 0 }}>Calories</h3>
-          <p className="text-sm" style={{ color: "#6b7280", marginTop: 4 }}>
-            Ajoute ta consommation du jour et consulte l’historique (14 jours).
-          </p>
-          <div style={{ marginTop: 12 }}>
-            <Link href="/dashboard/calories" className="btn btn-dash">Gérer mes calories</Link>
-          </div>
-        </article>
-
-        <article className="card">
-          <h3 style={{ marginTop: 0 }}>Entraînements</h3>
-          <p className="text-sm" style={{ color: "#6b7280", marginTop: 4 }}>
-            Crée, démarre et consulte tes séances d’entraînement.
-          </p>
-          <div style={{ marginTop: 12 }}>
-            <Link href="/dashboard/profile" className="btn btn-dash">Voir mes séances</Link>
-          </div>
-        </article>
-      </div>
+      </section>
     </div>
   );
 }
+
+/* ---------- Petites cartes KPI cohérentes avec tes "card" ---------- */
+function KpiCard({ title, value, href }: { title: string; value: string; href: string }) {
+  return (
+    <Link href={href} className="card" style={{ textDecoration: "none" }}>
+      <div style={{ display: "grid", gap: 6 }}>
+        <p className="text-sm" style={{ color: "#6b7280", fontSize: 12, margin: 0 }}>
+          {title}
+        </p>
+        <p style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "#111827" }}>{value}</p>
+      </div>
+    </Link>
+  );
+}
+
