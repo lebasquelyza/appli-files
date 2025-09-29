@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import Link from "next/link";
 import { getSession } from "@/lib/session";
 
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
@@ -37,101 +38,76 @@ export default async function Page() {
     .sort((a, b) => (b.endedAt || "").localeCompare(a.endedAt || ""))[0];
 
   return (
-    <div className="space-y-6">
-      {/* Carte d’intro (discrète) */}
-      <section className="rounded-2xl border bg-white shadow-sm p-5">
-        <h2 className="text-lg sm:text-xl font-extrabold tracking-tight text-gray-900">
-          Aperçu du jour
-        </h2>
-        <p className="text-sm text-gray-600 mt-1">
-          Tes chiffres clés et tes raccourcis.
-        </p>
-      </section>
-
-      {/* KPI en “carrés” blancs */}
-      <section className="grid gap-4 sm:gap-6 grid-cols-2 lg:grid-cols-4">
-        <KpiCard title="Calories aujourd’hui" value={`${todayKcal.toLocaleString("fr-FR")} kcal`} href="/dashboard/calories" emoji="🔥" />
-        <KpiCard title="Séances actives" value={`${activeCount}`} href="/dashboard/profile" emoji="🏃" />
-        <KpiCard title="Dernière séance" value={lastDone?.endedAt ? new Date(lastDone.endedAt).toLocaleDateString("fr-FR") : "—"} href="/dashboard/profile" emoji="📅" />
-        <KpiCard title="Abonnement" value={s?.plan || "BASIC"} href="/dashboard/abonnement" emoji="💳" />
-      </section>
-
-      {/* Deux grosses cartes blanches */}
-      <section className="grid gap-6 lg:grid-cols-2">
-        <BigCard
-          emoji="🍽️"
-          title="Calories"
-          desc="Ajoute ta conso du jour et consulte l’historique (14 jours)."
-          href="/dashboard/calories"
-          cta="Gérer mes calories"
-        />
-        <BigCard
-          emoji="💪"
-          title="Entraînements"
-          desc="Crée, démarre et consulte tes séances d’entraînement."
-          href="/dashboard/profile"
-          cta="Voir mes séances"
-        />
-      </section>
-    </div>
-  );
-}
-
-/* ========= Composants de carte (carrés blancs) ========= */
-
-function KpiCard({
-  emoji,
-  title,
-  value,
-  href,
-}: {
-  emoji: string;
-  title: string;
-  value: string;
-  href: string;
-}) {
-  return (
-    <Link href={href} className="block">
-      <div className="rounded-2xl border bg-white shadow-sm p-4 sm:p-5 min-h-[120px] flex flex-col justify-between hover:shadow-md transition">
-        <div className="flex items-center gap-2">
-          <span className="text-base">{emoji}</span>
-          <p className="text-xs sm:text-sm text-gray-600">{title}</p>
-        </div>
-        <p className="text-xl sm:text-2xl font-bold text-gray-900">{value}</p>
-      </div>
-    </Link>
-  );
-}
-
-function BigCard({
-  emoji,
-  title,
-  desc,
-  href,
-  cta,
-}: {
-  emoji: string;
-  title: string;
-  desc: string;
-  href: string;
-  cta: string;
-}) {
-  return (
-    <article className="rounded-2xl border bg-white shadow-sm p-6 flex flex-col justify-between">
-      <div className="flex items-start gap-3">
-        <div className="text-xl">{emoji}</div>
+    <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
+      {/* En-tête simple */}
+      <div className="page-header">
         <div>
-          <h3 className="text-lg font-bold">{title}</h3>
-          <p className="text-sm text-gray-600 mt-1">{desc}</p>
+          <h1 className="h1">Aperçu</h1>
+          <p className="lead">Tes chiffres clés et tes raccourcis.</p>
         </div>
       </div>
 
-      <Link
-        href={href}
-        className="mt-4 inline-flex items-center justify-center rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 active:scale-[.99] transition self-start"
-      >
-        {cta} →
-      </Link>
-    </article>
+      {/* Indicateurs (cartes blanches) */}
+      <div className="grid gap-6 lg:grid-cols-4">
+        <article className="card">
+          <div className="text-sm" style={{ color: "#6b7280" }}>🔥 Calories aujourd’hui</div>
+          <div style={{ fontSize: 24, fontWeight: 800, marginTop: 6 }}>
+            {todayKcal.toLocaleString("fr-FR")} kcal
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <Link href="/dashboard/calories" className="btn btn-dash">Gérer</Link>
+          </div>
+        </article>
+
+        <article className="card">
+          <div className="text-sm" style={{ color: "#6b7280" }}>🏃 Séances actives</div>
+          <div style={{ fontSize: 24, fontWeight: 800, marginTop: 6 }}>{activeCount}</div>
+          <div style={{ marginTop: 12 }}>
+            <Link href="/dashboard/profile" className="btn">Ouvrir</Link>
+          </div>
+        </article>
+
+        <article className="card">
+          <div className="text-sm" style={{ color: "#6b7280" }}>📅 Dernière séance</div>
+          <div style={{ fontSize: 24, fontWeight: 800, marginTop: 6 }}>
+            {lastDone?.endedAt ? new Date(lastDone.endedAt).toLocaleDateString("fr-FR") : "—"}
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <Link href="/dashboard/profile" className="btn">Historique</Link>
+          </div>
+        </article>
+
+        <article className="card">
+          <div className="text-sm" style={{ color: "#6b7280" }}>💳 Abonnement</div>
+          <div style={{ fontSize: 24, fontWeight: 800, marginTop: 6 }}>{s?.plan || "BASIC"}</div>
+          <div style={{ marginTop: 12 }}>
+            <Link href="/dashboard/abonnement" className="btn">Gérer</Link>
+          </div>
+        </article>
+      </div>
+
+      {/* Deux grandes cartes comme les autres pages */}
+      <div className="grid gap-6 lg:grid-cols-2" style={{ marginTop: 16 }}>
+        <article className="card">
+          <h3 style={{ marginTop: 0 }}>Calories</h3>
+          <p className="text-sm" style={{ color: "#6b7280", marginTop: 4 }}>
+            Ajoute ta consommation du jour et consulte l’historique (14 jours).
+          </p>
+          <div style={{ marginTop: 12 }}>
+            <Link href="/dashboard/calories" className="btn btn-dash">Gérer mes calories</Link>
+          </div>
+        </article>
+
+        <article className="card">
+          <h3 style={{ marginTop: 0 }}>Entraînements</h3>
+          <p className="text-sm" style={{ color: "#6b7280", marginTop: 4 }}>
+            Crée, démarre et consulte tes séances d’entraînement.
+          </p>
+          <div style={{ marginTop: 12 }}>
+            <Link href="/dashboard/profile" className="btn btn-dash">Voir mes séances</Link>
+          </div>
+        </article>
+      </div>
+    </div>
   );
 }
