@@ -1,4 +1,3 @@
-// apps/web/components/Topbar.tsx
 "use client";
 
 import { useRouter } from "next/navigation";
@@ -22,39 +21,44 @@ export default function Topbar() {
   }, [open]);
 
   return (
-    <header className="sticky top-0 z-40 border-b bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
-      <div className="mx-auto max-w-screen-xl px-4 py-3 flex items-center justify-between">
-        {/* Bouton hamburger à gauche — un seul libellé “Menu” */}
+    <header
+      className="sticky top-0 z-[1000] border-b bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80"
+      style={{ paddingTop: "env(safe-area-inset-top)" }}
+    >
+      <div className="mx-auto max-w-screen-xl h-12 px-4 flex items-center justify-between">
+        {/* Bouton hamburger à gauche */}
         <button
           aria-label="Ouvrir le menu"
           className="inline-flex items-center justify-center rounded-lg border px-3 py-2 hover:bg-gray-50 active:scale-[0.99]"
           onClick={() => setOpen(true)}
         >
-          <span className="relative block w-5 h-3">
-            <span className="absolute inset-x-0 top-0 h-[2px] bg-gray-900" />
-            <span className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[2px] bg-gray-900" />
-            <span className="absolute inset-x-0 bottom-0 h-[2px] bg-gray-900" />
+          {/* icône */}
+          <span className="relative block w-5 h-3 mr-2">
+            <span className="absolute inset-x-0 top-0 h-[2px] bg-gray-900"></span>
+            <span className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[2px] bg-gray-900"></span>
+            <span className="absolute inset-x-0 bottom-0 h-[2px] bg-gray-900"></span>
           </span>
-          <span className="ml-2 text-sm font-semibold">Menu</span>
+          <span className="text-sm font-semibold">Menu</span>
         </button>
 
-        {/* Centre vide */}
+        {/* espace centré vide pour ne rien afficher */}
         <div />
 
-        {/* Espace à droite pour équilibrer */}
+        {/* espace à droite pour équilibrer */}
         <div className="w-[42px]" />
 
-        {/* Panneau plein écran */}
+        {/* Overlay & panneau plein écran */}
         {open && (
-          <div className="fixed inset-0 z-50" role="dialog" aria-modal="true">
+          <div className="fixed inset-0 z-[1100]" role="dialog" aria-modal="true">
             <div
               className="absolute inset-0 bg-black/40"
               onClick={() => setOpen(false)}
               aria-hidden="true"
             />
             <div className="absolute inset-0 bg-white flex flex-col">
-              {/* Barre du panel : uniquement le bouton fermer */}
-              <div className="h-14 flex items-center justify-end px-4 border-b">
+              {/* Barre du panel */}
+              <div className="h-14 flex items-center justify-between px-4 border-b">
+                <div className="font-extrabold">Menu</div>
                 <button
                   aria-label="Fermer"
                   className="inline-flex items-center justify-center rounded-lg border px-3 py-2 hover:bg-gray-50"
@@ -90,7 +94,8 @@ export default function Topbar() {
                 </ul>
               </nav>
 
-              {/* Footer SUPPRIMÉ (plus de "Files Coaching 2025") */}
+              {/* Footer du panneau (si tu ne veux rien, laisse vide) */}
+              <div className="mt-auto border-t py-3 text-center text-sm text-gray-500"></div>
             </div>
           </div>
         )}
