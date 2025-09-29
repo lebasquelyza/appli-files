@@ -10,27 +10,19 @@ type KcalStore = Record<string, number>;
 type Workout = { status: "active" | "done"; startedAt?: string; endedAt?: string };
 type Store = { sessions: Workout[] };
 
-/* ---------- Utils ---------- */
 function parseKcalStore(raw?: string): KcalStore {
-  try {
-    return JSON.parse(raw || "{}") || {};
-  } catch {
-    return {};
-  }
+  try { return JSON.parse(raw || "{}") || {}; } catch { return {}; }
 }
 function parseSessions(raw?: string): Store {
   try {
     const o = JSON.parse(raw || "{}");
     return { sessions: Array.isArray(o?.sessions) ? o.sessions : [] };
-  } catch {
-    return { sessions: [] };
-  }
+  } catch { return { sessions: [] }; }
 }
 function todayISO(tz = "Europe/Paris") {
   return new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date());
 }
 
-/* ---------- Page ---------- */
 export default async function Page() {
   const jar = cookies();
   const kcals = parseKcalStore(jar.get("app.kcals")?.value);
@@ -46,21 +38,9 @@ export default async function Page() {
 
   return (
     <div className="space-y-10">
-      {/* ---- En-tête ---- */}
-      <header>
-        <h1 className="text-3xl font-extrabold">Bienvenue 👋</h1>
-        <p className="text-gray-600 mt-1">
-          Voici un aperçu de ta progression et de tes données d’aujourd’hui.
-        </p>
-      </header>
-
       {/* ---- Indicateurs clés ---- */}
-      <section className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        <Kpi
-          title="Calories aujourd'hui"
-          value={`${todayKcal.toLocaleString("fr-FR")} kcal`}
-          href="/dashboard/calories"
-        />
+      <section className="grid gap-4 sm:gap-6 grid-cols-2 lg:grid-cols-4">
+        <Kpi title="Calories aujourd’hui" value={`${todayKcal.toLocaleString("fr-FR")} kcal`} href="/dashboard/calories" />
         <Kpi title="Séances actives" value={`${activeCount}`} href="/dashboard/profile" />
         <Kpi
           title="Dernière séance"
@@ -72,7 +52,7 @@ export default async function Page() {
 
       {/* ---- Actions rapides ---- */}
       <section className="grid gap-6 lg:grid-cols-2">
-        <article className="card bg-white p-6 rounded-2xl shadow-sm">
+        <article className="bg-white p-6 rounded-2xl shadow-sm ring-1 ring-gray-100">
           <h3 className="font-bold text-lg mb-2">Calories</h3>
           <p className="text-sm text-gray-600 mb-4">
             Consulte ton historique ou ajoute ta consommation d’aujourd’hui.
@@ -85,7 +65,7 @@ export default async function Page() {
           </Link>
         </article>
 
-        <article className="card bg-white p-6 rounded-2xl shadow-sm">
+        <article className="bg-white p-6 rounded-2xl shadow-sm ring-1 ring-gray-100">
           <h3 className="font-bold text-lg mb-2">Entraînements</h3>
           <p className="text-sm text-gray-600 mb-4">
             Crée, démarre ou consulte tes séances d’entraînement passées.
@@ -102,18 +82,13 @@ export default async function Page() {
   );
 }
 
-/* ---------- Composant KPI (clean, sans flèche) ---------- */
 function Kpi({ title, value, href }: { title: string; value: string; href: string }) {
   return (
-    <Link
-      href={href}
-      className="block rounded-2xl border border-gray-200 bg-white shadow-sm hover:shadow-md hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 transition"
-    >
-      <div className="p-5">
-        <p className="text-[11px] uppercase tracking-wide text-gray-500">{title}</p>
-        <p className="mt-1 text-3xl font-extrabold text-gray-900">{value}</p>
+    <Link href={href}>
+      <div className="p-5 bg-white rounded-2xl shadow-sm ring-1 ring-gray-100 hover:shadow-md transition cursor-pointer">
+        <p className="text-xs sm:text-sm text-gray-500 mb-1">{title}</p>
+        <p className="text-xl sm:text-2xl font-bold text-gray-900">{value}</p>
       </div>
     </Link>
   );
 }
-
