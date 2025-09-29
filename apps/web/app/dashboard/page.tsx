@@ -1,3 +1,4 @@
+// apps/web/app/dashboard/page.tsx
 import { cookies } from "next/headers";
 import Link from "next/link";
 import { getSession } from "@/lib/session";
@@ -31,7 +32,7 @@ export default async function Page() {
   const today = todayISO();
   const todayKcal = kcals[today] || 0;
 
-  // Placeholder “steps du jour” (en attendant une vraie source)
+  // Placeholder “steps du jour” (temporaire)
   const stepsToday = sessions.sessions.filter(x => x.status === "active").length;
 
   const lastDone = sessions.sessions
@@ -43,7 +44,7 @@ export default async function Page() {
       {/* En-tête compact */}
       <div className="page-header" style={{ marginBottom: 8 }}>
         <div>
-          <h1 className="h1" style={{ fontSize: 22 }}>Bienvenue 👋</h1>
+          <h1 className="h1" style={{ fontSize: 22, color: "#111827" }}>Bienvenue 👋</h1>
           <p className="lead" style={{ fontSize: 13, marginTop: 4 }}>
             Aperçu rapide de ta progression et des données du jour.
           </p>
@@ -65,8 +66,27 @@ export default async function Page() {
       {/* Actions rapides — carrés blancs .card */}
       <section className="grid gap-6 lg:grid-cols-2" style={{ marginTop: 12 }}>
         <article className="card">
-          <h3 style={{ marginTop: 0, fontSize: 16 }}>Calories</h3>
-          <p className="text-sm" style={{ color: "#6b7280", marginTop: 4 }}>
+          {/* Titre + bouton Gérer (blanc sur vert) */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+            <h3 style={{ margin: 0, fontSize: 16, color: "#111827" }}>Calories</h3>
+            <Link
+              href="/dashboard/calories"
+              className="inline-flex items-center"
+              style={{
+                background: "#059669", // emerald-600
+                color: "#ffffff",
+                borderRadius: 8,
+                padding: "6px 10px",
+                fontSize: 12,
+                fontWeight: 700,
+                lineHeight: 1
+              }}
+            >
+              Gérer
+            </Link>
+          </div>
+
+          <p className="text-sm" style={{ color: "#6b7280", marginTop: 8 }}>
             Consulte ton historique ou ajoute ta consommation d’aujourd’hui.
           </p>
           <div style={{ marginTop: 10 }}>
@@ -81,8 +101,27 @@ export default async function Page() {
         </article>
 
         <article className="card">
-          <h3 style={{ marginTop: 0, fontSize: 16 }}>Entraînements</h3>
-          <p className="text-sm" style={{ color: "#6b7280", marginTop: 4 }}>
+          {/* Titre + bouton Gérer (blanc sur vert) */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+            <h3 style={{ margin: 0, fontSize: 16, color: "#111827" }}>Entraînements</h3>
+            <Link
+              href="/dashboard/profile"
+              className="inline-flex items-center"
+              style={{
+                background: "#059669",
+                color: "#ffffff",
+                borderRadius: 8,
+                padding: "6px 10px",
+                fontSize: 12,
+                fontWeight: 700,
+                lineHeight: 1
+              }}
+            >
+              Gérer
+            </Link>
+          </div>
+
+          <p className="text-sm" style={{ color: "#6b7280", marginTop: 8 }}>
             Crée, démarre ou consulte tes séances d’entraînement passées.
           </p>
           <div style={{ marginTop: 10 }}>
@@ -104,10 +143,12 @@ function KpiCard({ title, value, href }: { title: string; value: string; href: s
   return (
     <Link href={href}>
       <article className="card" style={{ cursor: "pointer" }}>
-        <p className="text-xs" style={{ color: "#6b7280", marginBottom: 6 }}>{title}</p>
-        <strong style={{ fontSize: 20, lineHeight: 1 }}>{value}</strong>
+        {/* Titre en noir */}
+        <p className="text-xs" style={{ color: "#111827", marginBottom: 6 }}>{title}</p>
+        <strong style={{ fontSize: 20, lineHeight: 1, color: "#111827" }}>{value}</strong>
       </article>
     </Link>
   );
 }
+
 
