@@ -37,73 +37,38 @@ export default async function Page() {
     .sort((a, b) => (b.endedAt || "").localeCompare(a.endedAt || ""))[0];
 
   return (
-    <div className="space-y-8">
-      {/* Bandeau d’intro discret */}
-      <section className="rounded-2xl border bg-gradient-to-br from-emerald-50 to-white p-5 sm:p-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight text-gray-900">
-              Aperçu du jour
-            </h2>
-            <p className="text-sm text-gray-600 mt-1">
-              Suis tes chiffres clés et accède rapidement aux sections utiles.
-            </p>
-          </div>
-          <div className="hidden sm:flex items-center gap-2 text-xs text-gray-500">
-            {/* Petit badge de statut de l’abonnement */}
-            <span className="inline-flex items-center rounded-full border px-2 py-1 bg-white">
-              <span className="mr-1">⭐</span>
-              {s?.plan || "BASIC"}
-            </span>
-          </div>
-        </div>
+    <div className="space-y-6">
+      {/* Carte d’intro (discrète) */}
+      <section className="rounded-2xl border bg-white shadow-sm p-5">
+        <h2 className="text-lg sm:text-xl font-extrabold tracking-tight text-gray-900">
+          Aperçu du jour
+        </h2>
+        <p className="text-sm text-gray-600 mt-1">
+          Tes chiffres clés et tes raccourcis.
+        </p>
       </section>
 
-      {/* KPIs */}
+      {/* KPI en “carrés” blancs */}
       <section className="grid gap-4 sm:gap-6 grid-cols-2 lg:grid-cols-4">
-        <Kpi
-          icon="🔥"
-          title="Calories aujourd’hui"
-          value={`${todayKcal.toLocaleString("fr-FR")} kcal`}
-          href="/dashboard/calories"
-          tone="emerald"
-        />
-        <Kpi
-          icon="🏃"
-          title="Séances actives"
-          value={`${activeCount}`}
-          href="/dashboard/profile"
-          tone="sky"
-        />
-        <Kpi
-          icon="📅"
-          title="Dernière séance"
-          value={lastDone?.endedAt ? new Date(lastDone.endedAt).toLocaleDateString("fr-FR") : "—"}
-          href="/dashboard/profile"
-          tone="amber"
-        />
-        <Kpi
-          icon="💳"
-          title="Abonnement"
-          value={s?.plan || "BASIC"}
-          href="/dashboard/abonnement"
-          tone="violet"
-        />
+        <KpiCard title="Calories aujourd’hui" value={`${todayKcal.toLocaleString("fr-FR")} kcal`} href="/dashboard/calories" emoji="🔥" />
+        <KpiCard title="Séances actives" value={`${activeCount}`} href="/dashboard/profile" emoji="🏃" />
+        <KpiCard title="Dernière séance" value={lastDone?.endedAt ? new Date(lastDone.endedAt).toLocaleDateString("fr-FR") : "—"} href="/dashboard/profile" emoji="📅" />
+        <KpiCard title="Abonnement" value={s?.plan || "BASIC"} href="/dashboard/abonnement" emoji="💳" />
       </section>
 
-      {/* Actions rapides */}
+      {/* Deux grosses cartes blanches */}
       <section className="grid gap-6 lg:grid-cols-2">
-        <CardAction
+        <BigCard
           emoji="🍽️"
           title="Calories"
-          desc="Ajoute ta conso du jour et consulte l’historique des 14 derniers jours."
+          desc="Ajoute ta conso du jour et consulte l’historique (14 jours)."
           href="/dashboard/calories"
           cta="Gérer mes calories"
         />
-        <CardAction
+        <BigCard
           emoji="💪"
           title="Entraînements"
-          desc="Crée, démarre et termine tes séances. Historique clair et rapide."
+          desc="Crée, démarre et consulte tes séances d’entraînement."
           href="/dashboard/profile"
           cta="Voir mes séances"
         />
@@ -112,45 +77,33 @@ export default async function Page() {
   );
 }
 
-/* ===== Petits composants ===== */
+/* ========= Composants de carte (carrés blancs) ========= */
 
-function Kpi({
-  icon,
+function KpiCard({
+  emoji,
   title,
   value,
   href,
-  tone = "emerald",
 }: {
-  icon: string;
+  emoji: string;
   title: string;
   value: string;
   href: string;
-  tone?: "emerald" | "sky" | "amber" | "violet";
 }) {
-  const tones: Record<string, string> = {
-    emerald: "ring-emerald-100 bg-emerald-50/60",
-    sky: "ring-sky-100 bg-sky-50/60",
-    amber: "ring-amber-100 bg-amber-50/60",
-    violet: "ring-violet-100 bg-violet-50/60",
-  };
-
   return (
-    <Link href={href}>
-      <div className="group cursor-pointer rounded-2xl border bg-white p-4 sm:p-5 shadow-sm hover:shadow-md transition">
-        <div className={`inline-flex h-9 w-9 items-center justify-center rounded-full ${tones[tone]} ring-4`}>
-          <span className="text-base">{icon}</span>
+    <Link href={href} className="block">
+      <div className="rounded-2xl border bg-white shadow-sm p-4 sm:p-5 min-h-[120px] flex flex-col justify-between hover:shadow-md transition">
+        <div className="flex items-center gap-2">
+          <span className="text-base">{emoji}</span>
+          <p className="text-xs sm:text-sm text-gray-600">{title}</p>
         </div>
-        <p className="mt-3 text-xs sm:text-sm text-gray-500">{title}</p>
         <p className="text-xl sm:text-2xl font-bold text-gray-900">{value}</p>
-        <div className="mt-2 text-sm font-semibold text-emerald-700 opacity-0 group-hover:opacity-100 transition">
-          Ouvrir →
-        </div>
       </div>
     </Link>
   );
 }
 
-function CardAction({
+function BigCard({
   emoji,
   title,
   desc,
@@ -164,7 +117,7 @@ function CardAction({
   cta: string;
 }) {
   return (
-    <article className="rounded-2xl border bg-white p-6 shadow-sm hover:shadow-md transition">
+    <article className="rounded-2xl border bg-white shadow-sm p-6 flex flex-col justify-between">
       <div className="flex items-start gap-3">
         <div className="text-xl">{emoji}</div>
         <div>
@@ -175,12 +128,10 @@ function CardAction({
 
       <Link
         href={href}
-        className="mt-4 inline-flex items-center justify-center rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 active:scale-[.99] transition"
+        className="mt-4 inline-flex items-center justify-center rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 active:scale-[.99] transition self-start"
       >
         {cta} →
       </Link>
     </article>
   );
 }
-
-
