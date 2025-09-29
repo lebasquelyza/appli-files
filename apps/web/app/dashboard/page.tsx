@@ -32,7 +32,7 @@ export default async function Page() {
   const today = todayISO();
   const todayKcal = kcals[today] || 0;
 
-  // Placeholder “steps du jour” (temporaire)
+  // Placeholder “steps du jour” (en attendant une vraie source)
   const stepsToday = sessions.sessions.filter(x => x.status === "active").length;
 
   const lastDone = sessions.sessions
@@ -51,41 +51,38 @@ export default async function Page() {
         </div>
       </div>
 
-      {/* KPIs — carrés blancs .card */}
+      {/* KPIs — carrés blancs .card avec bouton GÉRER */}
       <section className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard title="Calories aujourd'hui" value={`${todayKcal.toLocaleString("fr-FR")} kcal`} href="/dashboard/calories" />
-        <KpiCard title="Steps du jour" value={`${stepsToday}`} href="/dashboard/profile" />
+        <KpiCard
+          title="Calories aujourd'hui"
+          value={`${todayKcal.toLocaleString("fr-FR")} kcal`}
+          href="/dashboard/calories"
+          manageLabel="Gérer"
+        />
+        <KpiCard
+          title="Steps du jour"
+          value={`${stepsToday}`}
+          href="/dashboard/profile"
+          manageLabel="Gérer"
+        />
         <KpiCard
           title="Dernière séance"
           value={lastDone?.endedAt ? new Date(lastDone.endedAt).toLocaleDateString("fr-FR") : "—"}
           href="/dashboard/profile"
+          manageLabel="Gérer"
         />
-        <KpiCard title="Abonnement" value={s?.plan || "BASIC"} href="/dashboard/abonnement" />
+        <KpiCard
+          title="Abonnement"
+          value={s?.plan || "BASIC"}
+          href="/dashboard/abonnement"
+          manageLabel="Gérer"
+        />
       </section>
 
-      {/* Actions rapides — carrés blancs .card */}
+      {/* Actions rapides — SANS bouton Gérer */}
       <section className="grid gap-6 lg:grid-cols-2" style={{ marginTop: 12 }}>
         <article className="card">
-          {/* Titre + bouton Gérer (blanc sur vert) */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-            <h3 style={{ margin: 0, fontSize: 16, color: "#111827" }}>Calories</h3>
-            <Link
-              href="/dashboard/calories"
-              className="inline-flex items-center"
-              style={{
-                background: "#059669", // emerald-600
-                color: "#ffffff",
-                borderRadius: 8,
-                padding: "6px 10px",
-                fontSize: 12,
-                fontWeight: 700,
-                lineHeight: 1
-              }}
-            >
-              Gérer
-            </Link>
-          </div>
-
+          <h3 style={{ margin: 0, fontSize: 16, color: "#111827" }}>Calories</h3>
           <p className="text-sm" style={{ color: "#6b7280", marginTop: 8 }}>
             Consulte ton historique ou ajoute ta consommation d’aujourd’hui.
           </p>
@@ -101,26 +98,7 @@ export default async function Page() {
         </article>
 
         <article className="card">
-          {/* Titre + bouton Gérer (blanc sur vert) */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-            <h3 style={{ margin: 0, fontSize: 16, color: "#111827" }}>Entraînements</h3>
-            <Link
-              href="/dashboard/profile"
-              className="inline-flex items-center"
-              style={{
-                background: "#059669",
-                color: "#ffffff",
-                borderRadius: 8,
-                padding: "6px 10px",
-                fontSize: 12,
-                fontWeight: 700,
-                lineHeight: 1
-              }}
-            >
-              Gérer
-            </Link>
-          </div>
-
+          <h3 style={{ margin: 0, fontSize: 16, color: "#111827" }}>Entraînements</h3>
           <p className="text-sm" style={{ color: "#6b7280", marginTop: 8 }}>
             Crée, démarre ou consulte tes séances d’entraînement passées.
           </p>
@@ -139,16 +117,48 @@ export default async function Page() {
   );
 }
 
-function KpiCard({ title, value, href }: { title: string; value: string; href: string }) {
+function KpiCard({
+  title,
+  value,
+  href,
+  manageLabel,
+}: {
+  title: string;
+  value: string;
+  href: string;
+  manageLabel?: string;
+}) {
   return (
-    <Link href={href}>
-      <article className="card" style={{ cursor: "pointer" }}>
-        {/* Titre en noir */}
-        <p className="text-xs" style={{ color: "#111827", marginBottom: 6 }}>{title}</p>
-        <strong style={{ fontSize: 20, lineHeight: 1, color: "#111827" }}>{value}</strong>
-      </article>
-    </Link>
+    <article className="card" style={{ cursor: "default" }}>
+      {/* Ligne titre + bouton gérer */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+        <p className="text-xs" style={{ color: "#111827", margin: 0 }}>{title}</p>
+        {manageLabel && (
+          <Link
+            href={href}
+            className="inline-flex items-center"
+            style={{
+              background: "#059669",
+              color: "#ffffff",
+              borderRadius: 8,
+              padding: "6px 10px",
+              fontSize: 12,
+              fontWeight: 700,
+              lineHeight: 1,
+              whiteSpace: "nowrap"
+            }}
+          >
+            {manageLabel}
+          </Link>
+        )}
+      </div>
+
+      {/* Valeur cliquable vers la page liée */}
+      <Link href={href}>
+        <div style={{ marginTop: 8 }}>
+          <strong style={{ fontSize: 20, lineHeight: 1, color: "#111827" }}>{value}</strong>
+        </div>
+      </Link>
+    </article>
   );
 }
-
-
