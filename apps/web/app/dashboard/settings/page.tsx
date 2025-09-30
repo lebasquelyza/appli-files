@@ -44,7 +44,7 @@ function DaysDropdown({
 
   return (
     <div className="relative inline-block" ref={wrapperRef}>
-      {/* BTN affichant uniquement "Jours" */}
+      {/* BTN "Jours" (neutre) */}
       <button
         type="button"
         aria-haspopup="menu"
@@ -139,10 +139,15 @@ function PushScheduleForm() {
 
   return (
     <div className="card space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="font-semibold">Rappel planifié</h3>
+      <h3 className="font-semibold">Rappel planifié</h3>
+      <p className="text-sm" style={{ color: "var(--muted)" }}>
+        Fuseau : {tz}
+      </p>
 
-        {/* ➜ Heure collée en haut, à côté du titre */}
+      {/* ➜ Jours (gauche) + Heure (droite) alignés sur la même ligne */}
+      <div className="flex flex-wrap items-center gap-3">
+        <DaysDropdown value={days} onChange={setDays} />
+
         <div className="flex items-center gap-2">
           <label className="text-sm" style={{ color: "var(--muted)" }}>
             Heure
@@ -155,13 +160,6 @@ function PushScheduleForm() {
           />
         </div>
       </div>
-
-      <p className="text-sm" style={{ color: "var(--muted)" }}>
-        Fuseau : {tz}
-      </p>
-
-      {/* Bouton Jours + menu déroulant */}
-      <DaysDropdown value={days} onChange={setDays} />
 
       <div className="flex items-center justify-between">
         <div className="text-xs" style={{ color: "var(--muted)" }}>
