@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { PageHeader, Section } from "@/components/ui/Page";
+import { Section } from "@/components/ui/Page"; // ← plus de PageHeader ici
 
-/** ——— Texte un peu plus petit partout (sauf le gros titre “Réglages”) ——— */
+/** ——— Texte un peu plus petit partout (sauf le h1) ——— */
 function useSettingsFontSize() {
   useEffect(() => {
     const fs = getComputedStyle(document.body).fontSize || "16px";
@@ -242,7 +242,7 @@ const DEFAULT_PREFS: Prefs = { language: "fr", theme: "system", reducedMotion: f
 
 /* ======================= Page Réglages ======================= */
 export default function Page() {
-  useSettingsFontSize(); // taille plus petite pour tout (sauf le titre)
+  useSettingsFontSize(); // petite taille pour tout (sauf h1)
 
   const [prefs, setPrefs] = useState<Prefs>(DEFAULT_PREFS);
   const [loaded, setLoaded] = useState(false);
@@ -270,11 +270,11 @@ export default function Page() {
   }, [prefs, loaded]);
 
   return (
-    // <<< OPTION B : wrapper avec paddingTop pour éviter la superposition sous la Topbar
+    // Wrapper avec paddingTop pour ne pas passer dessous la Topbar
     <div className="container" style={{ paddingTop: 24, paddingBottom: 24 }}>
-      {/* Titre principal — garde sa taille via le composant */}
+      {/* Titre principal — même taille que “Bienvenue” (22px) */}
       <div className="mb-2">
-        <PageHeader title="Réglages" />
+        <h1 className="h1" style={{ fontSize: 22, color: "#111827" }}>Réglages</h1>
       </div>
 
       {/* Tout le reste hérite de la petite taille */}
@@ -411,4 +411,3 @@ export default function Page() {
     </div>
   );
 }
-
