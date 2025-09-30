@@ -178,14 +178,13 @@ function TimeDropdown({
 }
 
 /* ======================= Mentions légales (ouverture via « Cookies ») ======================= */
+/* ======================= Mentions légales (ouverture via « Cookies ») ======================= */
 function LegalModal() {
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    const onEsc = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
+    const onEsc = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
     document.addEventListener("keydown", onEsc);
     return () => document.removeEventListener("keydown", onEsc);
   }, []);
@@ -195,9 +194,7 @@ function LegalModal() {
     if (!open) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
+    return () => { document.body.style.overflow = prev; };
   }, [open]);
 
   return (
@@ -213,161 +210,152 @@ function LegalModal() {
       </button>
 
       {open && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="Mentions légales et politique de cookies"
-          className="fixed inset-0 z-[100] flex sm:items-center items-end justify-center sm:p-4 p-0"
-        >
-          {/* Backdrop */}
+        <>
+          {/* Overlay plein écran */}
           <div
-            className="absolute inset-0 bg-black/40"
+            className="fixed inset-0 z-[100] bg-black/40"
             onClick={() => setOpen(false)}
-            onTouchMove={(e) => e.preventDefault()}
+            aria-hidden
           />
-
-          {/* Dialog */}
-          <div
-            ref={wrap}
-            className="relative z-[101] w-full sm:max-w-3xl sm:rounded-2xl sm:border bg-white sm:p-5 p-4 shadow-2xl sm:max-h-[85vh] sm:h-auto h-[90vh] overflow-y-scroll overscroll-contain"
-            style={{
-              fontSize: "var(--settings-fs)",
-              WebkitOverflowScrolling: "touch",
-              touchAction: "pan-y",
-            }}
-          >
-            <div className="flex items-start justify-between gap-4">
-              <h3 className="text-base font-semibold">Mentions légales</h3>
-              <button aria-label="Fermer" className={btnGhost} onClick={() => setOpen(false)}>
-                Fermer
-              </button>
-            </div>
-
-            <div className="mt-3 space-y-4 leading-relaxed">
-              <section>
-                <h4 className="font-semibold">1) Éditeur du site</h4>
-                <p>
-                  <strong>Raison sociale :</strong>{" "}
-                  <span className="opacity-80">VOTRE SOCIÉTÉ</span>
-                  <br />
-                  <strong>Forme juridique :</strong>{" "}
-                  <span className="opacity-80">SAS / SARL / Auto-entrepreneur</span>
-                  <br />
-                  <strong>Siège social :</strong>{" "}
-                  <span className="opacity-80">Adresse complète</span>
-                  <br />
-                  <strong>Capital social :</strong> <span className="opacity-80">XX XXX €</span>
-                  <br />
-                  <strong>RCS / SIREN :</strong> <span className="opacity-80">XXXXXXXXX</span>
-                  <br />
-                  <strong>TVA intracommunautaire :</strong>{" "}
-                  <span className="opacity-80">FRXXXXXXXXXX</span>
-                  <br />
-                  <strong>Contact :</strong>{" "}
-                  <span className="opacity-80">email@domaine.tld • +33 X XX XX XX XX</span>
-                </p>
-              </section>
-
-              <section>
-                <h4 className="font-semibold">2) Directeur·rice de la publication</h4>
-                <p>
-                  <span className="opacity-80">Nom et prénom du/de la responsable légal·e.</span>
-                </p>
-              </section>
-
-              <section>
-                <h4 className="font-semibold">3) Hébergeur</h4>
-                <p>
-                  <strong>Nom :</strong>{" "}
-                  <span className="opacity-80">[OVH / Scaleway / Vercel / Autre]</span>
-                  <br />
-                  <strong>Adresse :</strong> <span className="opacity-80">Adresse postale</span>
-                  <br />
-                  <strong>Téléphone :</strong> <span className="opacity-80">Numéro</span>
-                </p>
-              </section>
-
-              <section>
-                <h4 className="font-semibold">4) Propriété intellectuelle</h4>
-                <p className="opacity-80">
-                  Le contenu de ce site (textes, images, logos, marques, vidéos, codes, etc.) est
-                  protégé par le droit de la propriété intellectuelle. Toute reproduction,
-                  représentation, adaptation ou exploitation, totale ou partielle, est interdite sans
-                  autorisation préalable.
-                </p>
-              </section>
-
-              <section>
-                <h4 className="font-semibold">5) Données personnelles &amp; cookies</h4>
-                <p className="opacity-80">
-                  Nous utilisons des cookies et technologies similaires à des fins de fonctionnement
-                  du site, de mesure d’audience et, le cas échéant, de personnalisation. Vous pouvez
-                  à tout moment paramétrer vos choix via le bouton ci-dessous. Pour plus
-                  d’informations, consultez notre politique de confidentialité.
-                </p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    className={btnGhost}
-                    onClick={() => {
-                      alert(
-                        "Ouvrir le gestionnaire de préférences cookies (branchez ici votre CMP si vous en avez un)."
-                      );
-                    }}
+          {/* Conteneur de la modale (centrée desktop, bottom-sheet mobile) */}
+          <div className="fixed inset-0 z-[101] flex sm:items-center items-end justify-center sm:p-4 p-0">
+            <div
+              ref={wrap}
+              className="
+                w-full sm:max-w-3xl bg-white shadow-2xl
+                sm:rounded-2xl sm:border sm:p-5 p-4
+                pointer-events-auto
+                sm:max-h-[85dvh] sm:h-auto
+                h-[92dvh] max-h-[100svh]
+                overflow-y-auto overscroll-contain
+              "
+              style={{
+                fontSize: "var(--settings-fs)",
+                WebkitOverflowScrolling: "touch",
+                touchAction: "pan-y",
+                paddingBottom: "max(1rem, env(safe-area-inset-bottom))",
+              }}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Mentions légales et politique de cookies"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <h3 className="text-base font-semibold">Mentions légales</h3>
+                <div className="flex items-center gap-2">
+                  {/* Lien secours pleine page */}
+                  <a
+                    href="/mentions-legales"
+                    className={`${btnGhost} text-sm`}
                   >
-                    Gérer mes préférences cookies
-                  </button>
-
+                    Voir en pleine page
+                  </a>
                   <button
-                    type="button"
+                    aria-label="Fermer"
                     className={btnGhost}
-                    onClick={() => {
-                      try {
-                        const list = document.cookie?.split(";").map((c) => c.trim()).filter(Boolean);
-                        const pretty =
-                          list && list.length
-                            ? list
-                                .map((p) => {
-                                  const i = p.indexOf("=");
-                                  const name = i >= 0 ? p.slice(0, i) : p;
-                                  const value = i >= 0 ? decodeURIComponent(p.slice(i + 1)) : "";
-                                  return `${name} = ${value}`;
-                                })
-                                .join("\n")
-                            : "Aucun cookie lisible côté client.";
-                        alert(pretty);
-                      } catch {
-                        alert("Impossible de lire les cookies depuis ce contexte.");
-                      }
-                    }}
+                    onClick={() => setOpen(false)}
                   >
-                    Voir les cookies actuels
+                    Fermer
                   </button>
                 </div>
-              </section>
+              </div>
 
-              <section>
-                <h4 className="font-semibold">6) Responsabilité</h4>
-                <p className="opacity-80">
-                  Nous nous efforçons d’assurer l’exactitude et la mise à jour des informations du
-                  site. Toutefois, des erreurs ou omissions peuvent survenir et l’éditeur ne saurait
-                  en être tenu pour responsable.
-                </p>
-              </section>
+              {/* --- CONTENU --- */}
+              <div className="mt-3 space-y-4 leading-relaxed">
+                <section>
+                  <h4 className="font-semibold">1) Éditeur du site</h4>
+                  <p>
+                    <strong>Raison sociale :</strong> <span className="opacity-80">VOTRE SOCIÉTÉ</span><br/>
+                    <strong>Forme juridique :</strong> <span className="opacity-80">SAS / SARL / Auto-entrepreneur</span><br/>
+                    <strong>Siège social :</strong> <span className="opacity-80">Adresse complète</span><br/>
+                    <strong>Capital social :</strong> <span className="opacity-80">XX XXX €</span><br/>
+                    <strong>RCS / SIREN :</strong> <span className="opacity-80">XXXXXXXXX</span><br/>
+                    <strong>TVA intracommunautaire :</strong> <span className="opacity-80">FRXXXXXXXXXX</span><br/>
+                    <strong>Contact :</strong> <span className="opacity-80">email@domaine.tld • +33 X XX XX XX XX</span>
+                  </p>
+                </section>
 
-              <section>
-                <h4 className="font-semibold">7) Contact</h4>
-                <p className="opacity-80">
-                  Pour toute question relative aux mentions légales ou à vos données personnelles :
-                  <br />
-                  Email : <span>email@domaine.tld</span> — Téléphone : <span>+33 X XX XX XX XX</span>
-                </p>
-              </section>
+                <section>
+                  <h4 className="font-semibold">2) Directeur·rice de la publication</h4>
+                  <p className="opacity-80">Nom et prénom du/de la responsable légal·e.</p>
+                </section>
 
-              <p className="text-xs opacity-60">Dernière mise à jour : 30/09/2025</p>
+                <section>
+                  <h4 className="font-semibold">3) Hébergeur</h4>
+                  <p>
+                    <strong>Nom :</strong> <span className="opacity-80">[OVH / Scaleway / Vercel / Autre]</span><br/>
+                    <strong>Adresse :</strong> <span className="opacity-80">Adresse postale</span><br/>
+                    <strong>Téléphone :</strong> <span className="opacity-80">Numéro</span>
+                  </p>
+                </section>
+
+                <section>
+                  <h4 className="font-semibold">4) Propriété intellectuelle</h4>
+                  <p className="opacity-80">
+                    Le contenu de ce site (textes, images, logos, marques, vidéos, codes, etc.) est protégé.
+                    Toute reproduction ou exploitation sans autorisation est interdite.
+                  </p>
+                </section>
+
+                <section>
+                  <h4 className="font-semibold">5) Données personnelles &amp; cookies</h4>
+                  <p className="opacity-80">
+                    Nous utilisons des cookies à des fins de fonctionnement, de mesure d’audience et de personnalisation.
+                    Gérez vos préférences à tout moment.
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className={btnGhost}
+                      onClick={() => {
+                        alert("Ouvrir le gestionnaire de préférences cookies (branchez votre CMP ici).");
+                      }}
+                    >
+                      Gérer mes préférences cookies
+                    </button>
+                    <button
+                      type="button"
+                      className={btnGhost}
+                      onClick={() => {
+                        try {
+                          const list = document.cookie?.split(";").map((c) => c.trim()).filter(Boolean);
+                          const pretty = (list && list.length)
+                            ? list.map((p) => {
+                                const i = p.indexOf("=");
+                                const name = i >= 0 ? p.slice(0, i) : p;
+                                const value = i >= 0 ? decodeURIComponent(p.slice(i + 1)) : "";
+                                return `${name} = ${value}`;
+                              }).join("\n")
+                            : "Aucun cookie lisible côté client.";
+                          alert(pretty);
+                        } catch {
+                          alert("Impossible de lire les cookies depuis ce contexte.");
+                        }
+                      }}
+                    >
+                      Voir les cookies actuels
+                    </button>
+                  </div>
+                </section>
+
+                <section>
+                  <h4 className="font-semibold">6) Responsabilité</h4>
+                  <p className="opacity-80">
+                    Nous nous efforçons d’assurer l’exactitude des informations. Des erreurs peuvent subsister.
+                  </p>
+                </section>
+
+                <section>
+                  <h4 className="font-semibold">7) Contact</h4>
+                  <p className="opacity-80">
+                    Pour toute question : email@domaine.tld — +33 X XX XX XX XX
+                  </p>
+                </section>
+
+                <p className="text-xs opacity-60">Dernière mise à jour : 30/09/2025</p>
+              </div>
             </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   );
