@@ -184,7 +184,7 @@ function LegalModal() {
           <div
             className="absolute inset-0 bg-black/40"
             onClick={() => setOpen(false)}
-            onTouchMove={(e) => e.preventDefault()} // évite le scroll du fond sur iOS
+            onTouchMove={(e) => e.preventDefault()}
           />
 
           {/* Dialog */}
@@ -532,3 +532,4 @@ export default function Page() {
     </div>
   );
 }
+
