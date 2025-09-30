@@ -6,21 +6,19 @@ export const dynamic = "force-dynamic";
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="fr">
-      <body className="min-h-screen bg-white text-gray-900">
-        {/* ✅ Le hamburger est toujours présent ici */}
-        <ClientTopbar />
+    <div className="min-h-dvh bg-white text-gray-900">
+      {/* Topbar (hamburger) visible sur toutes les pages du dashboard */}
+      <ClientTopbar />
 
-        {/* ✅ Le contenu de chaque page, y compris celle avec “Bienvenue” */}
-        <main className="pt-14 px-4 sm:px-6 max-w-screen-xl mx-auto">
-          {children}
-        </main>
+      {/* Contenu des pages : marge en haut pour passer sous le header */}
+      <main className="pt-12 px-4 sm:px-6 max-w-screen-xl mx-auto">
+        {children}
+      </main>
 
-        {/* ✅ Footer si tu veux le remettre */}
-        <footer className="mt-10 py-4 text-center text-sm text-gray-500">
-          Files Coaching 2025
-        </footer>
-      </body>
-    </html>
+      {/* Footer (facultatif) */}
+      <footer className="mt-10 py-4 text-center text-sm text-gray-500">
+        Files Coaching 2025
+      </footer>
+    </div>
   );
 }
