@@ -342,29 +342,11 @@ export default function Page() {
               </div>
             </div>
           </div>
-
-          {/* Actions */}
-          <div className="card flex items-center justify-between gap-4">
-            <button
-              type="button"
-              className={btnGhost}
-              onClick={() => {
-                setPrefs(DEFAULT_PREFS);
-                setMsg("Réglages réinitialisés");
-                setTimeout(() => setMsg(null), 1200);
-              }}
-              disabled={!loaded}
-            >
-              Réinitialiser
-            </button>
-            <div className="text-sm" style={{ color: "var(--muted)" }}>
-              {msg ?? "Les changements sont enregistrés automatiquement"}
-            </div>
-          </div>
+          {/* ⇨ Section "Actions" retirée (pas de bouton Réinitialiser ni texte) */}
         </div>
       </Section>
 
-      {/* --- Section Push (beta) --- */}
+      {/* --- Section Notifications push (beta) --- */}
       <Section title="Notifications push (beta)">
         <div className="card space-y-3">
           <div className="flex flex-wrap gap-3 items-center">
