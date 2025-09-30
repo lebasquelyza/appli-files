@@ -169,7 +169,7 @@ function TimeDropdown({
               type="time"
               value={temp}
               onChange={(e) => setTemp(e.target.value)}
-              step={300} // pas de 5 minutes
+              step={300}
               className="w-full rounded-[10px] border px-3 py-2 text-sm"
             />
           </div>
@@ -296,21 +296,12 @@ export default function Page() {
       {/* --- Section Général --- */}
       <Section title="Général">
         <div className="space-y-6">
-          <div className="card">
-            <p className="text-sm" style={{ color: "var(--muted)" }}>
-              Configure la langue, le thème, et l’accessibilité. Les changements
-              sont appliqués immédiatement et mémorisés sur cet appareil.
-            </p>
-          </div>
-
+          {/* Grille des préférences */}
           <div className="grid gap-6 md:grid-cols-2">
             {/* Langue */}
             <div className="card space-y-3">
               <div className="space-y-1">
                 <h3 className="font-semibold">Langue</h3>
-                <p className="text-sm" style={{ color: "var(--muted)" }}>
-                  Choisis la langue par défaut de l’interface (local à cet appareil).
-                </p>
               </div>
               <select
                 className="rounded-[10px] border px-3 py-2 text-sm w-full"
@@ -324,18 +315,12 @@ export default function Page() {
                 <option value="en">English (EN)</option>
                 <option value="de">Deutsch (DE)</option>
               </select>
-              <p className="text-xs" style={{ color: "var(--muted)" }}>
-                (Astuce) Un futur i18n pourra surcharger ce choix.
-              </p>
             </div>
 
             {/* Thème */}
             <div className="card space-y-3">
               <div className="space-y-1">
                 <h3 className="font-semibold">Thème</h3>
-                <p className="text-sm" style={{ color: "var(--muted)" }}>
-                  Clair, sombre ou automatique selon ton système.
-                </p>
               </div>
               <div className="flex flex-wrap gap-2">
                 {(["light", "dark", "system"] as const).map((t) => (
@@ -350,18 +335,12 @@ export default function Page() {
                   </button>
                 ))}
               </div>
-              <div className="text-xs" style={{ color: "var(--muted)" }}>
-                Aperçu instantané. Si tu utilises Tailwind, les classes <code>dark:</code> suivent.
-              </div>
             </div>
 
             {/* Accessibilité */}
             <div className="card space-y-3">
               <div className="space-y-1">
                 <h3 className="font-semibold">Accessibilité</h3>
-                <p className="text-sm" style={{ color: "var(--muted)" }}>
-                  Options d’ergonomie et de confort visuel.
-                </p>
               </div>
 
               <label className="inline-flex items-center gap-3">
@@ -376,10 +355,6 @@ export default function Page() {
                 />
                 <span>Réduire les animations</span>
               </label>
-
-              <p className="text-xs" style={{ color: "var(--muted)" }}>
-                Désactive ou raccourcit certaines animations/transitions.
-              </p>
             </div>
           </div>
 
@@ -407,11 +382,6 @@ export default function Page() {
       {/* --- Section Push (beta) --- */}
       <Section title="Notifications push (beta)">
         <div className="card space-y-3">
-          <p className="text-sm" style={{ color: "var(--muted)" }}>
-            Fonctionnent même si l’app est fermée. Autorise les notifications puis active
-            la souscription sur cet appareil.
-          </p>
-
           <div className="flex flex-wrap gap-8 items-center">
             {/* ACTIVER */}
             <button
@@ -523,21 +493,9 @@ export default function Page() {
 
           {/* --- Formulaire de planification (boutons Jours + Heure) --- */}
           <PushScheduleForm />
-
-          <p className="text-xs" style={{ color: "var(--muted)" }}>
-            Si rien ne s’affiche : vérifie que le navigateur autorise les notifications, que
-            <code> NEXT_PUBLIC_VAPID_PUBLIC_KEY </code> est bien configurée et que le service worker est actif.
-          </p>
         </div>
       </Section>
-
-      {/* CTA */}
-      <div className="card flex items-center justify-between gap-4">
-        <p className="text-sm" style={{ color: "var(--muted)" }}>
-          Tu veux être notifié·e quand ces options arrivent ?
-        </p>
-        <button type="button" className="btn-dash">Me prévenir</button>
-      </div>
     </>
   );
 }
+
