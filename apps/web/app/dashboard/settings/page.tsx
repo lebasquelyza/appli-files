@@ -220,16 +220,6 @@ function LegalModal() {
     return () => document.removeEventListener("keydown", onEsc);
   }, []);
 
-  // Bloque le scroll du body quand la modale est ouverte
-  useEffect(() => {
-    if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [open]);
-
   return (
     <div>
       <button type="button" className={btnGhost} onClick={() => setOpen(true)}>
@@ -244,7 +234,7 @@ function LegalModal() {
             onClick={() => setOpen(false)}
             aria-hidden
           />
-          {/* Conteneur (centré desktop, bottom-sheet mobile) */}
+          {/* Modale */}
           <div className="fixed inset-0 z-[101] flex sm:items-center items-end justify-center sm:p-4 p-0">
             <div
               ref={panelRef}
@@ -259,7 +249,6 @@ function LegalModal() {
                 fontSize: "var(--settings-fs)",
                 WebkitOverflowScrolling: "touch",
                 touchAction: "pan-y",
-                paddingBottom: "max(1rem, env(safe-area-inset-bottom))",
               }}
               role="dialog"
               aria-modal="true"
@@ -272,7 +261,6 @@ function LegalModal() {
                 </button>
               </div>
 
-              {/* --- CONTENU COURT À COMPLÉTER PLUS TARD --- */}
               <div className="mt-3 space-y-4 leading-relaxed">
                 <p className="opacity-80">
                   Ici vos mentions légales (éditeur du site, hébergeur, propriété intellectuelle,
@@ -283,46 +271,8 @@ function LegalModal() {
                 <h4 className="font-semibold">Cookies</h4>
                 <p className="opacity-80">
                   Ce site utilise des cookies nécessaires au bon fonctionnement et, le cas échéant,
-                  pour la mesure d’audience. Vous pouvez gérer vos préférences ici :
+                  pour la mesure d’audience.
                 </p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    className={btnGhost}
-                    onClick={() => {
-                      alert("Ouvrir le gestionnaire de préférences cookies (à connecter à votre CMP).");
-                    }}
-                  >
-                    Gérer mes préférences cookies
-                  </button>
-                  <button
-                    type="button"
-                    className={btnGhost}
-                    onClick={() => {
-                      try {
-                        const list = document.cookie?.split(";").map((c) => c.trim()).filter(Boolean);
-                        const pretty =
-                          list && list.length
-                            ? list
-                                .map((p) => {
-                                  const i = p.indexOf("=");
-                                  const name = i >= 0 ? p.slice(0, i) : p;
-                                  const value = i >= 0 ? decodeURIComponent(p.slice(i + 1)) : "";
-                                  return `${name} = ${value}`;
-                                })
-                                .join("\n")
-                            : "Aucun cookie lisible côté client.";
-                        alert(pretty);
-                      } catch {
-                        alert("Impossible de lire les cookies depuis ce contexte.");
-                      }
-                    }}
-                  >
-                    Voir les cookies actuels
-                  </button>
-                </div>
-
-                <p className="text-xs opacity-60">Dernière mise à jour : 30/09/2025</p>
               </div>
             </div>
           </div>
@@ -418,82 +368,7 @@ export default function Page() {
 
         {/* ======================= Section Notifications ======================= */}
         <Section title="Notifications push (beta)">
-          <div className="card space-y-3">
-            <div className="flex flex-wrap gap-3 items-center">
-              <button
-                type="button"
-                className={btnGhost}
-                onClick={async () => {
-                  try {
-                    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
-                    const isStandalone =
-                      window.matchMedia?.("(display-mode: standalone)").matches ||
-                      (navigator as any).standalone === true;
-                    if (isIOS && !isStandalone) {
-                      alert("Sur iOS, ouvre l’app depuis l’icône écran d’accueil (PWA), pas Safari.");
-                      return;
-                    }
-                    if ("Notification" in window && Notification.permission === "default") {
-                      const p = await Notification.requestPermission();
-                      if (p !== "granted") return alert("Notifications refusées.");
-                    }
-                    if ("Notification" in window && Notification.permission === "denied") {
-                      return alert("Notifications refusées.");
-                    }
-                    const vapid = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-                    if (!vapid) return alert("NEXT_PUBLIC_VAPID_PUBLIC_KEY manquante.");
-                    if (!("serviceWorker" in navigator)) return alert("SW non supporté.");
-                    await navigator.serviceWorker.ready;
-
-                    const { ensurePushSubscription, getDeviceId } = await import("@/lib/pushClient");
-                    const sub = await ensurePushSubscription(vapid!);
-                    const deviceId = getDeviceId();
-
-                    const res = await fetch("/api/push/subscribe", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ deviceId, subscription: sub }),
-                    });
-                    const j = await res.json().catch(() => ({}));
-                    if (!res.ok) return alert("Subscribe KO: " + res.status + " " + (j.error ?? ""));
-                    alert("Notifications push activées ✅");
-                  } catch (e: any) {
-                    alert("Erreur: " + (e?.message || String(e)));
-                  }
-                }}
-              >
-                Activer les notifications
-              </button>
-
-              <button
-                type="button"
-                className={btnGhost}
-                onClick={async () => {
-                  try {
-                    const { getDeviceId } = await import("@/lib/pushClient");
-                    const deviceId = getDeviceId();
-                    const res = await fetch("/api/push/unsubscribe", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ deviceId }),
-                    });
-                    const j = await res.json().catch(() => ({}));
-                    if (!res.ok) return alert("Unsubscribe KO: " + res.status + " " + (j.error ?? ""));
-                    const reg = await navigator.serviceWorker.ready;
-                    const s = await reg.pushManager.getSubscription();
-                    await s?.unsubscribe();
-                    alert("Notifications push désactivées");
-                  } catch (e: any) {
-                    alert("Erreur: " + (e?.message || String(e)));
-                  }
-                }}
-              >
-                Désactiver
-              </button>
-            </div>
-
-            <PushScheduleForm />
-          </div>
+          <PushScheduleForm />
         </Section>
 
         {/* ======================= Section Cookies & Mentions ======================= */}
