@@ -5,30 +5,25 @@ import Topbar from "@/components/Topbar";
 import "./globals.css";
 
 // === PWA metadata ===
-export const metadata: Metadata = {
-  title: "CoachFit",
+export const metadata = {
+  title: "Files",
   description: "Votre coach forme & bien-être",
   manifest: "/manifest.json",
   themeColor: "#ffffff",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Files" // <-- nom affiché sous l’icône iOS
+  },
   icons: {
     icon: [
       { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
       { url: "/icon-512.png", sizes: "512x512", type: "image/png" }
     ],
     apple: { url: "/icon-192.png", sizes: "192x192", type: "image/png" }
-  },
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: "default",
-    title: "CoachFit"
   }
 };
 
-export const viewport: Viewport = {
-  themeColor: "#ffffff",
-  width: "device-width",
-  initialScale: 1
-};
 
 // (tes options existantes)
 export const dynamic = "force-dynamic";
