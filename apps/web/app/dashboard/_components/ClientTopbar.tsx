@@ -1,9 +1,10 @@
+// apps/web/app/dashboard/_components/ClientTopbar.tsx
 "use client";
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
-export default function Topbar() {
+export default function ClientTopbar() {
   const [open, setOpen] = useState(false);
   const router = useRouter();
   const firstBtnRef = useRef<HTMLButtonElement | null>(null);
@@ -22,30 +23,26 @@ export default function Topbar() {
 
   return (
     <>
-      {/* Bandeau FIXE vert, plein écran (plus de border-b) */}
-      <header className="fixed inset-x-0 top-0 z-[1000] bg-emerald-600 text-white shadow-sm">
-        <div className="mx-auto max-w-screen-xl h-14 px-4 flex items-center justify-between">
-          {/* Bouton hamburger (vert foncé pour contraster) */}
+      {/* Header SANS barre : transparent + pas de border */}
+      <header className="fixed inset-x-0 top-0 z-[1000] bg-transparent">
+        <div className="mx-auto max-w-screen-xl h-12 px-4 flex items-center">
+          {/* Bouton hamburger : plus grand + vert */}
           <button
             aria-label="Ouvrir le menu"
+            className="inline-flex items-center gap-2 rounded-full px-4 py-2 bg-emerald-600 text-white font-semibold shadow hover:bg-emerald-700 active:scale-[0.99] transition"
             onClick={() => setOpen(true)}
-            className="inline-flex items-center gap-2 rounded-full bg-emerald-700 text-white px-5 py-3 text-sm font-semibold shadow hover:bg-emerald-800 active:scale-95 transition"
           >
-            <span className="relative block w-6 h-4">
+            <span className="relative block w-5 h-3">
               <span className="absolute inset-x-0 top-0 h-[2px] bg-white" />
               <span className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[2px] bg-white" />
               <span className="absolute inset-x-0 bottom-0 h-[2px] bg-white" />
             </span>
-            <span>Menu</span>
+            Menu
           </button>
-
-          {/* Rien au centre/droite */}
-          <div />
-          <div className="w-[104px]" />
         </div>
       </header>
 
-      {/* Panneau plein écran */}
+      {/* Panneau plein écran BLANC, pas de bande verte ni titre “Menu” */}
       {open && (
         <div className="fixed inset-0 z-[1100]" role="dialog" aria-modal="true">
           <div
@@ -54,13 +51,11 @@ export default function Topbar() {
             aria-hidden="true"
           />
           <div className="absolute inset-0 bg-white flex flex-col">
-            {/* Barre supérieure du panneau : verte aussi */}
-            <div className="h-14 flex items-center justify-between px-4"
-                 style={{ backgroundColor: "#059669", color: "white" /* emerald-600 */ }}>
-              <div className="font-extrabold">Menu</div>
+            {/* Barre du haut minimaliste : juste le bouton fermer à droite */}
+            <div className="h-14 flex items-center justify-end px-4">
               <button
                 aria-label="Fermer"
-                className="inline-flex items-center justify-center rounded-lg bg-white/10 px-3 py-2 hover:bg-white/20"
+                className="inline-flex items-center justify-center rounded-full border px-3 py-2 hover:bg-gray-50"
                 onClick={() => setOpen(false)}
               >
                 ✕
@@ -69,7 +64,7 @@ export default function Topbar() {
 
             {/* Liens */}
             <nav className="max-w-screen-md mx-auto w-full p-4">
-              <ul className="divide-y">
+              <ul className="space-y-3">
                 {[
                   { href: "/dashboard", label: "Accueil" },
                   { href: "/dashboard/calories", label: "Calories" },
@@ -84,7 +79,7 @@ export default function Topbar() {
                     <button
                       ref={i === 0 ? firstBtnRef : undefined}
                       onClick={() => go(item.href)}
-                      className="w-full text-left py-4 text-lg hover:bg-gray-50 rounded-md px-2 focus:outline-none focus:ring-2 focus:ring-gray-900/20"
+                      className="w-full text-left px-4 py-3 rounded-xl border bg-gray-50 hover:bg-gray-100 font-medium"
                     >
                       {item.label}
                     </button>
@@ -92,9 +87,6 @@ export default function Topbar() {
                 ))}
               </ul>
             </nav>
-
-            {/* Footer du panneau (vide) */}
-            <div className="mt-auto border-t py-3 text-center text-sm text-gray-500" />
           </div>
         </div>
       )}
