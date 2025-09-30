@@ -257,99 +257,90 @@ export default function Page() {
       </Section>
 
       {/* --- Nouvelle Section : Notifications (déplacée depuis Dashboard) --- */}
-      <Section title="Notifications">
-        <div className="space-y-6">
-          {/* Intro */}
-          <div className="card">
-            <p className="text-sm" style={{ color: "var(--muted)" }}>
-              Configure tes rappels pour rester motivé·e. Les envois par email et les
-              messages personnalisés arrivent bientôt.
-            </p>
-          </div>
+      // --- Section Push (beta) ---
+<Section title="Notifications push (beta)">
+  <div className="card space-y-3">
+    <p className="text-sm" style={{ color: "var(--muted)" }}>
+      Fonctionnent même si l’app est fermée. Autorise les notifications puis active
+      la souscription sur cet appareil.
+    </p>
 
-          {/* Grille */}
-          <div className="grid gap-6 md:grid-cols-2">
-            {/* Rappels de progression */}
-            <div className="card space-y-4">
-              <div className="space-y-1.5">
-                <h3 className="font-semibold">Rappels de progression</h3>
-                <p className="text-sm" style={{ color: "var(--muted)" }}>
-                  Reçois un rappel doux pour rester sur ta lancée.
-                </p>
-              </div>
+    <div className="flex flex-wrap gap-8 items-center">
+      <button
+        type="button"
+        className="btn-dash"
+        onClick={async () => {
+          // demande permission
+          if ("Notification" in window && Notification.permission === "default") {
+            await Notification.requestPermission();
+          }
+          const { ensurePushSubscription, getDeviceId } = await import("@/lib/pushClient");
+          const sub = await ensurePushSubscription(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!);
+          const deviceId = getDeviceId();
 
-              {/* Faux switch statique (pas d’interaction côté serveur) */}
-              <div className="flex items-center gap-3">
-                <div
-                  className="relative inline-flex h-8 w-[60px] rounded-full px-1"
-                  title="Bientôt disponible"
-                  style={{
-                    background: "rgba(0,0,0,.08)",
-                    border: "1px solid rgba(0,0,0,.10)",
-                    cursor: "not-allowed",
-                  }}
-                >
-                  <span
-                    className="inline-block h-6 w-6 rounded-full"
-                    style={{
-                      transform: "translateX(0)",
-                      background: "var(--bg)",
-                      boxShadow: "var(--shadow)",
-                    }}
-                  />
-                </div>
-                <span className="text-xs" style={{ color: "var(--muted)" }}>
-                  Bientôt
-                </span>
-              </div>
+          await fetch("/api/push/subscribe", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ deviceId, subscription: sub }),
+          });
+          alert("Notifications push activées ✅");
+        }}
+      >
+        Activer sur cet appareil
+      </button>
 
-              <p className="text-xs" style={{ color: "var(--muted)" }}>
-                Astuce : tu pourras choisir la fréquence (quotidienne, hebdo) et l’heure.
-              </p>
-            </div>
+      <button
+        type="button"
+        className="btn-dash"
+        onClick={async () => {
+          const { getDeviceId } = await import("@/lib/pushClient");
+          const deviceId = getDeviceId();
+          await fetch("/api/push/unsubscribe", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ deviceId }),
+          });
+          // et annule la souscription navigateur
+          const reg = await navigator.serviceWorker.ready;
+          const s = await reg.pushManager.getSubscription();
+          await s?.unsubscribe();
+          alert("Notifications push désactivées");
+        }}
+      >
+        Désactiver
+      </button>
 
-            {/* Aperçu d’un message */}
-            <div className="card space-y-4">
-              <h3 className="font-semibold">Aperçu d’un message</h3>
+      <button
+        type="button"
+        className="btn-dash"
+        onClick={async () => {
+          const { getDeviceId } = await import("@/lib/pushClient");
+          const deviceId = getDeviceId();
+          await fetch("/api/push/test", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              deviceId,
+              payload: {
+                title: "CoachFit",
+                body: "Test push : prêt·e pour 10 min ? 💪",
+                url: "/dashboard",
+              },
+            }),
+          });
+        }}
+      >
+        Envoyer un test
+      </button>
+    </div>
 
-              <div
-                className="rounded-xl p-4"
-                style={{
-                  background: "var(--panel)",
-                  border: "1px solid rgba(0,0,0,.06)",
-                }}
-              >
-                <p className="text-sm leading-relaxed">
-                  👋 Coucou ! Petit rappel motivation : 10 minutes de plus et tu fais
-                  une super différence. Tu t’y remets maintenant ?
-                </p>
-              </div>
+    <p className="text-xs" style={{ color: "var(--muted)" }}>
+      Si rien ne s’affiche : vérifie que le navigateur autorise les notifications, que
+      <code> NEXT_PUBLIC_VAPID_PUBLIC_KEY </code> est bien configurée et que le service worker est actif.
+    </p>
+  </div>
+</Section>
 
-              <div className="flex items-center gap-3 text-sm">
-                <span
-                  className="inline-block rounded-md px-2 py-1"
-                  style={{
-                    background: "var(--panel)",
-                    border: "1px solid rgba(0,0,0,.06)",
-                  }}
-                >
-                  09:00
-                </span>
-                <span style={{ color: "var(--muted)" }}>
-                  Heure de rappel par défaut
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Messages personnalisés */}
-          <div className="card space-y-2">
-            <h3 className="font-semibold">Messages personnalisés</h3>
-            <p className="text-sm" style={{ color: "var(--muted)" }}>
-              Bientôt : écris tes propres phrases de motivation et choisis à quels
-              moments les recevoir (emails, notifications).
-            </p>
-          </div>
 
           {/* CTA */}
           <div className="card flex items-center justify-between gap-4">
