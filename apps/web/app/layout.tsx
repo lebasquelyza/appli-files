@@ -41,7 +41,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         {/* 48px (h-12) + safe-area iOS */}
         <div
           className="min-h-dvh"
-          style={{ paddingTop: "calc(env(safe-area-inset-top) + 64px)" }}
+          style={{ paddingTop: "calc(env(safe-area-inset-top) + 56px)" }}
         >
           {children}
         </div>
