@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { PageHeader, Section } from "@/components/ui/Page";
 
 /* =======================
-   Menu déroulant des jours (bouton "Jours" seul)
+   Menu déroulant des jours (bouton "Jours")
    ======================= */
 function DaysDropdown({
   value,
@@ -44,7 +44,6 @@ function DaysDropdown({
 
   return (
     <div className="relative inline-block" ref={wrapperRef}>
-      {/* BTN "Jours" (neutre) */}
       <button
         type="button"
         aria-haspopup="menu"
@@ -109,11 +108,92 @@ function DaysDropdown({
   );
 }
 
+/* =======================
+   Menu déroulant de l'heure (bouton "Heure")
+   ======================= */
+function TimeDropdown({
+  value,
+  onChange,
+}: {
+  value: string; // "HH:mm"
+  onChange: (time: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [temp, setTemp] = useState(value);
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => setTemp(value), [value]);
+
+  useEffect(() => {
+    const onDoc = (e: MouseEvent) => {
+      if (!wrapperRef.current) return;
+      if (!wrapperRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onEsc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onEsc);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onEsc);
+    };
+  }, []);
+
+  const apply = () => {
+    onChange(temp || "08:00");
+    setOpen(false);
+  };
+
+  return (
+    <div className="relative inline-block" ref={wrapperRef}>
+      <button
+        type="button"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className="
+          inline-flex items-center rounded-full border bg-white
+          px-4 py-2 text-sm shadow-sm hover:bg-gray-50 active:scale-[0.99] transition
+        "
+      >
+        <span className="font-medium">Heure</span>
+      </button>
+
+      {open && (
+        <div
+          role="dialog"
+          aria-label="Sélection de l'heure"
+          className="absolute right-0 z-50 mt-2 w-56 rounded-2xl border bg-white p-3 shadow-lg"
+        >
+          <div className="flex items-center gap-3">
+            <input
+              type="time"
+              value={temp}
+              onChange={(e) => setTemp(e.target.value)}
+              step={300} // pas de 5 minutes
+              className="w-full rounded-[10px] border px-3 py-2 text-sm"
+            />
+          </div>
+
+          <div className="mt-3 flex items-center justify-end pt-2 border-t">
+            <button
+              type="button"
+              className="btn-dash px-3 py-1 text-xs"
+              onClick={apply}
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ==========================================
-   Formulaire de rappel planifié (heure + jours)
+   Formulaire de rappel planifié (jours + heure)
    ========================================== */
 function PushScheduleForm() {
-  const [time, setTime] = useState("08:00"); // HH:mm
+  const [time, setTime] = useState("08:00");
   const [days, setDays] = useState<number[]>([1, 2, 3, 4, 5]);
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
@@ -127,10 +207,7 @@ function PushScheduleForm() {
         body: JSON.stringify({ deviceId, time, days, tz }),
       });
       const j = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        alert("Sauvegarde KO: " + (j.error ?? res.status));
-        return;
-      }
+      if (!res.ok) return alert("Sauvegarde KO: " + (j.error ?? res.status));
       alert("Rappel enregistré ✅");
     } catch (e: any) {
       alert("Erreur: " + (e?.message || String(e)));
@@ -144,21 +221,10 @@ function PushScheduleForm() {
         Fuseau : {tz}
       </p>
 
-      {/* ➜ Jours (gauche) + Heure (droite) alignés sur la même ligne */}
+      {/* Ligne: Jours (gauche) + Heure (droite) en boutons */}
       <div className="flex flex-wrap items-center gap-3">
         <DaysDropdown value={days} onChange={setDays} />
-
-        <div className="flex items-center gap-2">
-          <label className="text-sm" style={{ color: "var(--muted)" }}>
-            Heure
-          </label>
-          <input
-            type="time"
-            value={time}
-            onChange={(e) => setTime(e.target.value)}
-            className="rounded-[10px] border px-3 py-2 text-sm"
-          />
-        </div>
+        <TimeDropdown value={time} onChange={setTime} />
       </div>
 
       <div className="flex items-center justify-between">
@@ -198,7 +264,6 @@ export default function Page() {
   const [loaded, setLoaded] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
-  // Charger depuis localStorage au mount
   useEffect(() => {
     try {
       const raw = localStorage.getItem(LS_KEY);
@@ -207,7 +272,6 @@ export default function Page() {
     setLoaded(true);
   }, []);
 
-  // Appliquer thème & co
   useEffect(() => {
     if (!loaded) return;
     const root = document.documentElement;
@@ -229,7 +293,7 @@ export default function Page() {
     <>
       <PageHeader title="Réglages" subtitle="Préférences de l’application" />
 
-      {/* --- Section Général (sans “Format date & heure”) --- */}
+      {/* --- Section Général --- */}
       <Section title="Général">
         <div className="space-y-6">
           <div className="card">
@@ -457,7 +521,7 @@ export default function Page() {
             </button>
           </div>
 
-          {/* --- Formulaire de planification --- */}
+          {/* --- Formulaire de planification (boutons Jours + Heure) --- */}
           <PushScheduleForm />
 
           <p className="text-xs" style={{ color: "var(--muted)" }}>
