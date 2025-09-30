@@ -3,6 +3,19 @@
 import { useEffect, useRef, useState } from "react";
 import { PageHeader, Section } from "@/components/ui/Page";
 
+/** Applique la taille de police globale du site à la page Réglages (hérite du <body>) */
+function useBodyFontSizeVar() {
+  useEffect(() => {
+    // Récupère la taille de police calculée du body (ex: 16px) — la même que sur “Bienvenue”
+    const fs = getComputedStyle(document.body).fontSize || "16px";
+    document.documentElement.style.setProperty("--app-body-fs", fs);
+  }, []);
+}
+
+/** Bouton discret réutilisable (laisse hériter la taille de police) */
+const btnGhostBase =
+  "rounded-full border bg-white px-4 py-2 shadow-sm hover:bg-gray-50 active:scale-[0.99] transition";
+
 /* =======================
    Menu déroulant des jours (bouton "Jours")
    ======================= */
@@ -13,15 +26,7 @@ function DaysDropdown({
   value: number[]; // 1..7 (Lu..Di)
   onChange: (days: number[]) => void;
 }) {
-  const labelsFull = [
-    "Lundi",
-    "Mardi",
-    "Mercredi",
-    "Jeudi",
-    "Vendredi",
-    "Samedi",
-    "Dimanche",
-  ];
+  const labelsFull = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
 
@@ -49,10 +54,8 @@ function DaysDropdown({
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className="
-          inline-flex items-center rounded-full border bg-white
-          px-4 py-2 text-sm shadow-sm hover:bg-gray-50 active:scale-[0.99] transition
-        "
+        className={`${btnGhostBase} inline-flex items-center`}
+        style={{ fontSize: "var(--app-body-fs, 16px)" }}
       >
         <span className="font-medium">Jours</span>
       </button>
@@ -62,6 +65,7 @@ function DaysDropdown({
           role="menu"
           aria-label="Sélection des jours"
           className="absolute z-50 mt-2 w-64 rounded-2xl border bg-white p-3 shadow-lg"
+          style={{ fontSize: "var(--app-body-fs, 16px)" }}
         >
           <ul className="space-y-2">
             {labelsFull.map((lbl, i) => {
@@ -76,7 +80,7 @@ function DaysDropdown({
                     checked={checked}
                     onChange={() => toggleDay(d)}
                   />
-                  <label htmlFor={`day-${d}`} className="text-sm cursor-pointer">
+                  <label htmlFor={`day-${d}`} className="cursor-pointer">
                     {lbl}
                   </label>
                 </li>
@@ -86,16 +90,12 @@ function DaysDropdown({
 
           <div className="mt-3 flex items-center justify-end pt-2 border-t">
             <div className="flex gap-2">
-              <button
-                type="button"
-                className="px-3 py-1 text-xs rounded-full border bg-white hover:bg-gray-50"
-                onClick={() => setOpen(false)}
-              >
+              <button type="button" className={`${btnGhostBase} px-3 py-1`}>
                 OK
               </button>
               <button
                 type="button"
-                className="px-3 py-1 text-xs rounded-full border bg-white hover:bg-gray-50"
+                className={`${btnGhostBase} px-3 py-1`}
                 onClick={() => onChange([])}
               >
                 Tout vider
@@ -150,10 +150,8 @@ function TimeDropdown({
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className="
-          inline-flex items-center rounded-full border bg-white
-          px-4 py-2 text-sm shadow-sm hover:bg-gray-50 active:scale-[0.99] transition
-        "
+        className={`${btnGhostBase} inline-flex items-center`}
+        style={{ fontSize: "var(--app-body-fs, 16px)" }}
       >
         <span className="font-medium">Heure</span>
       </button>
@@ -163,6 +161,7 @@ function TimeDropdown({
           role="dialog"
           aria-label="Sélection de l'heure"
           className="absolute right-0 z-50 mt-2 w-56 rounded-2xl border bg-white p-3 shadow-lg"
+          style={{ fontSize: "var(--app-body-fs, 16px)" }}
         >
           <div className="flex items-center gap-3">
             <input
@@ -170,16 +169,13 @@ function TimeDropdown({
               value={temp}
               onChange={(e) => setTemp(e.target.value)}
               step={300}
-              className="w-full rounded-[10px] border px-3 py-2 text-sm"
+              className="w-full rounded-[10px] border px-3 py-2"
+              style={{ fontSize: "var(--app-body-fs, 16px)" }}
             />
           </div>
 
           <div className="mt-3 flex items-center justify-end pt-2 border-t">
-            <button
-              type="button"
-              className="px-3 py-1 text-xs rounded-full border bg-white hover:bg-gray-50"
-              onClick={apply}
-            >
+            <button type="button" className={`${btnGhostBase} px-3 py-1`} onClick={apply}>
               OK
             </button>
           </div>
@@ -215,21 +211,18 @@ function CookiesViewer() {
     if (open) load();
   }, [open]);
 
-  const btnGhost =
-    "rounded-full border bg-white px-4 py-2 text-sm shadow-sm hover:bg-gray-50 active:scale-[0.99] transition";
-
   return (
-    <div className="card space-y-3">
-      <button type="button" className={btnGhost} onClick={() => setOpen((o) => !o)}>
+    <div className="card space-y-3" style={{ fontSize: "var(--app-body-fs, 16px)" }}>
+      <button type="button" className={btnGhostBase} onClick={() => setOpen((o) => !o)}>
         {open ? "Masquer les cookies" : "Voir les cookies"}
       </button>
 
       {open && (
         <div className="rounded-xl border bg-white p-3">
           {cookies.length === 0 ? (
-            <p className="text-sm opacity-70">Aucun cookie lisible côté client.</p>
+            <p className="opacity-70">Aucun cookie lisible côté client.</p>
           ) : (
-            <ul className="text-sm space-y-2">
+            <ul className="space-y-2">
               {cookies.map((c) => (
                 <li key={c.name} className="break-words">
                   <span className="font-medium">{c.name}</span>
@@ -240,7 +233,7 @@ function CookiesViewer() {
             </ul>
           )}
           <div className="mt-3">
-            <button type="button" className={btnGhost} onClick={load}>
+            <button type="button" className={btnGhostBase} onClick={load}>
               Actualiser
             </button>
           </div>
@@ -276,11 +269,9 @@ function PushScheduleForm() {
   };
 
   return (
-    <div className="card space-y-4">
+    <div className="card space-y-4" style={{ fontSize: "var(--app-body-fs, 16px)" }}>
       <h3 className="font-semibold">Rappel planifié</h3>
-      <p className="text-sm" style={{ color: "var(--muted)" }}>
-        Fuseau : {tz}
-      </p>
+      <p style={{ color: "var(--muted)" }}>Fuseau : {tz}</p>
 
       <div className="flex flex-wrap items-center gap-3">
         <DaysDropdown value={days} onChange={setDays} />
@@ -317,6 +308,8 @@ const DEFAULT_PREFS: Prefs = {
    Page Réglages
    ======================= */
 export default function Page() {
+  useBodyFontSizeVar(); // ← synchronise la taille de police avec celle du site (Bienvenue)
+
   const [prefs, setPrefs] = useState<Prefs>(DEFAULT_PREFS);
   const [loaded, setLoaded] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -346,12 +339,10 @@ export default function Page() {
     return () => clearTimeout(t);
   }, [prefs, loaded]);
 
-  const btnGhost =
-    "rounded-full border bg-white px-4 py-2 text-sm shadow-sm hover:bg-gray-50 active:scale-[0.99] transition";
-
+  // On met la taille une seule fois sur un wrapper : tout le contenu (hors gros titres) hérite
   return (
-    <>
-      {/* Titre collé au premier onglet */}
+    <div style={{ fontSize: "var(--app-body-fs, 16px)" }}>
+      {/* Titre (gros) garde sa propre taille via le composant */}
       <div className="mb-2">
         <PageHeader title="Réglages" />
       </div>
@@ -362,11 +353,11 @@ export default function Page() {
           <div className="grid gap-6 md:grid-cols-2">
             {/* Langue */}
             <div className="card space-y-3">
-              <div className="space-y-1">
+              <div>
                 <h3 className="font-semibold">Langue</h3>
               </div>
               <select
-                className="rounded-[10px] border px-3 py-2 text-sm w-full"
+                className="rounded-[10px] border px-3 py-2 w-full"
                 value={prefs.language}
                 onChange={(e) =>
                   setPrefs((p) => ({ ...p, language: e.target.value as Prefs["language"] }))
@@ -381,7 +372,7 @@ export default function Page() {
 
             {/* Thème */}
             <div className="card space-y-3">
-              <div className="space-y-1">
+              <div>
                 <h3 className="font-semibold">Thème</h3>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -389,7 +380,7 @@ export default function Page() {
                   <button
                     key={t}
                     type="button"
-                    className={btnGhost}
+                    className={btnGhostBase}
                     aria-pressed={prefs.theme === t}
                     onClick={() => setPrefs((p) => ({ ...p, theme: t }))}
                   >
@@ -408,7 +399,7 @@ export default function Page() {
           <div className="flex flex-wrap gap-3 items-center">
             <button
               type="button"
-              className={btnGhost}
+              className={btnGhostBase}
               onClick={async () => {
                 try {
                   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
@@ -454,7 +445,7 @@ export default function Page() {
 
             <button
               type="button"
-              className={btnGhost}
+              className={btnGhostBase}
               onClick={async () => {
                 try {
                   const { getDeviceId } = await import("@/lib/pushClient");
@@ -485,8 +476,6 @@ export default function Page() {
           <CookiesViewer />
         </div>
       </Section>
-    </>
+    </div>
   );
 }
-
-
