@@ -266,68 +266,146 @@ export default function Page() {
           </p>
 
           <div className="flex flex-wrap gap-8 items-center">
+            {/* ====== ACTIVER ====== */}
             <button
               type="button"
               className="btn-dash"
               onClick={async () => {
-                // demande permission
-                if ("Notification" in window && Notification.permission === "default") {
-                  await Notification.requestPermission();
-                }
-                const { ensurePushSubscription, getDeviceId } = await import("@/lib/pushClient");
-                const sub = await ensurePushSubscription(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!);
-                const deviceId = getDeviceId();
+                try {
+                  // iOS: s’assurer d’être en PWA (standalone)
+                  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+                  const isStandalone =
+                    window.matchMedia?.("(display-mode: standalone)").matches ||
+                    (navigator as any).standalone === true;
+                  if (isIOS && !isStandalone) {
+                    alert(
+                      "Sur iOS, ouvre l’app depuis l’icône écran d’accueil (PWA), pas Safari."
+                    );
+                    return;
+                  }
 
-                await fetch("/api/push/subscribe", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ deviceId, subscription: sub }),
-                });
-                alert("Notifications push activées ✅");
+                  // Demande de permission si nécessaire
+                  if ("Notification" in window && Notification.permission === "default") {
+                    const p = await Notification.requestPermission();
+                    if (p !== "granted") {
+                      alert("Notifications refusées.");
+                      return;
+                    }
+                  }
+                  if ("Notification" in window && Notification.permission === "denied") {
+                    alert("Notifications refusées dans le navigateur / iOS.");
+                    return;
+                  }
+
+                  // Clé VAPID (publique)
+                  const vapid = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+                  if (!vapid) {
+                    alert("NEXT_PUBLIC_VAPID_PUBLIC_KEY manquante.");
+                    return;
+                  }
+
+                  // Service worker prêt
+                  if (!("serviceWorker" in navigator)) {
+                    alert("Service Worker non supporté sur ce navigateur.");
+                    return;
+                  }
+                  const reg = await navigator.serviceWorker.ready.catch(() => null);
+                  if (!reg) {
+                    alert("Service worker non prêt. Enregistre /sw.js au boot.");
+                    return;
+                  }
+
+                  // Souscription + enregistrement serveur
+                  const { ensurePushSubscription, getDeviceId } = await import("@/lib/pushClient");
+                  const sub = await ensurePushSubscription(vapid);
+                  const deviceId = getDeviceId();
+
+                  const res = await fetch("/api/push/subscribe", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ deviceId, subscription: sub }),
+                  });
+                  const j = await res.json().catch(() => ({}));
+                  if (!res.ok) {
+                    alert("Subscribe KO: " + res.status + " " + (j.error ?? ""));
+                    return;
+                  }
+                  alert("Notifications push activées ✅");
+                } catch (e: any) {
+                  alert("Erreur: " + (e?.message || String(e)));
+                }
               }}
             >
               Activer sur cet appareil
             </button>
 
+            {/* ====== DÉSACTIVER ====== */}
             <button
               type="button"
               className="btn-dash"
               onClick={async () => {
-                const { getDeviceId } = await import("@/lib/pushClient");
-                const deviceId = getDeviceId();
-                await fetch("/api/push/unsubscribe", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ deviceId }),
-                });
-                // et annule la souscription navigateur
-                const reg = await navigator.serviceWorker.ready;
-                const s = await reg.pushManager.getSubscription();
-                await s?.unsubscribe();
-                alert("Notifications push désactivées");
+                try {
+                  const { getDeviceId } = await import("@/lib/pushClient");
+                  const deviceId = getDeviceId();
+
+                  // Côté serveur
+                  const res = await fetch("/api/push/unsubscribe", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ deviceId }),
+                  });
+                  const j = await res.json().catch(() => ({}));
+                  if (!res.ok) {
+                    alert("Unsubscribe KO: " + res.status + " " + (j.error ?? ""));
+                    return;
+                  }
+
+                  // Côté navigateur
+                  if ("serviceWorker" in navigator) {
+                    const reg = await navigator.serviceWorker.ready.catch(() => null);
+                    const s = await reg?.pushManager.getSubscription();
+                    await s?.unsubscribe();
+                  }
+
+                  alert("Notifications push désactivées");
+                } catch (e: any) {
+                  alert("Erreur: " + (e?.message || String(e)));
+                }
               }}
             >
               Désactiver
             </button>
 
+            {/* ====== ENVOYER UN TEST ====== */}
             <button
               type="button"
               className="btn-dash"
               onClick={async () => {
-                const { getDeviceId } = await import("@/lib/pushClient");
-                const deviceId = getDeviceId();
-                await fetch("/api/push/test", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    deviceId,
-                    payload: {
-                      title: "CoachFit",
-                      body: "Test push : prêt·e pour 10 min ? 💪",
-                      url: "/dashboard",
-                    },
-                  }),
-                });
+                try {
+                  const { getDeviceId } = await import("@/lib/pushClient");
+                  const deviceId = getDeviceId();
+
+                  const res = await fetch("/api/push/test", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      deviceId,
+                      payload: {
+                        title: "CoachFit",
+                        body: "Test push : prêt·e pour 10 min ? 💪",
+                        url: "/dashboard",
+                      },
+                    }),
+                  });
+                  const j = await res.json().catch(() => ({}));
+                  if (!res.ok) {
+                    alert(`Test KO: ${res.status} ${j.error ?? ""}`);
+                    return;
+                  }
+                  alert("Notification test envoyée ✅\n(Place l’app en arrière-plan pour la voir)");
+                } catch (e: any) {
+                  alert("Erreur: " + (e?.message || String(e)));
+                }
               }}
             >
               Envoyer un test
@@ -351,3 +429,4 @@ export default function Page() {
     </>
   );
 }
+
