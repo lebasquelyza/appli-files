@@ -88,14 +88,14 @@ function DaysDropdown({
             <div className="flex gap-2">
               <button
                 type="button"
-                className="btn-dash px-3 py-1 text-xs"
+                className="px-3 py-1 text-xs rounded-full border bg-white hover:bg-gray-50"
                 onClick={() => setOpen(false)}
               >
                 OK
               </button>
               <button
                 type="button"
-                className="btn-dash px-3 py-1 text-xs"
+                className="px-3 py-1 text-xs rounded-full border bg-white hover:bg-gray-50"
                 onClick={() => onChange([])}
               >
                 Tout vider
@@ -177,7 +177,7 @@ function TimeDropdown({
           <div className="mt-3 flex items-center justify-end pt-2 border-t">
             <button
               type="button"
-              className="btn-dash px-3 py-1 text-xs"
+              className="px-3 py-1 text-xs rounded-full border bg-white hover:bg-gray-50"
               onClick={apply}
             >
               OK
@@ -231,6 +231,7 @@ function PushScheduleForm() {
         <div className="text-xs" style={{ color: "var(--muted)" }}>
           Le rappel sera envoyé aux jours sélectionnés à {time}.
         </div>
+        {/* 👉 Celui-ci reste bien visible */}
         <button type="button" className="btn-dash" onClick={save}>
           Enregistrer le rappel
         </button>
@@ -289,6 +290,10 @@ export default function Page() {
     return () => clearTimeout(t);
   }, [prefs, loaded]);
 
+  // style bouton discret réutilisable
+  const btnGhost =
+    "rounded-full border bg-white px-4 py-2 text-sm shadow-sm hover:bg-gray-50 active:scale-[0.99] transition";
+
   return (
     <>
       <PageHeader title="Réglages" subtitle="Préférences de l’application" />
@@ -317,7 +322,7 @@ export default function Page() {
               </select>
             </div>
 
-            {/* Thème */}
+            {/* Thème (boutons moins voyants) */}
             <div className="card space-y-3">
               <div className="space-y-1">
                 <h3 className="font-semibold">Thème</h3>
@@ -327,7 +332,7 @@ export default function Page() {
                   <button
                     key={t}
                     type="button"
-                    className="btn-dash"
+                    className={btnGhost}
                     aria-pressed={prefs.theme === t}
                     onClick={() => setPrefs((p) => ({ ...p, theme: t }))}
                   >
@@ -336,33 +341,13 @@ export default function Page() {
                 ))}
               </div>
             </div>
-
-            {/* Accessibilité */}
-            <div className="card space-y-3">
-              <div className="space-y-1">
-                <h3 className="font-semibold">Accessibilité</h3>
-              </div>
-
-              <label className="inline-flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  className="accent-current"
-                  checked={prefs.reducedMotion}
-                  onChange={(e) =>
-                    setPrefs((p) => ({ ...p, reducedMotion: e.target.checked }))
-                  }
-                  disabled={!loaded}
-                />
-                <span>Réduire les animations</span>
-              </label>
-            </div>
           </div>
 
           {/* Actions */}
           <div className="card flex items-center justify-between gap-4">
             <button
               type="button"
-              className="btn-dash"
+              className={btnGhost}
               onClick={() => {
                 setPrefs(DEFAULT_PREFS);
                 setMsg("Réglages réinitialisés");
@@ -382,11 +367,11 @@ export default function Page() {
       {/* --- Section Push (beta) --- */}
       <Section title="Notifications push (beta)">
         <div className="card space-y-3">
-          <div className="flex flex-wrap gap-8 items-center">
-            {/* ACTIVER */}
+          <div className="flex flex-wrap gap-3 items-center">
+            {/* ACTIVER (moins voyant) */}
             <button
               type="button"
-              className="btn-dash"
+              className={btnGhost}
               onClick={async () => {
                 try {
                   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
@@ -427,13 +412,13 @@ export default function Page() {
                 }
               }}
             >
-              Activer sur cet appareil
+              Activer les notifications
             </button>
 
-            {/* DÉSACTIVER */}
+            {/* DÉSACTIVER (moins voyant) */}
             <button
               type="button"
-              className="btn-dash"
+              className={btnGhost}
               onClick={async () => {
                 try {
                   const { getDeviceId } = await import("@/lib/pushClient");
@@ -458,37 +443,6 @@ export default function Page() {
             >
               Désactiver
             </button>
-
-            {/* ENVOYER UN TEST */}
-            <button
-              type="button"
-              className="btn-dash"
-              onClick={async () => {
-                try {
-                  const { getDeviceId } = await import("@/lib/pushClient");
-                  const deviceId = getDeviceId();
-                  const res = await fetch("/api/push/test", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      deviceId,
-                      payload: {
-                        title: "Files Coaching",
-                        body: "Test push : prêt·e pour 10 min ? 💪",
-                        url: "/dashboard",
-                      },
-                    }),
-                  });
-                  const j = await res.json().catch(() => ({}));
-                  if (!res.ok) return alert(`Test KO: ${res.status} ${j.error ?? ""}`);
-                  alert("Notification test envoyée ✅\n(Mets l’app en arrière-plan pour la voir)");
-                } catch (e: any) {
-                  alert("Erreur: " + (e?.message || String(e)));
-                }
-              }}
-            >
-              Envoyer un test
-            </button>
           </div>
 
           {/* --- Formulaire de planification (boutons Jours + Heure) --- */}
@@ -498,4 +452,3 @@ export default function Page() {
     </>
   );
 }
-
