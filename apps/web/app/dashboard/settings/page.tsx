@@ -153,7 +153,7 @@ function LegalModal() {
     return () => document.removeEventListener("keydown", onEsc);
   }, []);
 
-  // Empêche le scroll du body lorsque la modal est ouverte
+  // Empêche le scroll du body lorsque la modale est ouverte
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
@@ -178,19 +178,20 @@ function LegalModal() {
           role="dialog"
           aria-modal="true"
           aria-label="Mentions légales et politique de cookies"
-          className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+          className="fixed inset-0 z-[100] flex sm:items-center items-end justify-center sm:p-4 p-0"
         >
           {/* Backdrop */}
           <div
             className="absolute inset-0 bg-black/40"
             onClick={() => setOpen(false)}
+            onTouchMove={(e) => e.preventDefault()} // évite le scroll du fond sur iOS
           />
 
           {/* Dialog */}
           <div
             ref={wrap}
-            className="relative z-[101] max-h-[85vh] w-full max-w-3xl overflow-y-auto rounded-2xl border bg-white p-5 shadow-2xl"
-            style={{ fontSize: "var(--settings-fs)" }}
+            className="relative z-[101] w-full sm:max-w-3xl sm:rounded-2xl sm:border bg-white sm:p-5 p-4 shadow-2xl sm:max-h-[85vh] sm:h-auto h-[90vh] overflow-y-scroll overscroll-contain"
+            style={{ fontSize: "var(--settings-fs)", WebkitOverflowScrolling: "touch", touchAction: "pan-y" }}
           >
             <div className="flex items-start justify-between gap-4">
               <h3 className="text-base font-semibold">Mentions légales</h3>
@@ -270,7 +271,8 @@ function LegalModal() {
                               const name = i >= 0 ? p.slice(0, i) : p;
                               const value = i >= 0 ? decodeURIComponent(p.slice(i + 1)) : "";
                               return `${name} = ${value}`;
-                            }).join("\n")
+                            }).join("
+")
                           : "Aucun cookie lisible côté client.";
                         alert(pretty);
                       } catch {
