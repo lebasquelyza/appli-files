@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { PageHeader, Section } from "@/components/ui/Page";
 
 /* =======================
-   Menu déroulant des jours
+   Menu déroulant des jours (bouton "Jours" seul)
    ======================= */
 function DaysDropdown({
   value,
@@ -17,15 +17,12 @@ function DaysDropdown({
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
 
-  // Fermer en cliquant hors du menu / sur Échap
   useEffect(() => {
-    function onDoc(e: MouseEvent) {
+    const onDoc = (e: MouseEvent) => {
       if (!wrapperRef.current) return;
       if (!wrapperRef.current.contains(e.target as Node)) setOpen(false);
-    }
-    function onEsc(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
-    }
+    };
+    const onEsc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
     document.addEventListener("mousedown", onDoc);
     document.addEventListener("keydown", onEsc);
     return () => {
@@ -37,31 +34,20 @@ function DaysDropdown({
   const toggleDay = (d: number) =>
     onChange(value.includes(d) ? value.filter((x) => x !== d) : [...value, d]);
 
-  const summary =
-    value.length === 0
-      ? "Aucun jour"
-      : value
-          .slice()
-          .sort((a, b) => a - b)
-          .map((d) => labels[d - 1])
-          .join(", ");
-
   return (
     <div className="relative inline-block" ref={wrapperRef}>
-      {/* BTN "Jours" NEUTRE (pas vert) */}
+      {/* BTN affichant uniquement "Jours" */}
       <button
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
         className="
-          min-w-56 flex items-center justify-between gap-2
-          rounded-full border bg-white px-4 py-2 text-sm
-          shadow-sm hover:bg-gray-50 active:scale-[0.99] transition
+          inline-flex items-center gap-2 rounded-full border bg-white
+          px-4 py-2 text-sm shadow-sm hover:bg-gray-50 active:scale-[0.99] transition
         "
       >
         <span className="font-medium">Jours</span>
-        <span className="truncate opacity-70">{summary}</span>
         <svg
           aria-hidden
           className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`}
@@ -92,7 +78,7 @@ function DaysDropdown({
                     onChange={() => toggleDay(d)}
                   />
                   <label htmlFor={`day-${d}`} className="text-sm cursor-pointer">
-                    {lbl} {i < 5 ? "(semaine)" : "(week-end)"}
+                    {lbl}
                   </label>
                 </li>
               );
@@ -107,8 +93,6 @@ function DaysDropdown({
             >
               Lun → Ven
             </button>
-
-            {/* OK & TOUT VIDER PLUS PETITS */}
             <div className="flex gap-2">
               <button
                 type="button"
@@ -255,7 +239,6 @@ export default function Page() {
       {/* --- Section Général (sans “Format date & heure”) --- */}
       <Section title="Général">
         <div className="space-y-6">
-          {/* Intro */}
           <div className="card">
             <p className="text-sm" style={{ color: "var(--muted)" }}>
               Configure la langue, le thème, et l’accessibilité. Les changements
@@ -263,7 +246,6 @@ export default function Page() {
             </p>
           </div>
 
-          {/* Grille des préférences */}
           <div className="grid gap-6 md:grid-cols-2">
             {/* Langue */}
             <div className="card space-y-3">
@@ -501,4 +483,6 @@ export default function Page() {
       </div>
     </>
   );
+}
+
 }
