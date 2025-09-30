@@ -1,4 +1,3 @@
-// apps/web/app/dashboard/_components/ClientTopbar.tsx
 "use client";
 
 import { useRouter } from "next/navigation";
@@ -23,16 +22,15 @@ export default function Topbar() {
 
   return (
     <>
-      {/* FIXED + z-[1000] pour être visible partout */}
-      <header className="fixed inset-x-0 top-0 z-[1000] border-b bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
+      {/* Bandeau FIXE vert, plein écran (plus de border-b) */}
+      <header className="fixed inset-x-0 top-0 z-[1000] bg-emerald-600 text-white shadow-sm">
         <div className="mx-auto max-w-screen-xl h-14 px-4 flex items-center justify-between">
-          {/* Bouton hamburger — PLUS GROS + VERT */}
+          {/* Bouton hamburger (vert foncé pour contraster) */}
           <button
             aria-label="Ouvrir le menu"
             onClick={() => setOpen(true)}
-            className="inline-flex items-center gap-2 rounded-full border border-emerald-600 bg-emerald-600 text-white px-4 py-2.5 text-sm font-semibold shadow-sm hover:bg-emerald-700 active:scale-95 transition"
+            className="inline-flex items-center gap-2 rounded-full bg-emerald-700 text-white px-5 py-3 text-sm font-semibold shadow hover:bg-emerald-800 active:scale-95 transition"
           >
-            {/* Icône burger (traits blancs) */}
             <span className="relative block w-6 h-4">
               <span className="absolute inset-x-0 top-0 h-[2px] bg-white" />
               <span className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[2px] bg-white" />
@@ -43,7 +41,7 @@ export default function Topbar() {
 
           {/* Rien au centre/droite */}
           <div />
-          <div className="w-[84px]" />
+          <div className="w-[104px]" />
         </div>
       </header>
 
@@ -56,12 +54,13 @@ export default function Topbar() {
             aria-hidden="true"
           />
           <div className="absolute inset-0 bg-white flex flex-col">
-            {/* Barre supérieure du panneau */}
-            <div className="h-14 flex items-center justify-between px-4 border-b">
+            {/* Barre supérieure du panneau : verte aussi */}
+            <div className="h-14 flex items-center justify-between px-4"
+                 style={{ backgroundColor: "#059669", color: "white" /* emerald-600 */ }}>
               <div className="font-extrabold">Menu</div>
               <button
                 aria-label="Fermer"
-                className="inline-flex items-center justify-center rounded-lg border px-3 py-2 hover:bg-gray-50"
+                className="inline-flex items-center justify-center rounded-lg bg-white/10 px-3 py-2 hover:bg-white/20"
                 onClick={() => setOpen(false)}
               >
                 ✕
@@ -94,7 +93,7 @@ export default function Topbar() {
               </ul>
             </nav>
 
-            {/* Footer du panneau (vide, pas de “Files Coaching 2025”) */}
+            {/* Footer du panneau (vide) */}
             <div className="mt-auto border-t py-3 text-center text-sm text-gray-500" />
           </div>
         </div>
@@ -102,3 +101,5 @@ export default function Topbar() {
     </>
   );
 }
+
+
