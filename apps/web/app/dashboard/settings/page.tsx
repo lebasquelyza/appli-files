@@ -3,17 +3,17 @@
 import { useEffect, useRef, useState } from "react";
 import { PageHeader, Section } from "@/components/ui/Page";
 
-/** ——— Taille plus petite pour tout (sauf le titre principal) ——— */
+/** ——— Texte un peu plus petit partout (sauf le gros titre “Réglages”) ——— */
 function useSettingsFontSize() {
   useEffect(() => {
-    const fs = getComputedStyle(document.body).fontSize || "13px";
-    const num = parseFloat(fs) || 13;
-    const smaller = Math.max(12, Math.round(num - 2)); // ← ajuste ici (-2px ; min 12px)
+    const fs = getComputedStyle(document.body).fontSize || "16px";
+    const num = parseFloat(fs) || 16;
+    const smaller = Math.max(11, Math.round(num - 4)); // ajuste si besoin
     document.documentElement.style.setProperty("--settings-fs", `${smaller}px`);
   }, []);
 }
 
-/** Bouton discret (hérite de la taille) */
+/** Bouton discret (hérite la taille) */
 const btnGhost =
   "rounded-full border bg-white px-4 py-2 shadow-sm hover:bg-gray-50 active:scale-[0.99] transition";
 
@@ -37,11 +37,17 @@ function DaysDropdown({
     return () => { document.removeEventListener("mousedown", onDoc); document.removeEventListener("keydown", onEsc); };
   }, []);
 
-  const toggle = (d: number) => onChange(value.includes(d) ? value.filter(x => x!==d) : [...value, d]);
+  const toggle = (d: number) =>
+    onChange(value.includes(d) ? value.filter(x => x !== d) : [...value, d]);
 
   return (
     <div className="relative inline-block" ref={wrap}>
-      <button type="button" className={`${btnGhost} inline-flex items-center`} onClick={() => setOpen(o=>!o)}>
+      <button
+        type="button"
+        className={`${btnGhost} inline-flex items-center`}
+        onClick={() => setOpen(o=>!o)}
+        style={{ fontSize: "var(--settings-fs)" }}
+      >
         <span className="font-medium">Jours</span>
       </button>
 
@@ -103,7 +109,12 @@ function TimeDropdown({
 
   return (
     <div className="relative inline-block" ref={wrap}>
-      <button type="button" className={`${btnGhost} inline-flex items-center`} onClick={() => setOpen(o=>!o)}>
+      <button
+        type="button"
+        className={`${btnGhost} inline-flex items-center`}
+        onClick={() => setOpen(o=>!o)}
+        style={{ fontSize: "var(--settings-fs)" }}
+      >
         <span className="font-medium">Heure</span>
       </button>
 
@@ -224,13 +235,14 @@ function PushScheduleForm() {
   );
 }
 
-/* ======================= Page Réglages ======================= */
+/* ======================= Préférences visuelles ======================= */
 type Prefs = { language: "fr" | "en" | "de"; theme: "light" | "dark" | "system"; reducedMotion: boolean; };
 const LS_KEY = "app.prefs.v1";
 const DEFAULT_PREFS: Prefs = { language: "fr", theme: "system", reducedMotion: false };
 
+/* ======================= Page Réglages ======================= */
 export default function Page() {
-  useSettingsFontSize(); // ← applique la petite taille globale
+  useSettingsFontSize(); // taille plus petite pour tout (sauf le titre)
 
   const [prefs, setPrefs] = useState<Prefs>(DEFAULT_PREFS);
   const [loaded, setLoaded] = useState(false);
@@ -258,13 +270,14 @@ export default function Page() {
   }, [prefs, loaded]);
 
   return (
-    <>
-      {/* Titre principal — garde sa taille normale via le composant */}
+    // <<< OPTION B : wrapper avec paddingTop pour éviter la superposition sous la Topbar
+    <div className="container" style={{ paddingTop: 24, paddingBottom: 24 }}>
+      {/* Titre principal — garde sa taille via le composant */}
       <div className="mb-2">
         <PageHeader title="Réglages" />
       </div>
 
-      {/* Tout le reste en plus petit */}
+      {/* Tout le reste hérite de la petite taille */}
       <div style={{ fontSize: "var(--settings-fs)" }}>
         <Section title="Général">
           <div className="space-y-6">
@@ -395,6 +408,7 @@ export default function Page() {
           </div>
         </Section>
       </div>
-    </>
+    </div>
   );
 }
+
