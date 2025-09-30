@@ -1,3 +1,4 @@
+// apps/web/lib/pushClient.ts
 const DEVICE_ID_KEY = "device:id";
 
 export function getDeviceId() {
@@ -19,8 +20,9 @@ function urlBase64ToUint8Array(base64String: string) {
 }
 
 export async function ensurePushSubscription(vapidPublicKey: string) {
-  if (!("serviceWorker" in navigator)) throw new Error("SW unsupported");
-  if (!("PushManager" in window)) throw new Error("Push unsupported");
+  if (!("serviceWorker" in navigator)) throw new Error("Service Worker unsupported");
+  if (!("PushManager" in window)) throw new Error("Push API unsupported");
+  if (!vapidPublicKey) throw new Error("Missing VAPID public key");
 
   const reg = await navigator.serviceWorker.ready;
   let sub = await reg.pushManager.getSubscription();
@@ -28,12 +30,10 @@ export async function ensurePushSubscription(vapidPublicKey: string) {
   if (!sub) {
     const appKey = urlBase64ToUint8Array(vapidPublicKey);
     sub = await reg.pushManager.subscribe({
-      userVisibleOnly: true, // indispensable pour iOS
+      userVisibleOnly: true,
       applicationServerKey: appKey,
     });
   }
 
-  // log de debug utile
-  console.log("[push] subscription", JSON.stringify(sub));
   return sub;
 }
