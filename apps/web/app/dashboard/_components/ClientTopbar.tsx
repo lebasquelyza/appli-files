@@ -1,3 +1,4 @@
+// apps/web/app/dashboard/_components/ClientTopbar.tsx
 "use client";
 
 import { useRouter } from "next/navigation";
@@ -13,7 +14,7 @@ export default function ClientTopbar() {
     router.push(href);
   };
 
-  // focus sur le 1er lien quand on ouvre
+  // Focus sur le 1er lien quand on ouvre le menu
   useEffect(() => {
     if (open) {
       const t = setTimeout(() => firstBtnRef.current?.focus(), 40);
@@ -23,43 +24,44 @@ export default function ClientTopbar() {
 
   return (
     <>
-      {/* Header compact (hauteur 40px) */}
-      <header className="fixed inset-x-0 top-0 z-[1000] border-b bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
-        <div className="mx-auto max-w-screen-xl h-10 px-3 flex items-center justify-between">
-          {/* Même bouton = toggle ouvrir/fermer */}
+      {/* Barre du haut (toujours visible) */}
+      <header className="fixed inset-x-0 top-0 z-[1000] border-b bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 shadow-sm">
+        <div className="mx-auto max-w-screen-xl h-12 px-4 flex items-center justify-between">
+          {/* Bouton hamburger vert (ouvre/ferme) */}
           <button
-            aria-label="Menu"
+            type="button"
+            aria-label="Ouvrir/fermer le menu"
             onClick={() => setOpen((v) => !v)}
-            className="inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium
-                       bg-emerald-600 text-white hover:bg-emerald-700 active:scale-[0.99] transition"
+            className="inline-flex items-center gap-2 rounded-full bg-emerald-600 text-white px-4 py-2 text-sm font-semibold hover:bg-emerald-700 active:scale-[.98] transition"
           >
-            {/* petite icône burger */}
             <span className="relative -ml-1 inline-block h-3 w-4">
               <span className="absolute inset-x-0 top-0 h-[2px] bg-white" />
-              <span className="absolute inset-x-0 top-1.5 h-[2px] bg-white" />
+              <span className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[2px] bg-white" />
               <span className="absolute inset-x-0 bottom-0 h-[2px] bg-white" />
             </span>
             Menu
           </button>
 
-          {/* espace à droite pour équilibrer */}
-          <div className="w-[42px]" />
+          {/* Rien au centre / à droite */}
+          <div />
+          <div className="w-[44px]" />
         </div>
       </header>
 
-      {/* Panneau plein écran minimal (pas de barre “Menu”, pas de croix) */}
+      {/* Panneau plein écran */}
       {open && (
         <div className="fixed inset-0 z-[1100]" role="dialog" aria-modal="true">
-          {/* cliquer en dehors ferme */}
+          {/* overlay (clic pour fermer) */}
           <div
             className="absolute inset-0 bg-black/40"
-            onClick={() => setOpen(false)}
             aria-hidden="true"
+            onClick={() => setOpen(false)}
           />
+          {/* panneau */}
           <div className="absolute inset-0 bg-white flex flex-col">
-            {/* un peu de marge en haut, plus compact */}
-            <nav className="max-w-screen-md mx-auto w-full p-3 pt-2">
-              <ul className="divide-y">
+            {/* Navigation — padding réduit en haut, safe-area respectée */}
+            <nav className="max-w-screen-md mx-auto w-full p-2 pt-[calc(env(safe-area-inset-top)+4px)]">
+              <ul className="list-none pl-0 m-0 space-y-2">
                 {[
                   { href: "/dashboard", label: "Accueil" },
                   { href: "/dashboard/calories", label: "Calories" },
@@ -74,8 +76,7 @@ export default function ClientTopbar() {
                     <button
                       ref={i === 0 ? firstBtnRef : undefined}
                       onClick={() => go(item.href)}
-                      className="w-full text-left py-3 text-lg hover:bg-gray-50 rounded-md px-2
-                                 focus:outline-none focus:ring-2 focus:ring-gray-900/20"
+                      className="w-full text-left py-3 text-lg rounded-md px-3 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-900/20"
                     >
                       {item.label}
                     </button>
@@ -89,3 +90,4 @@ export default function ClientTopbar() {
     </>
   );
 }
+
