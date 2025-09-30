@@ -189,6 +189,67 @@ function TimeDropdown({
   );
 }
 
+/* =======================
+   Voir les cookies (discret)
+   ======================= */
+function CookiesViewer() {
+  const [open, setOpen] = useState(false);
+  const [cookies, setCookies] = useState<{ name: string; value: string }[]>([]);
+
+  const load = () => {
+    const list =
+      document.cookie
+        ?.split(";")
+        .map((c) => c.trim())
+        .filter(Boolean)
+        .map((pair) => {
+          const idx = pair.indexOf("=");
+          const name = idx >= 0 ? pair.slice(0, idx) : pair;
+          const value = idx >= 0 ? decodeURIComponent(pair.slice(idx + 1)) : "";
+          return { name, value };
+        }) ?? [];
+    setCookies(list);
+  };
+
+  useEffect(() => {
+    if (open) load();
+  }, [open]);
+
+  const btnGhost =
+    "rounded-full border bg-white px-4 py-2 text-sm shadow-sm hover:bg-gray-50 active:scale-[0.99] transition";
+
+  return (
+    <div className="card space-y-3">
+      <button type="button" className={btnGhost} onClick={() => setOpen((o) => !o)}>
+        {open ? "Masquer les cookies" : "Voir les cookies"}
+      </button>
+
+      {open && (
+        <div className="rounded-xl border bg-white p-3">
+          {cookies.length === 0 ? (
+            <p className="text-sm opacity-70">Aucun cookie lisible côté client.</p>
+          ) : (
+            <ul className="text-sm space-y-2">
+              {cookies.map((c) => (
+                <li key={c.name} className="break-words">
+                  <span className="font-medium">{c.name}</span>
+                  <span className="opacity-60"> = </span>
+                  <code className="rounded bg-gray-50 px-1 py-0.5">{c.value}</code>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="mt-3">
+            <button type="button" className={btnGhost} onClick={load}>
+              Actualiser
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ==========================================
    Formulaire de rappel planifié (jours + heure)
    ========================================== */
@@ -227,10 +288,9 @@ function PushScheduleForm() {
         <TimeDropdown value={time} onChange={setTime} />
       </div>
 
-      <div className="flex items-center justify-between">
-        <div className="text-xs" style={{ color: "var(--muted)" }}>
-          Le rappel sera envoyé aux jours sélectionnés à {time}.
-        </div>
+      {/* Texte d’explication supprimé ici */}
+
+      <div className="flex items-center justify-end">
         {/* 👉 Celui-ci reste bien visible */}
         <button type="button" className="btn-dash" onClick={save}>
           Enregistrer le rappel
@@ -342,7 +402,6 @@ export default function Page() {
               </div>
             </div>
           </div>
-          {/* ⇨ Section "Actions" retirée (pas de bouton Réinitialiser ni texte) */}
         </div>
       </Section>
 
@@ -429,6 +488,9 @@ export default function Page() {
 
           {/* --- Formulaire de planification (boutons Jours + Heure) --- */}
           <PushScheduleForm />
+
+          {/* --- Zone Voir les cookies --- */}
+          <CookiesViewer />
         </div>
       </Section>
     </>
