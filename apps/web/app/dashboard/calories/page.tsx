@@ -102,10 +102,12 @@ export default async function Page({ searchParams }: { searchParams?: { saved?: 
 
   return (
     <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
-      <div className="page-header">
+      <div className="page-header" style={{ marginBottom: 8 }}>
         <div>
-          <h1 className="h1">Calories</h1>
-          <p className="lead">Enregistre tes calories consommées aujourd’hui. Historique sur 14 jours.</p>
+          <h1 className="h1" style={{ fontSize: 22, color: "#111827" }}>Calories</h1>
+          <p className="lead" style={{ fontSize: 13, marginTop: 4 }}>
+            Enregistre tes calories consommées aujourd’hui. Historique sur 14 jours.
+          </p>
         </div>
       </div>
 
@@ -122,9 +124,9 @@ export default async function Page({ searchParams }: { searchParams?: { saved?: 
 
       <div className="grid gap-6 lg:grid-cols-2">
         <article className="card">
-          <h3 style={{ marginTop: 0 }}>Aujourd’hui</h3>
-          <div className="text-sm" style={{ color: "#6b7280" }}>{today}</div>
-          <div style={{ fontSize: 28, fontWeight: 800, marginTop: 8 }}>
+          <h3 style={{ marginTop: 0, fontSize: 16, color: "#111827" }}>Aujourd’hui</h3>
+          <div className="text-sm" style={{ color: "#6b7280", fontSize: 14 }}>{today}</div>
+          <div style={{ fontSize: 20, fontWeight: 800, marginTop: 8, color: "#111827", lineHeight: 1 }}>
             {todayKcal.toLocaleString("fr-FR")} kcal
           </div>
 
@@ -148,7 +150,7 @@ export default async function Page({ searchParams }: { searchParams?: { saved?: 
                   WebkitTextFillColor: "#111827" as any
                 }}
               />
-              <div className="text-xs" style={{ color: "#6b7280", marginTop: 4 }}>
+              <div className="text-xs" style={{ color: "#6b7280", marginTop: 4, fontSize: 12 }}>
                 La valeur s’ajoute au total du jour (elle n’écrase pas).
               </div>
             </div>
@@ -170,7 +172,7 @@ export default async function Page({ searchParams }: { searchParams?: { saved?: 
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               {/* Principal = vert */}
-              <button className="btn btn-dash" type="submit">Enregistrer</button>
+              <button className="btn btn-dash" type="submit" style={{ fontSize: 14 }}>Enregistrer</button>
               {/* Secondaire = NOIR SUR BLANC */}
               <a
                 href="/dashboard/calories"
@@ -179,7 +181,8 @@ export default async function Page({ searchParams }: { searchParams?: { saved?: 
                   background: "#ffffff",
                   color: "#111827",
                   border: "1px solid #d1d5db",
-                  fontWeight: 500
+                  fontWeight: 500,
+                  fontSize: 14
                 }}
               >
                 Actualiser
@@ -199,18 +202,18 @@ export default async function Page({ searchParams }: { searchParams?: { saved?: 
                 gap: 8,
               }}
             >
-              <h3 style={{ margin: 0 }}>Historique (14 jours)</h3>
-              <span className="text-sm" style={{ color: "#6b7280" }}>
+              <h3 style={{ margin: 0, fontSize: 16, color: "#111827" }}>Historique (14 jours)</h3>
+              <span className="text-sm" style={{ color: "#6b7280", fontSize: 14 }}>
                 (cliquer pour afficher/masquer)
               </span>
             </summary>
 
-            <div className="text-sm" style={{ color: "#6b7280", margin: "6px 0 6px" }}>
+            <div className="text-sm" style={{ color: "#6b7280", margin: "6px 0 6px", fontSize: 14 }}>
               Les jours sans saisie sont à 0 kcal.
             </div>
 
             <div className="table-wrapper" style={{ overflowX: "auto" }}>
-              <table className="table" style={{ width: "100%", borderCollapse: "collapse" }}>
+              <table className="table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
                 <thead>
                   <tr>
                     <th style={{ textAlign: "left", padding: "6px 8px" }}>Date</th>
