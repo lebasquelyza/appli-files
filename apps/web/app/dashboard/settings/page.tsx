@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PageHeader, Section } from "@/components/ui/Page";
 
 /* =======================
@@ -17,7 +17,7 @@ function DaysDropdown({
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
 
-  // Fermer en cliquant hors du menu
+  // Fermer en cliquant hors du menu / sur Échap
   useEffect(() => {
     function onDoc(e: MouseEvent) {
       if (!wrapperRef.current) return;
@@ -48,14 +48,19 @@ function DaysDropdown({
 
   return (
     <div className="relative inline-block" ref={wrapperRef}>
+      {/* BTN "Jours" NEUTRE (pas vert) */}
       <button
         type="button"
-        className="btn-dash min-w-56 justify-between flex items-center gap-2"
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
+        className="
+          min-w-56 flex items-center justify-between gap-2
+          rounded-full border bg-white px-4 py-2 text-sm
+          shadow-sm hover:bg-gray-50 active:scale-[0.99] transition
+        "
       >
-        <span>Jours</span>
+        <span className="font-medium">Jours</span>
         <span className="truncate opacity-70">{summary}</span>
         <svg
           aria-hidden
@@ -97,16 +102,26 @@ function DaysDropdown({
           <div className="mt-3 flex items-center justify-between pt-2 border-t">
             <button
               type="button"
-              className="text-xs underline"
+              className="px-2 py-1 text-xs rounded-full bg-gray-100 hover:bg-gray-200"
               onClick={() => onChange([1, 2, 3, 4, 5])}
             >
               Lun → Ven
             </button>
+
+            {/* OK & TOUT VIDER PLUS PETITS */}
             <div className="flex gap-2">
-              <button type="button" className="btn-dash" onClick={() => setOpen(false)}>
+              <button
+                type="button"
+                className="btn-dash px-3 py-1 text-xs"
+                onClick={() => setOpen(false)}
+              >
                 OK
               </button>
-              <button type="button" className="btn-dash" onClick={() => onChange([])}>
+              <button
+                type="button"
+                className="btn-dash px-3 py-1 text-xs"
+                onClick={() => onChange([])}
+              >
                 Tout vider
               </button>
             </div>
@@ -182,13 +197,11 @@ function PushScheduleForm() {
 }
 
 /* =======================
-   Préférences visuelles
+   Préférences visuelles (simplifiées)
    ======================= */
 type Prefs = {
   language: "fr" | "en" | "de";
   theme: "light" | "dark" | "system";
-  dateFormat: "dd/mm/yyyy" | "mm/dd/yyyy";
-  timeFormat: "24h" | "12h";
   reducedMotion: boolean;
 };
 
@@ -197,8 +210,6 @@ const LS_KEY = "app.prefs.v1";
 const DEFAULT_PREFS: Prefs = {
   language: "fr",
   theme: "system",
-  dateFormat: "dd/mm/yyyy",
-  timeFormat: "24h",
   reducedMotion: false,
 };
 
@@ -237,35 +248,22 @@ export default function Page() {
     return () => clearTimeout(t);
   }, [prefs, loaded]);
 
-  const sampleDate = useMemo(() => {
-    const d = new Date(2025, 8, 14, 16, 7);
-    const dd = String(d.getDate()).padStart(2, "0");
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const yyyy = d.getFullYear();
-    const hh24 = String(d.getHours()).padStart(2, "0");
-    const min = String(d.getMinutes()).padStart(2, "0");
-    const hh12n = d.getHours() % 12 || 12;
-    const ampm = d.getHours() < 12 ? "AM" : "PM";
-    const date =
-      prefs.dateFormat === "dd/mm/yyyy" ? `${dd}/${mm}/${yyyy}` : `${mm}/${dd}/${yyyy}`;
-    const time = prefs.timeFormat === "24h" ? `${hh24}:${min}` : `${hh12n}:${min} ${ampm}`;
-    return `${date} · ${time}`;
-  }, [prefs.dateFormat, prefs.timeFormat]);
-
   return (
     <>
       <PageHeader title="Réglages" subtitle="Préférences de l’application" />
 
-      {/* --- Section Général --- */}
+      {/* --- Section Général (sans “Format date & heure”) --- */}
       <Section title="Général">
         <div className="space-y-6">
+          {/* Intro */}
           <div className="card">
             <p className="text-sm" style={{ color: "var(--muted)" }}>
-              Configure la langue, le thème, et le format date/heure. Les changements
+              Configure la langue, le thème, et l’accessibilité. Les changements
               sont appliqués immédiatement et mémorisés sur cet appareil.
             </p>
           </div>
 
+          {/* Grille des préférences */}
           <div className="grid gap-6 md:grid-cols-2">
             {/* Langue */}
             <div className="card space-y-3">
@@ -317,8 +315,6 @@ export default function Page() {
                 Aperçu instantané. Si tu utilises Tailwind, les classes <code>dark:</code> suivent.
               </div>
             </div>
-
-         
 
             {/* Accessibilité */}
             <div className="card space-y-3">
