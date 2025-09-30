@@ -289,7 +289,6 @@ function PushScheduleForm() {
       </div>
 
       <div className="flex items-center justify-end">
-        {/* 👉 Celui-ci reste bien visible */}
         <button type="button" className="btn-dash" onClick={save}>
           Enregistrer le rappel
         </button>
@@ -354,13 +353,14 @@ export default function Page() {
 
   return (
     <>
-      {/* Sous-titre retiré */}
+      {/* --- ESPACE SUPPLÉMENTAIRE POUR DESCENDRE LE TITRE --- */}
+      <div aria-hidden className="h-6 md:h-8" />
+
       <PageHeader title="Réglages" />
 
       {/* --- Section Général --- */}
       <Section title="Général">
         <div className="space-y-6">
-          {/* Grille des préférences */}
           <div className="grid gap-6 md:grid-cols-2">
             {/* Langue */}
             <div className="card space-y-3">
@@ -381,7 +381,7 @@ export default function Page() {
               </select>
             </div>
 
-            {/* Thème (boutons moins voyants) */}
+            {/* Thème */}
             <div className="card space-y-3">
               <div className="space-y-1">
                 <h3 className="font-semibold">Thème</h3>
@@ -408,7 +408,6 @@ export default function Page() {
       <Section title="Notifications push (beta)">
         <div className="card space-y-3">
           <div className="flex flex-wrap gap-3 items-center">
-            {/* ACTIVER (moins voyant) */}
             <button
               type="button"
               className={btnGhost}
@@ -455,7 +454,6 @@ export default function Page() {
               Activer les notifications
             </button>
 
-            {/* DÉSACTIVER (moins voyant) */}
             <button
               type="button"
               className={btnGhost}
@@ -485,13 +483,11 @@ export default function Page() {
             </button>
           </div>
 
-          {/* --- Formulaire de planification (boutons Jours + Heure) --- */}
           <PushScheduleForm />
-
-          {/* --- Zone Voir les cookies --- */}
           <CookiesViewer />
         </div>
       </Section>
     </>
   );
 }
+
