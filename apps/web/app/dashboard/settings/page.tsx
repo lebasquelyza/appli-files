@@ -25,27 +25,32 @@ function DaysDropdown({
   value: number[];
   onChange: (days: number[]) => void;
 }) {
-  const labelsFull = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"];
+  const labelsFull = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    const onDoc = (e: MouseEvent) => { if (wrap.current && !wrap.current.contains(e.target as Node)) setOpen(false); };
+    const onDoc = (e: MouseEvent) => {
+      if (wrap.current && !wrap.current.contains(e.target as Node)) setOpen(false);
+    };
     const onEsc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
     document.addEventListener("mousedown", onDoc);
     document.addEventListener("keydown", onEsc);
-    return () => { document.removeEventListener("mousedown", onDoc); document.removeEventListener("keydown", onEsc); };
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onEsc);
+    };
   }, []);
 
   const toggle = (d: number) =>
-    onChange(value.includes(d) ? value.filter(x => x !== d) : [...value, d]);
+    onChange(value.includes(d) ? value.filter((x) => x !== d) : [...value, d]);
 
   return (
     <div className="relative inline-block" ref={wrap}>
       <button
         type="button"
         className={`${btnGhost} inline-flex items-center`}
-        onClick={() => setOpen(o=>!o)}
+        onClick={() => setOpen((o) => !o)}
         style={{ fontSize: "var(--settings-fs)" }}
       >
         <span className="font-medium">Jours</span>
@@ -64,8 +69,16 @@ function DaysDropdown({
               const checked = value.includes(d);
               return (
                 <li key={d} className="flex items-center gap-3">
-                  <input id={`day-${d}`} type="checkbox" className="accent-current" checked={checked} onChange={()=>toggle(d)} />
-                  <label htmlFor={`day-${d}`} className="cursor-pointer">{lbl}</label>
+                  <input
+                    id={`day-${d}`}
+                    type="checkbox"
+                    className="accent-current"
+                    checked={checked}
+                    onChange={() => toggle(d)}
+                  />
+                  <label htmlFor={`day-${d}`} className="cursor-pointer">
+                    {lbl}
+                  </label>
                 </li>
               );
             })}
@@ -73,8 +86,20 @@ function DaysDropdown({
 
           <div className="mt-3 flex items-center justify-end pt-2 border-t">
             <div className="flex gap-2">
-              <button type="button" className={`${btnGhost} px-3 py-1`} onClick={()=>setOpen(false)}>OK</button>
-              <button type="button" className={`${btnGhost} px-3 py-1`} onClick={()=>onChange([])}>Tout vider</button>
+              <button
+                type="button"
+                className={`${btnGhost} px-3 py-1`}
+                onClick={() => setOpen(false)}
+              >
+                OK
+              </button>
+              <button
+                type="button"
+                className={`${btnGhost} px-3 py-1`}
+                onClick={() => onChange([])}
+              >
+                Tout vider
+              </button>
             </div>
           </div>
         </div>
@@ -95,24 +120,32 @@ function TimeDropdown({
   const [temp, setTemp] = useState(value);
   const wrap = useRef<HTMLDivElement | null>(null);
 
-  useEffect(()=>setTemp(value),[value]);
+  useEffect(() => setTemp(value), [value]);
 
   useEffect(() => {
-    const onDoc = (e: MouseEvent) => { if (wrap.current && !wrap.current.contains(e.target as Node)) setOpen(false); };
+    const onDoc = (e: MouseEvent) => {
+      if (wrap.current && !wrap.current.contains(e.target as Node)) setOpen(false);
+    };
     const onEsc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
     document.addEventListener("mousedown", onDoc);
     document.addEventListener("keydown", onEsc);
-    return () => { document.removeEventListener("mousedown", onDoc); document.removeEventListener("keydown", onEsc); };
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onEsc);
+    };
   }, []);
 
-  const apply = () => { onChange(temp || "08:00"); setOpen(false); };
+  const apply = () => {
+    onChange(temp || "08:00");
+    setOpen(false);
+  };
 
   return (
     <div className="relative inline-block" ref={wrap}>
       <button
         type="button"
         className={`${btnGhost} inline-flex items-center`}
-        onClick={() => setOpen(o=>!o)}
+        onClick={() => setOpen((o) => !o)}
         style={{ fontSize: "var(--settings-fs)" }}
       >
         <span className="font-medium">Heure</span>
@@ -128,13 +161,15 @@ function TimeDropdown({
           <input
             type="time"
             value={temp}
-            onChange={(e)=>setTemp(e.target.value)}
+            onChange={(e) => setTemp(e.target.value)}
             step={300}
             className="w-full rounded-[10px] border px-3 py-2"
             style={{ fontSize: "var(--settings-fs)" }}
           />
           <div className="mt-3 flex items-center justify-end pt-2 border-t">
-            <button type="button" className={`${btnGhost} px-3 py-1`} onClick={apply}>OK</button>
+            <button type="button" className={`${btnGhost} px-3 py-1`} onClick={apply}>
+              OK
+            </button>
           </div>
         </div>
       )}
@@ -142,23 +177,27 @@ function TimeDropdown({
   );
 }
 
-/* ======================= Mentions légales (ouverture via « Cookies ») ======================= */
+/* ======================= Mentions légales (ouverture via « Cookies ») ======================= */
 function LegalModal() {
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    const onEsc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
     document.addEventListener("keydown", onEsc);
     return () => document.removeEventListener("keydown", onEsc);
   }, []);
 
-  // Empêche le scroll du body lorsque la modale est ouverte
+  // Verrouille le scroll du body quand la modale est ouverte
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = prev; };
+    return () => {
+      document.body.style.overflow = prev;
+    };
   }, [open]);
 
   return (
@@ -191,37 +230,59 @@ function LegalModal() {
           <div
             ref={wrap}
             className="relative z-[101] w-full sm:max-w-3xl sm:rounded-2xl sm:border bg-white sm:p-5 p-4 shadow-2xl sm:max-h-[85vh] sm:h-auto h-[90vh] overflow-y-scroll overscroll-contain"
-            style={{ fontSize: "var(--settings-fs)", WebkitOverflowScrolling: "touch", touchAction: "pan-y" }}
+            style={{
+              fontSize: "var(--settings-fs)",
+              WebkitOverflowScrolling: "touch",
+              touchAction: "pan-y",
+            }}
           >
             <div className="flex items-start justify-between gap-4">
               <h3 className="text-base font-semibold">Mentions légales</h3>
-              <button aria-label="Fermer" className={btnGhost} onClick={() => setOpen(false)}>Fermer</button>
+              <button aria-label="Fermer" className={btnGhost} onClick={() => setOpen(false)}>
+                Fermer
+              </button>
             </div>
 
             <div className="mt-3 space-y-4 leading-relaxed">
               <section>
                 <h4 className="font-semibold">1) Éditeur du site</h4>
                 <p>
-                  <strong>Raison sociale :</strong> <span className="opacity-80">VOTRE SOCIÉTÉ</span><br/>
-                  <strong>Forme juridique :</strong> <span className="opacity-80">SAS / SARL / Auto‑entrepreneur</span><br/>
-                  <strong>Siège social :</strong> <span className="opacity-80">Adresse complète</span><br/>
-                  <strong>Capital social :</strong> <span className="opacity-80">XX XXX €</span><br/>
-                  <strong>RCS / SIREN :</strong> <span className="opacity-80">XXXXXXXXX</span><br/>
-                  <strong>TVA intracommunautaire :</strong> <span className="opacity-80">FRXXXXXXXXXX</span><br/>
-                  <strong>Contact :</strong> <span className="opacity-80">email@domaine.tld • +33 X XX XX XX XX</span>
+                  <strong>Raison sociale :</strong>{" "}
+                  <span className="opacity-80">VOTRE SOCIÉTÉ</span>
+                  <br />
+                  <strong>Forme juridique :</strong>{" "}
+                  <span className="opacity-80">SAS / SARL / Auto-entrepreneur</span>
+                  <br />
+                  <strong>Siège social :</strong>{" "}
+                  <span className="opacity-80">Adresse complète</span>
+                  <br />
+                  <strong>Capital social :</strong> <span className="opacity-80">XX XXX €</span>
+                  <br />
+                  <strong>RCS / SIREN :</strong> <span className="opacity-80">XXXXXXXXX</span>
+                  <br />
+                  <strong>TVA intracommunautaire :</strong>{" "}
+                  <span className="opacity-80">FRXXXXXXXXXX</span>
+                  <br />
+                  <strong>Contact :</strong>{" "}
+                  <span className="opacity-80">email@domaine.tld • +33 X XX XX XX XX</span>
                 </p>
               </section>
 
               <section>
                 <h4 className="font-semibold">2) Directeur·rice de la publication</h4>
-                <p><span className="opacity-80">Nom et prénom du/de la responsable légal·e.</span></p>
+                <p>
+                  <span className="opacity-80">Nom et prénom du/de la responsable légal·e.</span>
+                </p>
               </section>
 
               <section>
                 <h4 className="font-semibold">3) Hébergeur</h4>
                 <p>
-                  <strong>Nom :</strong> <span className="opacity-80">[OVH / Scaleway / Vercel / Autre]</span><br/>
-                  <strong>Adresse :</strong> <span className="opacity-80">Adresse postale</span><br/>
+                  <strong>Nom :</strong>{" "}
+                  <span className="opacity-80">[OVH / Scaleway / Vercel / Autre]</span>
+                  <br />
+                  <strong>Adresse :</strong> <span className="opacity-80">Adresse postale</span>
+                  <br />
                   <strong>Téléphone :</strong> <span className="opacity-80">Numéro</span>
                 </p>
               </section>
@@ -229,28 +290,29 @@ function LegalModal() {
               <section>
                 <h4 className="font-semibold">4) Propriété intellectuelle</h4>
                 <p className="opacity-80">
-                  Le contenu de ce site (textes, images, logos, marques, vidéos, codes, etc.) est protégé
-                  par le droit de la propriété intellectuelle. Toute reproduction, représentation, adaptation
-                  ou exploitation, totale ou partielle, est interdite sans autorisation préalable.
+                  Le contenu de ce site (textes, images, logos, marques, vidéos, codes, etc.) est
+                  protégé par le droit de la propriété intellectuelle. Toute reproduction,
+                  représentation, adaptation ou exploitation, totale ou partielle, est interdite sans
+                  autorisation préalable.
                 </p>
               </section>
 
               <section>
                 <h4 className="font-semibold">5) Données personnelles &amp; cookies</h4>
                 <p className="opacity-80">
-                  Nous utilisons des cookies et technologies similaires à des fins de fonctionnement du site,
-                  de mesure d’audience et, le cas échéant, de personnalisation. Vous pouvez à tout moment
-                  paramétrer vos choix via le bouton ci‑dessous. Pour plus d’informations, consultez notre
-                  politique de confidentialité.
+                  Nous utilisons des cookies et technologies similaires à des fins de fonctionnement
+                  du site, de mesure d’audience et, le cas échéant, de personnalisation. Vous pouvez
+                  à tout moment paramétrer vos choix via le bouton ci-dessous. Pour plus
+                  d’informations, consultez notre politique de confidentialité.
                 </p>
                 <div className="mt-2 flex flex-wrap gap-2">
                   <button
                     type="button"
                     className={btnGhost}
                     onClick={() => {
-                      // Si vous avez un CMP (ex: TCF), appelez ici l’UI de préférences
-                      // window.__tcfapi?.('showConsentManager') OU ouvrir une autre modale maison
-                      alert("Ouvrir le gestionnaire de préférences cookies (à connecter à votre CMP)");
+                      alert(
+                        "Ouvrir le gestionnaire de préférences cookies (branchez ici votre CMP si vous en avez un)."
+                      );
                     }}
                   >
                     Gérer mes préférences cookies
@@ -261,19 +323,18 @@ function LegalModal() {
                     className={btnGhost}
                     onClick={() => {
                       try {
-                        const list = document.cookie
-                          ?.split(";")
-                          .map((c) => c.trim())
-                          .filter(Boolean);
-                        const pretty = (list && list.length)
-                          ? list.map((p) => {
-                              const i = p.indexOf("=");
-                              const name = i >= 0 ? p.slice(0, i) : p;
-                              const value = i >= 0 ? decodeURIComponent(p.slice(i + 1)) : "";
-                              return `${name} = ${value}`;
-                            }).join("
-")
-                          : "Aucun cookie lisible côté client.";
+                        const list = document.cookie?.split(";").map((c) => c.trim()).filter(Boolean);
+                        const pretty =
+                          list && list.length
+                            ? list
+                                .map((p) => {
+                                  const i = p.indexOf("=");
+                                  const name = i >= 0 ? p.slice(0, i) : p;
+                                  const value = i >= 0 ? decodeURIComponent(p.slice(i + 1)) : "";
+                                  return `${name} = ${value}`;
+                                })
+                                .join("\n")
+                            : "Aucun cookie lisible côté client.";
                         alert(pretty);
                       } catch {
                         alert("Impossible de lire les cookies depuis ce contexte.");
@@ -288,21 +349,22 @@ function LegalModal() {
               <section>
                 <h4 className="font-semibold">6) Responsabilité</h4>
                 <p className="opacity-80">
-                  Nous nous efforçons d’assurer l’exactitude et la mise à jour des informations du site.
-                  Toutefois, des erreurs ou omissions peuvent survenir et l’éditeur ne saurait en être tenu
-                  pour responsable.
+                  Nous nous efforçons d’assurer l’exactitude et la mise à jour des informations du
+                  site. Toutefois, des erreurs ou omissions peuvent survenir et l’éditeur ne saurait
+                  en être tenu pour responsable.
                 </p>
               </section>
 
               <section>
                 <h4 className="font-semibold">7) Contact</h4>
                 <p className="opacity-80">
-                  Pour toute question relative aux mentions légales ou à vos données personnelles :
-                  <br/>Email : <span>email@domaine.tld</span> — Téléphone : <span>+33 X XX XX XX XX</span>
+                  Pour toute question relative aux mentions légales ou à vos données personnelles :
+                  <br />
+                  Email : <span>email@domaine.tld</span> — Téléphone : <span>+33 X XX XX XX XX</span>
                 </p>
               </section>
 
-              <p className="text-xs opacity-60">Dernière mise à jour : 30/09/2025</p>
+              <p className="text-xs opacity-60">Dernière mise à jour : 30/09/2025</p>
             </div>
           </div>
         </div>
@@ -314,7 +376,7 @@ function LegalModal() {
 /* ======================= Formulaire rappel ======================= */
 function PushScheduleForm() {
   const [time, setTime] = useState("08:00");
-  const [days, setDays] = useState<number[]>([1,2,3,4,5]);
+  const [days, setDays] = useState<number[]>([1, 2, 3, 4, 5]);
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   const save = async () => {
@@ -356,7 +418,11 @@ function PushScheduleForm() {
 }
 
 /* ======================= Préférences visuelles ======================= */
-type Prefs = { language: "fr" | "en" | "de"; theme: "light" | "dark" | "system"; reducedMotion: boolean; };
+type Prefs = {
+  language: "fr" | "en" | "de";
+  theme: "light" | "dark" | "system";
+  reducedMotion: boolean;
+};
 const LS_KEY = "app.prefs.v1";
 const DEFAULT_PREFS: Prefs = { language: "fr", theme: "system", reducedMotion: false };
 
@@ -394,7 +460,9 @@ export default function Page() {
     <div className="container" style={{ paddingTop: 24, paddingBottom: 24 }}>
       {/* Titre principal — même taille que “Bienvenue” (22px) */}
       <div className="mb-2">
-        <h1 className="h1" style={{ fontSize: 22, color: "#111827" }}>Réglages</h1>
+        <h1 className="h1" style={{ fontSize: 22, color: "#111827" }}>
+          Réglages
+        </h1>
       </div>
 
       {/* Tout le reste hérite de la petite taille */}
@@ -428,7 +496,7 @@ export default function Page() {
                   Thème
                 </h3>
                 <div className="flex flex-wrap gap-2">
-                  {(["light","dark","system"] as const).map((t) => (
+                  {(["light", "dark", "system"] as const).map((t) => (
                     <button
                       key={t}
                       type="button"
@@ -524,7 +592,6 @@ export default function Page() {
             </div>
 
             <PushScheduleForm />
-            {/* Remplace l'ancien <CookiesViewer /> par la modale Mentions Légales */}
             <LegalModal />
           </div>
         </Section>
@@ -532,4 +599,3 @@ export default function Page() {
     </div>
   );
 }
-
