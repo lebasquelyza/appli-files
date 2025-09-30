@@ -13,7 +13,15 @@ function DaysDropdown({
   value: number[]; // 1..7 (Lu..Di)
   onChange: (days: number[]) => void;
 }) {
-  const labels = ["Lu", "Ma", "Me", "Je", "Ve", "Sa", "Di"];
+  const labelsFull = [
+    "Lundi",
+    "Mardi",
+    "Mercredi",
+    "Jeudi",
+    "Vendredi",
+    "Samedi",
+    "Dimanche",
+  ];
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
 
@@ -43,19 +51,11 @@ function DaysDropdown({
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
         className="
-          inline-flex items-center gap-2 rounded-full border bg-white
+          inline-flex items-center rounded-full border bg-white
           px-4 py-2 text-sm shadow-sm hover:bg-gray-50 active:scale-[0.99] transition
         "
       >
         <span className="font-medium">Jours</span>
-        <svg
-          aria-hidden
-          className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`}
-          viewBox="0 0 20 20"
-          fill="currentColor"
-        >
-          <path d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11l3.71-3.77a.75.75 0 1 1 1.08 1.04l-4.25 4.32a.75.75 0 0 1-1.08 0L5.21 8.27a.75.75 0 0 1 .02-1.06z" />
-        </svg>
       </button>
 
       {open && (
@@ -65,7 +65,7 @@ function DaysDropdown({
           className="absolute z-50 mt-2 w-64 rounded-2xl border bg-white p-3 shadow-lg"
         >
           <ul className="space-y-2">
-            {labels.map((lbl, i) => {
+            {labelsFull.map((lbl, i) => {
               const d = i + 1; // 1..7
               const checked = value.includes(d);
               return (
@@ -85,14 +85,7 @@ function DaysDropdown({
             })}
           </ul>
 
-          <div className="mt-3 flex items-center justify-between pt-2 border-t">
-            <button
-              type="button"
-              className="px-2 py-1 text-xs rounded-full bg-gray-100 hover:bg-gray-200"
-              onClick={() => onChange([1, 2, 3, 4, 5])}
-            >
-              Lun → Ven
-            </button>
+          <div className="mt-3 flex items-center justify-end pt-2 border-t">
             <div className="flex gap-2">
               <button
                 type="button"
@@ -146,27 +139,29 @@ function PushScheduleForm() {
 
   return (
     <div className="card space-y-4">
-      <div className="space-y-1">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="font-semibold">Rappel planifié</h3>
-        <p className="text-sm" style={{ color: "var(--muted)" }}>
-          Choisis l’heure et les jours (heure locale : {tz}).
-        </p>
+
+        {/* ➜ Heure collée en haut, à côté du titre */}
+        <div className="flex items-center gap-2">
+          <label className="text-sm" style={{ color: "var(--muted)" }}>
+            Heure
+          </label>
+          <input
+            type="time"
+            value={time}
+            onChange={(e) => setTime(e.target.value)}
+            className="rounded-[10px] border px-3 py-2 text-sm"
+          />
+        </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <label className="text-sm" style={{ color: "var(--muted)" }}>
-          Heure
-        </label>
-        <input
-          type="time"
-          value={time}
-          onChange={(e) => setTime(e.target.value)}
-          className="rounded-[10px] border px-3 py-2 text-sm"
-        />
+      <p className="text-sm" style={{ color: "var(--muted)" }}>
+        Fuseau : {tz}
+      </p>
 
-        {/* Menu déroulant pour les jours */}
-        <DaysDropdown value={days} onChange={setDays} />
-      </div>
+      {/* Bouton Jours + menu déroulant */}
+      <DaysDropdown value={days} onChange={setDays} />
 
       <div className="flex items-center justify-between">
         <div className="text-xs" style={{ color: "var(--muted)" }}>
@@ -464,7 +459,7 @@ export default function Page() {
             </button>
           </div>
 
-          {/* --- Formulaire de planification (avec menu déroulant) --- */}
+          {/* --- Formulaire de planification --- */}
           <PushScheduleForm />
 
           <p className="text-xs" style={{ color: "var(--muted)" }}>
