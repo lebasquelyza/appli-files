@@ -288,8 +288,6 @@ function PushScheduleForm() {
         <TimeDropdown value={time} onChange={setTime} />
       </div>
 
-      {/* Texte d’explication supprimé ici */}
-
       <div className="flex items-center justify-end">
         {/* 👉 Celui-ci reste bien visible */}
         <button type="button" className="btn-dash" onClick={save}>
@@ -356,7 +354,8 @@ export default function Page() {
 
   return (
     <>
-      <PageHeader title="Réglages" subtitle="Préférences de l’application" />
+      {/* Sous-titre retiré */}
+      <PageHeader title="Réglages" />
 
       {/* --- Section Général --- */}
       <Section title="Général">
