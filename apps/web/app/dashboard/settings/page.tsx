@@ -282,7 +282,6 @@ function PushScheduleForm() {
         Fuseau : {tz}
       </p>
 
-      {/* Ligne: Jours (gauche) + Heure (droite) en boutons */}
       <div className="flex flex-wrap items-center gap-3">
         <DaysDropdown value={days} onChange={setDays} />
         <TimeDropdown value={time} onChange={setTime} />
@@ -347,16 +346,15 @@ export default function Page() {
     return () => clearTimeout(t);
   }, [prefs, loaded]);
 
-  // style bouton discret réutilisable
   const btnGhost =
     "rounded-full border bg-white px-4 py-2 text-sm shadow-sm hover:bg-gray-50 active:scale-[0.99] transition";
 
   return (
     <>
-      {/* --- ESPACE SUPPLÉMENTAIRE POUR DESCENDRE LE TITRE --- */}
-      <div aria-hidden className="h-6 md:h-8" />
-
-      <PageHeader title="Réglages" />
+      {/* Titre collé au premier onglet */}
+      <div className="mb-2">
+        <PageHeader title="Réglages" />
+      </div>
 
       {/* --- Section Général --- */}
       <Section title="Général">
@@ -490,4 +488,5 @@ export default function Page() {
     </>
   );
 }
+
 
