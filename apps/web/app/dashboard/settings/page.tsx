@@ -3,6 +3,92 @@
 import { useEffect, useMemo, useState } from "react";
 import { PageHeader, Section } from "@/components/ui/Page";
 
+// --- Formulaire de rappel planifié (jours + heure) ---
+function PushScheduleForm() {
+  const [time, setTime] = useState("08:00");               // HH:mm (24h)
+  const [days, setDays] = useState<number[]>([1, 2, 3, 4, 5]); // 1=Lu ... 7=Di
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+  const toggleDay = (d: number) =>
+    setDays((arr) => (arr.includes(d) ? arr.filter((x) => x !== d) : [...arr, d]));
+
+  const save = async () => {
+    try {
+      const { getDeviceId } = await import("@/lib/pushClient");
+      const deviceId = getDeviceId();
+      const res = await fetch("/api/push/prefs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deviceId, time, days, tz }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert("Sauvegarde KO: " + (j.error ?? res.status));
+        return;
+      }
+      alert("Rappel enregistré ✅");
+    } catch (e: any) {
+      alert("Erreur: " + (e?.message || String(e)));
+    }
+  };
+
+  const labels = ["Lu", "Ma", "Me", "Je", "Ve", "Sa", "Di"];
+
+  return (
+    <div className="card space-y-4">
+      <div className="space-y-1">
+        <h3 className="font-semibold">Rappel planifié</h3>
+        <p className="text-sm" style={{ color: "var(--muted)" }}>
+          Choisis les jours et l’heure locale auxquels tu veux recevoir la notification.
+        </p>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <label className="text-sm" style={{ color: "var(--muted)" }}>
+          Heure
+        </label>
+        <input
+          type="time"
+          value={time}
+          onChange={(e) => setTime(e.target.value)}
+          className="rounded-[10px] border px-3 py-2 text-sm"
+        />
+        <span className="text-xs" style={{ color: "var(--muted)" }}>
+          Fuseau détecté : {tz}
+        </span>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {labels.map((lbl, i) => {
+          const d = i + 1; // 1..7
+          const active = days.includes(d);
+          return (
+            <button
+              key={d}
+              type="button"
+              className="btn-dash"
+              aria-pressed={active}
+              onClick={() => toggleDay(d)}
+            >
+              {lbl}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="flex items-center justify-between">
+        <div className="text-xs" style={{ color: "var(--muted)" }}>
+          Jours sélectionnés :{" "}
+          {days.sort((a, b) => a - b).map((d) => labels[d - 1]).join(", ") || "aucun"}
+        </div>
+        <button type="button" className="btn-dash" onClick={save}>
+          Enregistrer le rappel
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ---- Types & constantes ----
 type Prefs = {
   language: "fr" | "en" | "de";
@@ -92,7 +178,7 @@ export default function Page() {
     <>
       <PageHeader title="Réglages" subtitle="Préférences de l’application" />
 
-      {/* --- Section Général (inchangée) --- */}
+      {/* --- Section Général --- */}
       <Section title="Général">
         <div className="space-y-6">
           {/* Intro */}
@@ -256,7 +342,6 @@ export default function Page() {
         </div>
       </Section>
 
-      {/* --- Nouvelle Section : Notifications (déplacée depuis Dashboard) --- */}
       {/* --- Section Push (beta) --- */}
       <Section title="Notifications push (beta)">
         <div className="card space-y-3">
@@ -409,6 +494,9 @@ export default function Page() {
               Envoyer un test
             </button>
           </div>
+
+          {/* --- Formulaire de planification --- */}
+          <PushScheduleForm />
 
           <p className="text-xs" style={{ color: "var(--muted)" }}>
             Si rien ne s’affiche : vérifie que le navigateur autorise les notifications, que
