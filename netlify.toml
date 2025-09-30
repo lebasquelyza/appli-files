@@ -1,10 +1,11 @@
 # netlify.toml (racine)
 
 [build]
+  # Ton app Next se trouve dans apps/web
   base    = "apps/web"
-  # Utilise npm ci pour une install strictement basée sur le package-lock.json
+  # Install stricte + build Next
   command = "npm ci --no-audit --no-fund && npm run build"
-  # Chemin de sortie relatif à base => apps/web/.next
+  # Dossier de sortie de Next relatif à base
   publish = ".next"
 
 [build.environment]
@@ -12,7 +13,13 @@
   NPM_FLAGS = "--no-audit --no-fund"
   NEXT_TELEMETRY_DISABLED = "1"
 
-  # ==== Variables d'env à définir dans le dashboard Netlify ===
+  # === VAPID (renseigne les vraies valeurs dans le dashboard Netlify) ===
+  NEXT_PUBLIC_VAPID_PUBLIC_KEY = ""
+  VAPID_PUBLIC_KEY   = ""
+  VAPID_PRIVATE_KEY  = ""
+  VAPID_SUBJECT      = "mailto:admin@example.com"
+
+  # === Tes variables existantes (met les vraies valeurs côté Netlify) ===
   OPEN_API_KEY   = ""
   NEXT_PUBLIC_SUPABASE_URL   = ""
   NEXT_PUBLIC_SUPABASE_ANON_KEY = ""
@@ -26,8 +33,13 @@
   ANALYZE_UPLOAD_BUCKET = "analyze-uploads-public"
 
 [functions]
-  external_node_modules = ["@upstash/redis", "@upstash/ratelimit"]
+  # Avec [build].base = "apps/web", tes fonctions vivent dans apps/web/netlify/functions/
   node_bundler = "esbuild"
+  external_node_modules = ["@upstash/redis", "@upstash/ratelimit", "web-push"]
+
+# (optionnel) Si tu veux stocker les fonctions à la racine, décommente la ligne suivante
+# et place tes fonctions dans netlify/functions/ :
+# directory = "../../netlify/functions"
 
 [[headers]]
   for = "/api/analyze"
@@ -38,3 +50,4 @@
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
+
