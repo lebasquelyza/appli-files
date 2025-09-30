@@ -7,7 +7,7 @@ import { PageHeader, Section } from "@/components/ui/Page";
 function useSettingsFontSize() {
   useEffect(() => {
     const fs = getComputedStyle(document.body).fontSize || "13px";
-    const num = parseFloat(fs) || 16;
+    const num = parseFloat(fs) || 13;
     const smaller = Math.max(12, Math.round(num - 2)); // ← ajuste ici (-2px ; min 12px)
     document.documentElement.style.setProperty("--settings-fs", `${smaller}px`);
   }, []);
