@@ -257,100 +257,97 @@ export default function Page() {
       </Section>
 
       {/* --- Nouvelle Section : Notifications (déplacée depuis Dashboard) --- */}
-      // --- Section Push (beta) ---
-<Section title="Notifications push (beta)">
-  <div className="card space-y-3">
-    <p className="text-sm" style={{ color: "var(--muted)" }}>
-      Fonctionnent même si l’app est fermée. Autorise les notifications puis active
-      la souscription sur cet appareil.
-    </p>
+      {/* --- Section Push (beta) --- */}
+      <Section title="Notifications push (beta)">
+        <div className="card space-y-3">
+          <p className="text-sm" style={{ color: "var(--muted)" }}>
+            Fonctionnent même si l’app est fermée. Autorise les notifications puis active
+            la souscription sur cet appareil.
+          </p>
 
-    <div className="flex flex-wrap gap-8 items-center">
-      <button
-        type="button"
-        className="btn-dash"
-        onClick={async () => {
-          // demande permission
-          if ("Notification" in window && Notification.permission === "default") {
-            await Notification.requestPermission();
-          }
-          const { ensurePushSubscription, getDeviceId } = await import("@/lib/pushClient");
-          const sub = await ensurePushSubscription(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!);
-          const deviceId = getDeviceId();
+          <div className="flex flex-wrap gap-8 items-center">
+            <button
+              type="button"
+              className="btn-dash"
+              onClick={async () => {
+                // demande permission
+                if ("Notification" in window && Notification.permission === "default") {
+                  await Notification.requestPermission();
+                }
+                const { ensurePushSubscription, getDeviceId } = await import("@/lib/pushClient");
+                const sub = await ensurePushSubscription(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!);
+                const deviceId = getDeviceId();
 
-          await fetch("/api/push/subscribe", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ deviceId, subscription: sub }),
-          });
-          alert("Notifications push activées ✅");
-        }}
-      >
-        Activer sur cet appareil
-      </button>
+                await fetch("/api/push/subscribe", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ deviceId, subscription: sub }),
+                });
+                alert("Notifications push activées ✅");
+              }}
+            >
+              Activer sur cet appareil
+            </button>
 
-      <button
-        type="button"
-        className="btn-dash"
-        onClick={async () => {
-          const { getDeviceId } = await import("@/lib/pushClient");
-          const deviceId = getDeviceId();
-          await fetch("/api/push/unsubscribe", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ deviceId }),
-          });
-          // et annule la souscription navigateur
-          const reg = await navigator.serviceWorker.ready;
-          const s = await reg.pushManager.getSubscription();
-          await s?.unsubscribe();
-          alert("Notifications push désactivées");
-        }}
-      >
-        Désactiver
-      </button>
+            <button
+              type="button"
+              className="btn-dash"
+              onClick={async () => {
+                const { getDeviceId } = await import("@/lib/pushClient");
+                const deviceId = getDeviceId();
+                await fetch("/api/push/unsubscribe", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ deviceId }),
+                });
+                // et annule la souscription navigateur
+                const reg = await navigator.serviceWorker.ready;
+                const s = await reg.pushManager.getSubscription();
+                await s?.unsubscribe();
+                alert("Notifications push désactivées");
+              }}
+            >
+              Désactiver
+            </button>
 
-      <button
-        type="button"
-        className="btn-dash"
-        onClick={async () => {
-          const { getDeviceId } = await import("@/lib/pushClient");
-          const deviceId = getDeviceId();
-          await fetch("/api/push/test", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              deviceId,
-              payload: {
-                title: "CoachFit",
-                body: "Test push : prêt·e pour 10 min ? 💪",
-                url: "/dashboard",
-              },
-            }),
-          });
-        }}
-      >
-        Envoyer un test
-      </button>
-    </div>
-
-    <p className="text-xs" style={{ color: "var(--muted)" }}>
-      Si rien ne s’affiche : vérifie que le navigateur autorise les notifications, que
-      <code> NEXT_PUBLIC_VAPID_PUBLIC_KEY </code> est bien configurée et que le service worker est actif.
-    </p>
-  </div>
-</Section>
-
-
-          {/* CTA */}
-          <div className="card flex items-center justify-between gap-4">
-            <p className="text-sm" style={{ color: "var(--muted)" }}>
-              Tu veux être notifié·e quand ces options arrivent ?
-            </p>
-            <button type="button" className="btn-dash">Me prévenir</button>
+            <button
+              type="button"
+              className="btn-dash"
+              onClick={async () => {
+                const { getDeviceId } = await import("@/lib/pushClient");
+                const deviceId = getDeviceId();
+                await fetch("/api/push/test", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    deviceId,
+                    payload: {
+                      title: "CoachFit",
+                      body: "Test push : prêt·e pour 10 min ? 💪",
+                      url: "/dashboard",
+                    },
+                  }),
+                });
+              }}
+            >
+              Envoyer un test
+            </button>
           </div>
+
+          <p className="text-xs" style={{ color: "var(--muted)" }}>
+            Si rien ne s’affiche : vérifie que le navigateur autorise les notifications, que
+            <code> NEXT_PUBLIC_VAPID_PUBLIC_KEY </code> est bien configurée et que le service worker est actif.
+          </p>
         </div>
       </Section>
+
+      {/* CTA */}
+      <div className="card flex items-center justify-between gap-4">
+        <p className="text-sm" style={{ color: "var(--muted)" }}>
+          Tu veux être notifié·e quand ces options arrivent ?
+        </p>
+        <button type="button" className="btn-dash">Me prévenir</button>
+      </div>
     </>
   );
 }
