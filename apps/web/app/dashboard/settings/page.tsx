@@ -318,56 +318,7 @@ export default function Page() {
               </div>
             </div>
 
-            {/* Format date & heure */}
-            <div className="card space-y-3">
-              <div className="space-y-1">
-                <h3 className="font-semibold">Format date & heure</h3>
-                <p className="text-sm" style={{ color: "var(--muted)" }}>
-                  Personnalise l’affichage selon tes habitudes.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-sm" style={{ color: "var(--muted)" }}>
-                    Date
-                  </label>
-                  <select
-                    className="rounded-[10px] border px-3 py-2 text-sm w-full"
-                    value={prefs.dateFormat}
-                    onChange={(e) =>
-                      setPrefs((p) => ({ ...p, dateFormat: e.target.value as Prefs["dateFormat"] }))
-                    }
-                    disabled={!loaded}
-                  >
-                    <option value="dd/mm/yyyy">JJ/MM/AAAA</option>
-                    <option value="mm/dd/yyyy">MM/JJ/AAAA</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-sm" style={{ color: "var(--muted)" }}>
-                    Heure
-                  </label>
-                  <select
-                    className="rounded-[10px] border px-3 py-2 text-sm w-full"
-                    value={prefs.timeFormat}
-                    onChange={(e) =>
-                      setPrefs((p) => ({ ...p, timeFormat: e.target.value as Prefs["timeFormat"] }))
-                    }
-                    disabled={!loaded}
-                  >
-                    <option value="24h">24h</option>
-                    <option value="12h">12h</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="text-sm">
-                <span style={{ color: "var(--muted)" }}>Aperçu&nbsp;: </span>
-                <span>{sampleDate}</span>
-              </div>
-            </div>
+         
 
             {/* Accessibilité */}
             <div className="card space-y-3">
