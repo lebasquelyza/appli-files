@@ -201,7 +201,6 @@ Règles:
       if (!r.title) return false;
       if (seen.has(r.id)) return false;
       seen.add(r.id);
-      // sécurité: exclure les allergènes demandés
       const ingLow = r.ingredients.map(i => i.toLowerCase());
       if (allergens.some(a => ingLow.includes(a))) return false;
       return true;
@@ -226,7 +225,6 @@ function personalizeFallback({
     return !allergens.some(a => ing.includes(a));
   });
   if (typeof kcal === "number" && !isNaN(kcal) && kcal > 0) {
-    // tolérance plus souple: ±15% avec plancher 75 kcal
     const tol = Math.max(75, Math.round(kcal * 0.15));
     filtered = filtered.filter(r => typeof r.kcal === "number" && Math.abs((r.kcal || 0) - kcal) <= tol);
   } else {
@@ -284,10 +282,8 @@ export default async function Page({
   const hasKcalMin = !isNaN(kcalMin) && kcalMin > 0;
   const hasKcalMax = !isNaN(kcalMax) && kcalMax > 0;
 
-  // bloc healthy commun
   const healthy = HEALTHY_BASE;
 
-  // bloc IA (réservé PLUS/PREMIUM)
   let personalized: Recipe[] = [];
   if (plan !== "BASIC") {
     const ai = await generateAIRecipes({
@@ -310,30 +306,25 @@ export default async function Page({
         });
   }
 
-  // Si vide, relâcher la contrainte calories (on garde allergènes)
   let relaxedNote: string | null = null;
   if (plan !== "BASIC" && personalized.length === 0) {
     const relaxed = personalizeFallback({
       base: HEALTHY_BASE,
-      // calories ignorées ici :
       allergens, dislikes, plan,
     });
     if (relaxed.length) {
       personalized = relaxed;
       relaxedNote = "Ajustement automatique : contrainte calories relâchée (allergènes respectés).";
     } else {
-      // Dernier filet de sécurité : proposer la base healthy taggée au plan
       personalized = HEALTHY_BASE.map(r => ({ ...r, minPlan: plan }));
       relaxedNote = "Ajustement automatique : suggestions healthy compatibles avec vos contraintes.";
     }
   }
 
-  // choisir quelques cartes à mettre en avant
   const seed = Number(searchParams?.rnd ?? "0") || 123456789;
   const healthyPick = pickRandomSeeded(healthy, 4, seed);
   const personalizedPick = pickRandomSeeded(personalized, 6, seed);
 
-  // QS gardés (pour Voir la recette)
   const qsParts: string[] = [];
   if (hasKcalTarget) qsParts.push(`kcal=${kcal}`);
   if (hasKcalMin) qsParts.push(`kcalMin=${kcalMin}`);
@@ -352,13 +343,14 @@ export default async function Page({
   return (
     <div
       className="container"
-      style={{ paddingTop: 24, paddingBottom: 32, fontSize: "var(--settings-fs, 12px)" }}  // ← taille unifiée
+      style={{ paddingTop: 24, paddingBottom: 32, fontSize: "var(--settings-fs, 12px)" }}
     >
       <div className="page-header">
         <div>
-          <h1 className="h1" style={{ fontSize: 22 }}>Recettes</h1> {/* ← titre à 22px */}
-          <p className="lead">Healthy pour tous. Pour PLUS/PREMIUM, l’IA adapte aux calories, allergies et aliments à re-travailler.</p>
-          {/* Récap filtres actifs */}
+          <h1 className="h1" style={{ fontSize: 22 }}>Recettes</h1>
+          <p className="lead">
+            Healthy pour tous. Pour PLUS/PREMIUM, l’IA adapte aux calories, allergies et aliments à re-travailler.
+          </p>
           <div className="text-xs" style={{color:"#6b7280", marginTop:8}}>
             Filtres actifs — 
             {hasKcalTarget && <> cible: ~{kcal} kcal</>}
@@ -385,61 +377,63 @@ export default async function Page({
       )}
 
       {/* Filtres */}
-    {/* Filtres */}
-<div className="section" style={{ marginTop: 12 }}>
-  <div
-    className="section-head"
-    style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}
-  >
-    <h2 style={{ margin: 0, lineHeight: 1.25 }}>Contraintes & filtres</h2>
-    {disabled && <span className="badge" style={{ lineHeight: 1 }}>Réservé PLUS/PREMIUM</span>}
-  </div>
-
-  <form action={applyFiltersAction} className="grid gap-6 lg:grid-cols-2">
-    <fieldset disabled={disabled} style={{ display: "contents" }}>
-      <div>
-        <label className="label">Cible calories (kcal)</label>
-        <input className="input" type="number" name="kcal" placeholder="ex: 600" defaultValue={hasKcalTarget ? String(kcal) : ""} />
-      </div>
-
-      <div className="grid gap-6 sm:grid-cols-2">
-        <div>
-          <label className="label">Min kcal</label>
-          <input className="input" type="number" name="kcalMin" placeholder="ex: 450" defaultValue={hasKcalMin ? String(kcalMin) : ""} />
+      <div className="section" style={{ marginTop: 12 }}>
+        <div
+          className="section-head"
+          style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}
+        >
+          <h2 style={{ margin: 0, lineHeight: 1.25 }}>Contraintes & filtres</h2>
+          {disabled && <span className="badge" style={{ lineHeight: 1 }}>Réservé PLUS/PREMIUM</span>}
         </div>
-        <div>
-          <label className="label">Max kcal</label>
-          <input className="input" type="number" name="kcalMax" placeholder="ex: 700" defaultValue={hasKcalMax ? String(kcalMax) : ""} />
-        </div>
-      </div>
 
-      <div>
-        <label className="label">Allergènes / intolérances (séparés par virgules)</label>
-        <input className="input" type="text" name="allergens" placeholder="arachide, lactose, gluten" defaultValue={allergens.join(", ")} />
-      </div>
+        <form
+          action={disabled ? undefined : applyFiltersAction}
+          onSubmit={disabled ? (e) => e.preventDefault() : undefined}
+          className="grid gap-6 lg:grid-cols-2"
+        >
+          <fieldset disabled={disabled} style={{ display:"contents" }}>
+            <div>
+              <label className="label">Cible calories (kcal)</label>
+              <input className="input" type="number" name="kcal" placeholder="ex: 600" defaultValue={hasKcalTarget ? String(kcal) : ""} />
+            </div>
+            <div className="grid gap-6 sm:grid-cols-2">
+              <div>
+                <label className="label">Min kcal</label>
+                <input className="input" type="number" name="kcalMin" placeholder="ex: 450" defaultValue={hasKcalMin ? String(kcalMin) : ""} />
+              </div>
+              <div>
+                <label className="label">Max kcal</label>
+                <input className="input" type="number" name="kcalMax" placeholder="ex: 700" defaultValue={hasKcalMax ? String(kcalMax) : ""} />
+              </div>
+            </div>
 
-      <div>
-        <label className="label">Aliments non aimés (re-travailler)</label>
-        <input className="input" type="text" name="dislikes" placeholder="brocoli, saumon, tofu..." defaultValue={dislikes.join(", ")} />
-        <div className="text-xs" style={{ color: "#6b7280", marginTop: 4 }}>
-          On les garde, mais on propose une autre façon de les cuisiner.
-        </div>
-      </div>
-    </fieldset>
+            <div>
+              <label className="label">Allergènes / intolérances (séparés par virgules)</label>
+              <input className="input" type="text" name="allergens" placeholder="arachide, lactose, gluten" defaultValue={allergens.join(", ")} />
+            </div>
 
-    <div className="flex items-center justify-between lg:col-span-2">
-      <div className="text-sm" style={{ color: "#6b7280" }}>
-        {disabled ? "Passez à PLUS pour activer les filtres." : "Ajustez les filtres puis régénérez."}
+            <div>
+              <label className="label">Aliments non aimés (re-travailler)</label>
+              <input className="input" type="text" name="dislikes" placeholder="brocoli, saumon, tofu..." defaultValue={dislikes.join(", ")} />
+              <div className="text-xs" style={{ color:"#6b7280", marginTop:4 }}>
+                On les garde, mais on propose une autre façon de les cuisiner.
+              </div>
+            </div>
+          </fieldset>
+
+          <div className="flex items-center justify-between lg:col-span-2">
+            <div className="text-sm" style={{ color: "#6b7280" }}>
+              {disabled ? "Passez à PLUS pour activer les filtres." : "Ajustez les filtres puis régénérez."}
+            </div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <a href="/dashboard/recipes" className="btn btn-outline" style={{ color: "#111" }}>
+                Réinitialiser
+              </a>
+              <button className="btn btn-dash" type="submit" disabled={disabled}>Régénérer</button>
+            </div>
+          </div>
+        </form>
       </div>
-      <div style={{ display: "flex", gap: 10 }}>
-        <a href="/dashboard/recipes" className="btn btn-outline" style={{ color: "#111" }}>
-          Réinitialiser
-        </a>
-        <button className="btn btn-dash" type="submit" disabled={disabled}>Régénérer</button>
-      </div>
-    </div>
-  </form>
-</div>
 
       {/* Healthy pour tous */}
       <section className="section" style={{ marginTop: 12 }}>
