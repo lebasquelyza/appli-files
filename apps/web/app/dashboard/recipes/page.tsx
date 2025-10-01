@@ -350,10 +350,13 @@ export default async function Page({
   const disabled = plan === "BASIC";
 
   return (
-    <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
+    <div
+      className="container"
+      style={{ paddingTop: 24, paddingBottom: 32, fontSize: "var(--settings-fs, 12px)" }}  // ← taille unifiée
+    >
       <div className="page-header">
         <div>
-          <h1 className="h1">Recettes</h1>
+          <h1 className="h1" style={{ fontSize: 22 }}>Recettes</h1> {/* ← titre à 22px */}
           <p className="lead">Healthy pour tous. Pour PLUS/PREMIUM, l’IA adapte aux calories, allergies et aliments à re-travailler.</p>
           {/* Récap filtres actifs */}
           <div className="text-xs" style={{color:"#6b7280", marginTop:8}}>
