@@ -385,57 +385,61 @@ export default async function Page({
       )}
 
       {/* Filtres */}
-     <div
-  className="section-head"
-  style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}
->
-  <h2 style={{ margin: 0, lineHeight: 1.25 }}>Contraintes & filtres</h2>
-  {disabled && <span className="badge" style={{ lineHeight: 1 }}>Réservé PLUS/PREMIUM</span>}
-</div>
-  <form action={applyFiltersAction} className="grid gap-6 lg:grid-cols-2" >
-          <fieldset disabled={disabled} style={{ display:"contents" }}>
-            <div>
-              <label className="label">Cible calories (kcal)</label>
-              <input className="input" type="number" name="kcal" placeholder="ex: 600" defaultValue={hasKcalTarget ? String(kcal) : ""} />
-            </div>
-            <div className="grid gap-6 sm:grid-cols-2">
-              <div>
-                <label className="label">Min kcal</label>
-                <input className="input" type="number" name="kcalMin" placeholder="ex: 450" defaultValue={hasKcalMin ? String(kcalMin) : ""} />
-              </div>
-              <div>
-                <label className="label">Max kcal</label>
-                <input className="input" type="number" name="kcalMax" placeholder="ex: 700" defaultValue={hasKcalMax ? String(kcalMax) : ""} />
-              </div>
-            </div>
+    {/* Filtres */}
+<div className="section" style={{ marginTop: 12 }}>
+  <div
+    className="section-head"
+    style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}
+  >
+    <h2 style={{ margin: 0, lineHeight: 1.25 }}>Contraintes & filtres</h2>
+    {disabled && <span className="badge" style={{ lineHeight: 1 }}>Réservé PLUS/PREMIUM</span>}
+  </div>
 
-            <div>
-              <label className="label">Allergènes / intolérances (séparés par virgules)</label>
-              <input className="input" type="text" name="allergens" placeholder="arachide, lactose, gluten" defaultValue={allergens.join(", ")} />
-            </div>
-
-            <div>
-              <label className="label">Aliments non aimés (re-travailler)</label>
-              <input className="input" type="text" name="dislikes" placeholder="brocoli, saumon, tofu..." defaultValue={dislikes.join(", ")} />
-              <div className="text-xs" style={{ color:"#6b7280", marginTop:4 }}>
-                On les garde, mais on propose une autre façon de les cuisiner.
-              </div>
-            </div>
-          </fieldset>
-
-          <div className="flex items-center justify-between lg:col-span-2">
-            <div className="text-sm" style={{ color: "#6b7280" }}>
-              {disabled ? "Passez à PLUS pour activer les filtres." : "Ajustez les filtres puis régénérez."}
-            </div>
-            <div style={{ display: "flex", gap: 10 }}>
-              <a href="/dashboard/recipes" className="btn btn-outline" style={{ color: "#111" }}>
-                Réinitialiser
-              </a>
-              <button className="btn btn-dash" type="submit" disabled={disabled}>Régénérer</button>
-            </div>
-          </div>
-        </form>
+  <form action={applyFiltersAction} className="grid gap-6 lg:grid-cols-2">
+    <fieldset disabled={disabled} style={{ display: "contents" }}>
+      <div>
+        <label className="label">Cible calories (kcal)</label>
+        <input className="input" type="number" name="kcal" placeholder="ex: 600" defaultValue={hasKcalTarget ? String(kcal) : ""} />
       </div>
+
+      <div className="grid gap-6 sm:grid-cols-2">
+        <div>
+          <label className="label">Min kcal</label>
+          <input className="input" type="number" name="kcalMin" placeholder="ex: 450" defaultValue={hasKcalMin ? String(kcalMin) : ""} />
+        </div>
+        <div>
+          <label className="label">Max kcal</label>
+          <input className="input" type="number" name="kcalMax" placeholder="ex: 700" defaultValue={hasKcalMax ? String(kcalMax) : ""} />
+        </div>
+      </div>
+
+      <div>
+        <label className="label">Allergènes / intolérances (séparés par virgules)</label>
+        <input className="input" type="text" name="allergens" placeholder="arachide, lactose, gluten" defaultValue={allergens.join(", ")} />
+      </div>
+
+      <div>
+        <label className="label">Aliments non aimés (re-travailler)</label>
+        <input className="input" type="text" name="dislikes" placeholder="brocoli, saumon, tofu..." defaultValue={dislikes.join(", ")} />
+        <div className="text-xs" style={{ color: "#6b7280", marginTop: 4 }}>
+          On les garde, mais on propose une autre façon de les cuisiner.
+        </div>
+      </div>
+    </fieldset>
+
+    <div className="flex items-center justify-between lg:col-span-2">
+      <div className="text-sm" style={{ color: "#6b7280" }}>
+        {disabled ? "Passez à PLUS pour activer les filtres." : "Ajustez les filtres puis régénérez."}
+      </div>
+      <div style={{ display: "flex", gap: 10 }}>
+        <a href="/dashboard/recipes" className="btn btn-outline" style={{ color: "#111" }}>
+          Réinitialiser
+        </a>
+        <button className="btn btn-dash" type="submit" disabled={disabled}>Régénérer</button>
+      </div>
+    </div>
+  </form>
+</div>
 
       {/* Healthy pour tous */}
       <section className="section" style={{ marginTop: 12 }}>
