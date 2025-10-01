@@ -44,13 +44,11 @@ function encodeB64UrlJson(data: any): string {
   const json = JSON.stringify(data);
   const B: any = (globalThis as any).Buffer;
 
-  // Node : Buffer existe
   if (typeof window === "undefined" && B?.from) {
     return B.from(json, "utf8").toString("base64")
       .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/,"");
   }
 
-  // Edge / Browser
   const bytes = new TextEncoder().encode(json);
   let bin = "";
   for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
@@ -207,7 +205,6 @@ Règles:
       if (!r.title) return false;
       if (seen.has(r.id)) return false;
       seen.add(r.id);
-      // sécurité: exclure les allergènes demandés
       const ingLow = r.ingredients.map(i => i.toLowerCase());
       if (allergens.some(a => ingLow.includes(a))) return false;
       return true;
@@ -232,7 +229,6 @@ function personalizeFallback({
     return !allergens.some(a => ing.includes(a));
   });
   if (typeof kcal === "number" && !isNaN(kcal) && kcal > 0) {
-    // tolérance ±15% (plancher 75 kcal)
     const tol = Math.max(75, Math.round(kcal * 0.15));
     filtered = filtered.filter(r => typeof r.kcal === "number" && Math.abs((r.kcal || 0) - kcal) <= tol);
   } else {
@@ -253,7 +249,7 @@ function personalizeFallback({
   return out;
 }
 
-/** ---- Server Action: appliquer filtres (AUCUNE redirection abonnement) ---- */
+/** ---- Server Action: appliquer filtres (aucune redirection abonnement) ---- */
 async function applyFiltersAction(formData: FormData): Promise<void> {
   "use server";
   const params = new URLSearchParams();
@@ -272,13 +268,13 @@ export default async function Page({
 }: {
   searchParams?: { kcal?: string; kcalMin?: string; kcalMax?: string; allergens?: string; dislikes?: string; rnd?: string };
 }) {
-  // Lecture de session en lazy (pas de redirection, jamais)
+  // Lecture session (lazy) — aucune redirection selon le plan
   let plan: Plan = "BASIC";
   try {
     const mod = await import("@/lib/session");
     const s: any = await mod.getSession().catch(() => ({}));
     plan = (s?.plan as Plan) || "BASIC";
-  } catch { /* on laisse BASIC par défaut */ }
+  } catch {}
 
   const kcal = Number(searchParams?.kcal ?? "");
   const kcalMin = Number(searchParams?.kcalMin ?? "");
@@ -290,10 +286,8 @@ export default async function Page({
   const hasKcalMin = !isNaN(kcalMin) && kcalMin > 0;
   const hasKcalMax = !isNaN(kcalMax) && kcalMax > 0;
 
-  // bloc healthy commun
   const healthy = HEALTHY_BASE;
 
-  // bloc IA (réservé PLUS/PREMIUM) — pas de redirection si BASIC
   let personalized: Recipe[] = [];
   if (plan !== "BASIC") {
     const ai = await generateAIRecipes({
@@ -316,7 +310,6 @@ export default async function Page({
         });
   }
 
-  // Si vide, relâcher la contrainte calories (on garde allergènes)
   let relaxedNote: string | null = null;
   if (plan !== "BASIC" && personalized.length === 0) {
     const relaxed = personalizeFallback({
@@ -327,18 +320,15 @@ export default async function Page({
       personalized = relaxed;
       relaxedNote = "Ajustement automatique : contrainte calories relâchée (allergènes respectés).";
     } else {
-      // Dernier filet de sécurité : proposer la base healthy taggée au plan
       personalized = HEALTHY_BASE.map(r => ({ ...r, minPlan: plan }));
       relaxedNote = "Ajustement automatique : suggestions healthy compatibles avec vos contraintes.";
     }
   }
 
-  // choisir quelques cartes à mettre en avant
   const seed = Number(searchParams?.rnd ?? "0") || 123456789;
   const healthyPick = pickRandomSeeded(healthy, 4, seed);
   const personalizedPick = pickRandomSeeded(personalized, 6, seed);
 
-  // QS gardés (pour Voir la recette)
   const qsParts: string[] = [];
   if (hasKcalTarget) qsParts.push(`kcal=${kcal}`);
   if (hasKcalMin) qsParts.push(`kcalMin=${kcalMin}`);
@@ -347,136 +337,127 @@ export default async function Page({
   if (dislikes.length) qsParts.push(`dislikes=${encodeURIComponent(dislikes.join(","))}`);
   const baseQS = qsParts.length ? `?${qsParts.join("&")}` : "";
 
-  const encode = (r: Recipe) => {
-    const b64url = encodeB64UrlJson(r);
-    return `${baseQS}${baseQS ? "&" : "?"}data=${b64url}`;
-  };
+  const encode = (r: Recipe) => `${baseQS}${baseQS ? "&" : "?"}data=${encodeB64UrlJson(r)}`;
 
   const disabled = plan === "BASIC";
 
   return (
-    <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
-      <div className="page-header">
-        <div>
-          <h1 className="h1">Recettes</h1>
-          <p className="lead">Healthy pour tous. Pour PLUS/PREMIUM, l’IA adapte aux calories, allergies et aliments à re-travailler.</p>
-          {/* Récap filtres actifs */}
-          <div className="text-xs" style={{color:"#6b7280", marginTop:8}}>
-            Filtres actifs — 
-            {hasKcalTarget && <> cible: ~{kcal} kcal</>}
-            {!hasKcalTarget && (hasKcalMin || hasKcalMax) && <> plage: {hasKcalMin? kcalMin:"…"}–{hasKcalMax? kcalMax:"…"} kcal</>}
-            {allergens.length ? <> · allergènes: {allergens.join(", ")}</> : null}
-            {dislikes.length ? <> · non aimés: {dislikes.join(", ")}</> : null}
-            {(!hasKcalTarget && !hasKcalMin && !hasKcalMax && !allergens.length && !dislikes.length) && " aucun"}
-          </div>
-        </div>
-        <div className="text-sm">
-          Votre formule : <span className="badge" style={{ marginLeft: 6 }}>{plan}</span>
-        </div>
-      </div>
+    <>
+      {/* spacer pour laisser passer le topbar FIXE (ClientTopbar, h-10 = 40px) */}
+      <div className="h-10" aria-hidden="true" />
 
-      {/* CTA upgrade pour BASIC (on affiche mais on ne redirige jamais) */}
-      {plan === "BASIC" && (
-        <div className="card" style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:12 }}>
+      <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
+        <div className="page-header">
           <div>
-            <strong>Débloquez la personnalisation IA</strong>
-            <div className="text-sm" style={{ color:"#6b7280" }}>Filtre calories, exclusions allergènes & “re-travailler” les aliments non aimés.</div>
-          </div>
-          <a className="btn btn-dash" href="/dashboard/abonnement">Passer à PLUS</a>
-        </div>
-      )}
-
-      {/* Filtres */}
-      <div className="section" style={{ marginTop: 12 }}>
-        <div className="section-head" style={{ marginBottom: 8 }}>
-          <h2>Contraintes & filtres {disabled && <span className="badge">Réservé PLUS/PREMIUM</span>}</h2>
-        </div>
-
-        <form action={applyFiltersAction} className="grid gap-6 lg:grid-cols-2" >
-          <fieldset disabled={disabled} style={{ display:"contents" }}>
-            <div>
-              <label className="label">Cible calories (kcal)</label>
-              <input className="input" type="number" name="kcal" placeholder="ex: 600" defaultValue={hasKcalTarget ? String(kcal) : ""} />
-            </div>
-            <div className="grid gap-6 sm:grid-cols-2">
-              <div>
-                <label className="label">Min kcal</label>
-                <input className="input" type="number" name="kcalMin" placeholder="ex: 450" defaultValue={hasKcalMin ? String(kcalMin) : ""} />
-              </div>
-              <div>
-                <label className="label">Max kcal</label>
-                <input className="input" type="number" name="kcalMax" placeholder="ex: 700" defaultValue={hasKcalMax ? String(kcalMax) : ""} />
-              </div>
-            </div>
-
-            <div>
-              <label className="label">Allergènes / intolérances (séparés par virgules)</label>
-              <input className="input" type="text" name="allergens" placeholder="arachide, lactose, gluten" defaultValue={allergens.join(", ")} />
-            </div>
-
-            <div>
-              <label className="label">Aliments non aimés (re-travailler)</label>
-              <input className="input" type="text" name="dislikes" placeholder="brocoli, saumon, tofu..." defaultValue={dislikes.join(", ")} />
-              <div className="text-xs" style={{ color:"#6b7280", marginTop:4 }}>
-                On les garde, mais on propose une autre façon de les cuisiner.
-              </div>
-            </div>
-          </fieldset>
-
-          <div className="flex items-center justify-between lg:col-span-2">
-            <div className="text-sm" style={{ color: "#6b7280" }}>
-              {disabled ? "Passez à PLUS pour activer les filtres." : "Ajustez les filtres puis régénérez."}
-            </div>
-            <div style={{ display: "flex", gap: 10 }}>
-              <a href="/dashboard/recipes" className="btn btn-outline" style={{ color: "#111" }}>
-                Réinitialiser
-              </a>
-              <button className="btn btn-dash" type="submit" disabled={disabled}>Régénérer</button>
+            <h1 className="h1">Recettes</h1>
+            <p className="lead">Healthy pour tous. Pour PLUS/PREMIUM, l’IA adapte aux calories, allergies et aliments à re-travailler.</p>
+            <div className="text-xs" style={{color:"#6b7280", marginTop:8}}>
+              Filtres actifs — 
+              {hasKcalTarget && <> cible: ~{kcal} kcal</>}
+              {!hasKcalTarget && (hasKcalMin || hasKcalMax) && <> plage: {hasKcalMin? kcalMin:"…"}–{hasKcalMax? kcalMax:"…"} kcal</>}
+              {allergens.length ? <> · allergènes: {allergens.join(", ")}</> : null}
+              {dislikes.length ? <> · non aimés: {dislikes.join(", ")}</> : null}
+              {(!hasKcalTarget && !hasKcalMin && !hasKcalMax && !allergens.length && !dislikes.length) && " aucun"}
             </div>
           </div>
-        </form>
-      </div>
-
-      {/* Healthy pour tous */}
-      <section className="section" style={{ marginTop: 12 }}>
-        <div className="section-head" style={{ marginBottom: 8 }}><h2>Healthy (pour tous)</h2></div>
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
-          {healthyPick.map((r) => {
-            const detailQS = encode(r);
-            return <Card key={r.id} r={r} detailQS={detailQS} />;
-          })}
+          <div className="text-sm">
+            Votre formule : <span className="badge" style={{ marginLeft: 6 }}>{plan}</span>
+          </div>
         </div>
-      </section>
 
-      {/* Personnalisées IA (affiché uniquement si plan !== BASIC) */}
-      {plan !== "BASIC" && (
-        <section className="section" style={{ marginTop: 12 }}>
+        {plan === "BASIC" && (
+          <div className="card" style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:12 }}>
+            <div>
+              <strong>Débloquez la personnalisation IA</strong>
+              <div className="text-sm" style={{ color:"#6b7280" }}>Filtre calories, exclusions allergènes & “re-travailler” les aliments non aimés.</div>
+            </div>
+            <a className="btn btn-dash" href="/dashboard/abonnement">Passer à PLUS</a>
+          </div>
+        )}
+
+        <div className="section" style={{ marginTop: 12 }}>
           <div className="section-head" style={{ marginBottom: 8 }}>
-            <h2>Recettes personnalisées (IA)</h2>
+            <h2>Contraintes & filtres {disabled && <span className="badge">Réservé PLUS/PREMIUM</span>}</h2>
           </div>
 
-          {relaxedNote && (
-            <div className="text-xs" style={{ color:"#6b7280", marginBottom:8 }}>
-              {relaxedNote}
-            </div>
-          )}
+          <form action={applyFiltersAction} className="grid gap-6 lg:grid-cols-2" >
+            <fieldset disabled={disabled} style={{ display:"contents" }}>
+              <div>
+                <label className="label">Cible calories (kcal)</label>
+                <input className="input" type="number" name="kcal" placeholder="ex: 600" defaultValue={hasKcalTarget ? String(kcal) : ""} />
+              </div>
+              <div className="grid gap-6 sm:grid-cols-2">
+                <div>
+                  <label className="label">Min kcal</label>
+                  <input className="input" type="number" name="kcalMin" placeholder="ex: 450" defaultValue={hasKcalMin ? String(kcalMin) : ""} />
+                </div>
+                <div>
+                  <label className="label">Max kcal</label>
+                  <input className="input" type="number" name="kcalMax" placeholder="ex: 700" defaultValue={hasKcalMax ? String(kcalMax) : ""} />
+                </div>
+              </div>
 
-          {personalizedPick.length ? (
-            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
-              {personalizedPick.map((r) => {
-                const detailQS = encode(r);
-                return <Card key={r.id} r={r} detailQS={detailQS} />;
-              })}
+              <div>
+                <label className="label">Allergènes / intolérances (séparés par virgules)</label>
+                <input className="input" type="text" name="allergens" placeholder="arachide, lactose, gluten" defaultValue={allergens.join(", ")} />
+              </div>
+
+              <div>
+                <label className="label">Aliments non aimés (re-travailler)</label>
+                <input className="input" type="text" name="dislikes" placeholder="brocoli, saumon, tofu..." defaultValue={dislikes.join(", ")} />
+                <div className="text-xs" style={{ color:"#6b7280", marginTop:4 }}>
+                  On les garde, mais on propose une autre façon de les cuisiner.
+                </div>
+              </div>
+            </fieldset>
+
+            <div className="flex items-center justify-between lg:col-span-2">
+              <div className="text-sm" style={{ color: "#6b7280" }}>
+                {disabled ? "Passez à PLUS pour activer les filtres." : "Ajustez les filtres puis régénérez."}
+              </div>
+              <div style={{ display: "flex", gap: 10 }}>
+                <a href="/dashboard/recipes" className="btn btn-outline" style={{ color: "#111" }}>
+                  Réinitialiser
+                </a>
+                <button className="btn btn-dash" type="submit" disabled={disabled}>Régénérer</button>
+              </div>
             </div>
-          ) : (
-            <div className="card text-sm" style={{ color:"#6b7280" }}>
-              Aucune recette correspondant exactement à vos filtres pour le moment.
-              Essayez d’élargir la plage calorique ou de réduire les exclusions.
-            </div>
-          )}
+          </form>
+        </div>
+
+        <section className="section" style={{ marginTop: 12 }}>
+          <div className="section-head" style={{ marginBottom: 8 }}><h2>Healthy (pour tous)</h2></div>
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
+            {healthyPick.map((r) => <Card key={r.id} r={r} detailQS={encode(r)} />)}
+          </div>
         </section>
-      )}
-    </div>
+
+        {plan !== "BASIC" && (
+          <section className="section" style={{ marginTop: 12 }}>
+            <div className="section-head" style={{ marginBottom: 8 }}>
+              <h2>Recettes personnalisées (IA)</h2>
+            </div>
+
+            {relaxedNote && (
+              <div className="text-xs" style={{ color:"#6b7280", marginBottom:8 }}>
+                {relaxedNote}
+              </div>
+            )}
+
+            {personalizedPick.length ? (
+              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
+                {personalizedPick.map((r) => <Card key={r.id} r={r} detailQS={encode(r)} />)}
+              </div>
+            ) : (
+              <div className="card text-sm" style={{ color:"#6b7280" }}>
+                Aucune recette correspondant exactement à vos filtres pour le moment.
+                Essayez d’élargir la plage calorique ou de réduire les exclusions.
+              </div>
+            )}
+          </section>
+        )}
+      </div>
+    </>
   );
 }
 
