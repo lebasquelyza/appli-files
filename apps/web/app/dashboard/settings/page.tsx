@@ -367,7 +367,7 @@ export default function Page() {
         </Section>
 
         {/* ======================= Section Notifications ======================= */}
-        <Section title="Notifications push (beta)">
+        <Section title="Rappel Motivation ">
           <PushScheduleForm />
         </Section>
 
