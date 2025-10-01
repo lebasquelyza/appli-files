@@ -121,7 +121,7 @@ export default async function Page({
               {ing.map((i, k) => <li key={k}>{i}</li>)}
             </ul>
           ) : (
-            <p className="text-sm" style={{ color: "#6b7280" }}>Pas d’étapes détaillées.</p>
+            <p className="text-sm" style={{ color: "#6b7280" }}>Pas d’ingrédients détaillés.</p>
           )}
         </article>
 
