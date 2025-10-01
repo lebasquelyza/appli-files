@@ -25,11 +25,13 @@ function b64urlToJson<T = any>(b64url: string): T | null {
     const b64 = (b64url + pad).replace(/-/g, "+").replace(/_/g, "/");
     const B: any = (globalThis as any).Buffer;
 
+    // Node
     if (typeof window === "undefined" && B?.from) {
       const json = B.from(b64, "base64").toString("utf8");
       return JSON.parse(json);
     }
 
+    // Edge/Browser
     const atobFn: ((s: string) => string) | undefined = (globalThis as any).atob;
     let bin: string;
     if (typeof atobFn === "function") bin = atobFn(b64);
@@ -80,10 +82,11 @@ export default async function Page({
   if (!r) {
     return (
       <>
+        {/* spacer topbar fixe */}
         <div className="h-10" aria-hidden="true" />
         <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
           <div className="section" style={{ marginTop: 12 }}>
-            <h2 style={{ marginTop: 0 }}>Recette introuvable</h2>
+            <h2 style={{ marginTop: 0, fontSize:"clamp(16px,1.9vw,18px)", lineHeight: 1.2 }}>Recette introuvable</h2>
             <p>Ouvrez la fiche depuis la liste des recettes.</p>
             <a href="/dashboard/recipes" className="btn btn-dash">← Retour aux recettes</a>
           </div>
@@ -98,14 +101,27 @@ export default async function Page({
 
   return (
     <>
-      {/* spacer pour le topbar fixe */}
+      {/* spacer topbar fixe */}
       <div className="h-10" aria-hidden="true" />
 
       <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
         <div className="page-header">
           <div>
-            <h1 className="h1">{r.title}</h1>
-            {r.subtitle && <p className="lead">{r.subtitle}</p>}
+            {/* titres plus petits + responsives */}
+            <h1
+              className="h1"
+              style={{ marginBottom: 2, fontSize: "clamp(20px, 2.2vw, 24px)", lineHeight: 1.15 }}
+            >
+              {r.title}
+            </h1>
+            {r.subtitle && (
+              <p
+                className="lead"
+                style={{ marginTop: 4, fontSize: "clamp(12px, 1.6vw, 14px)", lineHeight: 1.35, color: "#4b5563" }}
+              >
+                {r.subtitle}
+              </p>
+            )}
           </div>
           <div className="text-sm" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {typeof r.kcal === "number" && <span className="badge">{r.kcal} kcal</span>}
@@ -138,6 +154,7 @@ export default async function Page({
           </article>
         </div>
 
+        {/* Re-travailler */}
         {hasRework && (
           <article className="card" style={{ marginTop: 12 }}>
             <h3 style={{ marginTop: 0 }}>Re-travailler les aliments non aimés</h3>
