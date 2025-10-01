@@ -385,12 +385,14 @@ export default async function Page({
       )}
 
       {/* Filtres */}
-      <div className="section" style={{ marginTop: 12 }}>
-        <div className="section-head" style={{ marginBottom: 8 }}>
-          <h2>Contraintes & filtres {disabled && <span className="badge">Réservé PLUS/PREMIUM</span>}</h2>
-        </div>
-
-        <form action={applyFiltersAction} className="grid gap-6 lg:grid-cols-2" >
+     <div
+  className="section-head"
+  style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}
+>
+  <h2 style={{ margin: 0, lineHeight: 1.25 }}>Contraintes & filtres</h2>
+  {disabled && <span className="badge" style={{ lineHeight: 1 }}>Réservé PLUS/PREMIUM</span>}
+</div>
+  <form action={applyFiltersAction} className="grid gap-6 lg:grid-cols-2" >
           <fieldset disabled={disabled} style={{ display:"contents" }}>
             <div>
               <label className="label">Cible calories (kcal)</label>
