@@ -25,16 +25,22 @@ function b64urlToJson<T = any>(b64url: string): T | null {
     const b64 = (b64url + pad).replace(/-/g, "+").replace(/_/g, "/");
     const B: any = (globalThis as any).Buffer;
 
+    // Node
     if (typeof window === "undefined" && B?.from) {
       const json = B.from(b64, "base64").toString("utf8");
       return JSON.parse(json);
     }
 
+    // Edge/Browser
     const atobFn: ((s: string) => string) | undefined = (globalThis as any).atob;
     let bin: string;
-    if (typeof atobFn === "function") bin = atobFn(b64);
-    else if (B?.from) bin = B.from(b64, "base64").toString("binary");
-    else bin = "";
+    if (typeof atobFn === "function") {
+      bin = atobFn(b64);
+    } else if (B?.from) {
+      bin = B.from(b64, "base64").toString("binary");
+    } else {
+      bin = "";
+    }
     const bytes = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
     const json = new TextDecoder().decode(bytes);
@@ -79,10 +85,7 @@ export default async function Page({
 
   if (!r) {
     return (
-      <div
-        className="container"
-        style={{ paddingTop: "calc(env(safe-area-inset-top) + 24px)", paddingBottom: 32 }}
-      >
+      <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
         <div className="section" style={{ marginTop: 12 }}>
           <h2 style={{ marginTop: 0 }}>Recette introuvable</h2>
           <p>Ouvrez la fiche depuis la liste des recettes.</p>
@@ -97,10 +100,7 @@ export default async function Page({
   const hasRework = Array.isArray(r.rework) && r.rework.length > 0;
 
   return (
-    <div
-      className="container"
-      style={{ paddingTop: "calc(env(safe-area-inset-top) + 24px)", paddingBottom: 32 }}
-    >
+    <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
       <div className="page-header">
         <div>
           <h1 className="h1">{r.title}</h1>
@@ -121,7 +121,7 @@ export default async function Page({
               {ing.map((i, k) => <li key={k}>{i}</li>)}
             </ul>
           ) : (
-            <p className="text-sm" style={{ color: "#6b7280" }}>Pas d’ingrédients détaillés.</p>
+            <p className="text-sm" style={{ color: "#6b7280" }}>Pas d’étapes détaillées.</p>
           )}
         </article>
 
@@ -137,6 +137,7 @@ export default async function Page({
         </article>
       </div>
 
+      {/* Re-travailler */}
       {hasRework && (
         <article className="card" style={{ marginTop: 12 }}>
           <h3 style={{ marginTop: 0 }}>Re-travailler les aliments non aimés</h3>
