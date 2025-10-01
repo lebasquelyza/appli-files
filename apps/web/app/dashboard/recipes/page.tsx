@@ -1,5 +1,4 @@
 import { redirect } from "next/navigation";
-import { getSession } from "@/lib/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -45,13 +44,13 @@ function encodeB64UrlJson(data: any): string {
   const json = JSON.stringify(data);
   const B: any = (globalThis as any).Buffer;
 
-  // Serveur Node : Buffer existe
+  // Node : Buffer existe
   if (typeof window === "undefined" && B?.from) {
     return B.from(json, "utf8").toString("base64")
       .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/,"");
   }
 
-  // Edge / Browser : utiliser Web APIs
+  // Edge / Browser
   const bytes = new TextEncoder().encode(json);
   let bin = "";
   for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
@@ -60,10 +59,9 @@ function encodeB64UrlJson(data: any): string {
   if (typeof btoaFn === "function") {
     b64 = btoaFn(bin);
   } else if (B?.from) {
-    // Ultime filet (théorique)
     b64 = B.from(bin, "binary").toString("base64");
   } else {
-    throw new Error("Base64 encoding unsupported in this environment");
+    b64 = ""; // ne devrait pas arriver
   }
   return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/,"");
 }
@@ -213,7 +211,6 @@ Règles:
       if (!r.title) return false;
       if (seen.has(r.id)) return false;
       seen.add(r.id);
-      // sécurité: exclure les allergènes demandés
       const ingLow = r.ingredients.map(i => i.toLowerCase());
       if (allergens.some(a => ingLow.includes(a))) return false;
       return true;
@@ -238,7 +235,6 @@ function personalizeFallback({
     return !allergens.some(a => ing.includes(a));
   });
   if (typeof kcal === "number" && !isNaN(kcal) && kcal > 0) {
-    // tolérance plus souple: ±15% avec plancher 75 kcal
     const tol = Math.max(75, Math.round(kcal * 0.15));
     filtered = filtered.filter(r => typeof r.kcal === "number" && Math.abs((r.kcal || 0) - kcal) <= tol);
   } else {
@@ -262,8 +258,15 @@ function personalizeFallback({
 /** ---- Server Action: appliquer filtres ; BASIC => abonnement ---- */
 async function applyFiltersAction(formData: FormData): Promise<void> {
   "use server";
-  const s: any = await getSession().catch(() => ({}));
-  const plan: Plan = (s?.plan as Plan) || "BASIC";
+  // ⚠️ lazy import pour éviter un crash à l'import
+  let plan: Plan = "BASIC";
+  try {
+    const mod = await import("@/lib/session");
+    const s: any = await mod.getSession().catch(() => ({}));
+    plan = (s?.plan as Plan) || "BASIC";
+  } catch {
+    plan = "BASIC";
+  }
 
   const params = new URLSearchParams();
   const fields = ["kcal","kcalMin","kcalMax","allergens","dislikes"] as const;
@@ -283,8 +286,15 @@ export default async function Page({
 }: {
   searchParams?: { kcal?: string; kcalMin?: string; kcalMax?: string; allergens?: string; dislikes?: string; rnd?: string };
 }) {
-  const s: any = await getSession().catch(() => ({}));
-  const plan: Plan = (s?.plan as Plan) || "BASIC";
+  // ⚠️ lazy import pour éviter un crash à l'import
+  let plan: Plan = "BASIC";
+  try {
+    const mod = await import("@/lib/session");
+    const s: any = await mod.getSession().catch(() => ({}));
+    plan = (s?.plan as Plan) || "BASIC";
+  } catch {
+    plan = "BASIC";
+  }
 
   const kcal = Number(searchParams?.kcal ?? "");
   const kcalMin = Number(searchParams?.kcalMin ?? "");
@@ -296,10 +306,8 @@ export default async function Page({
   const hasKcalMin = !isNaN(kcalMin) && kcalMin > 0;
   const hasKcalMax = !isNaN(kcalMax) && kcalMax > 0;
 
-  // bloc healthy commun
   const healthy = HEALTHY_BASE;
 
-  // bloc IA (réservé PLUS/PREMIUM)
   let personalized: Recipe[] = [];
   if (plan !== "BASIC") {
     const ai = await generateAIRecipes({
@@ -322,30 +330,25 @@ export default async function Page({
         });
   }
 
-  // Si vide, relâcher la contrainte calories (on garde allergènes)
   let relaxedNote: string | null = null;
   if (plan !== "BASIC" && personalized.length === 0) {
     const relaxed = personalizeFallback({
       base: HEALTHY_BASE,
-      // calories ignorées ici :
       allergens, dislikes, plan,
     });
     if (relaxed.length) {
       personalized = relaxed;
       relaxedNote = "Ajustement automatique : contrainte calories relâchée (allergènes respectés).";
     } else {
-      // Dernier filet de sécurité : proposer la base healthy taggée au plan
       personalized = HEALTHY_BASE.map(r => ({ ...r, minPlan: plan }));
       relaxedNote = "Ajustement automatique : suggestions healthy compatibles avec vos contraintes.";
     }
   }
 
-  // choisir quelques cartes à mettre en avant
   const seed = Number(searchParams?.rnd ?? "0") || 123456789;
   const healthyPick = pickRandomSeeded(healthy, 4, seed);
   const personalizedPick = pickRandomSeeded(personalized, 6, seed);
 
-  // QS gardés (pour Voir la recette)
   const qsParts: string[] = [];
   if (hasKcalTarget) qsParts.push(`kcal=${kcal}`);
   if (hasKcalMin) qsParts.push(`kcalMin=${kcalMin}`);
@@ -367,7 +370,6 @@ export default async function Page({
         <div>
           <h1 className="h1">Recettes</h1>
           <p className="lead">Healthy pour tous. Pour PLUS/PREMIUM, l’IA adapte aux calories, allergies et aliments à re-travailler.</p>
-          {/* Récap filtres actifs */}
           <div className="text-xs" style={{color:"#6b7280", marginTop:8}}>
             Filtres actifs — 
             {hasKcalTarget && <> cible: ~{kcal} kcal</>}
@@ -382,7 +384,6 @@ export default async function Page({
         </div>
       </div>
 
-      {/* CTA upgrade pour BASIC */}
       {plan === "BASIC" && (
         <div className="card" style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:12 }}>
           <div>
@@ -393,7 +394,6 @@ export default async function Page({
         </div>
       )}
 
-      {/* Filtres */}
       <div className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
           <h2>Contraintes & filtres {disabled && <span className="badge">Réservé PLUS/PREMIUM</span>}</h2>
@@ -444,7 +444,6 @@ export default async function Page({
         </form>
       </div>
 
-      {/* Healthy pour tous */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}><h2>Healthy (pour tous)</h2></div>
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
@@ -455,7 +454,6 @@ export default async function Page({
         </div>
       </section>
 
-      {/* Personnalisées IA */}
       {plan !== "BASIC" && (
         <section className="section" style={{ marginTop: 12 }}>
           <div className="section-head" style={{ marginBottom: 8 }}>
@@ -516,3 +514,4 @@ function Card({ r, detailQS }: { r: Recipe; detailQS: string; }) {
     </article>
   );
 }
+
