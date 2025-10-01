@@ -1,4 +1,5 @@
 // apps/web/app/dashboard/recipes/page.tsx
+import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
 
 export const runtime = "nodejs";
@@ -244,7 +245,6 @@ export default async function Page({
 }: {
   searchParams?: { kcal?: string; kcalMin?: string; kcalMax?: string; allergens?: string; dislikes?: string; rnd?: string };
 }) {
-  // Jamais de throw ici —> la page doit toujours s’afficher
   const s: any = await getSession().catch(() => ({}));
   const plan: Plan = (s?.plan as Plan) || "BASIC";
 
@@ -368,7 +368,7 @@ export default async function Page({
         <form
           action={async (fd) => {
             "use server";
-            // Pas de redirection sauvage en BASIC : on revient sur la même page avec QS
+            // On reconstruit les QS et on REDIRIGE (fix du type: Promise<void>)
             const params = new URLSearchParams();
             const fields = ["kcal","kcalMin","kcalMax","allergens","dislikes"] as const;
             for (const f of fields) {
@@ -376,8 +376,7 @@ export default async function Page({
               if (val) params.set(f, val);
             }
             params.set("rnd", String(Date.now()));
-            // On renvoie toujours /dashboard/recipes (même en BASIC), c’est la page qui désactive le fieldset.
-            return `/dashboard/recipes?${params.toString()}`;
+            redirect(`/dashboard/recipes?${params.toString()}`);
           }}
           className="grid gap-6 lg:grid-cols-2"
         >
