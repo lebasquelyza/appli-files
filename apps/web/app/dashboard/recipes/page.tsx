@@ -1,4 +1,3 @@
-// apps/web/app/dashboard/recipes/page.tsx
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
 
@@ -23,6 +22,8 @@ type Recipe = {
 };
 
 /* ---------------- Utils ---------------- */
+function planRank(p?: Plan) { return p === "PREMIUM" ? 3 : p === "PLUS" ? 2 : 1; }
+function isUnlocked(r: Recipe, userPlan: Plan) { return planRank(userPlan) >= planRank(r.minPlan); }
 function parseCsv(value?: string | string[]): string[] {
   const raw = Array.isArray(value) ? value.join(",") : value ?? "";
   return raw.split(/[,|]/).map((s) => s.trim().toLowerCase()).filter(Boolean);
@@ -39,18 +40,23 @@ function pickRandomSeeded<T>(arr: T[], n: number, seed: number): T[] {
   return seededShuffle(arr, seed).slice(0, Math.max(0, Math.min(n, arr.length)));
 }
 
-/* ---- base64url JSON (Node safe) ---- */
+/* ---- base64url JSON (Node + Browser safe) ---- */
 function encodeB64UrlJson(data: any): string {
-  try {
-    // @ts-ignore Buffer dispo côté Node
-    const b64 = Buffer.from(JSON.stringify(data), "utf8")
-      .toString("base64")
+  const json = JSON.stringify(data);
+  if (typeof window === "undefined") {
+    // @ts-ignore Buffer côté Node
+    return Buffer.from(json, "utf8").toString("base64")
       .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/,"");
-    return b64;
-  } catch { return ""; }
+  } else {
+    const bytes = new TextEncoder().encode(json);
+    let bin = "";
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    const b64 = btoa(bin);
+    return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/,"");
+  }
 }
 
-/* ---- fallback “re-travailler” ---- */
+/* ---- dictionnaire "re-travailler" (fallback) ---- */
 const REWORK_TIPS: Record<string, string[]> = {
   "brocoli": ["Rôti au four parmesan-citron", "Wok soja-sésame", "Velouté crème légère"],
   "saumon": ["Mariné miso/soja", "Papillote citron-aneth", "Rillettes au yaourt"],
@@ -62,7 +68,7 @@ const REWORK_TIPS: Record<string, string[]> = {
   "lentilles": ["Dal coco", "Salade tiède", "Soupe carotte-cumin"],
 };
 
-/* ---- Healthy (accessible à tous) ---- */
+/* ---- base healthy (dispo pour tous) ---- */
 const HEALTHY_BASE: Recipe[] = [
   { id:"salade-quinoa", title:"Salade de quinoa croquante", subtitle:"Pois chiches, concombre, citron",
     kcal:520, timeMin:15, tags:["végétarien","sans-gluten"], goals:["equilibre"], minPlan:"BASIC",
@@ -84,7 +90,7 @@ const HEALTHY_BASE: Recipe[] = [
     ingredients:["tofu ferme","brocoli","sauce soja","ail","gingembre","graines de sésame","huile","maïzena"], steps:["Saisir, lier, napper"] },
 ];
 
-/* ========= IA (PLUS/PREMIUM) ========= */
+/* ========= Mode IA pour PLUS/PREMIUM ========= */
 async function generateAIRecipes({
   plan,
   kcal, kcalMin, kcalMax,
@@ -97,7 +103,7 @@ async function generateAIRecipes({
   count?: number;
 }): Promise<Recipe[]> {
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return []; // sans clé, on ne casse pas la page
+  if (!apiKey) return []; // fallback si pas de clé
 
   const constraints: string[] = [];
   if (typeof kcal === "number" && !isNaN(kcal) && kcal > 0) {
@@ -159,24 +165,22 @@ Règles:
     });
 
     if (!res.ok) return [];
-    const data = await res.json().catch(() => ({}));
-    const content = data?.choices?.[0]?.message?.content ?? "{}";
-
+    const data = await res.json();
     let payload: any = {};
-    try { payload = JSON.parse(content); } catch { payload = {}; }
+    try { payload = JSON.parse(data?.choices?.[0]?.message?.content ?? "{}"); } catch {}
 
     const arr: any[] = Array.isArray(payload?.recipes) ? payload.recipes : [];
     const seen = new Set<string>();
     const clean: Recipe[] = arr.map((raw) => {
       const title = String(raw?.title ?? "").trim();
-      const id = String(raw?.id || title || Math.random().toString(36).slice(2))
-        .trim().toLowerCase().replace(/[^a-z0-9-]+/g, "-");
+      const id = String(raw?.id || title || Math.random().toString(36).slice(2)).trim()
+        .toLowerCase().replace(/[^a-z0-9-]+/g, "-");
       const ingr = Array.isArray(raw?.ingredients) ? raw.ingredients.map((x: any) => String(x)) : [];
       const steps = Array.isArray(raw?.steps) ? raw.steps.map((x: any) => String(x)) : [];
       const rework: Rework[] | undefined = Array.isArray(raw?.rework)
         ? raw.rework.map((x: any) => ({
             ingredient: String(x?.ingredient || "").toLowerCase(),
-            tips: Array.isArray(x?.tips) ? x.tips.map((t: any) => String(t)) : [],
+            tips: Array.isArray(x?.tips) ? x.tips.map((t: any) => String(t)) : []
           }))
         : undefined;
       const minPlan: Plan = (plan === "PREMIUM" ? "PREMIUM" : "PLUS");
@@ -197,6 +201,7 @@ Règles:
       if (!r.title) return false;
       if (seen.has(r.id)) return false;
       seen.add(r.id);
+      // sécurité: exclure les allergènes demandés
       const ingLow = r.ingredients.map(i => i.toLowerCase());
       if (allergens.some(a => ingLow.includes(a))) return false;
       return true;
@@ -208,11 +213,12 @@ Règles:
   }
 }
 
-/* ---- fallback simple si IA vide/ko ---- */
+/* ---- fallback “personnalisation simple” si IA indisponible ---- */
 function personalizeFallback({
   base, kcal, kcalMin, kcalMax, allergens, dislikes, plan,
 }: {
-  base: Recipe[]; kcal?: number; kcalMin?: number; kcalMax?: number;
+  base: Recipe[];
+  kcal?: number; kcalMin?: number; kcalMax?: number;
   allergens: string[]; dislikes: string[]; plan: Plan;
 }): Recipe[] {
   let filtered = base.filter(r => {
@@ -220,6 +226,7 @@ function personalizeFallback({
     return !allergens.some(a => ing.includes(a));
   });
   if (typeof kcal === "number" && !isNaN(kcal) && kcal > 0) {
+    // tolérance plus souple: ±15% avec plancher 75 kcal
     const tol = Math.max(75, Math.round(kcal * 0.15));
     filtered = filtered.filter(r => typeof r.kcal === "number" && Math.abs((r.kcal || 0) - kcal) <= tol);
   } else {
@@ -229,7 +236,7 @@ function personalizeFallback({
     if (hasMax) filtered = filtered.filter(r => (r.kcal || 0) <= (kcalMax as number));
   }
   const dislikesSet = new Set(dislikes);
-  return filtered.map<Recipe>(r => {
+  const out: Recipe[] = filtered.map<Recipe>(r => {
     const ingLower = r.ingredients.map(i => i.toLowerCase());
     const hits = [...dislikesSet].filter(d => ingLower.includes(d));
     const minPlan: Plan = (plan === "PREMIUM" ? "PREMIUM" : "PLUS");
@@ -237,6 +244,25 @@ function personalizeFallback({
     const tips: Rework[] = hits.map(h => ({ ingredient: h, tips: REWORK_TIPS[h] ?? ["Changer la cuisson", "Assaisonnement différent", "Mixer/hacher pour texture"] }));
     return { ...r, minPlan, rework: tips };
   });
+  return out;
+}
+
+/** ---- Server Action: appliquer filtres ; BASIC => abonnement ---- */
+async function applyFiltersAction(formData: FormData): Promise<void> {
+  "use server";
+  const s: any = await getSession().catch(() => ({}));
+  const plan: Plan = (s?.plan as Plan) || "BASIC";
+
+  const params = new URLSearchParams();
+  const fields = ["kcal","kcalMin","kcalMax","allergens","dislikes"] as const;
+  for (const f of fields) {
+    const val = (formData.get(f) ?? "").toString().trim();
+    if (val) params.set(f, val);
+  }
+  params.set("rnd", String(Date.now()));
+
+  if (plan === "BASIC") redirect("/dashboard/abonnement");
+  redirect(`/dashboard/recipes?${params.toString()}`);
 }
 
 /* ---------------- Page ---------------- */
@@ -258,60 +284,56 @@ export default async function Page({
   const hasKcalMin = !isNaN(kcalMin) && kcalMin > 0;
   const hasKcalMax = !isNaN(kcalMax) && kcalMax > 0;
 
+  // bloc healthy commun
   const healthy = HEALTHY_BASE;
 
-  // IA: on essaie, mais la page ne casse jamais
+  // bloc IA (réservé PLUS/PREMIUM)
   let personalized: Recipe[] = [];
   if (plan !== "BASIC") {
-    try {
-      const ai = await generateAIRecipes({
-        plan,
-        kcal: hasKcalTarget ? kcal : undefined,
-        kcalMin: hasKcalMin ? kcalMin : undefined,
-        kcalMax: hasKcalMax ? kcalMax : undefined,
-        allergens, dislikes,
-        count: 16,
-      });
-      personalized = ai.length
-        ? ai
-        : personalizeFallback({
-            base: HEALTHY_BASE,
-            kcal: hasKcalTarget ? kcal : undefined,
-            kcalMin: hasKcalMin ? kcalMin : undefined,
-            kcalMax: hasKcalMax ? kcalMax : undefined,
-            allergens, dislikes, plan,
-          });
-    } catch {
-      personalized = personalizeFallback({
-        base: HEALTHY_BASE,
-        kcal: hasKcalTarget ? kcal : undefined,
-        kcalMin: hasKcalMin ? kcalMin : undefined,
-        kcalMax: hasKcalMax ? kcalMax : undefined,
-        allergens, dislikes, plan,
-      });
-    }
+    const ai = await generateAIRecipes({
+      plan,
+      kcal: hasKcalTarget ? kcal : undefined,
+      kcalMin: hasKcalMin ? kcalMin : undefined,
+      kcalMax: hasKcalMax ? kcalMax : undefined,
+      allergens, dislikes,
+      count: 16,
+    });
+
+    personalized = ai.length
+      ? ai
+      : personalizeFallback({
+          base: HEALTHY_BASE,
+          kcal: hasKcalTarget ? kcal : undefined,
+          kcalMin: hasKcalMin ? kcalMin : undefined,
+          kcalMax: hasKcalMax ? kcalMax : undefined,
+          allergens, dislikes, plan,
+        });
   }
 
-  // Si vide, relâcher calories (garde allergènes)
+  // Si vide, relâcher la contrainte calories (on garde allergènes)
   let relaxedNote: string | null = null;
   if (plan !== "BASIC" && personalized.length === 0) {
     const relaxed = personalizeFallback({
       base: HEALTHY_BASE,
+      // calories ignorées ici :
       allergens, dislikes, plan,
     });
     if (relaxed.length) {
       personalized = relaxed;
       relaxedNote = "Ajustement automatique : contrainte calories relâchée (allergènes respectés).";
     } else {
+      // Dernier filet de sécurité : proposer la base healthy taggée au plan
       personalized = HEALTHY_BASE.map(r => ({ ...r, minPlan: plan }));
       relaxedNote = "Ajustement automatique : suggestions healthy compatibles avec vos contraintes.";
     }
   }
 
+  // choisir quelques cartes à mettre en avant
   const seed = Number(searchParams?.rnd ?? "0") || 123456789;
   const healthyPick = pickRandomSeeded(healthy, 4, seed);
   const personalizedPick = pickRandomSeeded(personalized, 6, seed);
 
+  // QS gardés (pour Voir la recette)
   const qsParts: string[] = [];
   if (hasKcalTarget) qsParts.push(`kcal=${kcal}`);
   if (hasKcalMin) qsParts.push(`kcalMin=${kcalMin}`);
@@ -328,11 +350,15 @@ export default async function Page({
   const disabled = plan === "BASIC";
 
   return (
-    <div className="container" style={{ paddingTop: 24, paddingBottom: 32, fontSize: "var(--settings-fs, 12px)" }}>
+    <div
+      className="container"
+      style={{ paddingTop: 24, paddingBottom: 32, fontSize: "var(--settings-fs, 12px)" }}  // ← taille unifiée
+    >
       <div className="page-header">
         <div>
-          <h1 className="h1" style={{ fontSize: 22 }}>Recettes</h1>
+          <h1 className="h1" style={{ fontSize: 22 }}>Recettes</h1> {/* ← titre à 22px */}
           <p className="lead">Healthy pour tous. Pour PLUS/PREMIUM, l’IA adapte aux calories, allergies et aliments à re-travailler.</p>
+          {/* Récap filtres actifs */}
           <div className="text-xs" style={{color:"#6b7280", marginTop:8}}>
             Filtres actifs — 
             {hasKcalTarget && <> cible: ~{kcal} kcal</>}
@@ -347,7 +373,7 @@ export default async function Page({
         </div>
       </div>
 
-      {/* CTA upgrade pour BASIC (on ne redirige pas) */}
+      {/* CTA upgrade pour BASIC */}
       {plan === "BASIC" && (
         <div className="card" style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:12 }}>
           <div>
@@ -359,27 +385,14 @@ export default async function Page({
       )}
 
       {/* Filtres */}
-      <div className="section" style={{ marginTop: 12 }}>
-        <div className="section-head" style={{ marginBottom: 8, display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
-          <h2 style={{ margin:0, lineHeight:1.25 }}>Contraintes & filtres</h2>
-          {disabled && <span className="badge" style={{ lineHeight:1 }}>Réservé PLUS/PREMIUM</span>}
-        </div>
-
-        <form
-          action={async (fd) => {
-            "use server";
-            // On reconstruit les QS et on REDIRIGE (fix du type: Promise<void>)
-            const params = new URLSearchParams();
-            const fields = ["kcal","kcalMin","kcalMax","allergens","dislikes"] as const;
-            for (const f of fields) {
-              const val = (fd.get(f) ?? "").toString().trim();
-              if (val) params.set(f, val);
-            }
-            params.set("rnd", String(Date.now()));
-            redirect(`/dashboard/recipes?${params.toString()}`);
-          }}
-          className="grid gap-6 lg:grid-cols-2"
-        >
+     <div
+  className="section-head"
+  style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}
+>
+  <h2 style={{ margin: 0, lineHeight: 1.25 }}>Contraintes & filtres</h2>
+  {disabled && <span className="badge" style={{ lineHeight: 1 }}>Réservé PLUS/PREMIUM</span>}
+</div>
+  <form action={applyFiltersAction} className="grid gap-6 lg:grid-cols-2" >
           <fieldset disabled={disabled} style={{ display:"contents" }}>
             <div>
               <label className="label">Cible calories (kcal)</label>
@@ -429,7 +442,7 @@ export default async function Page({
         <div className="section-head" style={{ marginBottom: 8 }}><h2>Healthy (pour tous)</h2></div>
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
           {healthyPick.map((r) => {
-            const detailQS = `${baseQS}${baseQS ? "&" : "?"}data=${encodeB64UrlJson(r)}`;
+            const detailQS = encode(r);
             return <Card key={r.id} r={r} detailQS={detailQS} />;
           })}
         </div>
@@ -451,7 +464,7 @@ export default async function Page({
           {personalizedPick.length ? (
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
               {personalizedPick.map((r) => {
-                const detailQS = `${baseQS}${baseQS ? "&" : "?"}data=${encodeB64UrlJson(r)}`;
+                const detailQS = encode(r);
                 return <Card key={r.id} r={r} detailQS={detailQS} />;
               })}
             </div>
