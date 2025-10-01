@@ -25,22 +25,21 @@ function b64urlToJson<T = any>(b64url: string): T | null {
     const b64 = (b64url + pad).replace(/-/g, "+").replace(/_/g, "/");
     const B: any = (globalThis as any).Buffer;
 
-    // Serveur Node : Buffer existe
+    // Node
     if (typeof window === "undefined" && B?.from) {
       const json = B.from(b64, "base64").toString("utf8");
       return JSON.parse(json);
     }
 
-    // Edge / Browser : Web APIs
+    // Edge/Browser
     const atobFn: ((s: string) => string) | undefined = (globalThis as any).atob;
     let bin: string;
     if (typeof atobFn === "function") {
       bin = atobFn(b64);
     } else if (B?.from) {
-      // Ultime filet (théorique)
       bin = B.from(b64, "base64").toString("binary");
     } else {
-      throw new Error("Base64 decoding unsupported in this environment");
+      bin = "";
     }
     const bytes = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
@@ -138,7 +137,6 @@ export default async function Page({
         </article>
       </div>
 
-      {/* Re-travailler */}
       {hasRework && (
         <article className="card" style={{ marginTop: 12 }}>
           <h3 style={{ marginTop: 0 }}>Re-travailler les aliments non aimés</h3>
