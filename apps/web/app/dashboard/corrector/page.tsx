@@ -193,11 +193,25 @@ function makeCorrections(exo: string) {
 /* ===================== Page ===================== */
 export default function Page() {
   return (
-    <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
+    <div
+      className="container"
+      style={{
+        paddingTop: 24,
+        paddingBottom: 32,
+        fontSize: "var(--settings-fs, 12px)", // ⟵ même logique que la 1ère page
+      }}
+    >
       <div className="page-header">
         <div>
-          <h1 className="h1">Import / Enregistrement</h1>
-          <p className="lead">Filme ou importe ta vidéo, ajoute ton ressenti puis lance l’analyse IA.</p>
+          <h1
+            className="h1"
+            style={{ fontSize: 22 }} // ⟵ titre fixe 22px comme sur l’autre page
+          >
+            Import / Enregistrement
+          </h1>
+          <p className="lead">
+            Filme ou importe ta vidéo, ajoute ton ressenti puis lance l’analyse IA.
+          </p>
         </div>
       </div>
 
@@ -205,6 +219,7 @@ export default function Page() {
     </div>
   );
 }
+
 
 /* ===================== Composant principal ===================== */
 function CoachAnalyzer() {
