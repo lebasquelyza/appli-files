@@ -44,11 +44,13 @@ function encodeB64UrlJson(data: any): string {
   const json = JSON.stringify(data);
   const B: any = (globalThis as any).Buffer;
 
+  // Node
   if (typeof window === "undefined" && B?.from) {
     return B.from(json, "utf8").toString("base64")
       .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/,"");
   }
 
+  // Edge/Browser
   const bytes = new TextEncoder().encode(json);
   let bin = "";
   for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
@@ -205,6 +207,7 @@ Règles:
       if (!r.title) return false;
       if (seen.has(r.id)) return false;
       seen.add(r.id);
+      // sécurité: exclure les allergènes demandés
       const ingLow = r.ingredients.map(i => i.toLowerCase());
       if (allergens.some(a => ingLow.includes(a))) return false;
       return true;
@@ -288,7 +291,10 @@ export default async function Page({
 
   const healthy = HEALTHY_BASE;
 
+  // bloc IA (réservé PLUS/PREMIUM) — pas de redirection si BASIC
   let personalized: Recipe[] = [];
+  let relaxedNote: string | null = null;
+
   if (plan !== "BASIC") {
     const ai = await generateAIRecipes({
       plan,
@@ -308,27 +314,25 @@ export default async function Page({
           kcalMax: hasKcalMax ? kcalMax : undefined,
           allergens, dislikes, plan,
         });
-  }
 
-  let relaxedNote: string | null = null;
-  if (plan !== "BASIC" && personalized.length === 0) {
-    const relaxed = personalizeFallback({
-      base: HEALTHY_BASE,
-      allergens, dislikes, plan,
-    });
-    if (relaxed.length) {
-      personalized = relaxed;
-      relaxedNote = "Ajustement automatique : contrainte calories relâchée (allergènes respectés).";
-    } else {
-      personalized = HEALTHY_BASE.map(r => ({ ...r, minPlan: plan }));
-      relaxedNote = "Ajustement automatique : suggestions healthy compatibles avec vos contraintes.";
+    if (personalized.length === 0) {
+      const relaxed = personalizeFallback({ base: HEALTHY_BASE, allergens, dislikes, plan });
+      if (relaxed.length) {
+        personalized = relaxed;
+        relaxedNote = "Ajustement automatique : contrainte calories relâchée (allergènes respectés).";
+      } else {
+        personalized = HEALTHY_BASE.map(r => ({ ...r, minPlan: plan }));
+        relaxedNote = "Ajustement automatique : suggestions healthy compatibles avec vos contraintes.";
+      }
     }
   }
 
+  // cartes à afficher
   const seed = Number(searchParams?.rnd ?? "0") || 123456789;
   const healthyPick = pickRandomSeeded(healthy, 4, seed);
   const personalizedPick = pickRandomSeeded(personalized, 6, seed);
 
+  // QS gardés (pour Voir la recette)
   const qsParts: string[] = [];
   if (hasKcalTarget) qsParts.push(`kcal=${kcal}`);
   if (hasKcalMin) qsParts.push(`kcalMin=${kcalMin}`);
@@ -336,21 +340,33 @@ export default async function Page({
   if (allergens.length) qsParts.push(`allergens=${encodeURIComponent(allergens.join(","))}`);
   if (dislikes.length) qsParts.push(`dislikes=${encodeURIComponent(dislikes.join(","))}`);
   const baseQS = qsParts.length ? `?${qsParts.join("&")}` : "";
-
   const encode = (r: Recipe) => `${baseQS}${baseQS ? "&" : "?"}data=${encodeB64UrlJson(r)}`;
 
   const disabled = plan === "BASIC";
 
   return (
     <>
-      {/* spacer pour laisser passer le topbar FIXE (ClientTopbar, h-10 = 40px) */}
+      {/* spacer pour laisser passer le topbar FIXE (h-10 = 40px) */}
       <div className="h-10" aria-hidden="true" />
 
       <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
         <div className="page-header">
           <div>
-            <h1 className="h1">Recettes</h1>
-            <p className="lead">Healthy pour tous. Pour PLUS/PREMIUM, l’IA adapte aux calories, allergies et aliments à re-travailler.</p>
+            {/* tailles de texte ajustées (plus petites + responsives) */}
+            <h1
+              className="h1"
+              style={{ marginBottom: 2, fontSize: "clamp(20px, 2.2vw, 24px)", lineHeight: 1.15 }}
+            >
+              Recettes
+            </h1>
+            <p
+              className="lead"
+              style={{ marginTop: 4, fontSize: "clamp(12px, 1.6vw, 14px)", lineHeight: 1.35, color: "#4b5563" }}
+            >
+              Healthy pour tous. Pour PLUS/PREMIUM, l’IA adapte aux calories, allergies et aliments à re-travailler.
+            </p>
+
+            {/* Récap filtres actifs */}
             <div className="text-xs" style={{color:"#6b7280", marginTop:8}}>
               Filtres actifs — 
               {hasKcalTarget && <> cible: ~{kcal} kcal</>}
@@ -365,6 +381,7 @@ export default async function Page({
           </div>
         </div>
 
+        {/* CTA upgrade pour BASIC (affiché mais jamais de redirection auto) */}
         {plan === "BASIC" && (
           <div className="card" style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:12 }}>
             <div>
@@ -375,9 +392,21 @@ export default async function Page({
           </div>
         )}
 
+        {/* Filtres */}
         <div className="section" style={{ marginTop: 12 }}>
-          <div className="section-head" style={{ marginBottom: 8 }}>
-            <h2>Contraintes & filtres {disabled && <span className="badge">Réservé PLUS/PREMIUM</span>}</h2>
+          <div className="section-head" style={{ marginBottom: 8, display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+            <h2 style={{ margin:0, fontSize:"clamp(16px,1.9vw,18px)", lineHeight:1.2 }}>
+              Contraintes & filtres
+            </h2>
+            {/* Badge non coupé */}
+            {disabled && (
+              <span
+                className="badge"
+                style={{ display: "inline-block", whiteSpace: "nowrap", verticalAlign: "middle" }}
+              >
+                Réservé PLUS/PREMIUM
+              </span>
+            )}
           </div>
 
           <form action={applyFiltersAction} className="grid gap-6 lg:grid-cols-2" >
@@ -425,6 +454,7 @@ export default async function Page({
           </form>
         </div>
 
+        {/* Healthy pour tous */}
         <section className="section" style={{ marginTop: 12 }}>
           <div className="section-head" style={{ marginBottom: 8 }}><h2>Healthy (pour tous)</h2></div>
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
@@ -432,6 +462,7 @@ export default async function Page({
           </div>
         </section>
 
+        {/* Personnalisées IA */}
         {plan !== "BASIC" && (
           <section className="section" style={{ marginTop: 12 }}>
             <div className="section-head" style={{ marginBottom: 8 }}>
