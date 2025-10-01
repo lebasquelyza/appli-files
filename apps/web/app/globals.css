@@ -147,3 +147,62 @@ html,body{background:var(--bg); color:var(--text); font-family:var(--font-family
 .icon{
   width:18px; height:18px; display:block; fill:currentColor;
 }
+/* ===== Thème : base / dark ===== */
+html { color-scheme: light; }
+html.dark { color-scheme: dark; }
+
+/* Override des variables en mode dark */
+:root.dark{
+  --bg:#0b1220;         /* fond page */
+  --panel:#0f172a;      /* surfaces (cards, panels) */
+  --muted:#cbd5e1;      /* textes atténués */
+  --text:#e5e7eb;       /* texte principal */
+  --brand:#22c55e;      /* léger boost en dark pour le contraste */
+  --brand2:#16a34a;
+  --accent:#38bdf8;
+  --ring:rgba(59,130,246,.45);
+  --shadow:0 6px 18px rgba(0,0,0,.45);
+}
+
+/* ===== Harmonisation : utiliser les variables au lieu de couleurs figées ===== */
+
+/* Titres & lead -> suivent le thème */
+.h1{ color: var(--text); }
+.lead{ color: var(--muted); }
+
+/* Sections / Cards / Badges */
+html.dark .section,
+html.dark .card{
+  background: var(--panel);
+  border-color: #1f2937;
+}
+html.dark .badge{
+  background: #111827;           /* pastille plus sombre */
+  color: var(--text);
+  border-color: #1f2937;
+}
+
+/* Inputs & labels */
+.label{ color: var(--muted); }    /* au lieu d’un gris figé */
+html.dark .input{
+  background: #0b1220;
+  color: var(--text);
+  border-color: #1f2937;
+}
+
+/* Header / nav */
+html.dark header{
+  background: #0b1220f2;          /* équivalent de #fffffff2 en dark */
+  border-bottom-color: #1f2937;
+}
+html.dark .brand{ color: var(--text); }
+html.dark .menu a{ color: var(--text); }
+html.dark .menu a:hover{ background:#0f172a; }
+
+/* Boutons génériques (si tu n’utilises pas Tailwind ici) */
+html.dark .btn-outline{ 
+  background: transparent; 
+  color: var(--text); 
+  border-color:#334155; 
+}
+
