@@ -103,7 +103,7 @@ async function generateAIRecipes({
   count?: number;
 }): Promise<Recipe[]> {
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return []; // fallback si pas de clé
+  if (!apiKey) return [];
 
   const constraints: string[] = [];
   if (typeof kcal === "number" && !isNaN(kcal) && kcal > 0) {
@@ -351,10 +351,10 @@ export default async function Page({
           <p className="lead">
             Healthy pour tous. Pour PLUS/PREMIUM, l’IA adapte aux calories, allergies et aliments à re-travailler.
           </p>
-          <div className="text-xs" style={{color:"#6b7280", marginTop:8}}>
-            Filtres actifs — 
+          <div className="text-xs" style={{ color:"#6b7280", marginTop:8 }}>
+            Filtres actifs —
             {hasKcalTarget && <> cible: ~{kcal} kcal</>}
-            {!hasKcalTarget && (hasKcalMin || hasKcalMax) && <> plage: {hasKcalMin? kcalMin:"…"}–{hasKcalMax? kcalMax:"…"} kcal</>}
+            {!hasKcalTarget && (hasKcalMin || hasKcalMax) && <> plage: {hasKcalMin ? kcalMin : "…"}–{hasKcalMax ? kcalMax : "…"} kcal</>}
             {allergens.length ? <> · allergènes: {allergens.join(", ")}</> : null}
             {dislikes.length ? <> · non aimés: {dislikes.join(", ")}</> : null}
             {(!hasKcalTarget && !hasKcalMin && !hasKcalMax && !allergens.length && !dislikes.length) && " aucun"}
@@ -365,7 +365,6 @@ export default async function Page({
         </div>
       </div>
 
-      {/* CTA upgrade pour BASIC */}
       {plan === "BASIC" && (
         <div className="card" style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:12 }}>
           <div>
