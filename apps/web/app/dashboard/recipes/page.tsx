@@ -253,18 +253,9 @@ function personalizeFallback({
   return out;
 }
 
-/** ---- Server Action: appliquer filtres ; BASIC => abonnement (si session OK) ---- */
+/** ---- Server Action: appliquer filtres (AUCUNE redirection abonnement) ---- */
 async function applyFiltersAction(formData: FormData): Promise<void> {
   "use server";
-  let plan: Plan = "BASIC";
-  let sessionLoaded = false;
-  try {
-    const mod = await import("@/lib/session");
-    const s: any = await mod.getSession().catch(() => ({}));
-    plan = (s?.plan as Plan) || "BASIC";
-    sessionLoaded = true;
-  } catch { /* ignore */ }
-
   const params = new URLSearchParams();
   const fields = ["kcal","kcalMin","kcalMax","allergens","dislikes"] as const;
   for (const f of fields) {
@@ -272,9 +263,6 @@ async function applyFiltersAction(formData: FormData): Promise<void> {
     if (val) params.set(f, val);
   }
   params.set("rnd", String(Date.now()));
-
-  // Rediriger vers abonnement seulement si on a réellement lu la session et que le plan est BASIC
-  if (sessionLoaded && plan === "BASIC") redirect("/dashboard/abonnement");
   redirect(`/dashboard/recipes?${params.toString()}`);
 }
 
@@ -284,20 +272,13 @@ export default async function Page({
 }: {
   searchParams?: { kcal?: string; kcalMin?: string; kcalMax?: string; allergens?: string; dislikes?: string; rnd?: string };
 }) {
-  // Lecture de session (lazy) + flag pour savoir si elle est fiable
+  // Lecture de session en lazy (pas de redirection, jamais)
   let plan: Plan = "BASIC";
-  let sessionLoaded = false;
   try {
     const mod = await import("@/lib/session");
     const s: any = await mod.getSession().catch(() => ({}));
     plan = (s?.plan as Plan) || "BASIC";
-    sessionLoaded = true;
-  } catch { /* ignore, on laisse BASIC par défaut */ }
-
-  // Si la session est bien lue ET que le plan est BASIC → redirection.
-  if (sessionLoaded && plan === "BASIC") {
-    redirect("/dashboard/abonnement");
-  }
+  } catch { /* on laisse BASIC par défaut */ }
 
   const kcal = Number(searchParams?.kcal ?? "");
   const kcalMin = Number(searchParams?.kcalMin ?? "");
@@ -312,7 +293,7 @@ export default async function Page({
   // bloc healthy commun
   const healthy = HEALTHY_BASE;
 
-  // bloc IA (réservé PLUS/PREMIUM)
+  // bloc IA (réservé PLUS/PREMIUM) — pas de redirection si BASIC
   let personalized: Recipe[] = [];
   if (plan !== "BASIC") {
     const ai = await generateAIRecipes({
@@ -340,7 +321,6 @@ export default async function Page({
   if (plan !== "BASIC" && personalized.length === 0) {
     const relaxed = personalizeFallback({
       base: HEALTHY_BASE,
-      // calories ignorées ici :
       allergens, dislikes, plan,
     });
     if (relaxed.length) {
@@ -395,7 +375,7 @@ export default async function Page({
         </div>
       </div>
 
-      {/* CTA upgrade pour BASIC (s’affiche si on n’a PAS redirigé) */}
+      {/* CTA upgrade pour BASIC (on affiche mais on ne redirige jamais) */}
       {plan === "BASIC" && (
         <div className="card" style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:12 }}>
           <div>
@@ -468,7 +448,7 @@ export default async function Page({
         </div>
       </section>
 
-      {/* Personnalisées IA */}
+      {/* Personnalisées IA (affiché uniquement si plan !== BASIC) */}
       {plan !== "BASIC" && (
         <section className="section" style={{ marginTop: 12 }}>
           <div className="section-head" style={{ marginBottom: 8 }}>
@@ -529,4 +509,3 @@ function Card({ r, detailQS }: { r: Recipe; detailQS: string; }) {
     </article>
   );
 }
-
