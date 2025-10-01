@@ -18,21 +18,33 @@ type Recipe = {
   rework?: Rework[];
 };
 
-/* ---- b64url -> JSON (Node + Browser) ---- */
+/* ---- b64url -> JSON (Node + Edge + Browser safe) ---- */
 function b64urlToJson<T = any>(b64url: string): T | null {
   try {
     const pad = "=".repeat((4 - (b64url.length % 4)) % 4);
     const b64 = (b64url + pad).replace(/-/g, "+").replace(/_/g, "/");
-    let json = "";
-    if (typeof window === "undefined") {
-      // @ts-ignore Buffer dispo côté Node
-      json = Buffer.from(b64, "base64").toString("utf8");
-    } else {
-      const bin = atob(b64);
-      const bytes = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-      json = new TextDecoder().decode(bytes);
+    const B: any = (globalThis as any).Buffer;
+
+    // Serveur Node : Buffer existe
+    if (typeof window === "undefined" && B?.from) {
+      const json = B.from(b64, "base64").toString("utf8");
+      return JSON.parse(json);
     }
+
+    // Edge / Browser : Web APIs
+    const atobFn: ((s: string) => string) | undefined = (globalThis as any).atob;
+    let bin: string;
+    if (typeof atobFn === "function") {
+      bin = atobFn(b64);
+    } else if (B?.from) {
+      // Ultime filet (théorique)
+      bin = B.from(b64, "base64").toString("binary");
+    } else {
+      throw new Error("Base64 decoding unsupported in this environment");
+    }
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const json = new TextDecoder().decode(bytes);
     return JSON.parse(json);
   } catch { return null; }
 }
@@ -151,4 +163,4 @@ export default async function Page({
       </div>
     </div>
   );
-} 
+}
