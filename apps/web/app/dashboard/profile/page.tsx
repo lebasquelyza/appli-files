@@ -188,11 +188,23 @@ export default async function Page({
   const defaultDate = toYMD();
 
   return (
-    <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
+    <div
+      className="container"
+      style={{
+        paddingTop: 24,
+        paddingBottom: 32,
+        fontSize: "var(--settings-fs, 12px)", // ⟵ même taille héritée que la 1ʳᵉ page
+      }}
+    >
       {/* Header */}
       <div className="page-header">
         <div>
-          <h1 className="h1">Mon profil</h1>
+          <h1
+            className="h1"
+            style={{ fontSize: 22 }} // ⟵ titre principal fixé à 22px
+          >
+            Mon profil
+          </h1>
           <p className="lead">Gérez vos séances et gardez un historique clair de votre entraînement.</p>
         </div>
         {/* Bouton secondaire : noir sur blanc */}
