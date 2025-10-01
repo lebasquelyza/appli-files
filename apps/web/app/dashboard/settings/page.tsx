@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Section } from "@/components/ui/Page";
 
 /* ======================= Police responsive ======================= */
@@ -11,6 +11,19 @@ function useSettingsFontSize() {
     const smaller = Math.max(11, Math.round(num - 4));
     document.documentElement.style.setProperty("--settings-fs", `${smaller}px`);
   }, []);
+}
+
+/* ======================= Helpers thème ======================= */
+/** Applique la classe `dark` + l’attribut `data-theme` sur <html> */
+function applyThemeToRoot(isDark: boolean) {
+  const root = document.documentElement;
+  root.classList.toggle("dark", isDark);
+  root.setAttribute("data-theme", isDark ? "dark" : "light");
+}
+
+/** Retourne true si le système est en dark */
+function getSystemPrefersDark() {
+  return window.matchMedia?.("(prefers-color-scheme: dark)")?.matches ?? false;
 }
 
 /* ======================= Styles boutons ======================= */
@@ -298,29 +311,59 @@ export default function Page() {
   const [prefs, setPrefs] = useState<Prefs>(DEFAULT_PREFS);
   const [loaded, setLoaded] = useState(false);
 
-  useEffect(() => {
+  // 1) Lecture initiale + application immédiate du thème AVANT paint (réduction du flash)
+  useLayoutEffect(() => {
+    let initial: Prefs = DEFAULT_PREFS;
     try {
       const raw = localStorage.getItem(LS_KEY);
-      if (raw) setPrefs({ ...DEFAULT_PREFS, ...JSON.parse(raw) });
+      if (raw) initial = { ...DEFAULT_PREFS, ...JSON.parse(raw) };
     } catch {}
+    setPrefs(initial);
+
+    const isDark =
+      initial.theme === "dark" ||
+      (initial.theme === "system" && getSystemPrefersDark());
+    applyThemeToRoot(isDark);
+
     setLoaded(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 2) Persistance + (ré)application du thème à chaque changement
   useEffect(() => {
     if (!loaded) return;
-    const root = document.documentElement;
-    const systemDark = window.matchMedia?.("(prefers-color-scheme: dark)").matches;
-    const isDark = prefs.theme === "dark" || (prefs.theme === "system" && systemDark);
-    root.classList.toggle("dark", isDark);
-    root.setAttribute("data-theme", isDark ? "dark" : "light");
-    root.setAttribute("lang", prefs.language);
-    localStorage.setItem(LS_KEY, JSON.stringify(prefs));
+    try {
+      localStorage.setItem(LS_KEY, JSON.stringify(prefs));
+    } catch {}
+    const isDark =
+      prefs.theme === "dark" ||
+      (prefs.theme === "system" && getSystemPrefersDark());
+    applyThemeToRoot(isDark);
   }, [prefs, loaded]);
+
+  // 3) Écoute les changements système quand le mode = "system"
+  useEffect(() => {
+    if (!loaded) return;
+    const mql = window.matchMedia?.("(prefers-color-scheme: dark)");
+    if (!mql) return;
+
+    const onChange = () => {
+      if (prefs.theme === "system") {
+        applyThemeToRoot(mql.matches);
+      }
+    };
+    mql.addEventListener?.("change", onChange);
+    return () => mql.removeEventListener?.("change", onChange);
+  }, [prefs.theme, loaded]);
 
   return (
     <div className="container" style={{ paddingTop: 24, paddingBottom: 24 }}>
       <div className="mb-2">
-        <h1 className="h1" style={{ fontSize: 22, color: "#111827" }}>
+        {/* H1 harmonisé avec tes autres pages */}
+        <h1
+          className="h1"
+          style={{ fontSize: "clamp(20px, 2.2vw, 24px)", lineHeight: 1.15, color: "#111827" }}
+        >
           Réglages
         </h1>
       </div>
