@@ -191,11 +191,21 @@ export default async function Page({
 
   return (
     <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
-      {/* Header (même style que Recettes) */}
+      {/* Header (mêmes tailles que “Recettes”) */}
       <div className="page-header">
         <div>
-          <h1 className="h1">Mes progrès</h1>
-          <p className="lead">Ajoutez vos pas, vos charges et votre poids. Vos données restent en local (cookie).</p>
+          <h1
+            className="h1"
+            style={{ marginBottom: 2, fontSize: "clamp(20px, 2.2vw, 24px)", lineHeight: 1.15 }}
+          >
+            Mes progrès
+          </h1>
+          <p
+            className="lead"
+            style={{ marginTop: 4, fontSize: "clamp(12px, 1.6vw, 14px)", lineHeight: 1.35, color: "#4b5563" }}
+          >
+            Ajoutez vos pas, vos charges et votre poids. Vos données restent en local (cookie).
+          </p>
         </div>
         <a
           href="/dashboard"
@@ -225,10 +235,10 @@ export default async function Page({
         )}
       </div>
 
-      {/* === 1) Section Formulaire (comme “Filtres” sur Recettes) === */}
+      {/* === 1) Section Formulaire === */}
       <div className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
-          <h2>Ajouter une entrée</h2>
+          <h2 style={{ margin: 0, fontSize: "clamp(16px, 1.9vw, 18px)", lineHeight: 1.2 }}>Ajouter une entrée</h2>
         </div>
 
         <div className="card">
@@ -275,7 +285,7 @@ export default async function Page({
       {/* === 2) Semaine en cours (card) === */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h2>Pas — semaine en cours</h2>
+          <h2 style={{ margin: 0, fontSize: "clamp(16px, 1.9vw, 18px)", lineHeight: 1.2 }}>Pas — semaine en cours</h2>
           <span className="text-xs" style={{ color: "#6b7280" }}>Semaine = lundi → dimanche</span>
         </div>
 
@@ -317,14 +327,14 @@ export default async function Page({
       {/* === 3) Dernières valeurs (cards en grille) === */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
-          <h2>Dernières valeurs</h2>
+          <h2 style={{ margin: 0, fontSize: "clamp(16px, 1.9vw, 18px)", lineHeight: 1.2 }}>Dernières valeurs</h2>
         </div>
 
         <div className="grid gap-6 lg:grid-cols-3">
           {/* Pas */}
           <article className="card">
             <div className="flex items-center justify-between">
-              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>Pas</h3>
+              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>Pas</h3>
               <span className="badge">Steps</span>
             </div>
             {lastByType.steps ? (
@@ -340,7 +350,7 @@ export default async function Page({
           {/* Charges */}
           <article className="card">
             <div className="flex items-center justify-between">
-              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>Charges</h3>
+              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>Charges</h3>
               <span className="badge">Load</span>
             </div>
             {lastByType.load ? (
@@ -358,7 +368,7 @@ export default async function Page({
           {/* Poids */}
           <article className="card">
             <div className="flex items-center justify-between">
-              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>Poids</h3>
+              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>Poids</h3>
               <span className="badge">Weight</span>
             </div>
             {lastByType.weight ? (
@@ -376,7 +386,7 @@ export default async function Page({
       {/* === 4) Entrées récentes (liste en cartes) === */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
-          <h2>Entrées récentes</h2>
+          <h2 style={{ margin: 0, fontSize: "clamp(16px, 1.9vw, 18px)", lineHeight: 1.2 }}>Entrées récentes</h2>
         </div>
 
         {recent.length === 0 ? (
@@ -388,7 +398,7 @@ export default async function Page({
             {recent.map((e) => (
               <article key={e.id} className="card" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 <div className="flex items-center justify-between">
-                  <strong style={{ fontSize: 16 }}>
+                  <strong style={{ fontSize: 18 }}>
                     {e.type === "steps" && "Pas"}
                     {e.type === "load" && "Charges"}
                     {e.type === "weight" && "Poids"}
