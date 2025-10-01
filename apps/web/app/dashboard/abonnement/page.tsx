@@ -92,7 +92,17 @@ export default async function Page({ searchParams }: { searchParams?: { success?
     : (basePrice + (CPLUS[option]?.extra ?? 0));
 
   return (
-    <div className="container" style={{ paddingTop:24, paddingBottom:32 }}>
+    <div
+      className="container"
+      style={{ paddingTop:24, paddingBottom:32, fontSize: "var(--settings-fs, 12px)" }}
+    >
+      {/* Titre principal */}
+      <div className="page-header">
+        <div>
+          <h1 className="h1" style={{ fontSize: 22 }}>Abonnements</h1>
+        </div>
+      </div>
+
       {/* Bandeau compact en haut */}
       <section className="section" style={{ marginTop: 0 }}>
         <div className="card" style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:12 }}>
@@ -239,3 +249,4 @@ export default async function Page({ searchParams }: { searchParams?: { success?
     </div>
   );
 }
+
