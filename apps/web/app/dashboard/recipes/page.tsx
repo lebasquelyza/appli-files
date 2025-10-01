@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation";
+// apps/web/app/dashboard/recipes/page.tsx
 import { getSession } from "@/lib/session";
 
 export const runtime = "nodejs";
@@ -38,28 +38,18 @@ function pickRandomSeeded<T>(arr: T[], n: number, seed: number): T[] {
   return seededShuffle(arr, seed).slice(0, Math.max(0, Math.min(n, arr.length)));
 }
 
-/* ---- base64url JSON (Node + Browser safe) ---- */
+/* ---- base64url JSON (Node safe) ---- */
 function encodeB64UrlJson(data: any): string {
   try {
-    const json = JSON.stringify(data);
-    if (typeof window === "undefined") {
-      // @ts-ignore Buffer côté Node
-      return Buffer.from(json, "utf8").toString("base64")
-        .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/,"");
-    } else {
-      const bytes = new TextEncoder().encode(json);
-      let bin = "";
-      for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-      const b64 = btoa(bin);
-      return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/,"");
-    }
-  } catch {
-    // Filet de sécurité : si l'encodage échoue, on renvoie une petite charge utile compacte
-    return "";
-  }
+    // @ts-ignore Buffer dispo côté Node
+    const b64 = Buffer.from(JSON.stringify(data), "utf8")
+      .toString("base64")
+      .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/,"");
+    return b64;
+  } catch { return ""; }
 }
 
-/* ---- dictionnaire "re-travailler" (fallback) ---- */
+/* ---- fallback “re-travailler” ---- */
 const REWORK_TIPS: Record<string, string[]> = {
   "brocoli": ["Rôti au four parmesan-citron", "Wok soja-sésame", "Velouté crème légère"],
   "saumon": ["Mariné miso/soja", "Papillote citron-aneth", "Rillettes au yaourt"],
@@ -71,7 +61,7 @@ const REWORK_TIPS: Record<string, string[]> = {
   "lentilles": ["Dal coco", "Salade tiède", "Soupe carotte-cumin"],
 };
 
-/* ---- base healthy (dispo pour tous) ---- */
+/* ---- Healthy (accessible à tous) ---- */
 const HEALTHY_BASE: Recipe[] = [
   { id:"salade-quinoa", title:"Salade de quinoa croquante", subtitle:"Pois chiches, concombre, citron",
     kcal:520, timeMin:15, tags:["végétarien","sans-gluten"], goals:["equilibre"], minPlan:"BASIC",
@@ -93,7 +83,7 @@ const HEALTHY_BASE: Recipe[] = [
     ingredients:["tofu ferme","brocoli","sauce soja","ail","gingembre","graines de sésame","huile","maïzena"], steps:["Saisir, lier, napper"] },
 ];
 
-/* ========= Mode IA pour PLUS/PREMIUM ========= */
+/* ========= IA (PLUS/PREMIUM) ========= */
 async function generateAIRecipes({
   plan,
   kcal, kcalMin, kcalMax,
@@ -106,7 +96,7 @@ async function generateAIRecipes({
   count?: number;
 }): Promise<Recipe[]> {
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return []; // fallback si pas de clé
+  if (!apiKey) return []; // sans clé, on ne casse pas la page
 
   const constraints: string[] = [];
   if (typeof kcal === "number" && !isNaN(kcal) && kcal > 0) {
@@ -168,21 +158,24 @@ Règles:
     });
 
     if (!res.ok) return [];
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
+    const content = data?.choices?.[0]?.message?.content ?? "{}";
+
     let payload: any = {};
-    try { payload = JSON.parse(data?.choices?.[0]?.message?.content ?? "{}"); } catch {}
+    try { payload = JSON.parse(content); } catch { payload = {}; }
+
     const arr: any[] = Array.isArray(payload?.recipes) ? payload.recipes : [];
     const seen = new Set<string>();
     const clean: Recipe[] = arr.map((raw) => {
       const title = String(raw?.title ?? "").trim();
-      const id = String(raw?.id || title || Math.random().toString(36).slice(2)).trim()
-        .toLowerCase().replace(/[^a-z0-9-]+/g, "-");
+      const id = String(raw?.id || title || Math.random().toString(36).slice(2))
+        .trim().toLowerCase().replace(/[^a-z0-9-]+/g, "-");
       const ingr = Array.isArray(raw?.ingredients) ? raw.ingredients.map((x: any) => String(x)) : [];
       const steps = Array.isArray(raw?.steps) ? raw.steps.map((x: any) => String(x)) : [];
       const rework: Rework[] | undefined = Array.isArray(raw?.rework)
         ? raw.rework.map((x: any) => ({
             ingredient: String(x?.ingredient || "").toLowerCase(),
-            tips: Array.isArray(x?.tips) ? x.tips.map((t: any) => String(t)) : []
+            tips: Array.isArray(x?.tips) ? x.tips.map((t: any) => String(t)) : [],
           }))
         : undefined;
       const minPlan: Plan = (plan === "PREMIUM" ? "PREMIUM" : "PLUS");
@@ -214,12 +207,11 @@ Règles:
   }
 }
 
-/* ---- fallback “personnalisation simple” si IA indisponible ---- */
+/* ---- fallback simple si IA vide/ko ---- */
 function personalizeFallback({
   base, kcal, kcalMin, kcalMax, allergens, dislikes, plan,
 }: {
-  base: Recipe[];
-  kcal?: number; kcalMin?: number; kcalMax?: number;
+  base: Recipe[]; kcal?: number; kcalMin?: number; kcalMax?: number;
   allergens: string[]; dislikes: string[]; plan: Plan;
 }): Recipe[] {
   let filtered = base.filter(r => {
@@ -236,7 +228,7 @@ function personalizeFallback({
     if (hasMax) filtered = filtered.filter(r => (r.kcal || 0) <= (kcalMax as number));
   }
   const dislikesSet = new Set(dislikes);
-  const out: Recipe[] = filtered.map<Recipe>(r => {
+  return filtered.map<Recipe>(r => {
     const ingLower = r.ingredients.map(i => i.toLowerCase());
     const hits = [...dislikesSet].filter(d => ingLower.includes(d));
     const minPlan: Plan = (plan === "PREMIUM" ? "PREMIUM" : "PLUS");
@@ -244,25 +236,6 @@ function personalizeFallback({
     const tips: Rework[] = hits.map(h => ({ ingredient: h, tips: REWORK_TIPS[h] ?? ["Changer la cuisson", "Assaisonnement différent", "Mixer/hacher pour texture"] }));
     return { ...r, minPlan, rework: tips };
   });
-  return out;
-}
-
-/** ---- Server Action: appliquer filtres ; BASIC => abonnement ---- */
-async function applyFiltersAction(formData: FormData): Promise<void> {
-  "use server";
-  const s: any = await getSession().catch(() => ({}));
-  const plan: Plan = (s?.plan as Plan) || "BASIC";
-
-  const params = new URLSearchParams();
-  const fields = ["kcal","kcalMin","kcalMax","allergens","dislikes"] as const;
-  for (const f of fields) {
-    const val = (formData.get(f) ?? "").toString().trim();
-    if (val) params.set(f, val);
-  }
-  params.set("rnd", String(Date.now()));
-
-  if (plan === "BASIC") redirect("/dashboard/abonnement");
-  redirect(`/dashboard/recipes?${params.toString()}`);
 }
 
 /* ---------------- Page ---------------- */
@@ -271,256 +244,228 @@ export default async function Page({
 }: {
   searchParams?: { kcal?: string; kcalMin?: string; kcalMax?: string; allergens?: string; dislikes?: string; rnd?: string };
 }) {
-  try {
-    const s: any = await getSession().catch(() => ({}));
-    const plan: Plan = (s?.plan as Plan) || "BASIC";
+  // Jamais de throw ici —> la page doit toujours s’afficher
+  const s: any = await getSession().catch(() => ({}));
+  const plan: Plan = (s?.plan as Plan) || "BASIC";
 
-    const kcal = Number(searchParams?.kcal ?? "");
-    const kcalMin = Number(searchParams?.kcalMin ?? "");
-    const kcalMax = Number(searchParams?.kcalMax ?? "");
-    const allergens = parseCsv(searchParams?.allergens);
-    const dislikes = parseCsv(searchParams?.dislikes);
+  const kcal = Number(searchParams?.kcal ?? "");
+  const kcalMin = Number(searchParams?.kcalMin ?? "");
+  const kcalMax = Number(searchParams?.kcalMax ?? "");
+  const allergens = parseCsv(searchParams?.allergens);
+  const dislikes = parseCsv(searchParams?.dislikes);
 
-    const hasKcalTarget = !isNaN(kcal) && kcal > 0;
-    const hasKcalMin = !isNaN(kcalMin) && kcalMin > 0;
-    const hasKcalMax = !isNaN(kcalMax) && kcalMax > 0;
+  const hasKcalTarget = !isNaN(kcal) && kcal > 0;
+  const hasKcalMin = !isNaN(kcalMin) && kcalMin > 0;
+  const hasKcalMax = !isNaN(kcalMax) && kcalMax > 0;
 
-    const healthy = HEALTHY_BASE;
+  const healthy = HEALTHY_BASE;
 
-    // Bloc IA (protégé par try/catch)
-    let personalized: Recipe[] = [];
-    if (plan !== "BASIC") {
-      try {
-        const ai = await generateAIRecipes({
-          plan,
-          kcal: hasKcalTarget ? kcal : undefined,
-          kcalMin: hasKcalMin ? kcalMin : undefined,
-          kcalMax: hasKcalMax ? kcalMax : undefined,
-          allergens, dislikes,
-          count: 16,
-        });
-
-        personalized = ai.length
-          ? ai
-          : personalizeFallback({
-              base: HEALTHY_BASE,
-              kcal: hasKcalTarget ? kcal : undefined,
-              kcalMin: hasKcalMin ? kcalMin : undefined,
-              kcalMax: hasKcalMax ? kcalMax : undefined,
-              allergens, dislikes, plan,
-            });
-      } catch {
-        personalized = personalizeFallback({
-          base: HEALTHY_BASE,
-          kcal: hasKcalTarget ? kcal : undefined,
-          kcalMin: hasKcalMin ? kcalMin : undefined,
-          kcalMax: hasKcalMax ? kcalMax : undefined,
-          allergens, dislikes, plan,
-        });
-      }
-    }
-
-    // Si vide, relâcher la contrainte calories (on garde allergènes)
-    let relaxedNote: string | null = null;
-    if (plan !== "BASIC" && personalized.length === 0) {
-      const relaxed = personalizeFallback({
+  // IA: on essaie, mais la page ne casse jamais
+  let personalized: Recipe[] = [];
+  if (plan !== "BASIC") {
+    try {
+      const ai = await generateAIRecipes({
+        plan,
+        kcal: hasKcalTarget ? kcal : undefined,
+        kcalMin: hasKcalMin ? kcalMin : undefined,
+        kcalMax: hasKcalMax ? kcalMax : undefined,
+        allergens, dislikes,
+        count: 16,
+      });
+      personalized = ai.length
+        ? ai
+        : personalizeFallback({
+            base: HEALTHY_BASE,
+            kcal: hasKcalTarget ? kcal : undefined,
+            kcalMin: hasKcalMin ? kcalMin : undefined,
+            kcalMax: hasKcalMax ? kcalMax : undefined,
+            allergens, dislikes, plan,
+          });
+    } catch {
+      personalized = personalizeFallback({
         base: HEALTHY_BASE,
+        kcal: hasKcalTarget ? kcal : undefined,
+        kcalMin: hasKcalMin ? kcalMin : undefined,
+        kcalMax: hasKcalMax ? kcalMax : undefined,
         allergens, dislikes, plan,
       });
-      if (relaxed.length) {
-        personalized = relaxed;
-        relaxedNote = "Ajustement automatique : contrainte calories relâchée (allergènes respectés).";
-      } else {
-        personalized = HEALTHY_BASE.map(r => ({ ...r, minPlan: plan }));
-        relaxedNote = "Ajustement automatique : suggestions healthy compatibles avec vos contraintes.";
-      }
     }
-
-    // Sélections
-    const seed = Number(searchParams?.rnd ?? "0") || 123456789;
-    const healthyPick = pickRandomSeeded(healthy, 4, seed);
-    const personalizedPick = pickRandomSeeded(personalized, 6, seed);
-
-    // QS pour “Voir la recette”
-    const qsParts: string[] = [];
-    if (hasKcalTarget) qsParts.push(`kcal=${kcal}`);
-    if (hasKcalMin) qsParts.push(`kcalMin=${kcalMin}`);
-    if (hasKcalMax) qsParts.push(`kcalMax=${kcalMax}`);
-    if (allergens.length) qsParts.push(`allergens=${encodeURIComponent(allergens.join(","))}`);
-    if (dislikes.length) qsParts.push(`dislikes=${encodeURIComponent(dislikes.join(","))}`);
-    const baseQS = qsParts.length ? `?${qsParts.join("&")}` : "";
-    const encode = (r: Recipe) => {
-      const b64url = encodeB64UrlJson(r);
-      return `${baseQS}${baseQS ? "&" : "?"}data=${b64url}`;
-    };
-
-    const disabled = plan === "BASIC";
-
-    return (
-      <div
-        className="container"
-        style={{ paddingTop: 24, paddingBottom: 32, fontSize: "var(--settings-fs, 12px)" }}
-      >
-        <div className="page-header">
-          <div>
-            <h1 className="h1" style={{ fontSize: 22 }}>Recettes</h1>
-            <p className="lead">
-              Healthy pour tous. Pour PLUS/PREMIUM, l’IA adapte aux calories, allergies et aliments à re-travailler.
-            </p>
-            <div className="text-xs" style={{ color:"#6b7280", marginTop:8 }}>
-              Filtres actifs —
-              {hasKcalTarget && <> cible: ~{kcal} kcal</>}
-              {!hasKcalTarget && (hasKcalMin || hasKcalMax) && <> plage: {hasKcalMin ? kcalMin : "…"}–{hasKcalMax ? kcalMax : "…"} kcal</>}
-              {allergens.length ? <> · allergènes: {allergens.join(", ")}</> : null}
-              {dislikes.length ? <> · non aimés: {dislikes.join(", ")}</> : null}
-              {(!hasKcalTarget && !hasKcalMin && !hasKcalMax && !allergens.length && !dislikes.length) && " aucun"}
-            </div>
-          </div>
-          <div className="text-sm">
-            Votre formule : <span className="badge" style={{ marginLeft: 6 }}>{plan}</span>
-          </div>
-        </div>
-
-        {/* CTA upgrade pour BASIC */}
-        {plan === "BASIC" && (
-          <div className="card" style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:12 }}>
-            <div>
-              <strong>Débloquez la personnalisation IA</strong>
-              <div className="text-sm" style={{ color:"#6b7280" }}>Filtre calories, exclusions allergènes & “re-travailler” les aliments non aimés.</div>
-            </div>
-            <a className="btn btn-dash" href="/dashboard/abonnement">Passer à PLUS</a>
-          </div>
-        )}
-
-        {/* Filtres */}
-        <div className="section" style={{ marginTop: 12 }}>
-          <div
-            className="section-head"
-            style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}
-          >
-            <h2 style={{ margin: 0, lineHeight: 1.25 }}>Contraintes & filtres</h2>
-            {disabled && <span className="badge" style={{ lineHeight: 1 }}>Réservé PLUS/PREMIUM</span>}
-          </div>
-
-          <form
-            action={disabled ? undefined : applyFiltersAction}
-            onSubmit={disabled ? (e) => e.preventDefault() : undefined}
-            className="grid gap-6 lg:grid-cols-2"
-          >
-            <fieldset disabled={disabled} style={{ display:"contents" }}>
-              <div>
-                <label className="label">Cible calories (kcal)</label>
-                <input className="input" type="number" name="kcal" placeholder="ex: 600" defaultValue={hasKcalTarget ? String(kcal) : ""} />
-              </div>
-              <div className="grid gap-6 sm:grid-cols-2">
-                <div>
-                  <label className="label">Min kcal</label>
-                  <input className="input" type="number" name="kcalMin" placeholder="ex: 450" defaultValue={hasKcalMin ? String(kcalMin) : ""} />
-                </div>
-                <div>
-                  <label className="label">Max kcal</label>
-                  <input className="input" type="number" name="kcalMax" placeholder="ex: 700" defaultValue={hasKcalMax ? String(kcalMax) : ""} />
-                </div>
-              </div>
-
-              <div>
-                <label className="label">Allergènes / intolérances (séparés par virgules)</label>
-                <input className="input" type="text" name="allergens" placeholder="arachide, lactose, gluten" defaultValue={allergens.join(", ")} />
-              </div>
-
-              <div>
-                <label className="label">Aliments non aimés (re-travailler)</label>
-                <input className="input" type="text" name="dislikes" placeholder="brocoli, saumon, tofu..." defaultValue={dislikes.join(", ")} />
-                <div className="text-xs" style={{ color:"#6b7280", marginTop:4 }}>
-                  On les garde, mais on propose une autre façon de les cuisiner.
-                </div>
-              </div>
-            </fieldset>
-
-            <div className="flex items-center justify-between lg:col-span-2">
-              <div className="text-sm" style={{ color: "#6b7280" }}>
-                {disabled ? "Passez à PLUS pour activer les filtres." : "Ajustez les filtres puis régénérez."}
-              </div>
-              <div style={{ display: "flex", gap: 10 }}>
-                <a href="/dashboard/recipes" className="btn btn-outline" style={{ color: "#111" }}>
-                  Réinitialiser
-                </a>
-                <button className="btn btn-dash" type="submit" disabled={disabled}>Régénérer</button>
-              </div>
-            </div>
-          </form>
-        </div>
-
-        {/* Healthy pour tous */}
-        <section className="section" style={{ marginTop: 12 }}>
-          <div className="section-head" style={{ marginBottom: 8 }}><h2>Healthy (pour tous)</h2></div>
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
-            {healthyPick.map((r) => {
-              const detailQS = encode(r);
-              return <Card key={r.id} r={r} detailQS={detailQS} />;
-            })}
-          </div>
-        </section>
-
-        {/* Personnalisées IA */}
-        {plan !== "BASIC" && (
-          <section className="section" style={{ marginTop: 12 }}>
-            <div className="section-head" style={{ marginBottom: 8 }}>
-              <h2>Recettes personnalisées (IA)</h2>
-            </div>
-
-            {relaxedNote && (
-              <div className="text-xs" style={{ color:"#6b7280", marginBottom:8 }}>
-                {relaxedNote}
-              </div>
-            )}
-
-            {personalizedPick.length ? (
-              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
-                {personalizedPick.map((r) => {
-                  const detailQS = encode(r);
-                  return <Card key={r.id} r={r} detailQS={detailQS} />;
-                })}
-              </div>
-            ) : (
-              <div className="card text-sm" style={{ color:"#6b7280" }}>
-                Aucune recette correspondant exactement à vos filtres pour le moment.
-                Essayez d’élargir la plage calorique ou de réduire les exclusions.
-              </div>
-            )}
-          </section>
-        )}
-      </div>
-    );
-  } catch {
-    // Fallback ultime : on n'explose jamais la page
-    return (
-      <div
-        className="container"
-        style={{ paddingTop: 24, paddingBottom: 32, fontSize: "var(--settings-fs, 12px)" }}
-      >
-        <div className="page-header">
-          <div>
-            <h1 className="h1" style={{ fontSize: 22 }}>Recettes</h1>
-            <p className="lead">Healthy pour tous. (Mode sécurisé)</p>
-          </div>
-        </div>
-
-        <div className="card" style={{ border:"1px solid rgba(239,68,68,.35)", background:"rgba(239,68,68,.08)", marginBottom:12 }}>
-          Une erreur est survenue côté serveur. Affichage en mode “Healthy” uniquement.
-        </div>
-
-        <section className="section" style={{ marginTop: 12 }}>
-          <div className="section-head" style={{ marginBottom: 8 }}><h2>Healthy (pour tous)</h2></div>
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
-            {HEALTHY_BASE.slice(0, 4).map((r) => (
-              <Card key={r.id} r={r} detailQS={`?data=${encodeB64UrlJson(r)}`} />
-            ))}
-          </div>
-        </section>
-      </div>
-    );
   }
+
+  // Si vide, relâcher calories (garde allergènes)
+  let relaxedNote: string | null = null;
+  if (plan !== "BASIC" && personalized.length === 0) {
+    const relaxed = personalizeFallback({
+      base: HEALTHY_BASE,
+      allergens, dislikes, plan,
+    });
+    if (relaxed.length) {
+      personalized = relaxed;
+      relaxedNote = "Ajustement automatique : contrainte calories relâchée (allergènes respectés).";
+    } else {
+      personalized = HEALTHY_BASE.map(r => ({ ...r, minPlan: plan }));
+      relaxedNote = "Ajustement automatique : suggestions healthy compatibles avec vos contraintes.";
+    }
+  }
+
+  const seed = Number(searchParams?.rnd ?? "0") || 123456789;
+  const healthyPick = pickRandomSeeded(healthy, 4, seed);
+  const personalizedPick = pickRandomSeeded(personalized, 6, seed);
+
+  const qsParts: string[] = [];
+  if (hasKcalTarget) qsParts.push(`kcal=${kcal}`);
+  if (hasKcalMin) qsParts.push(`kcalMin=${kcalMin}`);
+  if (hasKcalMax) qsParts.push(`kcalMax=${kcalMax}`);
+  if (allergens.length) qsParts.push(`allergens=${encodeURIComponent(allergens.join(","))}`);
+  if (dislikes.length) qsParts.push(`dislikes=${encodeURIComponent(dislikes.join(","))}`);
+  const baseQS = qsParts.length ? `?${qsParts.join("&")}` : "";
+
+  const encode = (r: Recipe) => {
+    const b64url = encodeB64UrlJson(r);
+    return `${baseQS}${baseQS ? "&" : "?"}data=${b64url}`;
+  };
+
+  const disabled = plan === "BASIC";
+
+  return (
+    <div className="container" style={{ paddingTop: 24, paddingBottom: 32, fontSize: "var(--settings-fs, 12px)" }}>
+      <div className="page-header">
+        <div>
+          <h1 className="h1" style={{ fontSize: 22 }}>Recettes</h1>
+          <p className="lead">Healthy pour tous. Pour PLUS/PREMIUM, l’IA adapte aux calories, allergies et aliments à re-travailler.</p>
+          <div className="text-xs" style={{color:"#6b7280", marginTop:8}}>
+            Filtres actifs — 
+            {hasKcalTarget && <> cible: ~{kcal} kcal</>}
+            {!hasKcalTarget && (hasKcalMin || hasKcalMax) && <> plage: {hasKcalMin? kcalMin:"…"}–{hasKcalMax? kcalMax:"…"} kcal</>}
+            {allergens.length ? <> · allergènes: {allergens.join(", ")}</> : null}
+            {dislikes.length ? <> · non aimés: {dislikes.join(", ")}</> : null}
+            {(!hasKcalTarget && !hasKcalMin && !hasKcalMax && !allergens.length && !dislikes.length) && " aucun"}
+          </div>
+        </div>
+        <div className="text-sm">
+          Votre formule : <span className="badge" style={{ marginLeft: 6 }}>{plan}</span>
+        </div>
+      </div>
+
+      {/* CTA upgrade pour BASIC (on ne redirige pas) */}
+      {plan === "BASIC" && (
+        <div className="card" style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:12 }}>
+          <div>
+            <strong>Débloquez la personnalisation IA</strong>
+            <div className="text-sm" style={{ color:"#6b7280" }}>Filtre calories, exclusions allergènes & “re-travailler” les aliments non aimés.</div>
+          </div>
+          <a className="btn btn-dash" href="/dashboard/abonnement">Passer à PLUS</a>
+        </div>
+      )}
+
+      {/* Filtres */}
+      <div className="section" style={{ marginTop: 12 }}>
+        <div className="section-head" style={{ marginBottom: 8, display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+          <h2 style={{ margin:0, lineHeight:1.25 }}>Contraintes & filtres</h2>
+          {disabled && <span className="badge" style={{ lineHeight:1 }}>Réservé PLUS/PREMIUM</span>}
+        </div>
+
+        <form
+          action={async (fd) => {
+            "use server";
+            // Pas de redirection sauvage en BASIC : on revient sur la même page avec QS
+            const params = new URLSearchParams();
+            const fields = ["kcal","kcalMin","kcalMax","allergens","dislikes"] as const;
+            for (const f of fields) {
+              const val = (fd.get(f) ?? "").toString().trim();
+              if (val) params.set(f, val);
+            }
+            params.set("rnd", String(Date.now()));
+            // On renvoie toujours /dashboard/recipes (même en BASIC), c’est la page qui désactive le fieldset.
+            return `/dashboard/recipes?${params.toString()}`;
+          }}
+          className="grid gap-6 lg:grid-cols-2"
+        >
+          <fieldset disabled={disabled} style={{ display:"contents" }}>
+            <div>
+              <label className="label">Cible calories (kcal)</label>
+              <input className="input" type="number" name="kcal" placeholder="ex: 600" defaultValue={hasKcalTarget ? String(kcal) : ""} />
+            </div>
+            <div className="grid gap-6 sm:grid-cols-2">
+              <div>
+                <label className="label">Min kcal</label>
+                <input className="input" type="number" name="kcalMin" placeholder="ex: 450" defaultValue={hasKcalMin ? String(kcalMin) : ""} />
+              </div>
+              <div>
+                <label className="label">Max kcal</label>
+                <input className="input" type="number" name="kcalMax" placeholder="ex: 700" defaultValue={hasKcalMax ? String(kcalMax) : ""} />
+              </div>
+            </div>
+
+            <div>
+              <label className="label">Allergènes / intolérances (séparés par virgules)</label>
+              <input className="input" type="text" name="allergens" placeholder="arachide, lactose, gluten" defaultValue={allergens.join(", ")} />
+            </div>
+
+            <div>
+              <label className="label">Aliments non aimés (re-travailler)</label>
+              <input className="input" type="text" name="dislikes" placeholder="brocoli, saumon, tofu..." defaultValue={dislikes.join(", ")} />
+              <div className="text-xs" style={{ color:"#6b7280", marginTop:4 }}>
+                On les garde, mais on propose une autre façon de les cuisiner.
+              </div>
+            </div>
+          </fieldset>
+
+          <div className="flex items-center justify-between lg:col-span-2">
+            <div className="text-sm" style={{ color: "#6b7280" }}>
+              {disabled ? "Passez à PLUS pour activer les filtres." : "Ajustez les filtres puis régénérez."}
+            </div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <a href="/dashboard/recipes" className="btn btn-outline" style={{ color: "#111" }}>
+                Réinitialiser
+              </a>
+              <button className="btn btn-dash" type="submit" disabled={disabled}>Régénérer</button>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      {/* Healthy pour tous */}
+      <section className="section" style={{ marginTop: 12 }}>
+        <div className="section-head" style={{ marginBottom: 8 }}><h2>Healthy (pour tous)</h2></div>
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
+          {healthyPick.map((r) => {
+            const detailQS = `${baseQS}${baseQS ? "&" : "?"}data=${encodeB64UrlJson(r)}`;
+            return <Card key={r.id} r={r} detailQS={detailQS} />;
+          })}
+        </div>
+      </section>
+
+      {/* Personnalisées IA */}
+      {plan !== "BASIC" && (
+        <section className="section" style={{ marginTop: 12 }}>
+          <div className="section-head" style={{ marginBottom: 8 }}>
+            <h2>Recettes personnalisées (IA)</h2>
+          </div>
+
+          {relaxedNote && (
+            <div className="text-xs" style={{ color:"#6b7280", marginBottom:8 }}>
+              {relaxedNote}
+            </div>
+          )}
+
+          {personalizedPick.length ? (
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
+              {personalizedPick.map((r) => {
+                const detailQS = `${baseQS}${baseQS ? "&" : "?"}data=${encodeB64UrlJson(r)}`;
+                return <Card key={r.id} r={r} detailQS={detailQS} />;
+              })}
+            </div>
+          ) : (
+            <div className="card text-sm" style={{ color:"#6b7280" }}>
+              Aucune recette correspondant exactement à vos filtres pour le moment.
+              Essayez d’élargir la plage calorique ou de réduire les exclusions.
+            </div>
+          )}
+        </section>
+      )}
+    </div>
+  );
 }
 
 function Card({ r, detailQS }: { r: Recipe; detailQS: string; }) {
@@ -552,4 +497,3 @@ function Card({ r, detailQS }: { r: Recipe; detailQS: string; }) {
     </article>
   );
 }
-
