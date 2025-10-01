@@ -1,4 +1,4 @@
- import { redirect } from "next/navigation";
+import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
 
 export const runtime = "nodejs";
@@ -40,20 +40,32 @@ function pickRandomSeeded<T>(arr: T[], n: number, seed: number): T[] {
   return seededShuffle(arr, seed).slice(0, Math.max(0, Math.min(n, arr.length)));
 }
 
-/* ---- base64url JSON (Node + Browser safe) ---- */
+/* ---- base64url JSON (Node + Edge + Browser safe) ---- */
 function encodeB64UrlJson(data: any): string {
   const json = JSON.stringify(data);
-  if (typeof window === "undefined") {
-    // @ts-ignore Buffer côté Node
-    return Buffer.from(json, "utf8").toString("base64")
+  const B: any = (globalThis as any).Buffer;
+
+  // Serveur Node : Buffer existe
+  if (typeof window === "undefined" && B?.from) {
+    return B.from(json, "utf8").toString("base64")
       .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/,"");
-  } else {
-    const bytes = new TextEncoder().encode(json);
-    let bin = "";
-    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-    const b64 = btoa(bin);
-    return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/,"");
   }
+
+  // Edge / Browser : utiliser Web APIs
+  const bytes = new TextEncoder().encode(json);
+  let bin = "";
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  const btoaFn: ((s: string) => string) | undefined = (globalThis as any).btoa;
+  let b64: string;
+  if (typeof btoaFn === "function") {
+    b64 = btoaFn(bin);
+  } else if (B?.from) {
+    // Ultime filet (théorique)
+    b64 = B.from(bin, "binary").toString("base64");
+  } else {
+    throw new Error("Base64 encoding unsupported in this environment");
+  }
+  return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/,"");
 }
 
 /* ---- dictionnaire "re-travailler" (fallback) ---- */
