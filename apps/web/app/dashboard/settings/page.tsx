@@ -20,7 +20,6 @@ function applyThemeToRoot(isDark: boolean) {
   root.classList.toggle("dark", isDark);
   root.setAttribute("data-theme", isDark ? "dark" : "light");
 }
-
 /** Retourne true si le système est en dark */
 function getSystemPrefersDark() {
   return window.matchMedia?.("(prefers-color-scheme: dark)")?.matches ?? false;
@@ -28,7 +27,9 @@ function getSystemPrefersDark() {
 
 /* ======================= Styles boutons ======================= */
 const btnGhost =
-  "rounded-full border bg-white px-4 py-2 shadow-sm hover:bg-gray-50 active:scale-[0.99] transition";
+  "rounded-full border px-4 py-2 shadow-sm transition active:scale-[0.99] " +
+  "bg-white text-slate-900 border-slate-200 hover:bg-gray-50 " +
+  "dark:bg-slate-900 dark:text-slate-100 dark:border-slate-700 dark:hover:bg-slate-800";
 
 /* ======================= Jours (menu) ======================= */
 function DaysDropdown({
@@ -73,7 +74,7 @@ function DaysDropdown({
         <div
           role="menu"
           aria-label="Sélection des jours"
-          className="absolute z-50 mt-2 w-64 rounded-2xl border bg-white p-3 shadow-lg"
+          className="absolute z-50 mt-2 w-64 rounded-2xl border bg-white p-3 shadow-lg dark:bg-slate-900 dark:border-slate-700"
           style={{ fontSize: "var(--settings-fs)" }}
         >
           <ul className="space-y-2">
@@ -97,7 +98,7 @@ function DaysDropdown({
             })}
           </ul>
 
-          <div className="mt-3 flex items-center justify-end pt-2 border-t">
+          <div className="mt-3 flex items-center justify-end pt-2 border-t dark:border-slate-700">
             <div className="flex gap-2">
               <button type="button" className={`${btnGhost} px-3 py-1`} onClick={() => setOpen(false)}>
                 OK
@@ -160,7 +161,7 @@ function TimeDropdown({
         <div
           role="dialog"
           aria-label="Sélection de l'heure"
-          className="absolute right-0 z-50 mt-2 w-56 rounded-2xl border bg-white p-3 shadow-lg"
+          className="absolute right-0 z-50 mt-2 w-56 rounded-2xl border bg-white p-3 shadow-lg dark:bg-slate-900 dark:border-slate-700"
           style={{ fontSize: "var(--settings-fs)" }}
         >
           <input
@@ -168,10 +169,10 @@ function TimeDropdown({
             value={temp}
             onChange={(e) => setTemp(e.target.value)}
             step={300}
-            className="w-full rounded-[10px] border px-3 py-2"
+            className="w-full rounded-[10px] border px-3 py-2 dark:bg-slate-900 dark:border-slate-700"
             style={{ fontSize: "var(--settings-fs)" }}
           />
-          <div className="mt-3 flex items-center justify-end pt-2 border-t">
+          <div className="mt-3 flex items-center justify-end pt-2 border-t dark:border-slate-700">
             <button type="button" className={`${btnGhost} px-3 py-1`} onClick={apply}>
               OK
             </button>
@@ -257,6 +258,7 @@ function LegalModal() {
                 sm:max-h-[85dvh] sm:h-auto
                 h-[92dvh] max-h-[100svh]
                 overflow-y-auto overscroll-contain
+                dark:bg-slate-900 dark:border-slate-700
               "
               style={{
                 fontSize: "var(--settings-fs)",
@@ -311,18 +313,23 @@ export default function Page() {
   const [prefs, setPrefs] = useState<Prefs>(DEFAULT_PREFS);
   const [loaded, setLoaded] = useState(false);
 
-  // 1) Lecture initiale + application immédiate du thème AVANT paint (réduction du flash)
+  // 1) Lecture initiale + application immédiate du thème AVANT paint
+  //    RÈGLE : si AUCUNE préférence en storage -> défaut CLAIR (même si système sombre)
   useLayoutEffect(() => {
     let initial: Prefs = DEFAULT_PREFS;
+    let hadStored = false;
     try {
       const raw = localStorage.getItem(LS_KEY);
-      if (raw) initial = { ...DEFAULT_PREFS, ...JSON.parse(raw) };
+      if (raw) {
+        hadStored = true;
+        initial = { ...DEFAULT_PREFS, ...JSON.parse(raw) };
+      }
     } catch {}
     setPrefs(initial);
 
-    const isDark =
-      initial.theme === "dark" ||
-      (initial.theme === "system" && getSystemPrefersDark());
+    const isDark = hadStored
+      ? (initial.theme === "dark" || (initial.theme === "system" && getSystemPrefersDark()))
+      : false; // aucune préférence -> clair
     applyThemeToRoot(isDark);
 
     setLoaded(true);
@@ -359,10 +366,10 @@ export default function Page() {
   return (
     <div className="container" style={{ paddingTop: 24, paddingBottom: 24 }}>
       <div className="mb-2">
-        {/* H1 harmonisé avec tes autres pages */}
+        {/* H1 harmonisé (couleur via var pour dark mode) */}
         <h1
           className="h1"
-          style={{ fontSize: "clamp(20px, 2.2vw, 24px)", lineHeight: 1.15, color: "#111827" }}
+          style={{ fontSize: "clamp(20px, 2.2vw, 24px)", lineHeight: 1.15, color: "var(--text)" }}
         >
           Réglages
         </h1>
@@ -376,7 +383,7 @@ export default function Page() {
             <div className="card space-y-3">
               <h3 className="font-semibold">Langue</h3>
               <select
-                className="rounded-[10px] border px-3 py-2 w-full"
+                className="rounded-[10px] border px-3 py-2 w-full dark:bg-slate-900 dark:border-slate-700"
                 value={prefs.language}
                 onChange={(e) =>
                   setPrefs((p) => ({ ...p, language: e.target.value as Prefs["language"] }))
