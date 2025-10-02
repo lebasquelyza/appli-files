@@ -1,293 +1,83 @@
-/* Tailwind (si utilisé) */
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-/* ===== Design système (variables – mode clair) ===== */
-:root{
-  --bg:#ffffff;
-  --panel:#f7f7f9;
-  --muted:#333333;          /* textes atténués (clair) */
-  --text:#111111;           /* texte principal (clair) */
-  --brand:#16a34a;          /* vert */
-  --brand2:#15803d;
-  --accent:#0ea5e9;         /* bleu accent */
-  --ring:rgba(14,165,233,.35);
-  --radius:14px;
-  --shadow:0 6px 18px rgba(0,0,0,.08);
-  --font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-}
-
-/* ===== Thème : base / dark ===== */
-html { color-scheme: light; }
-html.dark { color-scheme: dark; }
-
-/* Variables en mode dark (lisibilité) */
-:root.dark{
-  --bg:#0b1220;         /* fond page */
-  --panel:#0f172a;      /* surfaces (cards, panels, sections) */
-  --muted:#22c55e;      /* textes atténués -> VERT lisible */
-  --text:#ffffff;       /* texte principal -> BLANC */
-  --brand:#22c55e;      /* liens / accent verts */
-  --brand2:#16a34a;
-  --accent:#22c55e;     /* harmonisé sur le vert */
-  --ring:rgba(59,130,246,.45);
-  --shadow:0 6px 18px rgba(0,0,0,.45);
-}
-
-/* ===== Reset & base ===== */
-*{box-sizing:border-box}
-html{scroll-behavior:smooth}
-body{
-  margin:0; font-family:var(--font-family);
-  background:var(--bg); color:var(--text);
-  line-height:1.6; overflow-y:scroll;
-}
-a{color:var(--brand);text-decoration:none}
-a:hover{text-decoration:underline}
-img{max-width:100%;display:block}
-.container{max-width:1100px;margin:0 auto;padding:0 24px}
-
-/* ===== Header / nav ===== */
-header{
-  position:fixed; top:0; left:0; right:0; z-index:50;
-  background:#fffffff2; backdrop-filter:blur(6px);
-  border-bottom:1px solid #e5e7eb;
-}
-html.dark header{ background:#0b1220f2; border-bottom-color:#1f2937; }
-.nav{display:flex;align-items:center;gap:16px;justify-content:space-between;padding:14px 0}
-.brand{display:flex;gap:12px;align-items:center;font-weight:800;letter-spacing:.2px;color:var(--text)}
-.brand .mark{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,var(--brand),var(--accent));box-shadow:0 6px 12px rgba(22,163,74,.25)}
-.menu{display:flex;gap:16px}
-.menu a{padding:8px 12px;border-radius:8px;color:var(--text);font-weight:600}
-.menu a:hover{background:#f2f4f7}
-html.dark .menu a:hover{background:#0f172a}
-.burger{display:none;background:none;border:0;color:var(--text);font-size:20px}
-@media (max-width:860px){
-  .menu{display:none}
-  .burger{display:block}
-  .menu.open{
-    display:flex;flex-direction:column;position:absolute;left:20px;right:20px;top:64px;
-    background:var(--bg);border:1px solid #e5e7eb;border-radius:12px;padding:10px;box-shadow:var(--shadow);
-  }
-  .menu.open a{padding:12px}
-}
-
-/* ===== Structure pages ===== */
-.h1{ font-size:32px; font-weight:800; margin:0 0 6px; color:var(--text); }
-.lead{ color:var(--muted); font-size:16px; margin:0; }
-.page-header{ display:flex; align-items:flex-end; justify-content:space-between; gap:16px; margin-bottom:18px; }
-
-.section{
-  background:var(--panel);
-  border:1px solid #e5e7eb; border-radius:var(--radius);
-  box-shadow:var(--shadow); padding:18px;
-}
-.section-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
-.section-head h2{ font-size:18px; font-weight:700; margin:0; color:var(--text); }
-.section-body{ display:block; }
-
-.card{
-  background:var(--panel);
-  border:1px solid #e5e7eb; border-radius:var(--radius);
-  box-shadow:var(--shadow); padding:16px;
-}
-html.dark .section, html.dark .card{ border-color:#1f2937; }
-
-/* ===== Badges ===== */
-.badge{
-  background:#eef2f7; color:var(--text);
-  border:1px solid #e5e7eb; padding:6px 10px;
-  border-radius:999px; font-weight:700; font-size:12px;
-}
-html.dark .badge{ background:#111827; color:var(--text); border-color:#1f2937; }
-
-/* ===== Boutons simples ===== */
-.cta,.btn{
-  display:inline-block; padding:10px 14px; border-radius:10px;
-  background:linear-gradient(135deg,var(--brand),var(--brand2));
-  color:#fff; font-weight:800; box-shadow:var(--shadow); border:0;
-}
-.btn-outline{
-  padding:10px 14px; border-radius:10px; border:1px solid #e5e7eb;
-  background:var(--bg); font-weight:700;
-}
-html.dark .btn-outline{ border-color:#334155; color:var(--text); background:transparent; }
-
-/* ===== Form ===== */
-.input{
-  width:100%; border:1px solid #e5e7eb; border-radius:12px; padding:10px;
-  background:var(--bg); color:var(--text);
-}
-.label{ color:var(--muted); font-size:14px; font-weight:600; display:block; margin-bottom:6px; }
-html.dark .input{ background:#0b1220; color:var(--text); border-color:#1f2937; }
-html.dark .input::placeholder { color: var(--muted); }
-
-/* ===== Helpers ===== */
-.grid{ display:grid; } .gap-6{ gap:16px; }
-.lg\:grid-cols-2{ grid-template-columns:1fr; } @media (min-width:1024px){ .lg\:grid-cols-2{ grid-template-columns:1fr 1fr; } }
-.sm\:grid-cols-2{ grid-template-columns:1fr; } @media (min-width:640px){ .sm\:grid-cols-2{ grid-template-columns:1fr 1fr; } }
-.flex{ display:flex; } .items-center{ align-items:center; } .justify-between{ justify-content:space-between; }
-.space-y-4 > * + *{ margin-top:16px; }
-.text-sm{ font-size:12.5px; } .text-3xl{ font-size:28px; } .font-bold{ font-weight:800; } .font-semibold{ font-weight:700; }
-.w-full{ width:100%; }
-.aspect-video{ position:relative; padding-bottom:56.25%; height:0; }
-.aspect-video > iframe{ position:absolute; inset:0; width:100%; height:100%; border:0; }
-
-/* ===== Boutons génériques (Tailwind @apply) ===== */
-.btn {
-  @apply inline-flex items-center justify-center gap-2
-         rounded-lg border border-gray-300 px-3 py-2
-         text-sm font-medium text-gray-900 bg-white
-         hover:bg-gray-50 active:translate-y-px transition;
-}
-.btn.btn-outline { @apply bg-transparent text-gray-900 border-gray-300 hover:bg-gray-100; }
-:root.dark .btn { @apply text-white bg-neutral-900 border-neutral-700 hover:bg-neutral-800; }
-:root.dark .btn.btn-outline { @apply bg-transparent text-white border-neutral-700 hover:bg-neutral-800; }
-
-/* ===== Bouton dashboard unifié ===== */
-.btn-dash{
-  display:inline-flex; align-items:center; justify-content:center; gap:.5rem;
-  border-radius:var(--radius); padding:.6rem 1rem; font-weight:600; font-size:.9rem; line-height:1;
-  color:#fff; background-image:linear-gradient(90deg,var(--brand),var(--brand2));
-  border:1px solid rgba(0,0,0,.08); box-shadow:var(--shadow);
-  transition:transform .1s ease, filter .2s ease, box-shadow .2s ease;
-}
-.btn-dash:hover{ filter:brightness(1.03); transform:translateY(-1px); }
-.btn-dash:active{ transform:translateY(0); }
-.btn-dash:focus-visible{ outline:none; box-shadow:0 0 0 4px var(--ring), var(--shadow); }
-.btn-dash:disabled{ opacity:.6; cursor:not-allowed; }
-
-/* ===== Segmented control ===== */
-.seg {
-  display:inline-flex; gap:.25rem; padding:.25rem; border-radius:var(--radius);
-  background:var(--panel); border:1px solid rgba(0,0,0,.06); box-shadow:var(--shadow);
-}
-.seg button{
-  border:0; background:transparent; color:var(--muted);
-  padding:.45rem .6rem; border-radius:calc(var(--radius) - 6px);
-  font-weight:600; font-size:.85rem; cursor:pointer; transition:filter .15s ease, transform .1s ease;
-}
-.seg button:hover{ filter:brightness(1.05); transform:translateY(-1px); }
-.seg button.active{
-  color:#fff; background-image:linear-gradient(90deg,var(--brand),var(--brand2));
-  box-shadow:var(--shadow);
-}
-
-/* ===== Chips ===== */
-.chips{ display:flex; flex-wrap:wrap; gap:.5rem; }
-.chip{
-  display:inline-flex; align-items:center; justify-content:center; gap:.35rem;
-  padding:.45rem .7rem; border-radius:var(--radius);
-  background:var(--panel); color:var(--text);
-  border:1px solid rgba(0,0,0,.06); box-shadow:var(--shadow);
-  font-weight:600; font-size:.85rem; cursor:pointer; transition:filter .15s ease, transform .1s ease;
-}
-.chip:hover{ filter:brightness(1.05); transform:translateY(-1px); }
-
-/* ===== Bouton icône compact ===== */
-.icon-btn{
-  width:40px; height:40px; display:inline-flex; align-items:center; justify-content:center;
-  border-radius:var(--radius); background:var(--panel); color:var(--text);
-  border:1px solid rgba(0,0,0,.08); box-shadow:var(--shadow);
-  transition:transform .1s ease, filter .2s ease, box-shadow .2s ease;
-}
-.icon-btn:hover{ filter:brightness(1.02); transform:translateY(-1px); }
-.icon-btn:active{ transform:translateY(0); }
-.icon-btn:disabled{ opacity:.6; cursor:not-allowed; }
-.icon{ width:18px; height:18px; display:block; fill:currentColor; }
-
 /* =========================================================
-   DARK MODE — forcer la lisibilité (tout noir -> blanc)
+   DARK — Patch v2 : tout texte sombre -> blanc (encore + large)
+   - Couvre + de hex Tailwind (gris foncés), rgb, inline styles,
+     pseudo-éléments et classes utilitaires.
    ========================================================= */
 
-/* Exceptions utiles (laisser ces couleurs dédiées) */
-html.dark a { color: var(--brand) !important; }                 /* liens verts */
-html.dark .lead,
-html.dark .label,
-html.dark .muted,
-html.dark .text-muted,
-html.dark .opacity-70,
-html.dark .opacity-80 { color: var(--muted) !important; }       /* textes atténués verts */
-
-/* Catch-all texte */
-html.dark :where(
-  h1,h2,h3,h4,h5,h6,
-  p,span,small,div,section,article,
-  li,dt,dd,
-  label,strong,em,code,blockquote,
-  button,input,select,textarea,
-  th,td
-){
+/* 0) Pseudo-éléments : ils héritent aussi du blanc */
+html.dark *::before,
+html.dark *::after {
   color: var(--text) !important;
 }
 
-/* Styles inline & classes utilitaires forcées en noir -> blanc */
-html.dark [style*="color:#000"],
-html.dark [style*="color: #000"],
-html.dark [style*="color:#000000"],
-html.dark [style*="color: #000000"],
-html.dark [style*="color:rgb(0,0,0)"],
+/* 1) Hex courants des gris/”noirs” Tailwind -> blanc */
 html.dark [style*="color:#111"],
 html.dark [style*="color: #111"],
 html.dark [style*="color:#111111"],
 html.dark [style*="color: #111111"],
 html.dark [style*="color:#0b0f14"],
 html.dark [style*="color: #0b0f14"],
+html.dark [style*="color:#0f172a"],
+html.dark [style*="color: #0f172a"],
+html.dark [style*="color:#111827"],
+html.dark [style*="color: #111827"],
+html.dark [style*="color:#1f2937"],
+html.dark [style*="color: #1f2937"],
+html.dark [style*="color:#374151"],
+html.dark [style*="color: #374151"],
+html.dark [style*="color:#475569"],
+html.dark [style*="color: #475569"] {
+  color: #fff !important;
+}
+
+/* 2) rgb() équivalents (ex: rgb(17,24,39) = #111827) -> blanc */
+html.dark [style*="color:rgb(17,24,39)"],   /* #111827 */
+html.dark [style*="color: rgb(17, 24, 39)"],
+html.dark [style*="color:rgb(31,41,55)"],   /* #1f2937 */
+html.dark [style*="color: rgb(31, 41, 55)"],
+html.dark [style*="color:rgb(55,65,81)"],   /* #374151 */
+html.dark [style*="color: rgb(55, 65, 81)"],
+html.dark [style*="color:rgb(71,85,105)"],  /* #475569 */
+html.dark [style*="color: rgb(71, 85, 105)"] {
+  color: #fff !important;
+}
+
+/* 3) Classes utilitaires “foncées” -> blanc (au cas où libs les posent) */
 html.dark .text-black,
 html.dark .text-gray-900,
+html.dark .text-gray-800,
+html.dark .text-gray-700,
+html.dark .text-slate-900,
+html.dark .text-slate-800,
+html.dark .text-slate-700,
 html.dark .text-neutral-900,
+html.dark .text-neutral-800,
 html.dark .text-zinc-900,
-html.dark .text-slate-900 {
+html.dark .text-zinc-800,
+html.dark .text-stone-900,
+html.dark .text-stone-800 {
   color: #fff !important;
 }
 
-/* SVG/icônes : noir -> currentColor (blanc) */
-html.dark svg { color: var(--text) !important; }
-html.dark svg [fill="black"],
-html.dark svg [fill="#000"],
-html.dark svg [fill="#000000"] { fill: currentColor !important; }
-html.dark svg [stroke="black"],
-html.dark svg [stroke="#000"],
-html.dark svg [stroke="#000000"] { stroke: currentColor !important; }
-
-/* Badges/labels/segments éventuels restés sombres */
+/* 4) Titres sous-scopés par des conteneurs spécifiques (plus de poids) */
+html.dark .page-header h1,
+html.dark .page-header .lead,
+html.dark .section-head h2,
+html.dark .card h3,
+html.dark .card p,
+html.dark .card li,
 html.dark .badge,
-html.dark .chip,
-html.dark .seg button { color: var(--text) !important; }
+html.dark .label {
+  color: var(--text) !important;
+}
 
-/* Placeholders et champs */
-html.dark ::placeholder { color: var(--muted) !important; }
-html.dark input, html.dark select, html.dark textarea { color: var(--text) !important; }
-
-/* =========================================================
-   DARK: forcer BLANC sur surfaces vertes (carrés/CTA/boutons)
-   ========================================================= */
+/* 5) Liens restent verts, mais si posés dans surfaces vertes → voir patch précédent
+      (on-accent / btn / btn-dash etc.). Si besoin, reforce ici : */
+html.dark .on-accent,
+html.dark .on-accent *,
 html.dark .btn,
-html.dark .cta,
-html.dark .btn-dash,
-html.dark .seg button.active {
-  color: #fff !important;
-}
 html.dark .btn *,
-html.dark .cta *,
-html.dark .btn-dash *,
-html.dark .seg button.active * {
+html.dark .btn-dash,
+html.dark .btn-dash * {
   color: #fff !important;
-}
-/* liens à l’intérieur des surfaces vertes */
-html.dark .btn a,
-html.dark .cta a,
-html.dark .btn-dash a,
-html.dark .seg button.active a {
-  color: #fff !important;
-  text-decoration-color: rgba(255,255,255,.7) !important;
-}
-
-/* Utilitaire pour n'importe quelle surface accentuée custom */
-.on-accent,
-.on-accent * { color:#fff !important; }
-.on-accent a {
-  color:#fff !important;
-  text-decoration-color: rgba(255,255,255,.7) !important;
 }
