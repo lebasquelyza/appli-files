@@ -193,30 +193,65 @@ html.dark .input::placeholder { color: var(--muted); }
 .icon-btn:disabled{ opacity:.6; cursor:not-allowed; }
 .icon{ width:18px; height:18px; display:block; fill:currentColor; }
 
-/* =========================
-   DARK MODE – noirs -> blancs
-   (ce bloc répond à ta demande)
-   ========================= */
+/* =========================================================
+   DARK MODE — forcer la lisibilité (tout noir -> blanc)
+   ========================================================= */
 
-/* 1) Styles inline (JSX) qui forcent une couleur noire -> blanc en dark */
+/* Exceptions utiles (laisser ces couleurs dédiées) */
+html.dark a { color: var(--brand) !important; }                 /* liens verts */
+html.dark .lead,
+html.dark .label,
+html.dark .muted,
+html.dark .text-muted,
+html.dark .opacity-70,
+html.dark .opacity-80 { color: var(--muted) !important; }       /* textes atténués verts */
+
+/* 1) Catch-all texte : blanchit la plupart des éléments textuels */
+html.dark :where(
+  h1,h2,h3,h4,h5,h6,
+  p,span,small,div,section,article,
+  li,dt,dd,
+  label,strong,em,code,blockquote,
+  button,input,select,textarea,
+  th,td
+){
+  color: var(--text) !important;
+}
+
+/* 2) Styles inline & classes utilitaires qui forcent le noir -> blanc */
 html.dark [style*="color:#000"],
 html.dark [style*="color: #000"],
+html.dark [style*="color:#000000"],
+html.dark [style*="color: #000000"],
 html.dark [style*="color:rgb(0,0,0)"],
 html.dark [style*="color:#111"],
 html.dark [style*="color: #111"],
 html.dark [style*="color:#111111"],
 html.dark [style*="color: #111111"],
 html.dark [style*="color:#0b0f14"],
-html.dark [style*="color: #0b0f14"]{
-  color:#ffffff !important;
+html.dark [style*="color: #0b0f14"],
+html.dark .text-black,
+html.dark .text-gray-900,
+html.dark .text-neutral-900,
+html.dark .text-zinc-900,
+html.dark .text-slate-900 {
+  color: #fff !important;
 }
 
-/* 2) Quelques classes de ton code qui utilisaient du noir en dur */
-html.dark .brand,
-html.dark .menu a,
-html.dark .h1{
-  color:#ffffff !important;
-}
+/* 3) SVG/icônes : si noir fixé, utiliser la couleur du texte (blanc) */
+html.dark svg { color: var(--text) !important; }
+html.dark svg [fill="black"],
+html.dark svg [fill="#000"],
+html.dark svg [fill="#000000"] { fill: currentColor !important; }
+html.dark svg [stroke="black"],
+html.dark svg [stroke="#000"],
+html.dark svg [stroke="#000000"] { stroke: currentColor !important; }
 
-/* 3) (Optionnel) si des badges/labels portent du noir en dur */
-html.dark .badge{ color:#ffffff !important; }
+/* 4) Badges/labels/segments éventuels restés sombres */
+html.dark .badge,
+html.dark .chip,
+html.dark .seg button { color: var(--text) !important; }
+
+/* 5) Placeholders et champs */
+html.dark ::placeholder { color: var(--muted) !important; }
+html.dark input, html.dark select, html.dark textarea { color: var(--text) !important; }
