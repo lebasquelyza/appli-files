@@ -1,401 +1,293 @@
-"use client";
+/* Tailwind (si utilisé) */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Section } from "@/components/ui/Page";
-
-/* ======================= Police responsive ======================= */
-function useSettingsFontSize() {
-  useEffect(() => {
-    const fs = getComputedStyle(document.body).fontSize || "16px";
-    const num = parseFloat(fs) || 16;
-    const smaller = Math.max(11, Math.round(num - 4));
-    document.documentElement.style.setProperty("--settings-fs", `${smaller}px`);
-  }, []);
+/* ===== Design système (variables – mode clair) ===== */
+:root{
+  --bg:#ffffff;
+  --panel:#f7f7f9;
+  --muted:#333333;          /* textes atténués (clair) */
+  --text:#111111;           /* texte principal (clair) */
+  --brand:#16a34a;          /* vert */
+  --brand2:#15803d;
+  --accent:#0ea5e9;         /* bleu accent */
+  --ring:rgba(14,165,233,.35);
+  --radius:14px;
+  --shadow:0 6px 18px rgba(0,0,0,.08);
+  --font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
 }
 
-/* ======================= Helpers thème ======================= */
-/** Applique la classe `dark` + l’attribut `data-theme` sur <html> */
-function applyThemeToRoot(isDark: boolean) {
-  const root = document.documentElement;
-  root.classList.toggle("dark", isDark);
-  root.setAttribute("data-theme", isDark ? "dark" : "light");
+/* ===== Thème : base / dark ===== */
+html { color-scheme: light; }
+html.dark { color-scheme: dark; }
+
+/* Variables en mode dark (lisibilité) */
+:root.dark{
+  --bg:#0b1220;         /* fond page */
+  --panel:#0f172a;      /* surfaces (cards, panels, sections) */
+  --muted:#22c55e;      /* textes atténués -> VERT lisible */
+  --text:#ffffff;       /* texte principal -> BLANC */
+  --brand:#22c55e;      /* liens / accent verts */
+  --brand2:#16a34a;
+  --accent:#22c55e;     /* harmonisé sur le vert */
+  --ring:rgba(59,130,246,.45);
+  --shadow:0 6px 18px rgba(0,0,0,.45);
 }
 
-/* ======================= Styles boutons ======================= */
-const btnGhost =
-  "rounded-full border bg-white px-4 py-2 shadow-sm hover:bg-gray-50 active:scale-[0.99] transition";
+/* ===== Reset & base ===== */
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; font-family:var(--font-family);
+  background:var(--bg); color:var(--text);
+  line-height:1.6; overflow-y:scroll;
+}
+a{color:var(--brand);text-decoration:none}
+a:hover{text-decoration:underline}
+img{max-width:100%;display:block}
+.container{max-width:1100px;margin:0 auto;padding:0 24px}
 
-/* ======================= Jours (menu) ======================= */
-function DaysDropdown({
-  value,
-  onChange,
-}: {
-  value: number[];
-  onChange: (days: number[]) => void;
-}) {
-  const labelsFull = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
-  const [open, setOpen] = useState(false);
-  const wrap = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const onDoc = (e: MouseEvent) => {
-      if (wrap.current && !wrap.current.contains(e.target as Node)) setOpen(false);
-    };
-    const onEsc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
-    document.addEventListener("mousedown", onDoc);
-    document.addEventListener("keydown", onEsc);
-    return () => {
-      document.removeEventListener("mousedown", onDoc);
-      document.removeEventListener("keydown", onEsc);
-    };
-  }, []);
-
-  const toggle = (d: number) =>
-    onChange(value.includes(d) ? value.filter((x) => x !== d) : [...value, d]);
-
-  return (
-    <div className="relative inline-block" ref={wrap}>
-      <button
-        type="button"
-        className={`${btnGhost} inline-flex items-center`}
-        onClick={() => setOpen((o) => !o)}
-        style={{ fontSize: "var(--settings-fs)" }}
-      >
-        <span className="font-medium">Jours</span>
-      </button>
-
-      {open && (
-        <div
-          role="menu"
-          aria-label="Sélection des jours"
-          className="absolute z-50 mt-2 w-64 rounded-2xl border bg-white p-3 shadow-lg"
-          style={{ fontSize: "var(--settings-fs)" }}
-        >
-          <ul className="space-y-2">
-            {labelsFull.map((lbl, i) => {
-              const d = i + 1;
-              const checked = value.includes(d);
-              return (
-                <li key={d} className="flex items-center gap-3">
-                  <input
-                    id={`day-${d}`}
-                    type="checkbox"
-                    className="accent-current"
-                    checked={checked}
-                    onChange={() => toggle(d)}
-                  />
-                  <label htmlFor={`day-${d}`} className="cursor-pointer">
-                    {lbl}
-                  </label>
-                </li>
-              );
-            })}
-          </ul>
-
-          <div className="mt-3 flex items-center justify-end pt-2 border-t">
-            <div className="flex gap-2">
-              <button type="button" className={`${btnGhost} px-3 py-1`} onClick={() => setOpen(false)}>
-                OK
-              </button>
-              <button type="button" className={`${btnGhost} px-3 py-1`} onClick={() => onChange([])}>
-                Tout vider
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+/* ===== Header / nav ===== */
+header{
+  position:fixed; top:0; left:0; right:0; z-index:50;
+  background:#fffffff2; backdrop-filter:blur(6px);
+  border-bottom:1px solid #e5e7eb;
+}
+html.dark header{ background:#0b1220f2; border-bottom-color:#1f2937; }
+.nav{display:flex;align-items:center;gap:16px;justify-content:space-between;padding:14px 0}
+.brand{display:flex;gap:12px;align-items:center;font-weight:800;letter-spacing:.2px;color:var(--text)}
+.brand .mark{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,var(--brand),var(--accent));box-shadow:0 6px 12px rgba(22,163,74,.25)}
+.menu{display:flex;gap:16px}
+.menu a{padding:8px 12px;border-radius:8px;color:var(--text);font-weight:600}
+.menu a:hover{background:#f2f4f7}
+html.dark .menu a:hover{background:#0f172a}
+.burger{display:none;background:none;border:0;color:var(--text);font-size:20px}
+@media (max-width:860px){
+  .menu{display:none}
+  .burger{display:block}
+  .menu.open{
+    display:flex;flex-direction:column;position:absolute;left:20px;right:20px;top:64px;
+    background:var(--bg);border:1px solid #e5e7eb;border-radius:12px;padding:10px;box-shadow:var(--shadow);
+  }
+  .menu.open a{padding:12px}
 }
 
-/* ======================= Heure (menu) ======================= */
-function TimeDropdown({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (time: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [temp, setTemp] = useState(value);
-  const wrap = useRef<HTMLDivElement | null>(null);
+/* ===== Structure pages ===== */
+.h1{ font-size:32px; font-weight:800; margin:0 0 6px; color:var(--text); }
+.lead{ color:var(--muted); font-size:16px; margin:0; }
+.page-header{ display:flex; align-items:flex-end; justify-content:space-between; gap:16px; margin-bottom:18px; }
 
-  useEffect(() => setTemp(value), [value]);
+.section{
+  background:var(--panel);
+  border:1px solid #e5e7eb; border-radius:var(--radius);
+  box-shadow:var(--shadow); padding:18px;
+}
+.section-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+.section-head h2{ font-size:18px; font-weight:700; margin:0; color:var(--text); }
+.section-body{ display:block; }
 
-  useEffect(() => {
-    const onDoc = (e: MouseEvent) => {
-      if (wrap.current && !wrap.current.contains(e.target as Node)) setOpen(false);
-    };
-    const onEsc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
-    document.addEventListener("mousedown", onDoc);
-    document.addEventListener("keydown", onEsc);
-    return () => {
-      document.removeEventListener("mousedown", onDoc);
-      document.removeEventListener("keydown", onEsc);
-    };
-  }, []);
+.card{
+  background:var(--panel);
+  border:1px solid #e5e7eb; border-radius:var(--radius);
+  box-shadow:var(--shadow); padding:16px;
+}
+html.dark .section, html.dark .card{ border-color:#1f2937; }
 
-  const apply = () => {
-    onChange(temp || "08:00");
-    setOpen(false);
-  };
+/* ===== Badges ===== */
+.badge{
+  background:#eef2f7; color:var(--text);
+  border:1px solid #e5e7eb; padding:6px 10px;
+  border-radius:999px; font-weight:700; font-size:12px;
+}
+html.dark .badge{ background:#111827; color:var(--text); border-color:#1f2937; }
 
-  return (
-    <div className="relative inline-block" ref={wrap}>
-      <button
-        type="button"
-        className={`${btnGhost} inline-flex items-center`}
-        onClick={() => setOpen((o) => !o)}
-        style={{ fontSize: "var(--settings-fs)" }}
-      >
-        <span className="font-medium">Heure</span>
-      </button>
+/* ===== Boutons simples ===== */
+.cta,.btn{
+  display:inline-block; padding:10px 14px; border-radius:10px;
+  background:linear-gradient(135deg,var(--brand),var(--brand2));
+  color:#fff; font-weight:800; box-shadow:var(--shadow); border:0;
+}
+.btn-outline{
+  padding:10px 14px; border-radius:10px; border:1px solid #e5e7eb;
+  background:var(--bg); font-weight:700;
+}
+html.dark .btn-outline{ border-color:#334155; color:var(--text); background:transparent; }
 
-      {open && (
-        <div
-          role="dialog"
-          aria-label="Sélection de l'heure"
-          className="absolute right-0 z-50 mt-2 w-56 rounded-2xl border bg-white p-3 shadow-lg"
-          style={{ fontSize: "var(--settings-fs)" }}
-        >
-          <input
-            type="time"
-            value={temp}
-            onChange={(e) => setTemp(e.target.value)}
-            step={300}
-            className="w-full rounded-[10px] border px-3 py-2"
-            style={{ fontSize: "var(--settings-fs)" }}
-          />
-          <div className="mt-3 flex items-center justify-end pt-2 border-t">
-            <button type="button" className={`${btnGhost} px-3 py-1`} onClick={apply}>
-              OK
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+/* ===== Form ===== */
+.input{
+  width:100%; border:1px solid #e5e7eb; border-radius:12px; padding:10px;
+  background:var(--bg); color:var(--text);
+}
+.label{ color:var(--muted); font-size:14px; font-weight:600; display:block; margin-bottom:6px; }
+html.dark .input{ background:#0b1220; color:var(--text); border-color:#1f2937; }
+html.dark .input::placeholder { color: var(--muted); }
+
+/* ===== Helpers ===== */
+.grid{ display:grid; } .gap-6{ gap:16px; }
+.lg\:grid-cols-2{ grid-template-columns:1fr; } @media (min-width:1024px){ .lg\:grid-cols-2{ grid-template-columns:1fr 1fr; } }
+.sm\:grid-cols-2{ grid-template-columns:1fr; } @media (min-width:640px){ .sm\:grid-cols-2{ grid-template-columns:1fr 1fr; } }
+.flex{ display:flex; } .items-center{ align-items:center; } .justify-between{ justify-content:space-between; }
+.space-y-4 > * + *{ margin-top:16px; }
+.text-sm{ font-size:12.5px; } .text-3xl{ font-size:28px; } .font-bold{ font-weight:800; } .font-semibold{ font-weight:700; }
+.w-full{ width:100%; }
+.aspect-video{ position:relative; padding-bottom:56.25%; height:0; }
+.aspect-video > iframe{ position:absolute; inset:0; width:100%; height:100%; border:0; }
+
+/* ===== Boutons génériques (Tailwind @apply) ===== */
+.btn {
+  @apply inline-flex items-center justify-center gap-2
+         rounded-lg border border-gray-300 px-3 py-2
+         text-sm font-medium text-gray-900 bg-white
+         hover:bg-gray-50 active:translate-y-px transition;
+}
+.btn.btn-outline { @apply bg-transparent text-gray-900 border-gray-300 hover:bg-gray-100; }
+:root.dark .btn { @apply text-white bg-neutral-900 border-neutral-700 hover:bg-neutral-800; }
+:root.dark .btn.btn-outline { @apply bg-transparent text-white border-neutral-700 hover:bg-neutral-800; }
+
+/* ===== Bouton dashboard unifié ===== */
+.btn-dash{
+  display:inline-flex; align-items:center; justify-content:center; gap:.5rem;
+  border-radius:var(--radius); padding:.6rem 1rem; font-weight:600; font-size:.9rem; line-height:1;
+  color:#fff; background-image:linear-gradient(90deg,var(--brand),var(--brand2));
+  border:1px solid rgba(0,0,0,.08); box-shadow:var(--shadow);
+  transition:transform .1s ease, filter .2s ease, box-shadow .2s ease;
+}
+.btn-dash:hover{ filter:brightness(1.03); transform:translateY(-1px); }
+.btn-dash:active{ transform:translateY(0); }
+.btn-dash:focus-visible{ outline:none; box-shadow:0 0 0 4px var(--ring), var(--shadow); }
+.btn-dash:disabled{ opacity:.6; cursor:not-allowed; }
+
+/* ===== Segmented control ===== */
+.seg {
+  display:inline-flex; gap:.25rem; padding:.25rem; border-radius:var(--radius);
+  background:var(--panel); border:1px solid rgba(0,0,0,.06); box-shadow:var(--shadow);
+}
+.seg button{
+  border:0; background:transparent; color:var(--muted);
+  padding:.45rem .6rem; border-radius:calc(var(--radius) - 6px);
+  font-weight:600; font-size:.85rem; cursor:pointer; transition:filter .15s ease, transform .1s ease;
+}
+.seg button:hover{ filter:brightness(1.05); transform:translateY(-1px); }
+.seg button.active{
+  color:#fff; background-image:linear-gradient(90deg,var(--brand),var(--brand2));
+  box-shadow:var(--shadow);
 }
 
-/* ======================= Formulaire de rappel ======================= */
-function PushScheduleForm() {
-  const [time, setTime] = useState("08:00");
-  const [days, setDays] = useState<number[]>([1, 2, 3, 4, 5]);
-  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+/* ===== Chips ===== */
+.chips{ display:flex; flex-wrap:wrap; gap:.5rem; }
+.chip{
+  display:inline-flex; align-items:center; justify-content:center; gap:.35rem;
+  padding:.45rem .7rem; border-radius:var(--radius);
+  background:var(--panel); color:var(--text);
+  border:1px solid rgba(0,0,0,.06); box-shadow:var(--shadow);
+  font-weight:600; font-size:.85rem; cursor:pointer; transition:filter .15s ease, transform .1s ease;
+}
+.chip:hover{ filter:brightness(1.05); transform:translateY(-1px); }
 
-  const save = async () => {
-    try {
-      const { getDeviceId } = await import("@/lib/pushClient");
-      const deviceId = getDeviceId();
-      const res = await fetch("/api/push/prefs", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deviceId, time, days, tz }),
-      });
-      if (!res.ok) throw new Error("Erreur");
-      alert("Rappel enregistré ✅");
-    } catch (e) {
-      alert("Erreur d’enregistrement");
-    }
-  };
+/* ===== Bouton icône compact ===== */
+.icon-btn{
+  width:40px; height:40px; display:inline-flex; align-items:center; justify-content:center;
+  border-radius:var(--radius); background:var(--panel); color:var(--text);
+  border:1px solid rgba(0,0,0,.08); box-shadow:var(--shadow);
+  transition:transform .1s ease, filter .2s ease, box-shadow .2s ease;
+}
+.icon-btn:hover{ filter:brightness(1.02); transform:translateY(-1px); }
+.icon-btn:active{ transform:translateY(0); }
+.icon-btn:disabled{ opacity:.6; cursor:not-allowed; }
+.icon{ width:18px; height:18px; display:block; fill:currentColor; }
 
-  return (
-    <div className="card space-y-4" style={{ fontSize: "var(--settings-fs)" }}>
-      <h3 className="font-semibold">Rappel planifié</h3>
-      <p>Fuseau : {tz}</p>
-      <div className="flex flex-wrap items-center gap-3">
-        <DaysDropdown value={days} onChange={setDays} />
-        <TimeDropdown value={time} onChange={setTime} />
-      </div>
-      <div className="flex items-center justify-end">
-        <button type="button" className="btn-dash" onClick={save}>
-          Enregistrer
-        </button>
-      </div>
-    </div>
-  );
+/* =========================================================
+   DARK MODE — forcer la lisibilité (tout noir -> blanc)
+   ========================================================= */
+
+/* Exceptions utiles (laisser ces couleurs dédiées) */
+html.dark a { color: var(--brand) !important; }                 /* liens verts */
+html.dark .lead,
+html.dark .label,
+html.dark .muted,
+html.dark .text-muted,
+html.dark .opacity-70,
+html.dark .opacity-80 { color: var(--muted) !important; }       /* textes atténués verts */
+
+/* Catch-all texte */
+html.dark :where(
+  h1,h2,h3,h4,h5,h6,
+  p,span,small,div,section,article,
+  li,dt,dd,
+  label,strong,em,code,blockquote,
+  button,input,select,textarea,
+  th,td
+){
+  color: var(--text) !important;
 }
 
-/* ======================= Modale Mentions légales ======================= */
-function LegalModal() {
-  const [open, setOpen] = useState(false);
-  const panelRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const onEsc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
-    document.addEventListener("keydown", onEsc);
-    return () => document.removeEventListener("keydown", onEsc);
-  }, []);
-
-  return (
-    <div>
-      <button type="button" className={btnGhost} onClick={() => setOpen(true)}>
-        Voir les mentions légales
-      </button>
-
-      {open && (
-        <>
-          <div
-            className="fixed inset-0 z-[100] bg-black/40"
-            onClick={() => setOpen(false)}
-            aria-hidden
-          />
-          <div className="fixed inset-0 z-[101] flex sm:items-center items-end justify-center sm:p-4 p-0">
-            <div
-              ref={panelRef}
-              className="
-                w-full sm:max-w-3xl bg-white shadow-2xl
-                sm:rounded-2xl sm:border sm:p-6 p-4
-                sm:max-h-[85dvh] sm:h-auto
-                h-[92dvh] max-h-[100svh]
-                overflow-y-auto overscroll-contain
-              "
-              style={{
-                fontSize: "var(--settings-fs)",
-                WebkitOverflowScrolling: "touch",
-                touchAction: "pan-y",
-              }}
-              role="dialog"
-              aria-modal="true"
-              aria-label="Mentions légales et politique de cookies"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <h3 className="text-base font-semibold">Mentions légales</h3>
-                <button aria-label="Fermer" className={btnGhost} onClick={() => setOpen(false)}>
-                  Fermer
-                </button>
-              </div>
-
-              <div className="mt-3 space-y-4 leading-relaxed">
-                <p className="opacity-80">
-                  Ici vos mentions légales (éditeur du site, hébergeur, propriété intellectuelle,
-                  données personnelles, cookies, contact, etc.). Remplacez ce texte par votre contenu
-                  lorsque vos informations seront prêtes.
-                </p>
-
-                <h4 className="font-semibold">Cookies</h4>
-                <p className="opacity-80">
-                  Ce site utilise des cookies nécessaires au bon fonctionnement et, le cas échéant,
-                  pour la mesure d’audience.
-                </p>
-              </div>
-            </div>
-          </div>
-        </>
-      )}
-    </div>
-  );
+/* Styles inline & classes utilitaires forcées en noir -> blanc */
+html.dark [style*="color:#000"],
+html.dark [style*="color: #000"],
+html.dark [style*="color:#000000"],
+html.dark [style*="color: #000000"],
+html.dark [style*="color:rgb(0,0,0)"],
+html.dark [style*="color:#111"],
+html.dark [style*="color: #111"],
+html.dark [style*="color:#111111"],
+html.dark [style*="color: #111111"],
+html.dark [style*="color:#0b0f14"],
+html.dark [style*="color: #0b0f14"],
+html.dark .text-black,
+html.dark .text-gray-900,
+html.dark .text-neutral-900,
+html.dark .text-zinc-900,
+html.dark .text-slate-900 {
+  color: #fff !important;
 }
 
-/* ======================= Préférences (type & valeurs) ======================= */
-type Prefs = {
-  language: "fr" | "en" | "de";
-  theme: "light" | "dark" | "system"; // system = CLAIR
-  reducedMotion: boolean;
-};
-const LS_KEY = "app.prefs.v1";
-const DEFAULT_PREFS: Prefs = { language: "fr", theme: "system", reducedMotion: false };
+/* SVG/icônes : noir -> currentColor (blanc) */
+html.dark svg { color: var(--text) !important; }
+html.dark svg [fill="black"],
+html.dark svg [fill="#000"],
+html.dark svg [fill="#000000"] { fill: currentColor !important; }
+html.dark svg [stroke="black"],
+html.dark svg [stroke="#000"],
+html.dark svg [stroke="#000000"] { stroke: currentColor !important; }
 
-/* ======================= Page principale ======================= */
-export default function Page() {
-  useSettingsFontSize();
+/* Badges/labels/segments éventuels restés sombres */
+html.dark .badge,
+html.dark .chip,
+html.dark .seg button { color: var(--text) !important; }
 
-  const [prefs, setPrefs] = useState<Prefs>(DEFAULT_PREFS);
-  const [loaded, setLoaded] = useState(false);
+/* Placeholders et champs */
+html.dark ::placeholder { color: var(--muted) !important; }
+html.dark input, html.dark select, html.dark textarea { color: var(--text) !important; }
 
-  // 1) Lecture initiale + application du thème AVANT paint
-  useLayoutEffect(() => {
-    let initial: Prefs = DEFAULT_PREFS;
-    try {
-      const raw = localStorage.getItem(LS_KEY);
-      if (raw) initial = { ...DEFAULT_PREFS, ...JSON.parse(raw) };
-    } catch {}
-    setPrefs(initial);
+/* =========================================================
+   DARK: forcer BLANC sur surfaces vertes (carrés/CTA/boutons)
+   ========================================================= */
+html.dark .btn,
+html.dark .cta,
+html.dark .btn-dash,
+html.dark .seg button.active {
+  color: #fff !important;
+}
+html.dark .btn *,
+html.dark .cta *,
+html.dark .btn-dash *,
+html.dark .seg button.active * {
+  color: #fff !important;
+}
+/* liens à l’intérieur des surfaces vertes */
+html.dark .btn a,
+html.dark .cta a,
+html.dark .btn-dash a,
+html.dark .seg button.active a {
+  color: #fff !important;
+  text-decoration-color: rgba(255,255,255,.7) !important;
+}
 
-    // Auto = clair (ne suit plus l'OS)
-    const isDark = initial.theme === "dark";
-    applyThemeToRoot(isDark);
-
-    setLoaded(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // 2) Persistance + (ré)application du thème à chaque changement
-  useEffect(() => {
-    if (!loaded) return;
-    try {
-      localStorage.setItem(LS_KEY, JSON.stringify(prefs));
-    } catch {}
-    // Auto = clair
-    const isDark = prefs.theme === "dark";
-    applyThemeToRoot(isDark);
-  }, [prefs, loaded]);
-
-  return (
-    <div className="container" style={{ paddingTop: 24, paddingBottom: 24 }}>
-      <div className="mb-2">
-        <h1
-          className="h1"
-          style={{ fontSize: "clamp(20px, 2.2vw, 24px)", lineHeight: 1.15, color: "#111827" }}
-        >
-          Réglages
-        </h1>
-      </div>
-
-      <div style={{ fontSize: "var(--settings-fs)" }}>
-        {/* ======================= Section Général ======================= */}
-        <Section title="Général">
-          <div className="grid gap-6 md:grid-cols-2">
-            {/* Langue */}
-            <div className="card space-y-3">
-              <h3 className="font-semibold">Langue</h3>
-              <select
-                className="rounded-[10px] border px-3 py-2 w-full"
-                value={prefs.language}
-                onChange={(e) =>
-                  setPrefs((p) => ({ ...p, language: e.target.value as Prefs["language"] }))
-                }
-                disabled={!loaded}
-              >
-                <option value="fr">Français (FR)</option>
-                <option value="en">English (EN)</option>
-                <option value="de">Deutsch (DE)</option>
-              </select>
-            </div>
-
-            {/* Thème */}
-            <div className="card space-y-3">
-              <h3 className="font-semibold">Thème</h3>
-              <div className="flex flex-wrap gap-2">
-                {(["light", "dark", "system"] as const).map((t) => (
-                  <button
-                    key={t}
-                    type="button"
-                    className={btnGhost}
-                    aria-pressed={prefs.theme === t}
-                    onClick={() => setPrefs((p) => ({ ...p, theme: t }))}
-                  >
-                    {t === "light" ? "Clair" : t === "dark" ? "Sombre" : "Auto (clair)"}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </Section>
-
-        {/* ======================= Section Notifications ======================= */}
-        <Section title="Rappel Motivation ">
-          <PushScheduleForm />
-        </Section>
-
-        {/* ======================= Section Cookies & Mentions ======================= */}
-        <Section title="Cookies & Mentions légales">
-          <p className="opacity-70 mb-4">
-            Consultez ici notre politique de cookies et les mentions légales du site.
-          </p>
-          <LegalModal />
-        </Section>
-      </div>
-    </div>
-  );
+/* Utilitaire pour n'importe quelle surface accentuée custom */
+.on-accent,
+.on-accent * { color:#fff !important; }
+.on-accent a {
+  color:#fff !important;
+  text-decoration-color: rgba(255,255,255,.7) !important;
 }
