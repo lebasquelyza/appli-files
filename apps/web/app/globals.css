@@ -206,7 +206,7 @@ html.dark .text-muted,
 html.dark .opacity-70,
 html.dark .opacity-80 { color: var(--muted) !important; }       /* textes atténués verts */
 
-/* 1) Catch-all texte : blanchit la plupart des éléments textuels */
+/* Catch-all texte */
 html.dark :where(
   h1,h2,h3,h4,h5,h6,
   p,span,small,div,section,article,
@@ -218,7 +218,7 @@ html.dark :where(
   color: var(--text) !important;
 }
 
-/* 2) Styles inline & classes utilitaires qui forcent le noir -> blanc */
+/* Styles inline & classes utilitaires forcées en noir -> blanc */
 html.dark [style*="color:#000"],
 html.dark [style*="color: #000"],
 html.dark [style*="color:#000000"],
@@ -238,7 +238,7 @@ html.dark .text-slate-900 {
   color: #fff !important;
 }
 
-/* 3) SVG/icônes : si noir fixé, utiliser la couleur du texte (blanc) */
+/* SVG/icônes : noir -> currentColor (blanc) */
 html.dark svg { color: var(--text) !important; }
 html.dark svg [fill="black"],
 html.dark svg [fill="#000"],
@@ -247,11 +247,43 @@ html.dark svg [stroke="black"],
 html.dark svg [stroke="#000"],
 html.dark svg [stroke="#000000"] { stroke: currentColor !important; }
 
-/* 4) Badges/labels/segments éventuels restés sombres */
+/* Badges/labels/segments éventuels restés sombres */
 html.dark .badge,
 html.dark .chip,
 html.dark .seg button { color: var(--text) !important; }
 
-/* 5) Placeholders et champs */
+/* Placeholders et champs */
 html.dark ::placeholder { color: var(--muted) !important; }
 html.dark input, html.dark select, html.dark textarea { color: var(--text) !important; }
+
+/* =========================================================
+   DARK: forcer BLANC sur surfaces vertes (carrés/CTA/boutons)
+   ========================================================= */
+html.dark .btn,
+html.dark .cta,
+html.dark .btn-dash,
+html.dark .seg button.active {
+  color: #fff !important;
+}
+html.dark .btn *,
+html.dark .cta *,
+html.dark .btn-dash *,
+html.dark .seg button.active * {
+  color: #fff !important;
+}
+/* liens à l’intérieur des surfaces vertes */
+html.dark .btn a,
+html.dark .cta a,
+html.dark .btn-dash a,
+html.dark .seg button.active a {
+  color: #fff !important;
+  text-decoration-color: rgba(255,255,255,.7) !important;
+}
+
+/* Utilitaire pour n'importe quelle surface accentuée custom */
+.on-accent,
+.on-accent * { color:#fff !important; }
+.on-accent a {
+  color:#fff !important;
+  text-decoration-color: rgba(255,255,255,.7) !important;
+}
