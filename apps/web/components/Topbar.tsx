@@ -1,3 +1,4 @@
+// apps/web/components/Topbar.tsx
 "use client";
 
 import { useRouter } from "next/navigation";
@@ -15,89 +16,86 @@ export default function Topbar() {
 
   useEffect(() => {
     if (open) {
-      const t = setTimeout(() => firstBtnRef.current?.focus(), 50);
+      const t = setTimeout(() => firstBtnRef.current?.focus(), 40);
       return () => clearTimeout(t);
     }
   }, [open]);
 
   return (
-    <header
-      className="sticky top-0 z-[1000] border-b bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80"
-      style={{ paddingTop: "env(safe-area-inset-top)" }}
-    >
-      <div className="mx-auto max-w-screen-xl h-12 px-4 flex items-center justify-between">
-        {/* Bouton hamburger à gauche */}
-        <button
-          aria-label="Ouvrir le menu"
-          className="inline-flex items-center justify-center rounded-lg border px-3 py-2 hover:bg-gray-50 active:scale-[0.99]"
-          onClick={() => setOpen(true)}
-        >
-          {/* icône */}
-          <span className="relative block w-5 h-3 mr-2">
-            <span className="absolute inset-x-0 top-0 h-[2px] bg-gray-900"></span>
-            <span className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[2px] bg-gray-900"></span>
-            <span className="absolute inset-x-0 bottom-0 h-[2px] bg-gray-900"></span>
-          </span>
-          <span className="text-sm font-semibold">Menu</span>
-        </button>
+    <>
+      {/* Barre fixe (même style que ClientTopbar) */}
+      <header className="fixed inset-x-0 top-0 z-[1000] border-b bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 shadow-sm">
+        <div className="mx-auto max-w-screen-xl h-10 px-3 flex items-center justify-between">
+          {/* Bouton Menu (toggle) */}
+          <button
+            aria-label="Ouvrir/Fermer le menu"
+            onClick={() => setOpen((v) => !v)}
+            className="inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-[.99] transition"
+          >
+            {/* 3 barres */}
+            <span className="relative -ml-1 inline-block h-3 w-4">
+              <span className="absolute inset-x-0 top-0 h-[2px] bg-white" />
+              <span className="absolute inset-x-0 top-1.5 h-[2px] bg-white" />
+              <span className="absolute inset-x-0 bottom-0 h-[2px] bg-white" />
+            </span>
+            Menu
+          </button>
 
-        {/* espace centré vide pour ne rien afficher */}
-        <div />
+          {/* Rien au centre/droite pour rester épuré */}
+          <div />
+          <div className="w-[42px]" />
+        </div>
+      </header>
 
-        {/* espace à droite pour équilibrer */}
-        <div className="w-[42px]" />
+      {/* Panneau plein écran sans titre "Menu" en haut (même que ClientTopbar) */}
+      {open && (
+        <div className="fixed inset-0 z-[1100]" role="dialog" aria-modal="true">
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setOpen(false)}
+            aria-hidden="true"
+          />
+          <div className="absolute inset-0 bg-white flex flex-col">
+            {/* espace top pour encoche */}
+            <div className="h-10" />
+            <nav className="max-w-screen-md mx-auto w-full p-2 pt-[calc(env(safe-area-inset-top)+2px)]">
+              <ul className="divide-y">
+                {[
+                  { href: "/dashboard", label: "Accueil" },
+                  { href: "/dashboard/calories", label: "Calories" },
+                  { href: "/dashboard/corrector", label: "Correcteur IA" },
+                  { href: "/dashboard/profile", label: "Profil" },
+                  { href: "/dashboard/abonnement", label: "Abonnement" },
+                  { href: "/dashboard/recipes", label: "Recettes" },
+                  { href: "/dashboard/progress", label: "Progression" },
+                  { href: "/dashboard/settings", label: "Réglages" },
+                ].map((item, i) => (
+                  <li key={item.href}>
+                    <button
+                      ref={i === 0 ? firstBtnRef : undefined}
+                      onClick={() => go(item.href)}
+                      className="w-full text-left py-3 text-lg rounded-md px-3 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-emerald-600/30"
+                    >
+                      {item.label}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </nav>
 
-        {/* Overlay & panneau plein écran */}
-        {open && (
-          <div className="fixed inset-0 z-[1100]" role="dialog" aria-modal="true">
-            <div
-              className="absolute inset-0 bg-black/40"
-              onClick={() => setOpen(false)}
-              aria-hidden="true"
-            />
-            <div className="absolute inset-0 bg-white flex flex-col">
-              {/* Barre du panel */}
-  <div className="h-14 flex items-center justify-end px-4 border-b">
-  <button
-    aria-label="Fermer"
-    className="inline-flex items-center justify-center rounded-lg border px-3 py-2 hover:bg-gray-50"
-    onClick={() => setOpen(false)}
-  >
-    ✕
-  </button>
-</div>
-  {/* Liens */}
-              <nav className="max-w-screen-md mx-auto w-full p-4">
-                <ul className="divide-y">
-                  {[
-                    { href: "/dashboard", label: "Accueil" },
-                    { href: "/dashboard/calories", label: "Calories" },
-                    { href: "/dashboard/corrector", label: "Correcteur IA" },
-                    { href: "/dashboard/profile", label: "Profil" },
-                    { href: "/dashboard/abonnement", label: "Abonnement" },
-                    { href: "/dashboard/recipes", label: "Recettes" },
-                    { href: "/dashboard/progress", label: "Progression" },
-                    { href: "/dashboard/settings", label: "Réglages" },
-                  ].map((item, i) => (
-                    <li key={item.href}>
-                      <button
-                        ref={i === 0 ? firstBtnRef : undefined}
-                        onClick={() => go(item.href)}
-                        className="w-full text-left py-4 text-lg hover:bg-gray-50 rounded-md px-2 focus:outline-none focus:ring-2 focus:ring-gray-900/20"
-                      >
-                        {item.label}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </nav>
-
-              {/* Footer du panneau (si tu ne veux rien, laisse vide) */}
-              <div className="mt-auto border-t py-3 text-center text-sm text-gray-500"></div>
+            {/* Fermer depuis le bas si besoin */}
+            <div className="mt-auto p-2">
+              <button
+                onClick={() => setOpen(false)}
+                className="w-full rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 active:scale-[.99]"
+                aria-label="Fermer le menu"
+              >
+                Fermer
+              </button>
             </div>
           </div>
-        )}
-      </div>
-    </header>
+        </div>
+      )}
+    </>
   );
 }
