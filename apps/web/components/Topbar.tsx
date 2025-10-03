@@ -57,18 +57,16 @@ export default function Topbar() {
             />
             <div className="absolute inset-0 bg-white flex flex-col">
               {/* Barre du panel */}
-              <div className="h-14 flex items-center justify-between px-4 border-b">
-                <div className="font-extrabold">Menu</div>
-                <button
-                  aria-label="Fermer"
-                  className="inline-flex items-center justify-center rounded-lg border px-3 py-2 hover:bg-gray-50"
-                  onClick={() => setOpen(false)}
-                >
-                  ✕
-                </button>
-              </div>
-
-              {/* Liens */}
+  <div className="h-14 flex items-center justify-end px-4 border-b">
+  <button
+    aria-label="Fermer"
+    className="inline-flex items-center justify-center rounded-lg border px-3 py-2 hover:bg-gray-50"
+    onClick={() => setOpen(false)}
+  >
+    ✕
+  </button>
+</div>
+  {/* Liens */}
               <nav className="max-w-screen-md mx-auto w-full p-4">
                 <ul className="divide-y">
                   {[
