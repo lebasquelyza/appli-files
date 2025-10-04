@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { Metadata, Viewport } from "next";
-import Topbar from "@/components/Topbar";
+import Topbar from "../components/Topbar";
 import "./globals.css";
 
 export const metadata: Metadata = {
