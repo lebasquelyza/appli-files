@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { getSupabase } from "../../lib/supabaseClient";
 
 export default function ResetPasswordPage() {
   const [password, setPassword] = useState("");
@@ -10,32 +10,35 @@ export default function ResetPasswordPage() {
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  // Si l’utilisateur arrive depuis l’e-mail de reset, Supabase crée une session temporaire.
-  // On peut directement mettre à jour son mot de passe.
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
     setMsg(null);
     setErr(null);
     try {
+      const supabase = getSupabase();
       const { error } = await supabase.auth.updateUser({ password });
       if (error) throw error;
       setMsg("Mot de passe mis à jour. Vous pouvez vous connecter.");
-      setTimeout(()=> (window.location.href="/dashboard"), 800);
+      setTimeout(() => (window.location.href = "/dashboard"), 800);
     } catch (e: any) {
       setErr(e?.message || "Impossible de mettre à jour le mot de passe.");
+      // eslint-disable-next-line no-console
+      console.error("[ResetPassword]", e);
     } finally {
       setBusy(false);
     }
   };
 
-  // Optionnel : si pas de session, on peut indiquer à l’utilisateur de relancer la procédure
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      if (!data.session) {
-        // Pas bloquant, on laisse changer après le lien correct.
-      }
-    });
+    try {
+      const supabase = getSupabase();
+      supabase.auth.getSession().then(() => {});
+    } catch (e) {
+      // Pas bloquant, affichage déjà géré par onSubmit si besoin
+      // eslint-disable-next-line no-console
+      console.warn("[ResetPassword init]", e);
+    }
   }, []);
 
   return (
@@ -47,7 +50,7 @@ export default function ResetPasswordPage() {
           required
           minLength={6}
           value={password}
-          onChange={e=>setPassword(e.target.value)}
+          onChange={(e) => setPassword(e.target.value)}
           placeholder="Nouveau mot de passe"
           className="w-full rounded-lg border px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-600/30"
         />
@@ -64,3 +67,4 @@ export default function ResetPasswordPage() {
     </main>
   );
 }
+
