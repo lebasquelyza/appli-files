@@ -3,7 +3,6 @@ import type { Metadata, Viewport } from "next";
 import Topbar from "@/components/Topbar";
 import "./globals.css";
 
-// === PWA / App name ===
 export const metadata: Metadata = {
   title: "Files Coaching",
   description: "Coaching & bien-être",
@@ -29,7 +28,6 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
-// Tes options existantes
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
@@ -38,13 +36,13 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="fr">
       <body className="bg-white text-gray-900 min-h-dvh">
         <Topbar />
-        {/* 48px (h-12) + safe-area iOS */}
-        <div
+        {/* ✅ Offset global unique */}
+        <main
           className="min-h-dvh"
-          style={{ paddingTop: "calc(env(safe-area-inset-top) + 72px)" }}
+          style={{ paddingTop: "calc(env(safe-area-inset-top) + 40px)" }}
         >
           {children}
-        </div>
+        </main>
       </body>
     </html>
   );
