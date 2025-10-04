@@ -2,7 +2,7 @@
 "use client";
 
 import { useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { getSupabase } from "../lib/supabaseClient";
 
 type Mode = "signin" | "signup";
 
@@ -19,27 +19,28 @@ export default function AuthCard() {
     setBusy(true);
     setMsg(null);
     setErr(null);
-
     try {
+      const supabase = getSupabase();
+
       if (mode === "signin") {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
         setMsg("Connexion réussie. Redirection vers le dashboard…");
-        // Redirige après un petit délai
         setTimeout(() => (window.location.href = "/dashboard"), 500);
       } else {
         const { error } = await supabase.auth.signUp({
           email,
           password,
-          options: {
-            emailRedirectTo: `${window.location.origin}/reset-password`,
-          },
+          options: { emailRedirectTo: `${window.location.origin}/reset-password` },
         });
         if (error) throw error;
         setMsg("Compte créé ! Vérifie tes e-mails pour confirmer l’adresse.");
       }
     } catch (e: any) {
       setErr(e?.message || "Une erreur est survenue.");
+      // trace utile pour la console
+      // eslint-disable-next-line no-console
+      console.error("[AuthCard submit]", e);
     } finally {
       setBusy(false);
     }
@@ -52,9 +53,9 @@ export default function AuthCard() {
     try {
       if (!email) {
         setErr("Entre d’abord ton e-mail puis clique sur « Mot de passe oublié ? »");
-        setBusy(false);
         return;
       }
+      const supabase = getSupabase();
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${window.location.origin}/reset-password`,
       });
@@ -62,6 +63,8 @@ export default function AuthCard() {
       setMsg("E-mail de réinitialisation envoyé. Vérifie ta boîte mail.");
     } catch (e: any) {
       setErr(e?.message || "Impossible d’envoyer l’e-mail.");
+      // eslint-disable-next-line no-console
+      console.error("[AuthCard forgot]", e);
     } finally {
       setBusy(false);
     }
@@ -72,15 +75,19 @@ export default function AuthCard() {
       <div className="flex gap-2 mb-4">
         <button
           onClick={() => setMode("signin")}
-          className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold border ${mode==="signin" ? "bg-gray-900 text-white" : "hover:bg-gray-50"}`}
-          aria-pressed={mode==="signin"}
+          className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold border ${
+            mode === "signin" ? "bg-gray-900 text-white" : "hover:bg-gray-50"
+          }`}
+          aria-pressed={mode === "signin"}
         >
           Connexion
         </button>
         <button
           onClick={() => setMode("signup")}
-          className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold border ${mode==="signup" ? "bg-gray-900 text-white" : "hover:bg-gray-50"}`}
-          aria-pressed={mode==="signup"}
+          className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold border ${
+            mode === "signup" ? "bg-gray-900 text-white" : "hover:bg-gray-50"
+          }`}
+          aria-pressed={mode === "signup"}
         >
           Créer un compte
         </button>
@@ -93,23 +100,24 @@ export default function AuthCard() {
             type="email"
             required
             value={email}
-            onChange={e=>setEmail(e.target.value)}
+            onChange={(e) => setEmail(e.target.value)}
             className="w-full rounded-lg border px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-600/30"
             placeholder="vous@exemple.com"
             autoComplete="email"
           />
         </div>
+
         <div>
           <label className="block text-sm font-medium mb-1">Mot de passe</label>
           <input
             type="password"
             required
+            minLength={6}
             value={password}
-            onChange={e=>setPassword(e.target.value)}
+            onChange={(e) => setPassword(e.target.value)}
             className="w-full rounded-lg border px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-600/30"
             placeholder="••••••••"
-            autoComplete={mode==="signin" ? "current-password" : "new-password"}
-            minLength={6}
+            autoComplete={mode === "signin" ? "current-password" : "new-password"}
           />
         </div>
 
@@ -118,14 +126,14 @@ export default function AuthCard() {
           disabled={busy}
           className="w-full inline-flex items-center justify-center rounded-lg px-3 py-2 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60"
         >
-          {busy ? "Veuillez patienter…" : (mode==="signin" ? "Se connecter" : "Créer le compte")}
+          {busy ? "Veuillez patienter…" : mode === "signin" ? "Se connecter" : "Créer le compte"}
         </button>
 
         <button
           type="button"
           onClick={onForgot}
-          className="block w-full text-center text-sm text-gray-600 hover:underline"
           disabled={busy}
+          className="block w-full text-center text-sm text-gray-600 hover:underline"
         >
           Mot de passe oublié ?
         </button>
