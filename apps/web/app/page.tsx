@@ -70,13 +70,15 @@ export default function SigninPage() {
         <header className="text-center mb-10">
           <h1 className="text-4xl font-bold mb-3">Files Coaching — Coach Sportif IA</h1>
           <p className="text-lg text-gray-700">
-            Séances personnalisées, conseils et suivi.
+            L'assistant intelligent qui optimise votre performance.
           </p>
         </header>
 
         {/* ✅ 2. Points forts */}
         <section className="mb-12 text-center">
-          <h3 className="text-2xl font-semibold mb-4">Pourquoi choisir Files Coaching ?</h3>
+          <h3 className="text-2xl font-semibold mb-4">
+            Séances personnalisées, conseils et suivi
+          </h3>
           <ul className="space-y-2 text-gray-700 text-lg">
             <li>✅ Programme personnalisé adapté à vos objectifs</li>
             <li>✅ Minuteur & Musique intégrés pour vos séances</li>
@@ -160,3 +162,4 @@ export default function SigninPage() {
     </main>
   );
 }
+
