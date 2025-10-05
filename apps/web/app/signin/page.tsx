@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { getSupabase } from "../../lib/supabaseClient"; // ✅ chemin corrigé
+import { getSupabase } from "../../lib/supabaseClient";
 import { Eye, EyeOff } from "lucide-react";
 
 export default function SigninPage() {
@@ -64,10 +64,8 @@ export default function SigninPage() {
   };
 
   return (
-    {/* ⬇️ descend le contenu sous la topbar */}
     <main className="pt-14 py-16">
       <div className="container max-w-md mx-auto">
-        {/* ⬇️ Titre contraint à 2xl / 3xl quoi qu’il arrive */}
         <h1
           className="not-prose font-bold mb-6 text-center
                      [font-size:theme(fontSize.2xl)!important]
@@ -103,7 +101,7 @@ export default function SigninPage() {
                 disabled={!inputsReady}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-gray-100 pr-10"
+                className="w-full border rounded-lg px-3 py-2 pr-10 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-gray-100"
                 placeholder="••••••••"
               />
               <button
@@ -144,3 +142,4 @@ export default function SigninPage() {
     </main>
   );
 }
+
