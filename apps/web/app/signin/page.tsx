@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { getSupabase } from "../../lib/supabaseClient";
+import { getSupabase } from "../../lib/supabaseClient"; // ✅ chemin corrigé
 import { Eye, EyeOff } from "lucide-react";
 
 export default function SigninPage() {
@@ -13,7 +13,6 @@ export default function SigninPage() {
   const [error, setError] = useState<string | null>(null);
   const [inputsReady, setInputsReady] = useState(false);
 
-  // ✅ Empêche le clavier de s’ouvrir automatiquement
   useEffect(() => {
     const t = setTimeout(() => {
       setInputsReady(true);
@@ -114,9 +113,9 @@ export default function SigninPage() {
             {loading ? "Connexion..." : "Se connecter"}
           </button>
 
-          <p className="text-center text-base font-medium text-gray-600 mt-4">
+          <p className="text-center text-sm text-gray-600 mt-3">
             Pas encore de compte ?{" "}
-            <a href="/signup" className="text-emerald-600 hover:underline text-base font-medium">
+            <a href="/signup" className="text-emerald-600 hover:underline">
               Créer un compte
             </a>
           </p>
