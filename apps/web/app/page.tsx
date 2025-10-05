@@ -64,29 +64,34 @@ export default function SigninPage() {
   };
 
   return (
-    <main className="py-16">
-      <div className="container max-w-md mx-auto">
-        {/* 1. Titre */}
-        <header className="text-center mb-10">
-          <h1 className="text-4xl font-bold mb-3">Files Coaching — Coach Sportif IA</h1>
+    <main className="py-10 sm:py-16">
+      <div className="container max-w-md mx-auto px-4">
+        {/* 1) Titre */}
+        <header className="text-center mb-6 sm:mb-10">
+          <h1 className="font-bold leading-tight text-3xl sm:text-4xl">
+            Files Coaching — Coach Sportif IA
+          </h1>
         </header>
 
-        {/* 2. Points forts */}
-        <section className="mb-12 text-center">
-          <h3 className="text-2xl font-semibold mb-4">
+        {/* 2) Points forts */}
+        <section className="mb-8 sm:mb-12 text-left">
+          <h3 className="text-xl sm:text-2xl font-semibold mb-3 sm:mb-4">
             Séances personnalisées, conseils et suivi
           </h3>
-          <ul className="space-y-2 text-gray-700 text-lg">
+          <ul className="space-y-2 text-gray-800 text-lg leading-relaxed pl-5 list-disc">
             <li>✅ Programme personnalisé adapté à vos objectifs</li>
             <li>✅ Minuteur & Musique intégrés pour vos séances</li>
             <li>✅ Recettes healthy & conseils nutrition</li>
           </ul>
         </section>
 
-        {/* 3. Formulaire de connexion */}
-        <h2 className="text-3xl font-bold mb-6 text-center">Se connecter</h2>
+        {/* 3) Formulaire */}
+        <h2 className="text-2xl sm:text-3xl font-bold mb-4 sm:mb-6 text-center">
+          Se connecter
+        </h2>
 
         <form onSubmit={handleLogin} className="space-y-4">
+          {/* Email */}
           <div>
             <label className="block text-sm font-medium mb-1">Adresse e-mail</label>
             <input
@@ -102,6 +107,7 @@ export default function SigninPage() {
             />
           </div>
 
+          {/* Mot de passe + œil */}
           <div>
             <label className="block text-sm font-medium mb-1">Mot de passe</label>
             <div className="relative">
@@ -113,14 +119,15 @@ export default function SigninPage() {
                 disabled={!inputsReady}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-gray-100 pr-10"
+                className="w-full border rounded-lg px-3 py-2 pr-12 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-gray-100"
                 placeholder="••••••••"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute inset-y-0 right-2 flex items-center text-gray-500 hover:text-gray-700"
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-500 hover:text-gray-700"
                 tabIndex={-1}
+                aria-label={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
               >
                 {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
               </button>
