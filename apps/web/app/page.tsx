@@ -66,15 +66,12 @@ export default function SigninPage() {
   return (
     <main className="py-16">
       <div className="container max-w-md mx-auto">
-        {/* ✅ 1. Titre et sous-titre */}
+        {/* 1. Titre */}
         <header className="text-center mb-10">
           <h1 className="text-4xl font-bold mb-3">Files Coaching — Coach Sportif IA</h1>
-          <p className="text-lg text-gray-700">
-            L'assistant intelligent qui optimise votre performance.
-          </p>
         </header>
 
-        {/* ✅ 2. Points forts */}
+        {/* 2. Points forts */}
         <section className="mb-12 text-center">
           <h3 className="text-2xl font-semibold mb-4">
             Séances personnalisées, conseils et suivi
@@ -86,11 +83,10 @@ export default function SigninPage() {
           </ul>
         </section>
 
-        {/* ✅ 3. Formulaire de connexion */}
+        {/* 3. Formulaire de connexion */}
         <h2 className="text-3xl font-bold mb-6 text-center">Se connecter</h2>
 
         <form onSubmit={handleLogin} className="space-y-4">
-          {/* Champ e-mail */}
           <div>
             <label className="block text-sm font-medium mb-1">Adresse e-mail</label>
             <input
@@ -106,7 +102,6 @@ export default function SigninPage() {
             />
           </div>
 
-          {/* Champ mot de passe */}
           <div>
             <label className="block text-sm font-medium mb-1">Mot de passe</label>
             <div className="relative">
@@ -162,4 +157,3 @@ export default function SigninPage() {
     </main>
   );
 }
-
