@@ -64,21 +64,21 @@ export default function SigninPage() {
   };
 
   return (
-    <main className="py-10 sm:py-16">
+    <main className="py-10 sm:py-12">
       <div className="container max-w-md mx-auto px-4">
-        {/* 1) Titre */}
-        <header className="text-center mb-6 sm:mb-10">
-          <h1 className="font-bold leading-tight text-3xl sm:text-4xl">
+        {/* 1) Titre (même taille que “Se connecter”) */}
+        <header className="text-left mb-4">
+          <h1 className="font-bold leading-tight text-2xl sm:text-3xl">
             Files Coaching — Coach Sportif IA
           </h1>
         </header>
 
-        {/* 2) Points forts */}
-        <section className="mb-8 sm:mb-12 text-left">
-          <h3 className="text-xl sm:text-2xl font-semibold mb-3 sm:mb-4">
+        {/* 2) Points forts (aucune barre, juste un petit écart) */}
+        <section className="mb-8">
+          <h3 className="text-lg sm:text-xl font-semibold mb-3">
             Séances personnalisées, conseils et suivi
           </h3>
-          <ul className="space-y-2 text-gray-800 text-lg leading-relaxed pl-5 list-disc">
+          <ul className="space-y-2 text-gray-800 text-base sm:text-lg leading-relaxed pl-5 list-disc">
             <li>✅ Programme personnalisé adapté à vos objectifs</li>
             <li>✅ Minuteur & Musique intégrés pour vos séances</li>
             <li>✅ Recettes healthy & conseils nutrition</li>
@@ -86,7 +86,7 @@ export default function SigninPage() {
         </section>
 
         {/* 3) Formulaire */}
-        <h2 className="text-2xl sm:text-3xl font-bold mb-4 sm:mb-6 text-center">
+        <h2 className="text-2xl sm:text-3xl font-bold mb-4 text-left">
           Se connecter
         </h2>
 
@@ -107,7 +107,7 @@ export default function SigninPage() {
             />
           </div>
 
-          {/* Mot de passe + œil */}
+          {/* Mot de passe + œil (bien aligné dans le champ) */}
           <div>
             <label className="block text-sm font-medium mb-1">Mot de passe</label>
             <div className="relative">
@@ -140,10 +140,7 @@ export default function SigninPage() {
 
           <p className="text-center text-base text-gray-600 mt-3">
             Pas encore de compte ?{" "}
-            <a
-              href="/signup"
-              className="text-base font-semibold text-emerald-600 hover:underline"
-            >
+            <a href="/signup" className="text-base font-semibold text-emerald-600 hover:underline">
               Créer un compte
             </a>
           </p>
