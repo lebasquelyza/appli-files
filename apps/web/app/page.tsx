@@ -67,6 +67,18 @@ export default function SigninPage() {
   return (
     <main className="py-16">
       <div className="container max-w-md mx-auto">
+        {/* ✅ HEADER — Texte + points forts */}
+        <header className="text-center mb-10">
+          <h1 className="text-4xl font-bold mb-3">Files Coaching — Coach Sportif IA</h1>
+          <p className="text-lg text-gray-700 mb-6">Séances personnalisées, conseils et suivi.</p>
+          <ul className="space-y-2 text-gray-600 text-base">
+            <li>✅ Programme personnalisé</li>
+            <li>✅ Minuteur & Musique intégrés</li>
+            <li>✅ Recettes healthy et conseils</li>
+          </ul>
+        </header>
+
+        {/* ✅ Formulaire de connexion */}
         <h1 className="text-3xl font-bold mb-6 text-center">Se connecter</h1>
 
         <form onSubmit={handleLogin} className="space-y-4">
