@@ -114,9 +114,9 @@ export default function SigninPage() {
             {loading ? "Connexion..." : "Se connecter"}
           </button>
 
-          <p className="text-center text-sm text-gray-600 mt-3">
+          <p className="text-center text-base font-medium text-gray-600 mt-4">
             Pas encore de compte ?{" "}
-            <a href="/signup" className="text-emerald-600 hover:underline">
+            <a href="/signup" className="text-emerald-600 hover:underline text-base font-medium">
               Créer un compte
             </a>
           </p>
