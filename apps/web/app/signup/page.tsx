@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { getSupabase } from "../../lib/supabaseClient";
+import { getSupabase } from "../../lib/supabaseClient"; // ✅ chemin corrigé
 import { Eye, EyeOff } from "lucide-react";
 
 export default function SignupPage() {
@@ -90,9 +90,9 @@ export default function SignupPage() {
             {loading ? "Création..." : "Créer mon compte"}
           </button>
 
-          <p className="text-center text-base font-medium text-gray-600 mt-4">
+          <p className="text-center text-sm text-gray-600 mt-3">
             Déjà un compte ?{" "}
-            <a href="/" className="text-emerald-600 hover:underline text-base font-medium">
+            <a href="/signin" className="text-emerald-600 hover:underline">
               Se connecter
             </a>
           </p>
