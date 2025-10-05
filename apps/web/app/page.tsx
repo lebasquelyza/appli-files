@@ -64,12 +64,16 @@ export default function SigninPage() {
   };
 
   return (
-    // ⬇️ ajout de pt-14 pour descendre sous la topbar
+    {/* ↓↓↓ pousse le contenu sous la topbar fixe */}
     <main className="pt-14 py-10 sm:py-12">
       <div className="container max-w-md mx-auto px-4">
-        {/* ✅ Titre désormais dans la page, même taille que "Se connecter" */}
+        {/* ↓↓↓ Titre forcé à la même taille que “Se connecter”, quoi qu’il arrive */}
         <header className="text-left mb-6">
-          <h1 className="not-prose font-bold leading-tight text-2xl sm:text-3xl">
+          <h1
+            className="font-bold leading-tight not-prose
+                       [font-size:theme(fontSize.2xl)!important]
+                       sm:[font-size:theme(fontSize.3xl)!important]"
+          >
             Files Coaching — Coach Sportif IA
           </h1>
         </header>
@@ -108,7 +112,7 @@ export default function SigninPage() {
             />
           </div>
 
-          {/* Mot de passe */}
+          {/* Mot de passe + œil */}
           <div>
             <label className="block text-sm font-medium mb-1">Mot de passe</label>
             <div className="relative">
@@ -162,3 +166,4 @@ export default function SigninPage() {
     </main>
   );
 }
+
