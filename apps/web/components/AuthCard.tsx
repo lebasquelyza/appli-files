@@ -1,7 +1,7 @@
 // apps/web/components/AuthCard.tsx
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { getSupabase } from "../lib/supabaseClient";
 
 type Mode = "signin" | "signup";
@@ -13,6 +13,18 @@ export default function AuthCard() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+
+  // (optionnel) petits logs pour vérifier l'injection des env; retire-les après.
+  useEffect(() => {
+    // eslint-disable-next-line no-console
+    console.log("SUPABASE_URL:", process.env.NEXT_PUBLIC_SUPABASE_URL, (window as any)?.__env?.NEXT_PUBLIC_SUPABASE_URL);
+    // eslint-disable-next-line no-console
+    console.log(
+      "SUPABASE_ANON:",
+      (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "").slice(0, 6) + "…",
+      ((window as any)?.__env?.NEXT_PUBLIC_SUPABASE_ANON_KEY || "").slice(0, 6) + "…"
+    );
+  }, []);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,6 +50,7 @@ export default function AuthCard() {
       }
     } catch (e: any) {
       setErr(e?.message || "Une erreur est survenue.");
+      // eslint-disable-next-line no-console
       console.error("[AuthCard submit]", e);
     } finally {
       setBusy(false);
@@ -61,6 +74,7 @@ export default function AuthCard() {
       setMsg("E-mail de réinitialisation envoyé. Vérifie ta boîte mail.");
     } catch (e: any) {
       setErr(e?.message || "Impossible d’envoyer l’e-mail.");
+      // eslint-disable-next-line no-console
       console.error("[AuthCard forgot]", e);
     } finally {
       setBusy(false);
@@ -120,11 +134,7 @@ export default function AuthCard() {
         </div>
 
         {/* Bouton principal → ta classe `btn` (vert) */}
-        <button
-          type="submit"
-          disabled={busy}
-          className="btn w-full disabled:opacity-60"
-        >
+        <button type="submit" disabled={busy} className="btn w-full disabled:opacity-60">
           {busy ? "Veuillez patienter…" : mode === "signin" ? "Se connecter" : "Créer le compte"}
         </button>
 
