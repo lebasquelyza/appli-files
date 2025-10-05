@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { getSupabase } from "../lib/supabaseClient"; // ✅ chemin corrigé
+import { getSupabase } from "../lib/supabaseClient";
 import { Eye, EyeOff } from "lucide-react";
 
 export default function SigninPage() {
@@ -13,7 +13,6 @@ export default function SigninPage() {
   const [error, setError] = useState<string | null>(null);
   const [inputsReady, setInputsReady] = useState(false);
 
-  // ✅ Empêche le clavier de s’ouvrir automatiquement
   useEffect(() => {
     const t = setTimeout(() => {
       setInputsReady(true);
@@ -67,24 +66,29 @@ export default function SigninPage() {
   return (
     <main className="py-16">
       <div className="container max-w-md mx-auto">
-        {/* ✅ HEADER — Texte + points forts */}
+        {/* ✅ 1. Titre et sous-titre */}
         <header className="text-center mb-10">
           <h1 className="text-4xl font-bold mb-3">Files Coaching — Coach Sportif IA</h1>
-          <p className="text-lg text-gray-700 mb-6">
+          <p className="text-lg text-gray-700">
             Séances personnalisées, conseils et suivi.
           </p>
-          <ul className="space-y-2 text-gray-600 text-base">
-            <li>✅ Programme personnalisé</li>
-            <li>✅ Minuteur & Musique intégrés</li>
-            <li>✅ Recettes healthy et conseils</li>
-          </ul>
         </header>
 
-        {/* ✅ Formulaire de connexion */}
+        {/* ✅ 2. Points forts */}
+        <section className="mb-12 text-center">
+          <h3 className="text-2xl font-semibold mb-4">Pourquoi choisir Files Coaching ?</h3>
+          <ul className="space-y-2 text-gray-700 text-lg">
+            <li>✅ Programme personnalisé adapté à vos objectifs</li>
+            <li>✅ Minuteur & Musique intégrés pour vos séances</li>
+            <li>✅ Recettes healthy & conseils nutrition</li>
+          </ul>
+        </section>
+
+        {/* ✅ 3. Formulaire de connexion */}
         <h2 className="text-3xl font-bold mb-6 text-center">Se connecter</h2>
 
         <form onSubmit={handleLogin} className="space-y-4">
-          {/* Champ email */}
+          {/* Champ e-mail */}
           <div>
             <label className="block text-sm font-medium mb-1">Adresse e-mail</label>
             <input
@@ -100,7 +104,7 @@ export default function SigninPage() {
             />
           </div>
 
-          {/* Champ mot de passe + œil */}
+          {/* Champ mot de passe */}
           <div>
             <label className="block text-sm font-medium mb-1">Mot de passe</label>
             <div className="relative">
@@ -126,12 +130,10 @@ export default function SigninPage() {
             </div>
           </div>
 
-          {/* Bouton Se connecter */}
           <button type="submit" className="btn w-full" disabled={loading || !inputsReady}>
             {loading ? "Connexion..." : "Se connecter"}
           </button>
 
-          {/* Lien vers inscription */}
           <p className="text-center text-base text-gray-600 mt-3">
             Pas encore de compte ?{" "}
             <a
@@ -142,7 +144,6 @@ export default function SigninPage() {
             </a>
           </p>
 
-          {/* Mot de passe oublié */}
           <button
             type="button"
             onClick={handleForgotPassword}
@@ -152,7 +153,6 @@ export default function SigninPage() {
             Mot de passe oublié ?
           </button>
 
-          {/* Messages */}
           {message && <p className="text-sm text-emerald-600 mt-2 text-center">{message}</p>}
           {error && <p className="text-sm text-red-600 mt-2 text-center">{error}</p>}
         </form>
@@ -160,4 +160,3 @@ export default function SigninPage() {
     </main>
   );
 }
-
