@@ -67,11 +67,12 @@ export default function SigninPage() {
     <main className="py-10 sm:py-12">
       <div className="container max-w-md mx-auto px-4">
         {/* 1) Titre (même taille que “Se connecter”) */}
-        <header className="text-left mb-4">
-          <h1 className="font-bold leading-tight text-2xl sm:text-3xl">
-            Files Coaching — Coach Sportif IA
-          </h1>
-        </header>
+       <header className="text-left mb-4">
+  <h1 className="font-bold leading-tight !text-2xl sm:!text-3xl">
+    Files Coaching — Coach Sportif IA
+  </h1>
+</header>
+
 
         {/* 2) Points forts (aucune barre, juste un petit écart) */}
         <section className="mb-8">
