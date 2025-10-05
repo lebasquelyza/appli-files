@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { getSupabase } from "../../lib/supabaseClient";
+import { getSupabase } from "../lib/supabaseClient"; // ✅ chemin corrigé
 import { Eye, EyeOff } from "lucide-react";
 
 export default function SigninPage() {
