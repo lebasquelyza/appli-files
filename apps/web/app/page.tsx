@@ -10,11 +10,18 @@ export default function Home() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // ✅ Empêche tout focus automatique au chargement
+  // ✅ On garde les champs "désactivés du focus" pendant 300ms pour éviter l'ouverture auto
+  const [inputsReady, setInputsReady] = useState(false);
+
   useEffect(() => {
-    if (typeof document !== "undefined") {
-      document.activeElement instanceof HTMLElement && document.activeElement.blur();
-    }
+    const t = setTimeout(() => {
+      setInputsReady(true);
+      // On s'assure qu'aucun élément n'a le focus
+      if (typeof document !== "undefined") {
+        document.activeElement instanceof HTMLElement && document.activeElement.blur();
+      }
+    }, 300);
+    return () => clearTimeout(t);
   }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -88,7 +95,6 @@ export default function Home() {
             padding: "0 16px",
           }}
         >
-          {/* --- Texte d'accueil conservé --- */}
           <div style={{ display: "grid", gap: 24, alignItems: "center", paddingTop: 16 }}>
             <div>
               <h1 className="h1">Files Le Coach — Coach Sportif IA</h1>
@@ -110,9 +116,10 @@ export default function Home() {
                   inputMode="email"
                   autoComplete="off"
                   required
+                  disabled={!inputsReady}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500 outline-none"
+                  className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-gray-100"
                   placeholder="vous@exemple.com"
                 />
               </div>
@@ -124,14 +131,15 @@ export default function Home() {
                   inputMode="text"
                   autoComplete="off"
                   required
+                  disabled={!inputsReady}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500 outline-none"
+                  className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-gray-100"
                   placeholder="••••••••"
                 />
               </div>
 
-              <button type="submit" className="btn w-full" disabled={loading}>
+              <button type="submit" className="btn w-full" disabled={loading || !inputsReady}>
                 {loading ? "Connexion..." : "Se connecter"}
               </button>
 
@@ -139,7 +147,7 @@ export default function Home() {
                 type="button"
                 onClick={handleSignup}
                 className="btn w-full bg-gray-800 hover:bg-gray-900"
-                disabled={loading}
+                disabled={loading || !inputsReady}
               >
                 Créer un compte
               </button>
@@ -148,6 +156,7 @@ export default function Home() {
                 type="button"
                 onClick={handleForgotPassword}
                 className="block w-full text-center text-sm text-gray-600 hover:underline mt-2"
+                disabled={!inputsReady}
               >
                 Mot de passe oublié ?
               </button>
@@ -161,3 +170,4 @@ export default function Home() {
     </main>
   );
 }
+
