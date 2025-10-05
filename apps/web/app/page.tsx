@@ -64,10 +64,8 @@ export default function SigninPage() {
   };
 
   return (
-    {/* ↓↓↓ pousse le contenu sous la topbar fixe */}
     <main className="pt-14 py-10 sm:py-12">
       <div className="container max-w-md mx-auto px-4">
-        {/* ↓↓↓ Titre forcé à la même taille que “Se connecter”, quoi qu’il arrive */}
         <header className="text-left mb-6">
           <h1
             className="font-bold leading-tight not-prose
@@ -78,7 +76,6 @@ export default function SigninPage() {
           </h1>
         </header>
 
-        {/* 2) Points forts */}
         <section className="mb-8">
           <h3 className="text-lg sm:text-xl font-semibold mb-3">
             Séances personnalisées, conseils et suivi
@@ -90,13 +87,11 @@ export default function SigninPage() {
           </ul>
         </section>
 
-        {/* 3) Formulaire */}
         <h2 className="text-2xl sm:text-3xl font-bold mb-4 text-left">
           Se connecter
         </h2>
 
         <form onSubmit={handleLogin} className="space-y-4">
-          {/* Email */}
           <div>
             <label className="block text-sm font-medium mb-1">Adresse e-mail</label>
             <input
@@ -112,7 +107,6 @@ export default function SigninPage() {
             />
           </div>
 
-          {/* Mot de passe + œil */}
           <div>
             <label className="block text-sm font-medium mb-1">Mot de passe</label>
             <div className="relative">
@@ -166,4 +160,3 @@ export default function SigninPage() {
     </main>
   );
 }
-
