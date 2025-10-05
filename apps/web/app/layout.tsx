@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from "next";
 import Topbar from "../components/Topbar";
 import "./globals.css";
 
+// === PWA / App name ===
 export const metadata: Metadata = {
   title: "Files Coaching",
   description: "Coaching & bien-être",
@@ -35,14 +36,25 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="fr">
       <body className="bg-white text-gray-900 min-h-dvh">
+        {/* Header fixe (h-10 = 40px) */}
         <Topbar />
-        {/* ✅ Offset global unique */}
+        {/* Offset global unique : safe-area + hauteur header */}
         <main
           className="min-h-dvh"
           style={{ paddingTop: "calc(env(safe-area-inset-top) + 40px)" }}
         >
           {children}
         </main>
+
+        {/* Fallback runtime: expose les env publiques si Next ne les inline pas */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `window.__env = {
+  NEXT_PUBLIC_SUPABASE_URL: ${JSON.stringify(process.env.NEXT_PUBLIC_SUPABASE_URL || null)},
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: ${JSON.stringify(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || null)}
+};`,
+          }}
+        />
       </body>
     </html>
   );
