@@ -90,9 +90,9 @@ export default function SignupPage() {
             {loading ? "Création..." : "Créer mon compte"}
           </button>
 
-          <p className="text-center text-sm text-gray-600 mt-3">
+          <p className="text-center text-base font-medium text-gray-600 mt-4">
             Déjà un compte ?{" "}
-            <a href="/" className="text-emerald-600 hover:underline">
+            <a href="/" className="text-emerald-600 hover:underline text-base font-medium">
               Se connecter
             </a>
           </p>
