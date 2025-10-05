@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { getSupabase } from "../../lib/supabaseClient"; // ✅ chemin corrigé
+import { getSupabase } from "../../lib/supabaseClient";
 import { Eye, EyeOff } from "lucide-react";
 
 export default function SigninPage() {
@@ -64,9 +64,13 @@ export default function SigninPage() {
   };
 
   return (
-    <main className="py-16">
-      <div className="container max-w-md mx-auto">
-        <h1 className="text-3xl font-bold mb-6 text-center">Se connecter</h1>
+    // ⬇️ ajout du pt-14 pour descendre sous la topbar
+    <main className="pt-14 py-16">
+      <div className="container max-w-md mx-auto px-4">
+        {/* ✅ Titre intégré dans la page, même taille que les autres */}
+        <h1 className="not-prose text-2xl sm:text-3xl font-bold mb-8 text-center">
+          Se connecter
+        </h1>
 
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
@@ -95,7 +99,7 @@ export default function SigninPage() {
                 disabled={!inputsReady}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-gray-100 pr-10"
+                className="w-full border rounded-lg px-3 py-2 pr-10 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-gray-100"
                 placeholder="••••••••"
               />
               <button
@@ -136,3 +140,4 @@ export default function SigninPage() {
     </main>
   );
 }
+
