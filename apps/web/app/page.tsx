@@ -15,7 +15,6 @@ export default function Home() {
     setLoading(true);
     setMessage(null);
     setError(null);
-
     try {
       const supabase = getSupabase();
       const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -33,7 +32,6 @@ export default function Home() {
     setLoading(true);
     setMessage(null);
     setError(null);
-
     try {
       const supabase = getSupabase();
       const { error } = await supabase.auth.signUp({
@@ -73,30 +71,24 @@ export default function Home() {
   };
 
   return (
-    <main style={{ paddingTop: 90 }}>
+    <main>
       <section>
-        <div
-          className="container"
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1.1fr .9fr",
-            gap: 34,
-            alignItems: "center",
-          }}
-        >
-          {/* --- Partie gauche : Texte d'accueil --- */}
-          <div>
-            <h1 className="h1">Files Le Coach — Coach Sportif IA</h1>
-            <p className="lead">Séances personnalisées, conseils et suivi.</p>
-            <div style={{ height: 16 }} />
-            <ul className="space-y-4" style={{ margin: 0, paddingLeft: 18 }}>
-              <li>Programme personnalisé</li>
-              <li>Minuteur & Musique</li>
-              <li>Recettes healthy</li>
-            </ul>
+        <div className="container" style={{ maxWidth: 1100, marginInline: "auto", padding: "0 16px" }}>
+          {/* Texte d'accueil conservé */}
+          <div style={{ display: "grid", gap: 24, alignItems: "center", paddingTop: 16 }}>
+            <div>
+              <h1 className="h1">Files Le Coach — Coach Sportif IA</h1>
+              <p className="lead">Séances personnalisées, conseils et suivi.</p>
+              <div style={{ height: 16 }} />
+              <ul className="space-y-4" style={{ margin: 0, paddingLeft: 18 }}>
+                <li>Programme personnalisé</li>
+                <li>Minuteur &amp; Musique</li>
+                <li>Recettes healthy</li>
+              </ul>
+            </div>
 
-            {/* ✅ Formulaire visible à la place du bouton */}
-            <form onSubmit={handleLogin} style={{ marginTop: 32 }} className="space-y-4 max-w-sm">
+            {/* Formulaire visible (adresse e-mail + mot de passe) */}
+            <form onSubmit={handleLogin} className="space-y-4 max-w-sm">
               <div>
                 <label className="block text-sm font-medium mb-1">Adresse e-mail</label>
                 <input
@@ -121,6 +113,7 @@ export default function Home() {
                 />
               </div>
 
+              {/* Boutons au même design que ton ancien bouton (classe .btn) */}
               <button type="submit" className="btn w-full" disabled={loading}>
                 {loading ? "Connexion..." : "Se connecter"}
               </button>
@@ -145,15 +138,6 @@ export default function Home() {
               {message && <p className="text-sm text-emerald-600 mt-2">{message}</p>}
               {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
             </form>
-          </div>
-
-          {/* --- Partie droite --- */}
-          <div className="card">
-            <ul className="space-y-4" style={{ margin: 0, paddingLeft: 18 }}>
-              <li>Programme personnalisé</li>
-              <li>Minuteur & Musique</li>
-              <li>Recettes healthy</li>
-            </ul>
           </div>
         </div>
       </section>
