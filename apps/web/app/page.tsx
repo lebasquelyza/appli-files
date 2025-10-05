@@ -70,7 +70,9 @@ export default function SigninPage() {
         {/* ✅ HEADER — Texte + points forts */}
         <header className="text-center mb-10">
           <h1 className="text-4xl font-bold mb-3">Files Coaching — Coach Sportif IA</h1>
-          <p className="text-lg text-gray-700 mb-6">Séances personnalisées, conseils et suivi.</p>
+          <p className="text-lg text-gray-700 mb-6">
+            Séances personnalisées, conseils et suivi.
+          </p>
           <ul className="space-y-2 text-gray-600 text-base">
             <li>✅ Programme personnalisé</li>
             <li>✅ Minuteur & Musique intégrés</li>
@@ -79,9 +81,10 @@ export default function SigninPage() {
         </header>
 
         {/* ✅ Formulaire de connexion */}
-        <h1 className="text-3xl font-bold mb-6 text-center">Se connecter</h1>
+        <h2 className="text-3xl font-bold mb-6 text-center">Se connecter</h2>
 
         <form onSubmit={handleLogin} className="space-y-4">
+          {/* Champ email */}
           <div>
             <label className="block text-sm font-medium mb-1">Adresse e-mail</label>
             <input
@@ -97,6 +100,7 @@ export default function SigninPage() {
             />
           </div>
 
+          {/* Champ mot de passe + œil */}
           <div>
             <label className="block text-sm font-medium mb-1">Mot de passe</label>
             <div className="relative">
@@ -122,10 +126,12 @@ export default function SigninPage() {
             </div>
           </div>
 
+          {/* Bouton Se connecter */}
           <button type="submit" className="btn w-full" disabled={loading || !inputsReady}>
             {loading ? "Connexion..." : "Se connecter"}
           </button>
 
+          {/* Lien vers inscription */}
           <p className="text-center text-base text-gray-600 mt-3">
             Pas encore de compte ?{" "}
             <a
@@ -136,6 +142,7 @@ export default function SigninPage() {
             </a>
           </p>
 
+          {/* Mot de passe oublié */}
           <button
             type="button"
             onClick={handleForgotPassword}
@@ -145,6 +152,7 @@ export default function SigninPage() {
             Mot de passe oublié ?
           </button>
 
+          {/* Messages */}
           {message && <p className="text-sm text-emerald-600 mt-2 text-center">{message}</p>}
           {error && <p className="text-sm text-red-600 mt-2 text-center">{error}</p>}
         </form>
