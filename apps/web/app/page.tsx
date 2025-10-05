@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { getSupabase } from "../lib/supabaseClient";
 
 export default function Home() {
@@ -9,6 +9,13 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // ✅ Empêche tout focus automatique au chargement
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      document.activeElement instanceof HTMLElement && document.activeElement.blur();
+    }
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,8 +80,15 @@ export default function Home() {
   return (
     <main>
       <section>
-        <div className="container" style={{ maxWidth: 1100, marginInline: "auto", padding: "0 16px" }}>
-          {/* Texte d'accueil conservé */}
+        <div
+          className="container"
+          style={{
+            maxWidth: 1100,
+            marginInline: "auto",
+            padding: "0 16px",
+          }}
+        >
+          {/* --- Texte d'accueil conservé --- */}
           <div style={{ display: "grid", gap: 24, alignItems: "center", paddingTop: 16 }}>
             <div>
               <h1 className="h1">Files Le Coach — Coach Sportif IA</h1>
@@ -87,12 +101,14 @@ export default function Home() {
               </ul>
             </div>
 
-            {/* Formulaire visible (adresse e-mail + mot de passe) */}
+            {/* --- Formulaire --- */}
             <form onSubmit={handleLogin} className="space-y-4 max-w-sm">
               <div>
                 <label className="block text-sm font-medium mb-1">Adresse e-mail</label>
                 <input
                   type="email"
+                  inputMode="email"
+                  autoComplete="off"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -105,6 +121,8 @@ export default function Home() {
                 <label className="block text-sm font-medium mb-1">Mot de passe</label>
                 <input
                   type="password"
+                  inputMode="text"
+                  autoComplete="off"
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -113,7 +131,6 @@ export default function Home() {
                 />
               </div>
 
-              {/* Boutons au même design que ton ancien bouton (classe .btn) */}
               <button type="submit" className="btn w-full" disabled={loading}>
                 {loading ? "Connexion..." : "Se connecter"}
               </button>
