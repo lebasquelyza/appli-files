@@ -13,7 +13,7 @@ export default function SigninPage() {
   const [error, setError] = useState<string | null>(null);
   const [inputsReady, setInputsReady] = useState(false);
 
-  // ⬇️ nouveau: contrôle de l’affichage du formulaire de connexion
+  // contrôle de l’affichage du formulaire de connexion
   const [showLogin, setShowLogin] = useState(false);
 
   useEffect(() => {
@@ -69,7 +69,7 @@ export default function SigninPage() {
   return (
     <main className="pt-14 py-10 sm:py-12">
       <div className="container max-w-md mx-auto px-4">
-        {/* Titre principal (taille forcée identique partout) */}
+        {/* Titre principal (même taille que partout et sous la topbar) */}
         <header className="text-left mb-6">
           <h1
             className="font-bold leading-tight not-prose
@@ -92,24 +92,27 @@ export default function SigninPage() {
           </ul>
         </section>
 
-        {/* Ligne d’action: Déjà un compte ? (dévoile)  |  Créer un compte */}
+        {/* Ligne d’action: Déjà un compte ? (toggle) | Créer un compte */}
         <div className="mb-4 flex items-center justify-between">
           <button
             type="button"
             onClick={() => setShowLogin((v) => !v)}
-            className="text-left text-2xl sm:text-3xl font-bold"
             aria-expanded={showLogin}
             aria-controls="login-panel"
+            className="inline-flex items-baseline gap-1
+                       text-base sm:text-lg font-semibold
+                       text-blue-600 hover:underline
+                       bg-transparent appearance-none border-0 p-0 m-0
+                       focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/30
+                       [-webkit-tap-highlight-color:transparent]"
           >
-            Déjà un compte ?{" "}
-            <span className="underline decoration-emerald-600 underline-offset-4">
-              Se connecter
-            </span>
+            <span className="text-gray-800">Déjà un compte&nbsp;?</span>
+            <span>Se connecter</span>
           </button>
 
           <a
             href="/signup"
-            className="text-emerald-600 font-semibold hover:underline"
+            className="text-base sm:text-lg text-emerald-600 font-semibold hover:underline"
           >
             Créer un compte
           </a>
@@ -184,3 +187,4 @@ export default function SigninPage() {
     </main>
   );
 }
+
