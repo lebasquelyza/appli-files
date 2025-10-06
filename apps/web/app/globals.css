@@ -32,7 +32,8 @@ img{max-width:100%;display:block}
 .container{max-width:1100px;margin:0 auto;padding:0 24px}
 
 /* ===== Header / nav (global clair par défaut) ===== */
-header{
+/* ⚠️ Avant: `header{...}` => rendait TOUT header fixe. On scope sur .site-header uniquement. */
+.site-header{
   position:fixed; top:0; left:0; right:0; z-index:50;
   background:#fffffff2; backdrop-filter:blur(6px);
   border-bottom:1px solid #e5e7eb;
@@ -255,13 +256,13 @@ header{
 .themer.dark [style*="color: #374151"],
 .themer.dark [style*="color:#475569"],
 .themer.dark [style*="color: #475569"],
-.themer.dark [style*="color:rgb(17,24,39)"],  /* #111827 */
+.themer.dark [style*="color:rgb(17,24,39)"],
 .themer.dark [style*="color: rgb(17, 24, 39)"],
-.themer.dark [style*="color:rgb(31,41,55)"],  /* #1f2937 */
+.themer.dark [style*="color:rgb(31,41,55)"],
 .themer.dark [style*="color: rgb(31, 41, 55)"],
-.themer.dark [style*="color:rgb(55,65,81)"],  /* #374151 */
+.themer.dark [style*="color:rgb(55,65,81)"],
 .themer.dark [style*="color: rgb(55, 65, 81)"],
-.themer.dark [style*="color:rgb(71,85,105)"], /* #475569 */
+.themer.dark [style*="color:rgb(71,85,105)"],
 .themer.dark [style*="color: rgb(71, 85, 105)"],
 .themer.dark .text-black,
 .themer.dark .text-gray-900,
@@ -316,3 +317,8 @@ header{
 /* 6) Exemple d’en-tête/menus dans le conteneur sombre (si tu en as un dedans) */
 .themer.dark header{ background:#0b1220f2; border-bottom-color:#1f2937; }
 .themer.dark .menu a:hover{ background:#0f172a; }
+
+/* ====== Utilitaire titre de page (même taille que "Se connecter") ====== */
+@layer components {
+  .app-h1 { @apply not-prose font-bold leading-tight text-2xl sm:text-3xl; }
+}
