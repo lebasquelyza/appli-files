@@ -105,7 +105,7 @@ export default function SigninPage() {
   };
 
   return (
-    <main className="pt-14 py-16">
+    <main className="hide-topbar-menu pt-14 py-16">
       <div className="container max-w-md mx-auto">
         <h1
           className="not-prose font-bold mb-6 text-center
