@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { Metadata, Viewport } from "next";
-import TopbarGate from "./_components/TopbarGate"; // ⬅️ gate client
+import TopbarGate from "./dashboard/_components/TopbarGate"; // ⬅️ topbar conditionnelle
 import "./globals.css";
 
 // === PWA / App name ===
@@ -36,10 +36,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="fr">
       <body className="bg-white text-gray-900 min-h-dvh">
-        {/* Topbar conditionnelle */}
+        {/* Topbar conditionnelle (cachée sur /, /signin, /signup) */}
         <TopbarGate />
 
-        {/* Offset global = safe-area + hauteur topbar (0px sur /, /signin, /signup) */}
+        {/* Offset global = safe-area + hauteur topbar (0px quand topbar cachée) */}
         <main
           className="min-h-dvh"
           style={{ paddingTop: "calc(env(safe-area-inset-top) + var(--topbar-h, 40px))" }}
