@@ -106,7 +106,7 @@ img{max-width:100%;display:block}
 .sm\:grid-cols-2{ grid-template-columns:1fr; } @media (min-width:640px){ .sm\:grid-cols-2{ grid-template-columns:1fr 1fr; } }
 .flex{ display:flex; } .items-center{ align-items:center; } .justify-between{ justify-content:space-between; }
 .space-y-4 > * + *{ margin-top:16px; }
-.text-sm{ font-size:12.5px; } .text-3xl{ font size:28px; } .font-bold{ font-weight:800; } .font-semibold{ font-weight:700; }
+.text-sm{ font-size:12.5px; } .text-3xl{ font-size:28px; } .font-bold{ font-weight:800; } .font-semibold{ font-weight:700; }
 .w-full{ width:100%; }
 .aspect-video{ position:relative; padding-bottom:56.25%; height:0; }
 .aspect-video > iframe{ position:absolute; inset:0; width:100%; height:100%; border:0; }
@@ -277,7 +277,7 @@ img{max-width:100%;display:block}
 /* Pseudo-éléments & icônes */
 .themer.dark *::before,
 .themer.dark *::after { color: var(--text) !important; }
-themer.dark svg { color: var(--text) !important; }
+.themer.dark svg { color: var(--text) !important; }
 .themer.dark svg [fill="black"],
 .themer.dark svg [fill="#000"],
 .themer.dark svg [fill="#000000"] { fill: currentColor !important; }
@@ -292,13 +292,13 @@ themer.dark svg { color: var(--text) !important; }
 .themer.dark .seg button.active {
   color: #fff !important;
 }
-themer.dark .btn *,
+.themer.dark .btn *,
 .themer.dark .cta *,
 .themer.dark .btn-dash *,
 .themer.dark .seg button.active * {
   color: #fff !important;
 }
-themer.dark .btn a,
+.themer.dark .btn a,
 .themer.dark .cta a,
 .themer.dark .btn-dash a,
 .themer.dark .seg button.active a {
