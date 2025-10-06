@@ -67,7 +67,7 @@ export default function SigninPage() {
   };
 
   return (
-    <main className="pt-14 py-10 sm:py-12">
+    <main className="hide-topbar-menu pt-14 py-10 sm:py-12">
       <div className="container max-w-md mx-auto px-4">
         {/* Titre principal (même taille que partout et sous la topbar) */}
         <header className="text-left mb-0">
@@ -121,7 +121,7 @@ export default function SigninPage() {
           </a>
         </div>
 
-        {/* Panneau de connexion (identique à avant) */}
+        {/* Panneau de connexion */}
         {showLogin && (
           <div id="login-panel">
             <form onSubmit={handleLogin} className="space-y-4">
@@ -190,3 +190,4 @@ export default function SigninPage() {
     </main>
   );
 }
+
