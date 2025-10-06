@@ -6,11 +6,12 @@ import { useEffect, useRef, useState } from "react";
 export default function ClientTopbar() {
   const [open, setOpen] = useState(false);
   const router = useRouter();
-  const pathname = usePathname();
-  const firstBtnRef = useRef<HTMLButtonElement | null>(null);
+  const pathname = usePathname() || "/"; // sécurité
 
-  // Masquer le bouton menu sur /, /signin, /signup
-  const hideMenu = pathname === "/" || pathname === "/signin" || pathname === "/signup";
+  // Masque le bouton menu sur /, /signin, /signup (avec ou sans trailing slash)
+  const hideMenu = /^\/($|signin\/?$|signup\/?$)/.test(pathname);
+
+  const firstBtnRef = useRef<HTMLButtonElement | null>(null);
 
   const go = (href: string) => {
     setOpen(false);
@@ -25,7 +26,7 @@ export default function ClientTopbar() {
     }
   }, [open]);
 
-  // Si on arrive sur une page où le menu est caché, on ferme le panneau si ouvert
+  // Si on est sur une page où le menu est caché, ferme le panneau
   useEffect(() => {
     if (hideMenu && open) setOpen(false);
   }, [hideMenu, open]);
@@ -37,7 +38,7 @@ export default function ClientTopbar() {
         <div className="mx-auto max-w-screen-xl h-10 px-3 flex items-center justify-between">
           {/* Bouton Menu (toggle) — masqué selon la route */}
           {hideMenu ? (
-            <div className="w-[72px]" aria-hidden /> // espace réservé pour conserver l'alignement
+            <div className="w-[72px]" aria-hidden />
           ) : (
             <button
               aria-label="Ouvrir/Fermer le menu"
@@ -60,17 +61,15 @@ export default function ClientTopbar() {
         </div>
       </header>
 
-      {/* Panneau plein écran (ouvre/ferme avec le même bouton) — ne s'affiche pas si hideMenu */}
+      {/* Panneau plein écran — pas rendu si hideMenu */}
       {!hideMenu && open && (
         <div className="fixed inset-0 z-[1100]" role="dialog" aria-modal="true">
-          {/* clic sur l’overlay ferme aussi */}
           <div
             className="absolute inset-0 bg-black/40"
             onClick={() => setOpen(false)}
             aria-hidden="true"
           />
           <div className="absolute inset-0 bg-white flex flex-col">
-            {/* petite barre top pour resp. encoche */}
             <div className="h-10" />
             <nav className="max-w-screen-md mx-auto w-full p-2 pt-[calc(env(safe-area-inset-top)+2px)]">
               <ul className="divide-y">
@@ -96,8 +95,6 @@ export default function ClientTopbar() {
                 ))}
               </ul>
             </nav>
-
-            {/* rien en bas */}
             <div className="mt-auto" />
           </div>
         </div>
@@ -105,4 +102,3 @@ export default function ClientTopbar() {
     </>
   );
 }
-
