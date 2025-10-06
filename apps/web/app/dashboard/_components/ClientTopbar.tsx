@@ -1,12 +1,16 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 export default function ClientTopbar() {
   const [open, setOpen] = useState(false);
   const router = useRouter();
+  const pathname = usePathname();
   const firstBtnRef = useRef<HTMLButtonElement | null>(null);
+
+  // Masquer le bouton menu sur /, /signin, /signup
+  const hideMenu = pathname === "/" || pathname === "/signin" || pathname === "/signup";
 
   const go = (href: string) => {
     setOpen(false);
@@ -21,25 +25,34 @@ export default function ClientTopbar() {
     }
   }, [open]);
 
+  // Si on arrive sur une page où le menu est caché, on ferme le panneau si ouvert
+  useEffect(() => {
+    if (hideMenu && open) setOpen(false);
+  }, [hideMenu, open]);
+
   return (
     <>
       {/* Barre fixe (40px) */}
       <header className="fixed inset-x-0 top-0 z-[1000] border-b bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 shadow-sm">
         <div className="mx-auto max-w-screen-xl h-10 px-3 flex items-center justify-between">
-          {/* Bouton Menu (toggle) */}
-          <button
-            aria-label="Ouvrir/Fermer le menu"
-            onClick={() => setOpen((v) => !v)}
-            className="inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-[.99] transition"
-          >
-            {/* 3 barres */}
-            <span className="relative -ml-1 inline-block h-3 w-4">
-              <span className="absolute inset-x-0 top-0 h-[2px] bg-white" />
-              <span className="absolute inset-x-0 top-1.5 h-[2px] bg-white" />
-              <span className="absolute inset-x-0 bottom-0 h-[2px] bg-white" />
-            </span>
-            Menu
-          </button>
+          {/* Bouton Menu (toggle) — masqué selon la route */}
+          {hideMenu ? (
+            <div className="w-[72px]" aria-hidden /> // espace réservé pour conserver l'alignement
+          ) : (
+            <button
+              aria-label="Ouvrir/Fermer le menu"
+              onClick={() => setOpen((v) => !v)}
+              className="inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-[.99] transition"
+            >
+              {/* 3 barres */}
+              <span className="relative -ml-1 inline-block h-3 w-4">
+                <span className="absolute inset-x-0 top-0 h-[2px] bg-white" />
+                <span className="absolute inset-x-0 top-1.5 h-[2px] bg-white" />
+                <span className="absolute inset-x-0 bottom-0 h-[2px] bg-white" />
+              </span>
+              Menu
+            </button>
+          )}
 
           {/* Rien au centre/droite pour rester épuré */}
           <div />
@@ -47,8 +60,8 @@ export default function ClientTopbar() {
         </div>
       </header>
 
-      {/* Panneau plein écran (ouvre/ferme avec le même bouton) */}
-      {open && (
+      {/* Panneau plein écran (ouvre/ferme avec le même bouton) — ne s'affiche pas si hideMenu */}
+      {!hideMenu && open && (
         <div className="fixed inset-0 z-[1100]" role="dialog" aria-modal="true">
           {/* clic sur l’overlay ferme aussi */}
           <div
