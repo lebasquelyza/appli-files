@@ -1,10 +1,18 @@
 "use client";
+
 import { usePathname } from "next/navigation";
-import ClientTopbar from "@/components/ClientTopbar"; // <-- le topbar utilisé au root
+import Topbar from "../components/Topbar";
 
 export default function TopbarGate() {
-  const p = (usePathname() || "/").replace(/\/+$/, "");
+  const p = (usePathname() || "/").replace(/\/+$/, ""); // retire le slash final
+  // cacher la topbar sur /, /signin, /signup
   const hide = p === "" || p === "/" || p === "/signin" || p === "/signup";
-  if (hide) return null;         // → pas de topbar sur /, /signin, /signup
-  return <ClientTopbar />;       // → topbar partout ailleurs (dashboard, etc.)
+
+  // optionnel: ajuste le padding global défini dans layout
+  if (typeof document !== "undefined") {
+    document.documentElement.style.setProperty("--topbar-h", hide ? "0px" : "40px");
+  }
+
+  if (hide) return null;
+  return <Topbar />;
 }
