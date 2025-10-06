@@ -322,3 +322,6 @@ img{max-width:100%;display:block}
 @layer components {
   .app-h1 { @apply not-prose font-bold leading-tight text-2xl sm:text-3xl; }
 }
+/* Cache le bouton Menu uniquement sur les pages qui mettent la classe `hide-topbar-menu` */
+.hide-topbar-menu .js-topbar-menu { display: none !important; }
+}
