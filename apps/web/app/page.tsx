@@ -70,7 +70,7 @@ export default function SigninPage() {
     <main className="pt-14 py-10 sm:py-12">
       <div className="container max-w-md mx-auto px-4">
         {/* Titre principal (même taille que partout et sous la topbar) */}
-        <header className="text-left mb-6">
+        <header className="text-left mb-0">
           <h1
             className="font-bold leading-tight not-prose
                        [font-size:theme(fontSize.2xl)!important]
@@ -80,9 +80,12 @@ export default function SigninPage() {
           </h1>
         </header>
 
+        {/* Gros espace sous le titre */}
+        <div className="mt-16 sm:mt-24" aria-hidden="true" />
+
         {/* Points forts */}
-        <section className="mb-8">
-          <h3 className="text-lg sm:text-xl font-semibold mb-3">
+        <section className="mt-6 sm:mt-8 mb-12">
+          <h3 className="text-lg sm:text-xl font-semibold mb-4">
             Séances personnalisées, conseils et suivi
           </h3>
           <ul className="space-y-2 text-gray-800 text-base sm:text-lg leading-relaxed pl-5 list-disc">
@@ -93,7 +96,7 @@ export default function SigninPage() {
         </section>
 
         {/* Ligne d’action: Déjà un compte ? (toggle) | Créer un compte */}
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mt-8 sm:mt-10 mb-6 flex items-center justify-between">
           <button
             type="button"
             onClick={() => setShowLogin((v) => !v)}
@@ -187,4 +190,3 @@ export default function SigninPage() {
     </main>
   );
 }
-
