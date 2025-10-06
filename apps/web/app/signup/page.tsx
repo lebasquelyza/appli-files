@@ -26,12 +26,9 @@ export default function SignupPage() {
 
     try {
       const supabase = getSupabase();
-
-      // hygiène: supprime espaces, force minuscule (certaines apps envoient l’email avec maj.)
       const emailTrim = email.trim().toLowerCase();
       const passTrim = password.trim();
 
-      // NB: emailRedirectTo doit être autorisé dans Supabase > Auth > URL Configuration
       const { data, error } = await supabase.auth.signUp({
         email: emailTrim,
         password: passTrim,
@@ -40,7 +37,6 @@ export default function SignupPage() {
 
       if (error) throw error;
 
-      // Cas fréquents à expliquer clairement
       if (data?.user && !data.user.email_confirmed_at) {
         setMessage(
           "Compte créé ✅. Vérifie ta boîte mail pour confirmer ton adresse avant de te connecter."
@@ -62,14 +58,11 @@ export default function SignupPage() {
       }
 
       setError(friendly);
-      // Pour debug si besoin:
-      // console.error("Signup error:", raw);
     } finally {
       setLoading(false);
     }
   };
 
-  // Renvoyer l’email de confirmation si besoin
   const handleResendConfirmation = async () => {
     const emailTrim = email.trim().toLowerCase();
     if (!emailTrim) {
@@ -96,7 +89,7 @@ export default function SignupPage() {
   };
 
   return (
-    <main className="pt-14 py-16">
+    <main className="hide-topbar-menu pt-14 py-16">
       <div className="container max-w-md mx-auto">
         <h1
           className="not-prose font-bold mb-6 text-center
@@ -163,7 +156,6 @@ export default function SignupPage() {
             </a>
           </p>
 
-          {/* Renvoyer la confirmation au besoin */}
           <button
             type="button"
             onClick={handleResendConfirmation}
