@@ -324,4 +324,4 @@ img{max-width:100%;display:block}
 }
 /* Cache le bouton Menu uniquement sur les pages qui mettent la classe `hide-topbar-menu` */
 .hide-topbar-menu .js-topbar-menu { display: none !important; }
-}
+
