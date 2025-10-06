@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { Metadata, Viewport } from "next";
-import TopbarGate from "./dashboard/_components/TopbarGate"; // ⬅️ topbar conditionnelle
+import TopbarGate from "./dashboard/_components/TopbarGate"; // ⬅️ chemin corrigé
 import "./globals.css";
 
 // === PWA / App name ===
