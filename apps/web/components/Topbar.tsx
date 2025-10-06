@@ -30,7 +30,7 @@ export default function ClientTopbar() {
           <button
             aria-label="Ouvrir/Fermer le menu"
             onClick={() => setOpen((v) => !v)}
-            className="inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-[.99] transition"
+            className="js-topbar-menu inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-[.99] transition"
           >
             {/* 3 barres */}
             <span className="relative -ml-1 inline-block h-3 w-4">
