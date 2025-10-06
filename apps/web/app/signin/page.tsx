@@ -30,19 +30,33 @@ export default function SigninPage() {
     setError(null);
     try {
       const supabase = getSupabase();
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+
+      const emailTrim = email.trim().toLowerCase();
+      const passTrim = password.trim();
+
+      const { error } = await supabase.auth.signInWithPassword({
+        email: emailTrim,
+        password: passTrim,
+      });
       if (error) throw error;
+
       setMessage("Connexion réussie ✅");
       window.location.href = "/dashboard";
     } catch (err: any) {
-      setError(err.message || "Impossible de se connecter");
+      const msg = String(err?.message || "");
+      if (msg.toLowerCase().includes("invalid login credentials")) {
+        setError("Identifiants invalides. Vérifie l’e-mail/mot de passe, ou confirme ton e-mail.");
+      } else {
+        setError(msg || "Impossible de se connecter");
+      }
     } finally {
       setLoading(false);
     }
   };
 
   const handleForgotPassword = async () => {
-    if (!email) {
+    const emailTrim = email.trim().toLowerCase();
+    if (!emailTrim) {
       setError("Entrez votre e-mail pour réinitialiser votre mot de passe.");
       return;
     }
@@ -51,13 +65,40 @@ export default function SigninPage() {
     setError(null);
     try {
       const supabase = getSupabase();
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      const { error } = await supabase.auth.resetPasswordForEmail(emailTrim, {
         redirectTo: `${window.location.origin}/reset-password`,
       });
       if (error) throw error;
       setMessage("E-mail de réinitialisation envoyé 📩");
     } catch (err: any) {
       setError(err.message || "Erreur lors de la réinitialisation");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Permet de renvoyer le mail de confirmation si le compte n'est pas confirmé
+  const handleResendConfirmation = async () => {
+    const emailTrim = email.trim().toLowerCase();
+    if (!emailTrim) {
+      setError("Entrez votre e-mail pour renvoyer la confirmation.");
+      return;
+    }
+    setLoading(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const supabase = getSupabase();
+      // Supabase JS v2
+      const { error } = await supabase.auth.resend({
+        type: "signup",
+        email: emailTrim,
+        options: { emailRedirectTo: `${window.location.origin}/reset-password` },
+      });
+      if (error) throw error;
+      setMessage("E-mail de confirmation renvoyé 📩");
+    } catch (err: any) {
+      setError(err.message || "Erreur lors de l’envoi de la confirmation");
     } finally {
       setLoading(false);
     }
@@ -80,7 +121,9 @@ export default function SigninPage() {
             <input
               type="email"
               inputMode="email"
-              autoComplete="off"
+              autoComplete="email"
+              autoCapitalize="none"
+              spellCheck={false}
               required
               disabled={!inputsReady}
               value={email}
@@ -96,7 +139,9 @@ export default function SigninPage() {
               <input
                 type={showPassword ? "text" : "password"}
                 inputMode="text"
-                autoComplete="off"
+                autoComplete="current-password"
+                autoCapitalize="none"
+                spellCheck={false}
                 required
                 disabled={!inputsReady}
                 value={password}
@@ -109,6 +154,7 @@ export default function SigninPage() {
                 onClick={() => setShowPassword(!showPassword)}
                 className="absolute inset-y-0 right-2 flex items-center text-gray-500 hover:text-gray-700"
                 tabIndex={-1}
+                aria-label={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
               >
                 {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
               </button>
@@ -133,6 +179,16 @@ export default function SigninPage() {
             disabled={!inputsReady}
           >
             Mot de passe oublié ?
+          </button>
+
+          {/* Nouveau : renvoi de l’e-mail de confirmation */}
+          <button
+            type="button"
+            onClick={handleResendConfirmation}
+            className="block w-full text-center text-sm text-gray-600 hover:underline mt-1"
+            disabled={!inputsReady}
+          >
+            Renvoyer l’e-mail de confirmation
           </button>
 
           {message && <p className="text-sm text-emerald-600 mt-2 text-center">{message}</p>}
