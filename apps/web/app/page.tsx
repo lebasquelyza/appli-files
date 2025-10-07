@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { getSupabase } from "../lib/supabaseClient";
 
-// Petit carré vert (même style que dans ta page Profil)
+// Petit carré vert (même style que dans la page Profil)
 function GreenSquare() {
   return (
     <span
@@ -123,8 +123,8 @@ export default function HomePage() {
           </ul>
         </section>
 
-        {/* CTAs CENTRÉS */}
-        <div className="mt-2 mb-10 flex flex-wrap items-center justify-center gap-3 text-center">
+        {/* CTAs : 2 boutons CENTRÉS, sans séparateur */}
+        <div className="mt-2 mb-10 flex flex-wrap items-center justify-center gap-4 text-center">
           <button
             type="button"
             onClick={() => setShowLogin((v) => !v)}
@@ -135,9 +135,6 @@ export default function HomePage() {
             <GreenSquare />
             <span>Connecte-toi</span>
           </button>
-
-          {/* séparateur : “/” en NOIR (pas de pastille) */}
-          <span className="mx-1 text-lg font-semibold text-black select-none">/</span>
 
           <a
             href="/signup"
