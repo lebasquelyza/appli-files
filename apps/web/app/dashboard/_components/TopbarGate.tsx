@@ -1,11 +1,14 @@
+// apps/web/app/dashboard/_components/TopbarGate.tsx
 "use client";
 
-import { usePathname } from "next/navigation";
-import Topbar from "../components/Topbar";
+import ClientTopbar from "./ClientTopbar";
 
+/**
+ * Ce gate dashboard ne fait rien de spécial :
+ * on affiche juste la topbar du dashboard.
+ * (L'autre gate global, dans app/_components/TopbarGate.tsx,
+ * s'occupe de cacher le bouton sur /, /signin, /signup.)
+ */
 export default function TopbarGate() {
-  const pathname = usePathname();
-  const hideOn = pathname === "/" || pathname === "/signin" || pathname === "/signup";
-  return <Topbar hideMenu={hideOn} />;
+  return <ClientTopbar />;
 }
-
