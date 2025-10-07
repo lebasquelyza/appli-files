@@ -2,14 +2,18 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-// ⬇️ Chemin CORRECT vers le composant réel
-import ClientTopbar from "../dashboard/_components/ClientTopbar";
+import Topbar from "../components/Topbar"; // la topbar publique
 
-// Pages où on cache le bouton/menu (page d’accueil, login, signup)
-const HIDE_PATHS = new Set<string>(["/", "/signin", "/signup"]);
+const HIDE_EXACT = ["/", "/signin", "/signup"];
 
 export default function TopbarGate() {
   const pathname = usePathname() || "/";
-  if (HIDE_PATHS.has(pathname)) return null;
-  return <ClientTopbar />;
+
+  // Ne rien afficher sur les pages publiques et TOUT le dashboard
+  if (HIDE_EXACT.includes(pathname) || pathname.startsWith("/dashboard")) {
+    return null;
+  }
+
+  // Sinon, affiche la topbar publique
+  return <Topbar />;
 }
