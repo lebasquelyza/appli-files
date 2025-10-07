@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
-export default function ClientTopbar() {
+export default function Topbar() {
   const [open, setOpen] = useState(false);
   const router = useRouter();
   const firstBtnRef = useRef<HTMLButtonElement | null>(null);
@@ -24,7 +24,7 @@ export default function ClientTopbar() {
   return (
     <>
       {/* Barre fixe (40px) */}
-      <header className="fixed inset-x-0 top-0 z-[1000] border-b bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 shadow-sm">
+      <header className="site-header fixed inset-x-0 top-0 z-[1000] border-b bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 shadow-sm">
         <div className="mx-auto max-w-screen-xl h-10 px-3 flex items-center justify-between">
           {/* Bouton Menu (toggle) */}
           <button
@@ -92,3 +92,4 @@ export default function ClientTopbar() {
     </>
   );
 }
+
