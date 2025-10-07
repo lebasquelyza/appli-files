@@ -33,7 +33,7 @@ export default function HomePage() {
     setError(null);
     try {
       // import dynamique pour éviter les soucis de résolution pendant le build
-      const { getSupabase } = await import("./lib/supabaseClient");
+      const { getSupabase } = await import("../lib/supabaseClient");
       const supabase = getSupabase();
 
       const emailTrim = email.trim().toLowerCase();
