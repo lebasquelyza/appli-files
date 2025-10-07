@@ -79,7 +79,8 @@ export default function HomePage() {
   /** Style "pill" ultra résistant aux overrides globaux */
   const pillClass =
     "inline-flex items-center justify-center font-semibold shadow " +
-    "px-5 py-2 select-none active:translate-y-px focus:outline-none " +
+    // plus compact:
+    "px-3 py-1.5 select-none active:translate-y-px focus:outline-none " +
     "focus-visible:ring-2 focus-visible:ring-emerald-500/30";
   const pillStyle: React.CSSProperties = {
     background: "linear-gradient(90deg,#22c55e,#16a34a)",
@@ -87,7 +88,8 @@ export default function HomePage() {
     textDecoration: "none",
     borderRadius: 9999,
     WebkitTapHighlightColor: "transparent",
-    minWidth: 190,
+    whiteSpace: "nowrap", // évite un retour à la ligne du texte
+    // minWidth supprimé pour que le bouton serre le texte
   };
 
   return (
@@ -131,7 +133,7 @@ export default function HomePage() {
             Connecte-toi
           </button>
 
-          {/* LIGNE MODIFIÉE : <a> -> <button> pour un rendu 100% identique */}
+          {/* même rendu, redirection au clic */}
           <button
             type="button"
             onClick={() => (window.location.href = "/signup")}
@@ -194,7 +196,7 @@ export default function HomePage() {
               <button
                 type="submit"
                 className={pillClass + " w-full"}
-                style={{ ...pillStyle, minWidth: 0, width: "100%" }}
+                style={{ ...pillStyle, whiteSpace: "normal" }}
                 disabled={loading || !inputsReady}
               >
                 {loading ? "Connexion..." : "Se connecter"}
