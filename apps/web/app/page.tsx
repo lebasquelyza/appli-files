@@ -96,7 +96,7 @@ export default function HomePage() {
                        [font-size:theme(fontSize.3xl)!important]
                        sm:[font-size:theme(fontSize.5xl)!important]"
           >
-            Files Coaching —<br /> Coach Sportif IA
+            Files Coaching —<br /> 
           </h1>
         </header>
 
