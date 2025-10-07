@@ -1,19 +1,14 @@
+// apps/web/app/dashboard/_components/TopbarGate.tsx
 "use client";
 
 import { usePathname } from "next/navigation";
-// ⬇️ importe la vraie topbar qui existe chez toi
-import ClientTopbar from "../dashboard/_components/ClientTopbar";
+import ClientTopbar from "./ClientTopbar"; // ✅ bon chemin
 
-// Pages où on NE veut PAS afficher le bouton/menu (hamburger)
-const HIDE = new Set<string>(["/", "/signin", "/signup"]);
+// Si tu veux cacher la topbar pour certaines sous-routes du dashboard, ajoute-les ici
+const HIDE = new Set<string>([]);
 
 export default function TopbarGate() {
-  const pathname = usePathname() || "/";
-
-  if (HIDE.has(pathname)) {
-    // Ne rien rendre -> plus de bouton menu sur /, /signin, /signup
-    return null;
-  }
-
+  const pathname = usePathname() || "/dashboard";
+  if (HIDE.has(pathname)) return null;
   return <ClientTopbar />;
 }
