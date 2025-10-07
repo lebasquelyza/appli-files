@@ -1,33 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
 import { Eye, EyeOff } from "lucide-react";
-import { getSupabase } from "../lib/supabaseClient"; // adapte si besoin
 
 export default function HomePage() {
-  const router = useRouter();
-
-  // UI
-  const [inputsReady, setInputsReady] = useState(false);
+  // UI state
   const [showLogin, setShowLogin] = useState(false);
+  const [inputsReady, setInputsReady] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  // Form
+  // Auth state
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-
-  // Status
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  // === Style bouton vert (forcé) ===
-  const btnGreen =
-    "inline-flex items-center justify-center px-4 py-2 rounded-lg " +
-    "!bg-emerald-600 !text-white font-semibold shadow " +
-    "hover:!bg-emerald-700 active:translate-y-px transition " +
-    "no-underline"; // évite héritage d'un lien vert souligné
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -35,7 +22,7 @@ export default function HomePage() {
       if (typeof document !== "undefined") {
         document.activeElement instanceof HTMLElement && document.activeElement.blur();
       }
-    }, 250);
+    }, 300);
     return () => clearTimeout(t);
   }, []);
 
@@ -45,7 +32,10 @@ export default function HomePage() {
     setMessage(null);
     setError(null);
     try {
+      // import dynamique pour éviter les soucis de résolution pendant le build
+      const { getSupabase } = await import("./lib/supabaseClient");
       const supabase = getSupabase();
+
       const emailTrim = email.trim().toLowerCase();
       const passTrim = password.trim();
 
@@ -72,13 +62,14 @@ export default function HomePage() {
   const handleForgotPassword = async () => {
     const emailTrim = email.trim().toLowerCase();
     if (!emailTrim) {
-      setError("Entre ton e-mail pour réinitialiser ton mot de passe.");
+      setError("Entrez votre e-mail pour réinitialiser votre mot de passe.");
       return;
     }
     setLoading(true);
     setMessage(null);
     setError(null);
     try {
+      const { getSupabase } = await import("./lib/supabaseClient");
       const supabase = getSupabase();
       const { error } = await supabase.auth.resetPasswordForEmail(emailTrim, {
         redirectTo: `${window.location.origin}/reset-password`,
@@ -92,47 +83,62 @@ export default function HomePage() {
     }
   };
 
+  // style commun bouton vert (rectangle arrondi, texte blanc)
+  const btnGreen =
+    "inline-flex items-center justify-center rounded-xl px-4 py-2 text-base font-semibold shadow " +
+    "focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/30 " +
+    "active:translate-y-px transition";
+
   return (
-    <main className="hide-topbar-menu pt-12 sm:pt-14 pb-12">
-      <div className="container max-w-3xl mx-auto px-4">
+    <main className="hide-topbar-menu pt-10 sm:pt-12 pb-12">
+      <div className="container max-w-screen-lg mx-auto px-4">
         {/* Titre */}
-        <header className="mb-2">
+        <header className="mb-0">
           <h1
             className="font-bold leading-tight not-prose
                        [font-size:theme(fontSize.3xl)!important]
-                       sm:[font-size:theme(fontSize.4xl)!important]"
+                       sm:[font-size:theme(fontSize.5xl)!important]"
           >
             Files Coaching —<br /> Coach Sportif IA
           </h1>
         </header>
 
+        {/* Espace sous le titre */}
+        <div className="mt-10 sm:mt-12" aria-hidden="true" />
+
         {/* Accroche */}
-        <section className="mt-6 sm:mt-8 mb-8">
+        <section className="mb-8">
           <h3 className="text-xl sm:text-2xl font-semibold mb-4">
             Séances personnalisées, conseils et suivi
           </h3>
-          <ul className="space-y-3 text-gray-900 text-lg leading-relaxed pl-5 list-disc">
+          <ul className="space-y-3 text-gray-900 text-lg sm:text-xl leading-relaxed pl-5 list-disc">
             <li>✅ Programme personnalisé adapté à vos objectifs</li>
             <li>✅ Minuteur &amp; Musique intégrés pour vos séances</li>
             <li>✅ Recettes healthy &amp; conseils nutrition</li>
           </ul>
         </section>
 
-        {/* CTA : Connecte-toi | Créer un compte — mêmes rectangles verts */}
-        <div className="mt-6 mb-8 flex items-center gap-3">
+        {/* CTA : Connecte-toi | ou | Créer un compte */}
+        <div className="mt-2 mb-10 flex flex-wrap items-center gap-3">
           <button
             type="button"
             onClick={() => setShowLogin((v) => !v)}
             aria-expanded={showLogin}
             aria-controls="login-panel"
             className={btnGreen}
-            // filet de sécurité si une règle globale écrase Tailwind
-            style={{ backgroundColor: "#059669", color: "#fff" }} // emerald-600
+            style={{ backgroundColor: "#059669", color: "#fff" }}
           >
             Connecte-toi
           </button>
 
-          {/* on garde <a>, mais on force aussi via important + style inline */}
+          {/* pastille “ou” verte */}
+          <span
+            className="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-semibold select-none shadow"
+            style={{ backgroundColor: "#059669", color: "#fff" }}
+          >
+            ou
+          </span>
+
           <a
             href="/signup"
             role="button"
@@ -141,12 +147,9 @@ export default function HomePage() {
           >
             Créer un compte
           </a>
-          {/* Variante 100% sûre : 
-              <button onClick={() => router.push('/signup')} className={btnGreen} style={{backgroundColor:'#059669',color:'#fff'}}>Créer un compte</button>
-           */}
         </div>
 
-        {/* Formulaire de connexion inline */}
+        {/* Panneau de connexion inline */}
         {showLogin && (
           <div id="login-panel" className="max-w-md">
             <form onSubmit={handleLogin} className="space-y-4">
@@ -156,9 +159,7 @@ export default function HomePage() {
                 <input
                   type="email"
                   inputMode="email"
-                  autoComplete="email"
-                  autoCapitalize="none"
-                  spellCheck={false}
+                  autoComplete="off"
                   required
                   disabled={!inputsReady}
                   value={email}
@@ -175,9 +176,7 @@ export default function HomePage() {
                   <input
                     type={showPassword ? "text" : "password"}
                     inputMode="text"
-                    autoComplete="current-password"
-                    autoCapitalize="none"
-                    spellCheck={false}
+                    autoComplete="off"
                     required
                     disabled={!inputsReady}
                     value={password}
@@ -187,7 +186,7 @@ export default function HomePage() {
                   />
                   <button
                     type="button"
-                    onClick={() => setShowPassword((v) => !v)}
+                    onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-500 hover:text-gray-700"
                     tabIndex={-1}
                     aria-label={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
@@ -197,12 +196,7 @@ export default function HomePage() {
                 </div>
               </div>
 
-              <button
-                type="submit"
-                className={`${btnGreen} w-full`}
-                style={{ backgroundColor: "#059669", color: "#fff" }}
-                disabled={loading || !inputsReady}
-              >
+              <button type="submit" className={btnGreen + " w-full"} style={{ backgroundColor: "#059669", color: "#fff" }} disabled={loading || !inputsReady}>
                 {loading ? "Connexion..." : "Se connecter"}
               </button>
 
@@ -224,4 +218,3 @@ export default function HomePage() {
     </main>
   );
 }
-
