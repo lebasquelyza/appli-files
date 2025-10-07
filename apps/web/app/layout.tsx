@@ -1,9 +1,8 @@
 import type { ReactNode } from "react";
 import type { Metadata, Viewport } from "next";
-import TopbarGate from "./dashboard/_components/TopbarGate"; // ⬅️ chemin corrigé
+import TopbarGate from "./_components/TopbarGate";
 import "./globals.css";
 
-// === PWA / App name ===
 export const metadata: Metadata = {
   title: "Files Coaching",
   description: "Coaching & bien-être",
@@ -16,11 +15,7 @@ export const metadata: Metadata = {
     ],
     apple: { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
   },
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: "default",
-    title: "Files Coaching",
-  },
+  appleWebApp: { capable: true, statusBarStyle: "default", title: "Files Coaching" },
 };
 
 export const viewport: Viewport = {
@@ -36,18 +31,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="fr">
       <body className="bg-white text-gray-900 min-h-dvh">
-        {/* Topbar conditionnelle (cachée sur /, /signin, /signup) */}
         <TopbarGate />
-
-        {/* Offset global = safe-area + hauteur topbar (0px quand topbar cachée) */}
-        <main
-          className="min-h-dvh"
-          style={{ paddingTop: "calc(env(safe-area-inset-top) + var(--topbar-h, 40px))" }}
-        >
+        <main className="min-h-dvh" style={{ paddingTop: "calc(env(safe-area-inset-top) + 40px)" }}>
           {children}
         </main>
-
-        {/* Fallback runtime: expose les env publiques si Next ne les inline pas */}
         <script
           dangerouslySetInnerHTML={{
             __html: `window.__env = {
