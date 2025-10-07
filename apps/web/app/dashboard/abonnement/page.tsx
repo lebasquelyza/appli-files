@@ -1,7 +1,9 @@
 // apps/web/app/dashboard/abonnement/page.tsx
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
+import { stripe } from "@/lib/stripe";
+import { PRICE_IDS } from "@/lib/price-map";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,7 +48,7 @@ function fmt(dateISO?: string|null) {
   catch { return "—"; }
 }
 
-/** Server Action: choisir/mettre à jour le plan (redirige vers /dashboard/abonnement) */
+/** Server Action: choisir/mettre à jour le plan -> crée la session Stripe Checkout et redirige vers Stripe */
 async function choosePlanAction(formData: FormData) {
   "use server";
   const plan = (formData.get("plan") || "").toString().toUpperCase() as Plan;
@@ -55,30 +57,40 @@ async function choosePlanAction(formData: FormData) {
   if (!["BASIC","PLUS","PREMIUM"].includes(plan)) redirect("/dashboard/abonnement?error=plan_invalide");
   if (!(option in CPLUS)) redirect("/dashboard/abonnement?error=option_invalide");
 
+  // (facultatif) récupérer ta session applicative
   let s: any = {};
   try { s = await getSession(); } catch {}
 
-  const now = new Date();
-  const nextPaymentAt = plan === "BASIC" ? null : new Date(now.getFullYear(), now.getMonth()+1, now.getDate());
-  const expiresAt     = plan === "BASIC" ? null : new Date(now.getFullYear(), now.getMonth()+1, now.getDate());
+  const origin =
+    process.env.APP_URL ||
+    headers().get("origin") ||
+    "http://localhost:3000";
 
-  const base = PLANS.find(p => p.code === plan)?.priceEUR ?? 0;
-  const extra = CPLUS[option].extra;
-  const monthlyTotal = base + extra;
+  // Lignes d’abonnement : plan + éventuelle option Coaching+
+  const line_items: Array<{ price: string; quantity: number }> = [
+    { price: PRICE_IDS[plan], quantity: 1 },
+  ];
+  const addOn = (PRICE_IDS.CPLUS as any)[option] as string | null;
+  if (addOn) line_items.push({ price: addOn, quantity: 1 });
 
-  const updated = {
-    ...s,
-    plan,
-    nextPaymentAt: nextPaymentAt ? nextPaymentAt.toISOString() : null,
-    expiresAt: expiresAt ? expiresAt.toISOString() : null,
-    coachingOption: option,
-    coachingExtraEUR: extra,
-    monthlyTotalEUR: Number(monthlyTotal.toFixed(2)),
-    lastUpdatedAt: now.toISOString(),
-  };
+  // Création de la session Checkout (mode abonnement)
+  const session = await stripe.checkout.sessions.create({
+    mode: "subscription",
+    line_items,
+    allow_promotion_codes: true,
+    success_url: `${origin}/dashboard/abonnement/success?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${origin}/dashboard/abonnement?canceled=1`,
+    metadata: {
+      plan,
+      option,
+      appUserId: s?.userId || "",
+    },
+    // Si tu as déjà un customer Stripe pour l’utilisateur :
+    // customer: s?.stripeCustomerId || undefined,
+  });
 
-  cookies().set("app_session", JSON.stringify(updated), { path:"/" });
-  redirect("/dashboard/abonnement?success=1");
+  // Redirection vers la page de paiement Stripe
+  redirect(session.url!);
 }
 
 export default async function Page({ searchParams }: { searchParams?: { success?: string; error?: string } }) {
@@ -249,4 +261,3 @@ export default async function Page({ searchParams }: { searchParams?: { success?
     </div>
   );
 }
-
