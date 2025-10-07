@@ -132,8 +132,9 @@ export default function HomePage() {
             Connecte-toi
           </button>
 
+          {/* LIGNE MODIFIÉE : ajout de " text-base" */}
           <a href="/signup" role="button" className={pillClass + " text-base"} style={pillStyle}>
-       Créer un compte
+            Créer un compte
           </a>
         </div>
 
@@ -213,4 +214,3 @@ export default function HomePage() {
     </main>
   );
 }
-
