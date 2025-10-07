@@ -76,14 +76,19 @@ export default function HomePage() {
     }
   }
 
-  // Style pilule vert + texte blanc identique pour les deux
-  const pill =
-    "inline-flex items-center justify-center rounded-full text-white font-semibold " +
-    "shadow px-5 py-2 no-underline hover:no-underline active:translate-y-px " +
-    "focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/30";
+  /** Style "pill" ultra résistant aux overrides globaux */
+  const pillClass =
+    "inline-flex items-center justify-center font-semibold shadow " +
+    "px-5 py-2 select-none active:translate-y-px focus:outline-none " +
+    "focus-visible:ring-2 focus-visible:ring-emerald-500/30";
   const pillStyle: React.CSSProperties = {
+    // fond vert (même esprit que tes badges)
     background: "linear-gradient(90deg,#22c55e,#16a34a)",
-    width: 190, // même largeur
+    color: "#fff",                 // ← texte BLANC, coûte que coûte
+    textDecoration: "none",        // ← pas de soulignement sur <a>
+    borderRadius: 9999,           // ← VRAI arrondi “pilule”
+    WebkitTapHighlightColor: "transparent",
+    minWidth: 190,                 // deux boutons même largeur
   };
 
   return (
@@ -100,7 +105,6 @@ export default function HomePage() {
           </h1>
         </header>
 
-        {/* Espace sous le titre */}
         <div className="mt-10 sm:mt-12" aria-hidden="true" />
 
         {/* Accroche */}
@@ -115,27 +119,25 @@ export default function HomePage() {
           </ul>
         </section>
 
-        {/* Boutons — centrés, identiques, texte blanc */}
-        <div className="mt-2 mb-10">
-          <div className="flex justify-center gap-3">
-            <button
-              type="button"
-              onClick={() => setShowLogin((v) => !v)}
-              aria-expanded={showLogin}
-              aria-controls="login-panel"
-              className={pill}
-              style={pillStyle}
-            >
-              Connecte-toi
-            </button>
+        {/* Boutons centrés */}
+        <div className="mt-2 mb-10 flex justify-center gap-3">
+          <button
+            type="button"
+            onClick={() => setShowLogin((v) => !v)}
+            aria-expanded={showLogin}
+            aria-controls="login-panel"
+            className={pillClass}
+            style={pillStyle}
+          >
+            Connecte-toi
+          </button>
 
-            <a href="/signup" role="button" className={pill} style={pillStyle}>
-              Créer un compte
-            </a>
-          </div>
+          <a href="/signup" role="button" className={pillClass} style={pillStyle}>
+            Créer un compte
+          </a>
         </div>
 
-        {/* Panneau de connexion centré */}
+        {/* Login inline centré */}
         {showLogin && (
           <div id="login-panel" className="max-w-md mx-auto">
             <form onSubmit={handleLogin} className="space-y-4">
@@ -186,8 +188,8 @@ export default function HomePage() {
 
               <button
                 type="submit"
-                className={pill + " w-full"}
-                style={{ ...pillStyle, width: "100%" }}
+                className={pillClass + " w-full"}
+                style={{ ...pillStyle, minWidth: 0, width: "100%" }}
                 disabled={loading || !inputsReady}
               >
                 {loading ? "Connexion..." : "Se connecter"}
