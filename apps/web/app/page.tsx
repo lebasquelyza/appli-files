@@ -2,21 +2,21 @@
 
 import { useEffect, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
-// ⬇️ Ajuste ce chemin si besoin : si ton fichier est apps/web/app/lib/supabaseClient.ts, garde "./lib/..."
-import { getSupabase } from "../lib/supabaseClient";
+import { getSupabase } from "./lib/supabaseClient";
 
-/** Petit carré vert (même style que sur la page profil) */
+/** Petit carré vert compact */
 function GreenSquare() {
   return (
     <span
       aria-hidden="true"
       className="inline-block"
       style={{
-        width: 10,
-        height: 10,
+        width: 8,
+        height: 8,
         borderRadius: 3,
-        backgroundColor: "#059669", // même vert que .btn-dash
+        backgroundColor: "#059669",
         marginRight: 8,
+        flex: "0 0 auto",
       }}
     />
   );
@@ -52,24 +52,20 @@ export default function HomePage() {
     setError(null);
     try {
       const supabase = getSupabase();
-      const emailTrim = email.trim().toLowerCase();
-      const passTrim = password.trim();
-
       const { error } = await supabase.auth.signInWithPassword({
-        email: emailTrim,
-        password: passTrim,
+        email: email.trim().toLowerCase(),
+        password: password.trim(),
       });
       if (error) throw error;
-
       setMessage("Connexion réussie ✅");
       window.location.href = "/dashboard";
     } catch (err: any) {
       const msg = String(err?.message || "");
-      if (msg.toLowerCase().includes("invalid login credentials")) {
-        setError("Identifiants invalides. Vérifie l’e-mail/mot de passe, ou confirme ton e-mail.");
-      } else {
-        setError(msg || "Impossible de se connecter");
-      }
+      setError(
+        msg.toLowerCase().includes("invalid login credentials")
+          ? "Identifiants invalides. Vérifie l’e-mail/mot de passe, ou confirme ton e-mail."
+          : msg || "Impossible de se connecter"
+      );
     } finally {
       setLoading(false);
     }
@@ -127,15 +123,21 @@ export default function HomePage() {
           </ul>
         </section>
 
-        {/* CTAs : 2 boutons décalés à droite (centrés sur très petit écran) */}
+        {/* CTAs : compacts, alignés un peu à droite (centrés sur très petit écran) */}
         <div className="mt-2 mb-10 max-w-2xl sm:ml-auto sm:mr-0">
-          <div className="flex flex-wrap items-center gap-4 justify-center sm:justify-end">
+          <div className="flex flex-wrap items-center gap-3 justify-center sm:justify-end">
             <button
               type="button"
               onClick={() => setShowLogin((v) => !v)}
               aria-expanded={showLogin}
               aria-controls="login-panel"
-              className="btn-dash inline-flex items-center justify-center"
+              className="inline-flex items-center justify-center font-semibold text-white shadow"
+              style={{
+                background: "linear-gradient(90deg,#22c55e,#16a34a)",
+                border: "1px solid rgba(0,0,0,.08)",
+                borderRadius: 9999,
+                padding: "8px 14px", // 👈 compact
+              }}
             >
               <GreenSquare />
               <span>Connecte-toi</span>
@@ -144,7 +146,13 @@ export default function HomePage() {
             <a
               href="/signup"
               role="button"
-              className="btn-dash inline-flex items-center justify-center"
+              className="inline-flex items-center justify-center font-semibold text-white shadow"
+              style={{
+                background: "linear-gradient(90deg,#22c55e,#16a34a)",
+                border: "1px solid rgba(0,0,0,.08)",
+                borderRadius: 9999,
+                padding: "8px 14px", // 👈 compact
+              }}
             >
               <GreenSquare />
               <span>Créer un compte</span>
@@ -205,7 +213,13 @@ export default function HomePage() {
 
               <button
                 type="submit"
-                className="btn-dash w-full inline-flex items-center justify-center"
+                className="w-full inline-flex items-center justify-center font-semibold text-white shadow"
+                style={{
+                  background: "linear-gradient(90deg,#22c55e,#16a34a)",
+                  border: "1px solid rgba(0,0,0,.08)",
+                  borderRadius: 9999,
+                  padding: "10px 14px",
+                }}
                 disabled={loading || !inputsReady}
               >
                 <GreenSquare />
@@ -230,4 +244,3 @@ export default function HomePage() {
     </main>
   );
 }
-
