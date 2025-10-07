@@ -5,10 +5,12 @@ import { Eye, EyeOff } from "lucide-react";
 import { getSupabase } from "../lib/supabaseClient";
 
 export default function HomePage() {
+  // UI
   const [showLogin, setShowLogin] = useState(false);
   const [inputsReady, setInputsReady] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
+  // Auth
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -74,6 +76,7 @@ export default function HomePage() {
     }
   }
 
+  /** Style "pill" compact et cohérent */
   const pillClass =
     "inline-flex items-center justify-center font-semibold shadow " +
     "px-3 py-1.5 select-none active:translate-y-px focus:outline-none " +
@@ -90,6 +93,7 @@ export default function HomePage() {
   return (
     <main className="hide-topbar-menu pt-10 sm:pt-12 pb-12">
       <div className="container max-w-screen-lg mx-auto px-4">
+        {/* Titre */}
         <header className="mb-0">
           <h1
             className="font-bold leading-tight not-prose
@@ -102,6 +106,7 @@ export default function HomePage() {
 
         <div className="mt-10 sm:mt-12" aria-hidden="true" />
 
+        {/* Accroche */}
         <section className="mb-8">
           <h3 className="text-xl sm:text-2xl font-semibold mb-4">
             Séances personnalisées, conseils et suivi
@@ -113,14 +118,14 @@ export default function HomePage() {
           </ul>
         </section>
 
-        {/* ✅ Boutons centrés au MILIEU de l'écran, sur la même ligne */}
-        <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-row items-center justify-center gap-3 z-10">
+        {/* ✅ Boutons centrés au milieu de la zone visible (compense le padding-top global de 40px) */}
+        <div className="w-full min-h-[calc(100dvh-40px)] flex flex-row justify-center items-center gap-3">
           <button
             type="button"
             onClick={() => setShowLogin((v) => !v)}
             aria-expanded={showLogin}
             aria-controls="login-panel"
-            className={pillClass + " pointer-events-auto"}
+            className={pillClass}
             style={pillStyle}
           >
             Connecte-toi
@@ -129,13 +134,14 @@ export default function HomePage() {
           <button
             type="button"
             onClick={() => (window.location.href = "/signup")}
-            className={pillClass + " pointer-events-auto"}
+            className={pillClass}
             style={pillStyle}
           >
             Créer un compte
           </button>
         </div>
 
+        {/* Login inline centré (sous les boutons une fois ouverts) */}
         {showLogin && (
           <div id="login-panel" className="max-w-md mx-auto">
             <form onSubmit={handleLogin} className="space-y-4">
