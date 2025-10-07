@@ -113,8 +113,8 @@ export default function HomePage() {
           </ul>
         </section>
 
-        {/* ✅ Boutons centrés au milieu de la page */}
-        <div className="mt-2 mb-10 w-full flex justify-center items-center gap-3">
+        {/* LIGNE MODIFIÉE : plus bas + alignés verticalement */}
+        <div className="mt-8 mb-10 w-full flex flex-col items-center justify-center gap-3">
           <button
             type="button"
             onClick={() => setShowLogin((v) => !v)}
@@ -211,4 +211,3 @@ export default function HomePage() {
     </main>
   );
 }
-
