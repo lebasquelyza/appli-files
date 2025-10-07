@@ -94,15 +94,14 @@ export default function HomePage() {
     }
   };
 
-  // style commun : pilule verte compacte, texte blanc, largeur égale
+  // style commun : pilule verte, texte blanc, largeur IDENTIQUE
   const btnPill =
     "inline-flex items-center justify-center font-semibold shadow " +
     "rounded-full px-4 py-2 whitespace-nowrap no-underline text-white";
   const pillStyle: React.CSSProperties = {
     background: "linear-gradient(90deg,#22c55e,#16a34a)",
     border: "1px solid rgba(0,0,0,.08)",
-    // 👇 même taille pour les 2 boutons
-    width: "180px",
+    width: "190px", // même largeur pour les 2 boutons
   };
 
   return (
@@ -134,9 +133,9 @@ export default function HomePage() {
           </ul>
         </section>
 
-        {/* CTAs : centrés, même largeur, texte blanc */}
+        {/* CTAs centrés */}
         <div className="mt-2 mb-10">
-          <div className="flex flex-wrap items-center justify-center gap-3">
+          <div className="flex justify-center gap-3">
             <button
               type="button"
               onClick={() => setShowLogin((v) => !v)}
@@ -156,7 +155,7 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Panneau de connexion inline */}
+        {/* Panneau de connexion inline (centré aussi) */}
         {showLogin && (
           <div id="login-panel" className="max-w-md mx-auto">
             <form onSubmit={handleLogin} className="space-y-4">
@@ -194,7 +193,7 @@ export default function HomePage() {
                     onChange={(e) => setPassword(e.target.value)}
                     className="w-full border rounded-lg px-3 py-2 pr-12 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-gray-100"
                     placeholder="••••••••"
-                />
+                  />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
@@ -212,7 +211,7 @@ export default function HomePage() {
                 className={btnPill + " w-full"}
                 style={{
                   ...pillStyle,
-                  width: "100%", // full width pour le bouton du formulaire
+                  width: "100%",
                   paddingTop: 10,
                   paddingBottom: 10,
                 }}
@@ -240,5 +239,3 @@ export default function HomePage() {
     </main>
   );
 }
-
-
