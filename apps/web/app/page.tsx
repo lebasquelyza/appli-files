@@ -5,12 +5,10 @@ import { Eye, EyeOff } from "lucide-react";
 import { getSupabase } from "../lib/supabaseClient";
 
 export default function HomePage() {
-  // UI
   const [showLogin, setShowLogin] = useState(false);
   const [inputsReady, setInputsReady] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  // Auth
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -76,10 +74,8 @@ export default function HomePage() {
     }
   }
 
-  /** Style "pill" ultra résistant aux overrides globaux */
   const pillClass =
     "inline-flex items-center justify-center font-semibold shadow " +
-    // plus compact:
     "px-3 py-1.5 select-none active:translate-y-px focus:outline-none " +
     "focus-visible:ring-2 focus-visible:ring-emerald-500/30";
   const pillStyle: React.CSSProperties = {
@@ -88,14 +84,12 @@ export default function HomePage() {
     textDecoration: "none",
     borderRadius: 9999,
     WebkitTapHighlightColor: "transparent",
-    whiteSpace: "nowrap", // évite un retour à la ligne du texte
-    // minWidth supprimé pour que le bouton serre le texte
+    whiteSpace: "nowrap",
   };
 
   return (
     <main className="hide-topbar-menu pt-10 sm:pt-12 pb-12">
       <div className="container max-w-screen-lg mx-auto px-4">
-        {/* Titre */}
         <header className="mb-0">
           <h1
             className="font-bold leading-tight not-prose
@@ -108,7 +102,6 @@ export default function HomePage() {
 
         <div className="mt-10 sm:mt-12" aria-hidden="true" />
 
-        {/* Accroche */}
         <section className="mb-8">
           <h3 className="text-xl sm:text-2xl font-semibold mb-4">
             Séances personnalisées, conseils et suivi
@@ -120,8 +113,8 @@ export default function HomePage() {
           </ul>
         </section>
 
-        {/* Boutons centrés */}
-        <div className="mt-2 mb-10 flex justify-center gap-3">
+        {/* ✅ Boutons centrés au milieu de la page */}
+        <div className="mt-2 mb-10 w-full flex justify-center items-center gap-3">
           <button
             type="button"
             onClick={() => setShowLogin((v) => !v)}
@@ -133,7 +126,6 @@ export default function HomePage() {
             Connecte-toi
           </button>
 
-          {/* même rendu, redirection au clic */}
           <button
             type="button"
             onClick={() => (window.location.href = "/signup")}
@@ -144,7 +136,6 @@ export default function HomePage() {
           </button>
         </div>
 
-        {/* Login inline centré */}
         {showLogin && (
           <div id="login-panel" className="max-w-md mx-auto">
             <form onSubmit={handleLogin} className="space-y-4">
@@ -220,3 +211,4 @@ export default function HomePage() {
     </main>
   );
 }
+
