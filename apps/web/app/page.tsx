@@ -74,7 +74,6 @@ export default function HomePage() {
     }
   }
 
-  // boutons "pilule" compacts
   const pillClass =
     "inline-flex items-center justify-center font-semibold shadow " +
     "px-3 py-1.5 select-none active:translate-y-px focus:outline-none " +
@@ -114,14 +113,14 @@ export default function HomePage() {
           </ul>
         </section>
 
-        {/* ✅ Boutons centrés au milieu de l'écran (vertical & horizontal) */}
-        <div className="w-full min-h-[40vh] flex flex-row justify-center items-center gap-3">
+        {/* ✅ Boutons centrés au MILIEU de l'écran, sur la même ligne */}
+        <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-row items-center justify-center gap-3 z-10">
           <button
             type="button"
             onClick={() => setShowLogin((v) => !v)}
             aria-expanded={showLogin}
             aria-controls="login-panel"
-            className={pillClass}
+            className={pillClass + " pointer-events-auto"}
             style={pillStyle}
           >
             Connecte-toi
@@ -130,7 +129,7 @@ export default function HomePage() {
           <button
             type="button"
             onClick={() => (window.location.href = "/signup")}
-            className={pillClass}
+            className={pillClass + " pointer-events-auto"}
             style={pillStyle}
           >
             Créer un compte
@@ -212,3 +211,4 @@ export default function HomePage() {
     </main>
   );
 }
+
