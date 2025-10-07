@@ -15,7 +15,11 @@ export const metadata: Metadata = {
     ],
     apple: { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
   },
-  appleWebApp: { capable: true, statusBarStyle: "default", title: "Files Coaching" },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Files Coaching",
+  },
 };
 
 export const viewport: Viewport = {
@@ -31,10 +35,16 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="fr">
       <body className="bg-white text-gray-900 min-h-dvh">
+        {/* Affiche la Topbar seulement hors /, /signin, /signup */}
         <TopbarGate />
-        <main className="min-h-dvh" style={{ paddingTop: "calc(env(safe-area-inset-top) + 40px)" }}>
+
+        {/* Padding-top constant (40px) pour compenser la topbar si elle est présente.
+           Ce petit offset ne gêne pas si la topbar est cachée. */}
+        <main style={{ paddingTop: "calc(env(safe-area-inset-top) + 40px)" }}>
           {children}
         </main>
+
+        {/* Fallback runtime: expose env publiques si besoin */}
         <script
           dangerouslySetInnerHTML={{
             __html: `window.__env = {
