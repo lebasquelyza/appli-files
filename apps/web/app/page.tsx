@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
-import { getSupabase } from "../lib/supabaseClient";
+import { getSupabase } from "./lib/supabaseClient";
 
 /** Petit carré vert décoratif */
 function GreenSquare() {
@@ -240,4 +240,5 @@ export default function HomePage() {
     </main>
   );
 }
+
 
