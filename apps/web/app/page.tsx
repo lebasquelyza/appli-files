@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
-import { getSupabase } from "../lib/supabaseClient";
+import { getSupabase } from "./lib/supabaseClient";
 
-/** Petit carré vert compact */
+/** Petit carré vert décoratif */
 function GreenSquare() {
   return (
     <span
@@ -94,6 +94,17 @@ export default function HomePage() {
     }
   };
 
+  // style commun : pilule verte compacte, texte blanc, largeur égale
+  const btnPill =
+    "inline-flex items-center justify-center font-semibold shadow " +
+    "rounded-full px-4 py-2 whitespace-nowrap no-underline text-white";
+  const pillStyle: React.CSSProperties = {
+    background: "linear-gradient(90deg,#22c55e,#16a34a)",
+    border: "1px solid rgba(0,0,0,.08)",
+    // 👇 même taille pour les 2 boutons
+    width: "180px",
+  };
+
   return (
     <main className="hide-topbar-menu pt-10 sm:pt-12 pb-12">
       <div className="container max-w-screen-lg mx-auto px-4">
@@ -123,37 +134,22 @@ export default function HomePage() {
           </ul>
         </section>
 
-        {/* CTAs : compacts, alignés un peu à droite (centrés sur très petit écran) */}
-        <div className="mt-2 mb-10 max-w-2xl sm:ml-auto sm:mr-0">
-          <div className="flex flex-wrap items-center gap-3 justify-center sm:justify-end">
+        {/* CTAs : centrés, même largeur, texte blanc */}
+        <div className="mt-2 mb-10">
+          <div className="flex flex-wrap items-center justify-center gap-3">
             <button
               type="button"
               onClick={() => setShowLogin((v) => !v)}
               aria-expanded={showLogin}
               aria-controls="login-panel"
-              className="inline-flex items-center justify-center font-semibold text-white shadow"
-              style={{
-                background: "linear-gradient(90deg,#22c55e,#16a34a)",
-                border: "1px solid rgba(0,0,0,.08)",
-                borderRadius: 9999,
-                padding: "8px 14px", // 👈 compact
-              }}
+              className={btnPill}
+              style={pillStyle}
             >
               <GreenSquare />
               <span>Connecte-toi</span>
             </button>
 
-            <a
-              href="/signup"
-              role="button"
-              className="inline-flex items-center justify-center font-semibold text-white shadow"
-              style={{
-                background: "linear-gradient(90deg,#22c55e,#16a34a)",
-                border: "1px solid rgba(0,0,0,.08)",
-                borderRadius: 9999,
-                padding: "8px 14px", // 👈 compact
-              }}
-            >
+            <a href="/signup" role="button" className={btnPill} style={pillStyle}>
               <GreenSquare />
               <span>Créer un compte</span>
             </a>
@@ -162,7 +158,7 @@ export default function HomePage() {
 
         {/* Panneau de connexion inline */}
         {showLogin && (
-          <div id="login-panel" className="max-w-md">
+          <div id="login-panel" className="max-w-md mx-auto">
             <form onSubmit={handleLogin} className="space-y-4">
               {/* Email */}
               <div>
@@ -198,7 +194,7 @@ export default function HomePage() {
                     onChange={(e) => setPassword(e.target.value)}
                     className="w-full border rounded-lg px-3 py-2 pr-12 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-gray-100"
                     placeholder="••••••••"
-                  />
+                />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
@@ -213,12 +209,12 @@ export default function HomePage() {
 
               <button
                 type="submit"
-                className="w-full inline-flex items-center justify-center font-semibold text-white shadow"
+                className={btnPill + " w-full"}
                 style={{
-                  background: "linear-gradient(90deg,#22c55e,#16a34a)",
-                  border: "1px solid rgba(0,0,0,.08)",
-                  borderRadius: 9999,
-                  padding: "10px 14px",
+                  ...pillStyle,
+                  width: "100%", // full width pour le bouton du formulaire
+                  paddingTop: 10,
+                  paddingBottom: 10,
                 }}
                 disabled={loading || !inputsReady}
               >
@@ -244,3 +240,4 @@ export default function HomePage() {
     </main>
   );
 }
+
