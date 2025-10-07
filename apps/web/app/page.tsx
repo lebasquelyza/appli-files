@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Eye, EyeOff } from "lucide-react";
+import { getSupabase } from "../lib/supabaseClient";
 
 export default function HomePage() {
   // UI state
