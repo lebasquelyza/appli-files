@@ -4,6 +4,24 @@ import { useState, useEffect } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { getSupabase } from "../lib/supabaseClient"; // ✅ bon chemin depuis app/page.tsx
 
+// Petit carré vert — même style que sur l’autre page
+function GreenSquare() {
+  return (
+    <span
+      aria-hidden="true"
+      className="inline-block mr-2 align-middle"
+      style={{
+        width: 12,
+        height: 12,
+        borderRadius: 6,        // coins adoucis
+        backgroundColor: "#059669", // même vert
+        display: "inline-block",
+        flexShrink: 0,
+      }}
+    />
+  );
+}
+
 export default function HomePage() {
   // UI state
   const [showLogin, setShowLogin] = useState(false);
@@ -126,7 +144,8 @@ export default function HomePage() {
             className={btnGreen}
             style={{ backgroundColor: "#059669", color: "#fff" }}
           >
-            Connecte-toi
+            <GreenSquare />
+            <span>Connecte-toi</span>
           </button>
 
           {/* pastille “ou” verte */}
@@ -143,7 +162,8 @@ export default function HomePage() {
             className={btnGreen}
             style={{ backgroundColor: "#059669", color: "#fff" }}
           >
-            Créer un compte
+            <GreenSquare />
+            <span>Créer un compte</span>
           </a>
         </div>
 
@@ -204,7 +224,8 @@ export default function HomePage() {
                 style={{ backgroundColor: "#059669", color: "#fff" }}
                 disabled={loading || !inputsReady}
               >
-                {loading ? "Connexion..." : "Se connecter"}
+                <GreenSquare />
+                <span>{loading ? "Connexion..." : "Se connecter"}</span>
               </button>
 
               <button
@@ -225,4 +246,3 @@ export default function HomePage() {
     </main>
   );
 }
-
