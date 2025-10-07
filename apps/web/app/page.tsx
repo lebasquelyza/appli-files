@@ -113,8 +113,11 @@ export default function HomePage() {
           </ul>
         </section>
 
-        {/* LIGNE MODIFIÉE : plus bas, même ligne, centré */}
-        <div className="mt-16 sm:mt-24 mb-10 w-full flex flex-row justify-center items-center gap-3">
+        {/* 👇 AJOUT : spacer pour descendre les boutons */}
+        <div className="h-10 sm:h-16" />
+
+        {/* Boutons sur la même ligne, centrés */}
+        <div className="mb-10 w-full flex flex-row justify-center items-center gap-3">
           <button
             type="button"
             onClick={() => setShowLogin((v) => !v)}
@@ -157,7 +160,7 @@ export default function HomePage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">Mot de passe</label>
+                <label className="block text.sm font-medium mb-1">Mot de passe</label>
                 <div className="relative">
                   <input
                     type={showPassword ? "text" : "password"}
