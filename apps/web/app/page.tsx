@@ -82,13 +82,12 @@ export default function HomePage() {
     "px-5 py-2 select-none active:translate-y-px focus:outline-none " +
     "focus-visible:ring-2 focus-visible:ring-emerald-500/30";
   const pillStyle: React.CSSProperties = {
-    // fond vert (même esprit que tes badges)
     background: "linear-gradient(90deg,#22c55e,#16a34a)",
-    color: "#fff",                 // ← texte BLANC, coûte que coûte
-    textDecoration: "none",        // ← pas de soulignement sur <a>
-    borderRadius: 9999,           // ← VRAI arrondi “pilule”
+    color: "#fff",
+    textDecoration: "none",
+    borderRadius: 9999,
     WebkitTapHighlightColor: "transparent",
-    minWidth: 190,                 // deux boutons même largeur
+    minWidth: 190,
   };
 
   return (
@@ -132,8 +131,8 @@ export default function HomePage() {
             Connecte-toi
           </button>
 
-          {/* LIGNE MODIFIÉE : ajout de " text-base" */}
-          <a href="/signup" role="button" className={pillClass + " text-base"} style={pillStyle}>
+          {/* LIGNE MODIFIÉE : réduction de la taille du texte */}
+          <a href="/signup" role="button" className={pillClass + " text-sm"} style={pillStyle}>
             Créer un compte
           </a>
         </div>
