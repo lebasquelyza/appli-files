@@ -76,7 +76,7 @@ export default function HomePage() {
     }
   }
 
-  /** Style "pill" compact et cohérent */
+  /** Style "pill" compact */
   const pillClass =
     "inline-flex items-center justify-center font-semibold shadow " +
     "px-3 py-1.5 select-none active:translate-y-px focus:outline-none " +
@@ -118,8 +118,8 @@ export default function HomePage() {
           </ul>
         </section>
 
-        {/* ✅ Boutons centrés au milieu de la zone visible (compense le padding-top global de 40px) */}
-        <div className="w-full min-h-[calc(100dvh-40px)] flex flex-row justify-center items-center gap-3">
+        {/* Tes boutons actuels (peu importe leur position pour le moment) */}
+        <div className="mb-10 w-full flex flex-row justify-center items-center gap-3">
           <button
             type="button"
             onClick={() => setShowLogin((v) => !v)}
@@ -141,7 +141,6 @@ export default function HomePage() {
           </button>
         </div>
 
-        {/* Login inline centré (sous les boutons une fois ouverts) */}
         {showLogin && (
           <div id="login-panel" className="max-w-md mx-auto">
             <form onSubmit={handleLogin} className="space-y-4">
@@ -214,7 +213,36 @@ export default function HomePage() {
           </div>
         )}
       </div>
+
+      {/* ======== DEBUG OVERLAY CENTRÉ (à retirer après test) ======== */}
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          gap: "12px",
+          zIndex: 99999,
+          pointerEvents: "none",
+          background: "rgba(255,0,0,0.05)", // léger voile rouge, pour vérifier visuellement
+        }}
+        data-debug="OVERLAY-CENTER"
+      >
+        <button
+          className="px-3 py-1.5 rounded-full font-semibold shadow"
+          style={{ background: "#16a34a", color: "#fff", pointerEvents: "auto" }}
+        >
+          Connecte-toi (overlay)
+        </button>
+        <button
+          className="px-3 py-1.5 rounded-full font-semibold shadow"
+          style={{ background: "#16a34a", color: "#fff", pointerEvents: "auto" }}
+        >
+          Créer un compte (overlay)
+        </button>
+      </div>
+      {/* ===================== FIN DEBUG OVERLAY ===================== */}
     </main>
   );
 }
-
