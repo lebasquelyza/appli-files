@@ -66,12 +66,24 @@ async function choosePlanAction(formData: FormData) {
     headers().get("origin") ||
     "http://localhost:3000";
 
-  // Lignes d’abonnement : plan + éventuelle option Coaching+
+  // --- CORRECTION: valider et typer les price ids pour éviter string|null ---
+  const planPrice = PRICE_IDS[plan] as string | undefined;
+  if (!planPrice || !planPrice.startsWith("price_")) {
+    console.error("PRICE_IDS plan manquant/invalide:", plan, planPrice);
+    redirect("/dashboard/abonnement?error=price_plan_invalide");
+  }
+
+  const addOnMaybe = (PRICE_IDS.CPLUS as any)[option] as string | null | undefined;
+  if (addOnMaybe && !addOnMaybe.startsWith("price_")) {
+    console.error("PRICE_IDS option invalide:", option, addOnMaybe);
+    redirect("/dashboard/abonnement?error=price_option_invalide");
+  }
+
   const line_items: Array<{ price: string; quantity: number }> = [
-    { price: PRICE_IDS[plan], quantity: 1 },
+    { price: planPrice, quantity: 1 },
   ];
-  const addOn = (PRICE_IDS.CPLUS as any)[option] as string | null;
-  if (addOn) line_items.push({ price: addOn, quantity: 1 });
+  if (addOnMaybe) line_items.push({ price: addOnMaybe, quantity: 1 });
+  // --- FIN CORRECTION ---
 
   // Création de la session Checkout (mode abonnement)
   const session = await stripe.checkout.sessions.create({
@@ -261,3 +273,4 @@ export default async function Page({ searchParams }: { searchParams?: { success?
     </div>
   );
 }
+
