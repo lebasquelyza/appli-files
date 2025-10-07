@@ -1,26 +1,32 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { getSupabase } from "../lib/supabaseClient";
+import { useEffect, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
+import { getSupabase } from "../lib/supabaseClient"; // ← adapte le chemin si besoin
 
 export default function HomePage() {
-  // état CTA + formulaire inline
+  // UI
+  const [inputsReady, setInputsReady] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
-  // champs & UI
+  // Auth form
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [inputsReady, setInputsReady] = useState(false);
-  const [loading, setLoading] = useState(false);
 
-  // messages
+  // Status
+  const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const t = setTimeout(() => setInputsReady(true), 300);
+    const t = setTimeout(() => {
+      setInputsReady(true);
+      if (typeof document !== "undefined") {
+        document.activeElement instanceof HTMLElement &&
+          document.activeElement.blur();
+      }
+    }, 250);
     return () => clearTimeout(t);
   }, []);
 
@@ -31,17 +37,23 @@ export default function HomePage() {
     setError(null);
     try {
       const supabase = getSupabase();
+      const emailTrim = email.trim().toLowerCase();
+      const passTrim = password.trim();
+
       const { error } = await supabase.auth.signInWithPassword({
-        email: email.trim().toLowerCase(),
-        password: password.trim(),
+        email: emailTrim,
+        password: passTrim,
       });
       if (error) throw error;
+
       setMessage("Connexion réussie ✅");
       window.location.href = "/dashboard";
     } catch (err: any) {
       const msg = String(err?.message || "");
       if (msg.toLowerCase().includes("invalid login credentials")) {
-        setError("Identifiants invalides. Vérifie l’e-mail/mot de passe ou confirme ton e-mail.");
+        setError(
+          "Identifiants invalides. Vérifie l’e-mail/mot de passe, ou confirme ton e-mail."
+        );
       } else {
         setError(msg || "Impossible de se connecter");
       }
@@ -74,67 +86,57 @@ export default function HomePage() {
   };
 
   return (
-    <main className="hide-topbar-menu pt-14 py-10 sm:py-12">
-      <div className="container max-w-4xl mx-auto px-4">
+    <main className="hide-topbar-menu pt-12 sm:pt-14 pb-12">
+      <div className="container max-w-3xl mx-auto px-4">
         {/* Titre */}
-        <header className="text-left mb-0">
+        <header className="mb-2">
           <h1
             className="font-bold leading-tight not-prose
                        [font-size:theme(fontSize.3xl)!important]
-                       sm:[font-size:theme(fontSize.5xl)!important]"
+                       sm:[font-size:theme(fontSize.4xl)!important]"
           >
-            Files Coaching —<br />
-            Coach Sportif IA
+            Files Coaching —<br /> Coach Sportif IA
           </h1>
         </header>
 
-        {/* Espace sous le titre */}
-        <div className="mt-10 sm:mt-12" aria-hidden="true" />
-
-        {/* Points forts */}
-        <section className="mt-6 sm:mt-8 mb-10">
+        {/* Accroche */}
+        <section className="mt-6 sm:mt-8 mb-8">
           <h3 className="text-xl sm:text-2xl font-semibold mb-4">
             Séances personnalisées, conseils et suivi
           </h3>
-          <ul className="space-y-3 text-gray-800 text-lg leading-relaxed pl-6 list-disc">
+          <ul className="space-y-3 text-gray-900 text-lg leading-relaxed pl-5 list-disc">
             <li>✅ Programme personnalisé adapté à vos objectifs</li>
-            <li>✅ Minuteur & Musique intégrés pour vos séances</li>
-            <li>✅ Recettes healthy & conseils nutrition</li>
+            <li>✅ Minuteur &amp; Musique intégrés pour vos séances</li>
+            <li>✅ Recettes healthy &amp; conseils nutrition</li>
           </ul>
         </section>
 
-        {/* Ligne d’action : Connecte-toi (ouvre le formulaire) | Créer un compte */}
-        <div className="mt-6 mb-4 flex items-center justify-between">
+        {/* CTA : Connecte-toi | Créer un compte */}
+        <div className="mt-6 mb-8 flex items-center gap-3">
           <button
             type="button"
             onClick={() => setShowLogin((v) => !v)}
             aria-expanded={showLogin}
             aria-controls="login-panel"
-            className="inline-flex items-baseline gap-1
-                       text-lg font-semibold
-                       text-blue-600 hover:underline
-                       bg-transparent appearance-none border-0 p-0 m-0
-                       focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/30
-                       [-webkit-tap-highlight-color:transparent]"
+            className="btn-green"
           >
             Connecte-toi
           </button>
 
-          <a
-            href="/signup"
-            className="text-lg text-emerald-600 font-semibold hover:underline"
-          >
+          <a href="/signup" className="btn-green" role="button">
             Créer un compte
           </a>
         </div>
 
-        {/* Formulaire de connexion inline */}
+        {/* Panneau de connexion inline */}
         {showLogin && (
-          <div id="login-panel" className="mt-2 max-w-md">
+          <div id="login-panel" className="max-w-md">
             <form onSubmit={handleLogin} className="space-y-4">
               {/* Email */}
               <div>
-                <label className="block text-sm font-medium mb-1">Adresse e-mail</label>
+                <label className="block text-sm font-medium mb-1">
+                  Adresse e-mail
+                </label>
                 <input
                   type="email"
                   inputMode="email"
@@ -150,9 +152,11 @@ export default function HomePage() {
                 />
               </div>
 
-              {/* Mot de passe + œil */}
+              {/* Mot de passe */}
               <div>
-                <label className="block text-sm font-medium mb-1">Mot de passe</label>
+                <label className="block text-sm font-medium mb-1">
+                  Mot de passe
+                </label>
                 <div className="relative">
                   <input
                     type={showPassword ? "text" : "password"}
@@ -169,17 +173,25 @@ export default function HomePage() {
                   />
                   <button
                     type="button"
-                    onClick={() => setShowPassword(!showPassword)}
+                    onClick={() => setShowPassword((v) => !v)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-500 hover:text-gray-700"
                     tabIndex={-1}
-                    aria-label={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+                    aria-label={
+                      showPassword
+                        ? "Masquer le mot de passe"
+                        : "Afficher le mot de passe"
+                    }
                   >
                     {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                   </button>
                 </div>
               </div>
 
-              <button type="submit" className="btn w-full" disabled={loading || !inputsReady}>
+              <button
+                type="submit"
+                className="btn-green w-full"
+                disabled={loading || !inputsReady}
+              >
                 {loading ? "Connexion..." : "Se connecter"}
               </button>
 
@@ -192,8 +204,14 @@ export default function HomePage() {
                 Mot de passe oublié ?
               </button>
 
-              {message && <p className="text-sm text-emerald-600 mt-2">{message}</p>}
-              {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
+              {message && (
+                <p className="text-sm text-emerald-600 mt-2 text-center">
+                  {message}
+                </p>
+              )}
+              {error && (
+                <p className="text-sm text-red-600 mt-2 text-center">{error}</p>
+              )}
             </form>
           </div>
         )}
