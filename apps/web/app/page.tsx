@@ -131,10 +131,15 @@ export default function HomePage() {
             Connecte-toi
           </button>
 
-          {/* LIGNE MODIFIÉE : réduction de la taille du texte */}
-          <a href="/signup" role="button" className={pillClass + " text-sm"} style={pillStyle}>
+          {/* LIGNE MODIFIÉE : <a> -> <button> pour un rendu 100% identique */}
+          <button
+            type="button"
+            onClick={() => (window.location.href = "/signup")}
+            className={pillClass}
+            style={pillStyle}
+          >
             Créer un compte
-          </a>
+          </button>
         </div>
 
         {/* Login inline centré */}
