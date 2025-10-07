@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
-import { getSupabase } from "../lib/supabaseClient"; // ← adapte le chemin si besoin
+import { getSupabase } from "../lib/supabaseClient"; // adapte si ton alias @ n'est pas configuré
 
 export default function HomePage() {
   // UI
@@ -10,7 +10,7 @@ export default function HomePage() {
   const [showLogin, setShowLogin] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  // Auth form
+  // Form
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
@@ -18,6 +18,12 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Classe utilitaire pour NOS deux boutons (vert plein, texte blanc)
+  const btnGreen =
+    "inline-flex items-center justify-center px-4 py-2 rounded-lg " +
+    "bg-emerald-600 text-white font-semibold shadow " +
+    "hover:bg-emerald-700 active:translate-y-px transition";
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -111,24 +117,24 @@ export default function HomePage() {
           </ul>
         </section>
 
-        {/* CTA : Connecte-toi | Créer un compte */}
+        {/* CTA : Connecte-toi | Créer un compte (même design) */}
         <div className="mt-6 mb-8 flex items-center gap-3">
           <button
             type="button"
             onClick={() => setShowLogin((v) => !v)}
             aria-expanded={showLogin}
             aria-controls="login-panel"
-            className="btn-green"
+            className={btnGreen}
           >
             Connecte-toi
           </button>
 
-          <a href="/signup" className="btn-green" role="button">
+          <a href="/signup" className={btnGreen} role="button">
             Créer un compte
           </a>
         </div>
 
-        {/* Panneau de connexion inline */}
+        {/* Formulaire de connexion inline */}
         {showLogin && (
           <div id="login-panel" className="max-w-md">
             <form onSubmit={handleLogin} className="space-y-4">
@@ -189,7 +195,7 @@ export default function HomePage() {
 
               <button
                 type="submit"
-                className="btn-green w-full"
+                className={`${btnGreen} w-full`}
                 disabled={loading || !inputsReady}
               >
                 {loading ? "Connexion..." : "Se connecter"}
@@ -219,3 +225,4 @@ export default function HomePage() {
     </main>
   );
 }
+
