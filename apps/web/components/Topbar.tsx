@@ -1,19 +1,12 @@
 "use client";
 
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
-export default function Topbar() {
+export default function Topbar({ hideMenu = false }: { hideMenu?: boolean }) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
-  const pathname = usePathname();
   const firstBtnRef = useRef<HTMLButtonElement | null>(null);
-
-  // Pages où le bouton Menu doit être masqué
-  const hideMenu =
-    pathname === "/" ||
-    pathname === "/signin" ||
-    pathname === "/signup";
 
   const go = (href: string) => {
     setOpen(false);
@@ -31,7 +24,6 @@ export default function Topbar() {
     <>
       <header className="site-header fixed inset-x-0 top-0 z-[1000] border-b bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 shadow-sm">
         <div className="mx-auto max-w-screen-xl h-10 px-3 flex items-center justify-between">
-          {/* Bouton Menu (masqué sur /, /signin, /signup) */}
           {!hideMenu && (
             <button
               aria-label="Ouvrir/Fermer le menu"
@@ -46,20 +38,14 @@ export default function Topbar() {
               Menu
             </button>
           )}
-
           <div />
           <div className="w-[42px]" />
         </div>
       </header>
 
-      {/* Panneau plein écran (affiché seulement si le bouton existe) */}
       {!hideMenu && open && (
         <div className="fixed inset-0 z-[1100]" role="dialog" aria-modal="true">
-          <div
-            className="absolute inset-0 bg-black/40"
-            onClick={() => setOpen(false)}
-            aria-hidden="true"
-          />
+          <div className="absolute inset-0 bg-black/40" onClick={() => setOpen(false)} aria-hidden="true" />
           <div className="absolute inset-0 bg-white flex flex-col">
             <div className="h-10" />
             <nav className="max-w-screen-md mx-auto w-full p-2 pt-[calc(env(safe-area-inset-top)+2px)]">
@@ -93,4 +79,5 @@ export default function Topbar() {
     </>
   );
 }
+
 
