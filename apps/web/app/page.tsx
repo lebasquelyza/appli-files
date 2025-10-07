@@ -74,10 +74,12 @@ export default function HomePage() {
     }
   }
 
+  /** Style "pill" */
   const pillClass =
     "inline-flex items-center justify-center font-semibold shadow " +
     "px-3 py-1.5 select-none active:translate-y-px focus:outline-none " +
-    "focus-visible:ring-2 focus-visible:ring-emerald-500/30";
+    "focus-visible:ring-2 focus-visible:ring-emerald-500/30 " +
+    "leading-none"; // ← uniformise la hauteur du texte
   const pillStyle: React.CSSProperties = {
     background: "linear-gradient(90deg,#22c55e,#16a34a)",
     color: "#fff",
@@ -113,11 +115,8 @@ export default function HomePage() {
           </ul>
         </section>
 
-        {/* spacer pour contrôler la hauteur au-dessus des boutons (garde si utile) */}
-        <div className="h-10 sm:h-16" />
-
-        {/* LIGNE MODIFIÉE : poussés à droite */}
-        <div className="mb-10 w-full flex flex-row justify-end items-center gap-3 pr-4">
+        {/* Boutons sur la même ligne, à droite, alignés verticalement */}
+        <div className="mb-10 w-full h-20 flex flex-row justify-end items-center gap-3 pr-4">
           <button
             type="button"
             onClick={() => setShowLogin((v) => !v)}
@@ -214,5 +213,3 @@ export default function HomePage() {
     </main>
   );
 }
-
-
