@@ -1,10 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
-import { getSupabase } from "../lib/supabaseClient"; // adapte si ton alias @ n'est pas configuré
+import { getSupabase } from "../lib/supabaseClient"; // adapte si besoin
 
 export default function HomePage() {
+  const router = useRouter();
+
   // UI
   const [inputsReady, setInputsReady] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
@@ -19,18 +22,18 @@ export default function HomePage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Classe utilitaire pour NOS deux boutons (vert plein, texte blanc)
+  // === Style bouton vert (forcé) ===
   const btnGreen =
     "inline-flex items-center justify-center px-4 py-2 rounded-lg " +
-    "bg-emerald-600 text-white font-semibold shadow " +
-    "hover:bg-emerald-700 active:translate-y-px transition";
+    "!bg-emerald-600 !text-white font-semibold shadow " +
+    "hover:!bg-emerald-700 active:translate-y-px transition " +
+    "no-underline"; // évite héritage d'un lien vert souligné
 
   useEffect(() => {
     const t = setTimeout(() => {
       setInputsReady(true);
       if (typeof document !== "undefined") {
-        document.activeElement instanceof HTMLElement &&
-          document.activeElement.blur();
+        document.activeElement instanceof HTMLElement && document.activeElement.blur();
       }
     }, 250);
     return () => clearTimeout(t);
@@ -57,9 +60,7 @@ export default function HomePage() {
     } catch (err: any) {
       const msg = String(err?.message || "");
       if (msg.toLowerCase().includes("invalid login credentials")) {
-        setError(
-          "Identifiants invalides. Vérifie l’e-mail/mot de passe, ou confirme ton e-mail."
-        );
+        setError("Identifiants invalides. Vérifie l’e-mail/mot de passe, ou confirme ton e-mail.");
       } else {
         setError(msg || "Impossible de se connecter");
       }
@@ -117,7 +118,7 @@ export default function HomePage() {
           </ul>
         </section>
 
-        {/* CTA : Connecte-toi | Créer un compte (même design) */}
+        {/* CTA : Connecte-toi | Créer un compte — mêmes rectangles verts */}
         <div className="mt-6 mb-8 flex items-center gap-3">
           <button
             type="button"
@@ -125,13 +126,24 @@ export default function HomePage() {
             aria-expanded={showLogin}
             aria-controls="login-panel"
             className={btnGreen}
+            // filet de sécurité si une règle globale écrase Tailwind
+            style={{ backgroundColor: "#059669", color: "#fff" }} // emerald-600
           >
             Connecte-toi
           </button>
 
-          <a href="/signup" className={btnGreen} role="button">
+          {/* on garde <a>, mais on force aussi via important + style inline */}
+          <a
+            href="/signup"
+            role="button"
+            className={btnGreen}
+            style={{ backgroundColor: "#059669", color: "#fff" }}
+          >
             Créer un compte
           </a>
+          {/* Variante 100% sûre : 
+              <button onClick={() => router.push('/signup')} className={btnGreen} style={{backgroundColor:'#059669',color:'#fff'}}>Créer un compte</button>
+           */}
         </div>
 
         {/* Formulaire de connexion inline */}
@@ -140,9 +152,7 @@ export default function HomePage() {
             <form onSubmit={handleLogin} className="space-y-4">
               {/* Email */}
               <div>
-                <label className="block text-sm font-medium mb-1">
-                  Adresse e-mail
-                </label>
+                <label className="block text-sm font-medium mb-1">Adresse e-mail</label>
                 <input
                   type="email"
                   inputMode="email"
@@ -160,9 +170,7 @@ export default function HomePage() {
 
               {/* Mot de passe */}
               <div>
-                <label className="block text-sm font-medium mb-1">
-                  Mot de passe
-                </label>
+                <label className="block text-sm font-medium mb-1">Mot de passe</label>
                 <div className="relative">
                   <input
                     type={showPassword ? "text" : "password"}
@@ -182,11 +190,7 @@ export default function HomePage() {
                     onClick={() => setShowPassword((v) => !v)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-500 hover:text-gray-700"
                     tabIndex={-1}
-                    aria-label={
-                      showPassword
-                        ? "Masquer le mot de passe"
-                        : "Afficher le mot de passe"
-                    }
+                    aria-label={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
                   >
                     {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                   </button>
@@ -196,6 +200,7 @@ export default function HomePage() {
               <button
                 type="submit"
                 className={`${btnGreen} w-full`}
+                style={{ backgroundColor: "#059669", color: "#fff" }}
                 disabled={loading || !inputsReady}
               >
                 {loading ? "Connexion..." : "Se connecter"}
@@ -210,14 +215,8 @@ export default function HomePage() {
                 Mot de passe oublié ?
               </button>
 
-              {message && (
-                <p className="text-sm text-emerald-600 mt-2 text-center">
-                  {message}
-                </p>
-              )}
-              {error && (
-                <p className="text-sm text-red-600 mt-2 text-center">{error}</p>
-              )}
+              {message && <p className="text-sm text-emerald-600 mt-2 text-center">{message}</p>}
+              {error && <p className="text-sm text-red-600 mt-2 text-center">{error}</p>}
             </form>
           </div>
         )}
