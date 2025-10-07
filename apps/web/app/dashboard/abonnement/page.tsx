@@ -66,24 +66,29 @@ async function choosePlanAction(formData: FormData) {
     headers().get("origin") ||
     "http://localhost:3000";
 
-  // --- CORRECTION: valider et typer les price ids pour éviter string|null ---
-  const planPrice = PRICE_IDS[plan] as string | undefined;
-  if (!planPrice || !planPrice.startsWith("price_")) {
-    console.error("PRICE_IDS plan manquant/invalide:", plan, planPrice);
+  // --- VALIDATION + TYPAGE SÛR DES PRICE IDS ---
+  const planPriceRaw = PRICE_IDS[plan] as string | undefined;
+  if (!planPriceRaw || !planPriceRaw.startsWith("price_")) {
+    console.error("PRICE_IDS plan manquant/invalide:", { plan, value: planPriceRaw });
     redirect("/dashboard/abonnement?error=price_plan_invalide");
   }
+  const planPrice: string = planPriceRaw;
 
-  const addOnMaybe = (PRICE_IDS.CPLUS as any)[option] as string | null | undefined;
-  if (addOnMaybe && !addOnMaybe.startsWith("price_")) {
-    console.error("PRICE_IDS option invalide:", option, addOnMaybe);
-    redirect("/dashboard/abonnement?error=price_option_invalide");
+  const addOnRaw = (PRICE_IDS.CPLUS as any)[option] as string | null | undefined;
+  let addOn: string | null = null;
+  if (typeof addOnRaw === "string" && addOnRaw.trim() !== "") {
+    if (!addOnRaw.startsWith("price_")) {
+      console.error("PRICE_IDS option invalide:", { option, value: addOnRaw });
+      redirect("/dashboard/abonnement?error=price_option_invalide");
+    }
+    addOn = addOnRaw;
   }
+  // --- FIN ---
 
   const line_items: Array<{ price: string; quantity: number }> = [
     { price: planPrice, quantity: 1 },
   ];
-  if (addOnMaybe) line_items.push({ price: addOnMaybe, quantity: 1 });
-  // --- FIN CORRECTION ---
+  if (addOn) line_items.push({ price: addOn, quantity: 1 });
 
   // Création de la session Checkout (mode abonnement)
   const session = await stripe.checkout.sessions.create({
@@ -97,7 +102,6 @@ async function choosePlanAction(formData: FormData) {
       option,
       appUserId: s?.userId || "",
     },
-    // Si tu as déjà un customer Stripe pour l’utilisateur :
     // customer: s?.stripeCustomerId || undefined,
   });
 
@@ -273,4 +277,3 @@ export default async function Page({ searchParams }: { searchParams?: { success?
     </div>
   );
 }
-
