@@ -1,28 +1,26 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { getSupabase } from "../lib/supabaseClient";
+import { getSupabase } from "./lib/supabaseClient";
 import { Eye, EyeOff } from "lucide-react";
 
-export default function SigninPage() {
+export default function HomePage() {
+  // état CTA + formulaire inline
+  const [showLogin, setShowLogin] = useState(false);
+
+  // champs & UI
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [inputsReady, setInputsReady] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // messages
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [inputsReady, setInputsReady] = useState(false);
-
-  // contrôle de l’affichage du formulaire de connexion
-  const [showLogin, setShowLogin] = useState(false);
 
   useEffect(() => {
-    const t = setTimeout(() => {
-      setInputsReady(true);
-      if (typeof document !== "undefined") {
-        document.activeElement instanceof HTMLElement && document.activeElement.blur();
-      }
-    }, 300);
+    const t = setTimeout(() => setInputsReady(true), 300);
     return () => clearTimeout(t);
   }, []);
 
@@ -33,20 +31,29 @@ export default function SigninPage() {
     setError(null);
     try {
       const supabase = getSupabase();
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const { error } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password: password.trim(),
+      });
       if (error) throw error;
       setMessage("Connexion réussie ✅");
       window.location.href = "/dashboard";
     } catch (err: any) {
-      setError(err.message || "Impossible de se connecter");
+      const msg = String(err?.message || "");
+      if (msg.toLowerCase().includes("invalid login credentials")) {
+        setError("Identifiants invalides. Vérifie l’e-mail/mot de passe ou confirme ton e-mail.");
+      } else {
+        setError(msg || "Impossible de se connecter");
+      }
     } finally {
       setLoading(false);
     }
   };
 
   const handleForgotPassword = async () => {
-    if (!email) {
-      setError("Entrez votre e-mail pour réinitialiser votre mot de passe.");
+    const emailTrim = email.trim().toLowerCase();
+    if (!emailTrim) {
+      setError("Entre ton e-mail pour réinitialiser ton mot de passe.");
       return;
     }
     setLoading(true);
@@ -54,7 +61,7 @@ export default function SigninPage() {
     setError(null);
     try {
       const supabase = getSupabase();
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      const { error } = await supabase.auth.resetPasswordForEmail(emailTrim, {
         redirectTo: `${window.location.origin}/reset-password`,
       });
       if (error) throw error;
@@ -68,62 +75,62 @@ export default function SigninPage() {
 
   return (
     <main className="hide-topbar-menu pt-14 py-10 sm:py-12">
-      <div className="container max-w-md mx-auto px-4">
-        {/* Titre principal (même taille que partout et sous la topbar) */}
+      <div className="container max-w-4xl mx-auto px-4">
+        {/* Titre */}
         <header className="text-left mb-0">
           <h1
             className="font-bold leading-tight not-prose
-                       [font-size:theme(fontSize.2xl)!important]
-                       sm:[font-size:theme(fontSize.3xl)!important]"
+                       [font-size:theme(fontSize.3xl)!important]
+                       sm:[font-size:theme(fontSize.5xl)!important]"
           >
-            Files Coaching — Coach Sportif IA
+            Files Coaching —<br />
+            Coach Sportif IA
           </h1>
         </header>
 
-        {/* Gros espace sous le titre */}
-        <div className="mt-16 sm:mt-24" aria-hidden="true" />
+        {/* Espace sous le titre */}
+        <div className="mt-10 sm:mt-12" aria-hidden="true" />
 
         {/* Points forts */}
-        <section className="mt-6 sm:mt-8 mb-12">
-          <h3 className="text-lg sm:text-xl font-semibold mb-4">
+        <section className="mt-6 sm:mt-8 mb-10">
+          <h3 className="text-xl sm:text-2xl font-semibold mb-4">
             Séances personnalisées, conseils et suivi
           </h3>
-          <ul className="space-y-2 text-gray-800 text-base sm:text-lg leading-relaxed pl-5 list-disc">
+          <ul className="space-y-3 text-gray-800 text-lg leading-relaxed pl-6 list-disc">
             <li>✅ Programme personnalisé adapté à vos objectifs</li>
             <li>✅ Minuteur & Musique intégrés pour vos séances</li>
             <li>✅ Recettes healthy & conseils nutrition</li>
           </ul>
         </section>
 
-        {/* Ligne d’action: Déjà un compte ? (toggle) | Créer un compte */}
-        <div className="mt-8 sm:mt-10 mb-6 flex items-center justify-between">
+        {/* Ligne d’action : Connecte-toi (ouvre le formulaire) | Créer un compte */}
+        <div className="mt-6 mb-4 flex items-center justify-between">
           <button
             type="button"
             onClick={() => setShowLogin((v) => !v)}
             aria-expanded={showLogin}
             aria-controls="login-panel"
             className="inline-flex items-baseline gap-1
-                       text-base sm:text-lg font-semibold
+                       text-lg font-semibold
                        text-blue-600 hover:underline
                        bg-transparent appearance-none border-0 p-0 m-0
                        focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/30
                        [-webkit-tap-highlight-color:transparent]"
           >
-            <span className="text-gray-800">Déjà un compte&nbsp;?</span>
-            <span>Se connecter</span>
+            Connecte-toi
           </button>
 
           <a
             href="/signup"
-            className="text-base sm:text-lg text-emerald-600 font-semibold hover:underline"
+            className="text-lg text-emerald-600 font-semibold hover:underline"
           >
             Créer un compte
           </a>
         </div>
 
-        {/* Panneau de connexion */}
+        {/* Formulaire de connexion inline */}
         {showLogin && (
-          <div id="login-panel">
+          <div id="login-panel" className="mt-2 max-w-md">
             <form onSubmit={handleLogin} className="space-y-4">
               {/* Email */}
               <div>
@@ -131,7 +138,9 @@ export default function SigninPage() {
                 <input
                   type="email"
                   inputMode="email"
-                  autoComplete="off"
+                  autoComplete="email"
+                  autoCapitalize="none"
+                  spellCheck={false}
                   required
                   disabled={!inputsReady}
                   value={email}
@@ -148,7 +157,9 @@ export default function SigninPage() {
                   <input
                     type={showPassword ? "text" : "password"}
                     inputMode="text"
-                    autoComplete="off"
+                    autoComplete="current-password"
+                    autoCapitalize="none"
+                    spellCheck={false}
                     required
                     disabled={!inputsReady}
                     value={password}
@@ -181,8 +192,8 @@ export default function SigninPage() {
                 Mot de passe oublié ?
               </button>
 
-              {message && <p className="text-sm text-emerald-600 mt-2 text-center">{message}</p>}
-              {error && <p className="text-sm text-red-600 mt-2 text-center">{error}</p>}
+              {message && <p className="text-sm text-emerald-600 mt-2">{message}</p>}
+              {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
             </form>
           </div>
         )}
@@ -190,4 +201,3 @@ export default function SigninPage() {
     </main>
   );
 }
-
