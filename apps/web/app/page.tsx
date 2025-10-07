@@ -4,24 +4,6 @@ import { useEffect, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { getSupabase } from "../lib/supabaseClient";
 
-/** Petit carré vert décoratif */
-function GreenSquare() {
-  return (
-    <span
-      aria-hidden="true"
-      className="inline-block"
-      style={{
-        width: 8,
-        height: 8,
-        borderRadius: 3,
-        backgroundColor: "#059669",
-        marginRight: 8,
-        flex: "0 0 auto",
-      }}
-    />
-  );
-}
-
 export default function HomePage() {
   // UI
   const [showLogin, setShowLogin] = useState(false);
@@ -45,7 +27,7 @@ export default function HomePage() {
     return () => clearTimeout(t);
   }, []);
 
-  const handleLogin = async (e: React.FormEvent) => {
+  async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setMessage(null);
@@ -69,9 +51,9 @@ export default function HomePage() {
     } finally {
       setLoading(false);
     }
-  };
+  }
 
-  const handleForgotPassword = async () => {
+  async function handleForgotPassword() {
     const emailTrim = email.trim().toLowerCase();
     if (!emailTrim) {
       setError("Entrez votre e-mail pour réinitialiser votre mot de passe.");
@@ -92,16 +74,16 @@ export default function HomePage() {
     } finally {
       setLoading(false);
     }
-  };
+  }
 
-  // style commun : pilule verte, texte blanc, largeur IDENTIQUE
-  const btnPill =
-    "inline-flex items-center justify-center font-semibold shadow " +
-    "rounded-full px-4 py-2 whitespace-nowrap no-underline text-white";
+  // Style pilule vert + texte blanc identique pour les deux
+  const pill =
+    "inline-flex items-center justify-center rounded-full text-white font-semibold " +
+    "shadow px-5 py-2 no-underline hover:no-underline active:translate-y-px " +
+    "focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/30";
   const pillStyle: React.CSSProperties = {
     background: "linear-gradient(90deg,#22c55e,#16a34a)",
-    border: "1px solid rgba(0,0,0,.08)",
-    width: "190px", // même largeur pour les 2 boutons
+    width: 190, // même largeur
   };
 
   return (
@@ -133,7 +115,7 @@ export default function HomePage() {
           </ul>
         </section>
 
-        {/* CTAs centrés */}
+        {/* Boutons — centrés, identiques, texte blanc */}
         <div className="mt-2 mb-10">
           <div className="flex justify-center gap-3">
             <button
@@ -141,25 +123,22 @@ export default function HomePage() {
               onClick={() => setShowLogin((v) => !v)}
               aria-expanded={showLogin}
               aria-controls="login-panel"
-              className={btnPill}
+              className={pill}
               style={pillStyle}
             >
-              <GreenSquare />
-              <span>Connecte-toi</span>
+              Connecte-toi
             </button>
 
-            <a href="/signup" role="button" className={btnPill} style={pillStyle}>
-              <GreenSquare />
-              <span>Créer un compte</span>
+            <a href="/signup" role="button" className={pill} style={pillStyle}>
+              Créer un compte
             </a>
           </div>
         </div>
 
-        {/* Panneau de connexion inline (centré aussi) */}
+        {/* Panneau de connexion centré */}
         {showLogin && (
           <div id="login-panel" className="max-w-md mx-auto">
             <form onSubmit={handleLogin} className="space-y-4">
-              {/* Email */}
               <div>
                 <label className="block text-sm font-medium mb-1">Adresse e-mail</label>
                 <input
@@ -177,7 +156,6 @@ export default function HomePage() {
                 />
               </div>
 
-              {/* Mot de passe */}
               <div>
                 <label className="block text-sm font-medium mb-1">Mot de passe</label>
                 <div className="relative">
@@ -208,17 +186,11 @@ export default function HomePage() {
 
               <button
                 type="submit"
-                className={btnPill + " w-full"}
-                style={{
-                  ...pillStyle,
-                  width: "100%",
-                  paddingTop: 10,
-                  paddingBottom: 10,
-                }}
+                className={pill + " w-full"}
+                style={{ ...pillStyle, width: "100%" }}
                 disabled={loading || !inputsReady}
               >
-                <GreenSquare />
-                <span>{loading ? "Connexion..." : "Se connecter"}</span>
+                {loading ? "Connexion..." : "Se connecter"}
               </button>
 
               <button
