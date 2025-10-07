@@ -132,8 +132,8 @@ export default function HomePage() {
             Connecte-toi
           </button>
 
-          <a href="/signup" role="button" className={pillClass} style={pillStyle}>
-            Créer un compte
+          <a href="/signup" role="button" className={pillClass + " text-base"} style={pillStyle}>
+       Créer un compte
           </a>
         </div>
 
