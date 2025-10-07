@@ -1,330 +1,95 @@
-/* Tailwind (si utilisé) */
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+"use client";
 
-/* ===== Design système (variables – mode clair) ===== */
-:root{
-  --bg:#ffffff;
-  --panel:#f7f7f9;
-  --muted:#333333;          /* textes atténués (clair) */
-  --text:#111111;           /* texte principal (clair) */
-  --brand:#16a34a;          /* vert */
-  --brand2:#15803d;
-  --accent:#0ea5e9;         /* bleu accent */
-  --ring:rgba(14,165,233,.35);
-  --radius:14px;
-  --shadow:0 6px 18px rgba(0,0,0,.08);
-  --font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-}
+import { useRouter, usePathname } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 
-/* ===== Reset & base ===== */
-*{box-sizing:border-box}
-html{scroll-behavior:smooth}
-body{
-  margin:0; font-family:var(--font-family);
-  background:var(--bg); color:var(--text);
-  line-height:1.6; overflow-y:scroll;
-}
-a{color:var(--brand);text-decoration:none}
-a:hover{text-decoration:underline}
-img{max-width:100%;display:block}
-.container{max-width:1100px;margin:0 auto;padding:0 24px}
+export default function Topbar() {
+  const [open, setOpen] = useState(false);
+  const router = useRouter();
+  const pathname = usePathname();
+  const firstBtnRef = useRef<HTMLButtonElement | null>(null);
 
-/* ===== Header / nav (global clair par défaut) ===== */
-/* ⚠️ Avant: `header{...}` => rendait TOUT header fixe. On scope sur .site-header uniquement. */
-.site-header{
-  position:fixed; top:0; left:0; right:0; z-index:50;
-  background:#fffffff2; backdrop-filter:blur(6px);
-  border-bottom:1px solid #e5e7eb;
-}
-.nav{display:flex;align-items:center;gap:16px;justify-content:space-between;padding:14px 0}
-.brand{display:flex;gap:12px;align-items:center;font-weight:800;letter-spacing:.2px;color:var(--text)}
-.brand .mark{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,var(--brand),var(--accent));box-shadow:0 6px 12px rgba(22,163,74,.25)}
-.menu{display:flex;gap:16px}
-.menu a{padding:8px 12px;border-radius:8px;color:var(--text);font-weight:600}
-.menu a:hover{background:#f2f4f7}
-.burger{display:none;background:none;border:0;color:var(--text);font-size:20px}
-@media (max-width:860px){
-  .menu{display:none}
-  .burger{display:block}
-  .menu.open{
-    display:flex;flex-direction:column;position:absolute;left:20px;right:20px;top:64px;
-    background:var(--bg);border:1px solid #e5e7eb;border-radius:12px;padding:10px;box-shadow:var(--shadow);
-  }
-  .menu.open a{padding:12px}
-}
+  // Pages où le bouton Menu doit être masqué
+  const hideMenu =
+    pathname === "/" ||
+    pathname === "/signin" ||
+    pathname === "/signup";
 
-/* ===== Structure pages (utilise les variables) ===== */
-.h1{ font-size:32px; font-weight:800; margin:0 0 6px; color:var(--text); }
-.lead{ color:var(--muted); font-size:16px; margin:0; }
-.page-header{ display:flex; align-items:flex-end; justify-content:space-between; gap:16px; margin-bottom:18px; }
+  const go = (href: string) => {
+    setOpen(false);
+    router.push(href);
+  };
 
-.section{
-  background:var(--panel);
-  border:1px solid #e5e7eb; border-radius:var(--radius);
-  box-shadow:var(--shadow); padding:18px;
-}
-.section-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
-.section-head h2{ font-size:18px; font-weight:700; margin:0; color:var(--text); }
-.section-body{ display:block; }
+  useEffect(() => {
+    if (open) {
+      const t = setTimeout(() => firstBtnRef.current?.focus(), 40);
+      return () => clearTimeout(t);
+    }
+  }, [open]);
 
-.card{
-  background:var(--panel);
-  border:1px solid #e5e7eb; border-radius:var(--radius);
-  box-shadow:var(--shadow); padding:16px;
-}
+  return (
+    <>
+      <header className="site-header fixed inset-x-0 top-0 z-[1000] border-b bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 shadow-sm">
+        <div className="mx-auto max-w-screen-xl h-10 px-3 flex items-center justify-between">
+          {/* Bouton Menu (masqué sur /, /signin, /signup) */}
+          {!hideMenu && (
+            <button
+              aria-label="Ouvrir/Fermer le menu"
+              onClick={() => setOpen((v) => !v)}
+              className="js-topbar-menu inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-[.99] transition"
+            >
+              <span className="relative -ml-1 inline-block h-3 w-4">
+                <span className="absolute inset-x-0 top-0 h-[2px] bg-white" />
+                <span className="absolute inset-x-0 top-1.5 h-[2px] bg-white" />
+                <span className="absolute inset-x-0 bottom-0 h-[2px] bg-white" />
+              </span>
+              Menu
+            </button>
+          )}
 
-/* ===== Badges ===== */
-.badge{
-  background:#eef2f7; color:var(--text);
-  border:1px solid #e5e7eb; padding:6px 10px;
-  border-radius:999px; font-weight:700; font-size:12px;
-}
+          <div />
+          <div className="w-[42px]" />
+        </div>
+      </header>
 
-/* ===== Boutons simples ===== */
-.cta,.btn{
-  display:inline-block; padding:10px 14px; border-radius:10px;
-  background:linear-gradient(135deg,var(--brand),var(--brand2));
-  color:#fff; font-weight:800; box-shadow:var(--shadow); border:0;
-}
-.btn-outline{
-  padding:10px 14px; border-radius:10px; border:1px solid #e5e7eb;
-  background:var(--bg); font-weight:700;
-}
-
-/* ===== Form ===== */
-.input{
-  width:100%; border:1px solid #e5e7eb; border-radius:12px; padding:10px;
-  background:var(--bg); color:var(--text);
-}
-.label{ color:var(--muted); font-size:14px; font-weight:600; display:block; margin-bottom:6px; }
-
-/* ===== Helpers ===== */
-.grid{ display:grid; } .gap-6{ gap:16px; }
-.lg\:grid-cols-2{ grid-template-columns:1fr; } @media (min-width:1024px){ .lg\:grid-cols-2{ grid-template-columns:1fr 1fr; } }
-.sm\:grid-cols-2{ grid-template-columns:1fr; } @media (min-width:640px){ .sm\:grid-cols-2{ grid-template-columns:1fr 1fr; } }
-.flex{ display:flex; } .items-center{ align-items:center; } .justify-between{ justify-content:space-between; }
-.space-y-4 > * + *{ margin-top:16px; }
-.text-sm{ font-size:12.5px; } .text-3xl{ font-size:28px; } .font-bold{ font-weight:800; } .font-semibold{ font-weight:700; }
-.w-full{ width:100%; }
-.aspect-video{ position:relative; padding-bottom:56.25%; height:0; }
-.aspect-video > iframe{ position:absolute; inset:0; width:100%; height:100%; border:0; }
-
-/* ===== Boutons génériques (Tailwind @apply) ===== */
-.btn {
-  @apply inline-flex items-center justify-center gap-2
-         rounded-lg border border-gray-300 px-3 py-2
-         text-sm font-medium text-gray-900 bg-white
-         hover:bg-gray-50 active:translate-y-px transition;
-}
-.btn.btn-outline { @apply bg-transparent text-gray-900 border-gray-300 hover:bg-gray-100; }
-
-/* ===== Bouton dashboard unifié ===== */
-.btn-dash{
-  display:inline-flex; align-items:center; justify-content:center; gap:.5rem;
-  border-radius:var(--radius); padding:.6rem 1rem; font-weight:600; font-size:.9rem; line-height:1;
-  color:#fff; background-image:linear-gradient(90deg,var(--brand),var(--brand2));
-  border:1px solid rgba(0,0,0,.08); box-shadow:var(--shadow);
-  transition:transform .1s ease, filter .2s ease, box-shadow .2s ease;
-}
-.btn-dash:hover{ filter:brightness(1.03); transform:translateY(-1px); }
-.btn-dash:active{ transform:translateY(0); }
-.btn-dash:focus-visible{ outline:none; box-shadow:0 0 0 4px var(--ring), var(--shadow); }
-.btn-dash:disabled{ opacity:.6; cursor:not-allowed; }
-
-/* ===== Segmented control ===== */
-.seg {
-  display:inline-flex; gap:.25rem; padding:.25rem; border-radius:var(--radius);
-  background:var(--panel); border:1px solid rgba(0,0,0,.06); box-shadow:var(--shadow);
-}
-.seg button{
-  border:0; background:transparent; color:var(--muted);
-  padding:.45rem .6rem; border-radius:calc(var(--radius) - 6px);
-  font-weight:600; font-size:.85rem; cursor:pointer; transition:filter .15s ease, transform .1s ease;
-}
-.seg button:hover{ filter:brightness(1.05); transform:translateY(-1px); }
-.seg button.active{
-  color:#fff; background-image:linear-gradient(90deg,var(--brand),var(--brand2));
-  box-shadow:var(--shadow);
-}
-
-/* ===== Chips ===== */
-.chips{ display:flex; flex-wrap:wrap; gap:.5rem; }
-.chip{
-  display:inline-flex; align-items:center; justify-content:center; gap:.35rem;
-  padding:.45rem .7rem; border-radius:var(--radius);
-  background:var(--panel); color:var(--text);
-  border:1px solid rgba(0,0,0,.06); box-shadow:var(--shadow);
-  font-weight:600; font-size:.85rem; cursor:pointer; transition:filter .15s ease, transform .1s ease;
-}
-.chip:hover{ filter:brightness(1.05); transform:translateY(-1px); }
-
-/* ===== Bouton icône compact ===== */
-.icon-btn{
-  width:40px; height:40px; display:inline-flex; align-items:center; justify-content:center;
-  border-radius:var(--radius); background:var(--panel); color:var(--text);
-  border:1px solid rgba(0,0,0,.08); box-shadow:var(--shadow);
-  transition:transform .1s ease, filter .2s ease, box-shadow .2s ease;
-}
-.icon-btn:hover{ filter:brightness(1.02); transform:translateY(-1px); }
-.icon-btn:active{ transform:translateY(0); }
-.icon-btn:disabled{ opacity:.6; cursor:not-allowed; }
-.icon{ width:18px; height:18px; display:block; fill:currentColor; }
-
-/* =====================================================================
-   THEME SCOPÉ : le mode sombre n’affecte QUE l’intérieur d’un wrapper
-   <div class="themer dark"> ... </div>
-   ===================================================================== */
-
-/* 1) Conteneur de thème : clair par défaut (hérite de :root) */
-.themer {}
-
-/* 2) Variables dark uniquement À L'INTÉRIEUR du conteneur */
-.themer.dark{
-  --bg:#0b1220;
-  --panel:#0f172a;
-  --muted:#22c55e;      /* textes atténués -> vert lisible */
-  --text:#ffffff;       /* texte principal -> blanc */
-  --brand:#22c55e;
-  --brand2:#16a34a;
-  --accent:#22c55e;
-  --ring:rgba(59,130,246,.45);
-  --shadow:0 6px 18px rgba(0,0,0,.45);
-}
-
-/* 3) Surfaces & textes basiques dans le conteneur */
-.themer,
-.themer * { color: var(--text); }
-.themer .section,
-.themer .card { background: var(--panel); }
-.themer .badge { color: var(--text); }
-.themer a { color: var(--brand); }
-
-/* Champs & placeholders */
-.themer input,
-.themer select,
-.themer textarea {
-  background: var(--bg);
-  color: var(--text);
-  border-color: #e5e7eb;
-}
-.themer.dark input,
-.themer.dark select,
-.themer.dark textarea {
-  border-color:#1f2937;
-}
-.themer ::placeholder { color: var(--muted); }
-
-/* Si tu utilises un header DANS le conteneur (optionnel) */
-.themer header {
-  background: var(--bg);
-  border-bottom-color:#1f2937;
-}
-
-/* 4) DARK — Anti-noir SCOPÉ : rattrape inline styles & utilitaires */
-.themer.dark :where(
-  h1,h2,h3,h4,h5,h6,
-  p,span,small,div,section,article,
-  li,dt,dd,
-  label,strong,em,code,blockquote,
-  button,input,select,textarea,
-  th,td
-){
-  color: var(--text) !important;
-}
-
-/* hex/rgb courants (noirs/gris foncés) -> blanc, uniquement dans .themer.dark */
-.themer.dark [style*="color:#000"],
-.themer.dark [style*="color: #000"],
-.themer.dark [style*="color:#000000"],
-.themer.dark [style*="color: #000000"],
-.themer.dark [style*="color:rgb(0,0,0)"],
-.themer.dark [style*="color:#111"],
-.themer.dark [style*="color: #111"],
-.themer.dark [style*="color:#111111"],
-.themer.dark [style*="color: #111111"],
-.themer.dark [style*="color:#0b0f14"],
-.themer.dark [style*="color: #0b0f14"],
-.themer.dark [style*="color:#0f172a"],
-.themer.dark [style*="color: #0f172a"],
-.themer.dark [style*="color:#111827"],
-.themer.dark [style*="color: #111827"],
-.themer.dark [style*="color:#1f2937"],
-.themer.dark [style*="color: #1f2937"],
-.themer.dark [style*="color:#374151"],
-.themer.dark [style*="color: #374151"],
-.themer.dark [style*="color:#475569"],
-.themer.dark [style*="color: #475569"],
-.themer.dark [style*="color:rgb(17,24,39)"],
-.themer.dark [style*="color: rgb(17, 24, 39)"],
-.themer.dark [style*="color:rgb(31,41,55)"],
-.themer.dark [style*="color: rgb(31, 41, 55)"],
-.themer.dark [style*="color:rgb(55,65,81)"],
-.themer.dark [style*="color: rgb(55, 65, 81)"],
-.themer.dark [style*="color:rgb(71,85,105)"],
-.themer.dark [style*="color: rgb(71, 85, 105)"],
-.themer.dark .text-black,
-.themer.dark .text-gray-900,
-.themer.dark .text-gray-800,
-.themer.dark .text-slate-900,
-.themer.dark .text-neutral-900,
-.themer.dark .text-zinc-900,
-.themer.dark .text-stone-900 {
-  color:#fff !important;
-}
-
-/* Pseudo-éléments & icônes */
-.themer.dark *::before,
-.themer.dark *::after { color: var(--text) !important; }
-.themer.dark svg { color: var(--text) !important; }
-.themer.dark svg [fill="black"],
-.themer.dark svg [fill="#000"],
-.themer.dark svg [fill="#000000"] { fill: currentColor !important; }
-.themer.dark svg [stroke="black"],
-.themer.dark svg [stroke="#000"],
-.themer.dark svg [stroke="#000000"] { stroke: currentColor !important; }
-
-/* 5) DARK — Surfaces vertes (boutons/CTA/segments actifs) -> texte blanc */
-.themer.dark .btn,
-.themer.dark .cta,
-.themer.dark .btn-dash,
-.themer.dark .seg button.active {
-  color: #fff !important;
-}
-.themer.dark .btn *,
-.themer.dark .cta *,
-.themer.dark .btn-dash *,
-.themer.dark .seg button.active * {
-  color: #fff !important;
-}
-.themer.dark .btn a,
-.themer.dark .cta a,
-.themer.dark .btn-dash a,
-.themer.dark .seg button.active a {
-  color: #fff !important;
-  text-decoration-color: rgba(255,255,255,.7) !important;
-}
-
-/* Utilitaire pour n'importe quelle surface accentuée custom */
-.on-accent,
-.on-accent * { color:#fff !important; }
-.on-accent a {
-  color:#fff !important;
-  text-decoration-color: rgba(255,255,255,.7) !important;
-}
-
-/* 6) Exemple d’en-tête/menus dans le conteneur sombre (si tu en as un dedans) */
-.themer.dark header{ background:#0b1220f2; border-bottom-color:#1f2937; }
-.themer.dark .menu a:hover{ background:#0f172a; }
-
-/* ====== Utilitaire titre de page (même taille que "Se connecter") ====== */
-@layer components {
-  .app-h1 { @apply not-prose font-bold leading-tight text-2xl sm:text-3xl; }
-}
-
-/* ====== Masquage contextuel du bouton Menu (Topbar) ====== */
-/* Cache le bouton Menu si la page (main) porte la classe hide-topbar-menu */
-body:has(main.hide-topbar-menu) .js-topbar-menu {
-  display: none !important;
+      {/* Panneau plein écran (affiché seulement si le bouton existe) */}
+      {!hideMenu && open && (
+        <div className="fixed inset-0 z-[1100]" role="dialog" aria-modal="true">
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setOpen(false)}
+            aria-hidden="true"
+          />
+          <div className="absolute inset-0 bg-white flex flex-col">
+            <div className="h-10" />
+            <nav className="max-w-screen-md mx-auto w-full p-2 pt-[calc(env(safe-area-inset-top)+2px)]">
+              <ul className="divide-y">
+                {[
+                  { href: "/dashboard", label: "Accueil" },
+                  { href: "/dashboard/calories", label: "Calories" },
+                  { href: "/dashboard/corrector", label: "Correcteur IA" },
+                  { href: "/dashboard/profile", label: "Profil" },
+                  { href: "/dashboard/abonnement", label: "Abonnement" },
+                  { href: "/dashboard/recipes", label: "Recettes" },
+                  { href: "/dashboard/progress", label: "Progression" },
+                  { href: "/dashboard/settings", label: "Réglages" },
+                ].map((item, i) => (
+                  <li key={item.href}>
+                    <button
+                      ref={i === 0 ? firstBtnRef : undefined}
+                      onClick={() => go(item.href)}
+                      className="w-full text-left py-3 text-lg rounded-md px-3 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-emerald-600/30"
+                    >
+                      {item.label}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+            <div className="mt-auto" />
+          </div>
+        </div>
+      )}
+    </>
+  );
 }
