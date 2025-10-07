@@ -328,3 +328,11 @@ img{max-width:100%;display:block}
 body:has(main.hide-topbar-menu) .js-topbar-menu {
   display: none !important;
 }
+/* Bouton vert plein, texte blanc */
+.btn-green{
+  @apply inline-flex items-center justify-center
+         px-4 py-2 rounded-lg
+         bg-emerald-600 text-white font-semibold
+         shadow hover:bg-emerald-700
+         active:translate-y-px transition;
+}
