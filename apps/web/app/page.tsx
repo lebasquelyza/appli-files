@@ -74,12 +74,11 @@ export default function HomePage() {
     }
   }
 
-  /** Style "pill" */
+  // boutons "pilule" compacts
   const pillClass =
     "inline-flex items-center justify-center font-semibold shadow " +
     "px-3 py-1.5 select-none active:translate-y-px focus:outline-none " +
-    "focus-visible:ring-2 focus-visible:ring-emerald-500/30 " +
-    "leading-none"; // ← uniformise la hauteur du texte
+    "focus-visible:ring-2 focus-visible:ring-emerald-500/30 leading-none";
   const pillStyle: React.CSSProperties = {
     background: "linear-gradient(90deg,#22c55e,#16a34a)",
     color: "#fff",
@@ -115,8 +114,8 @@ export default function HomePage() {
           </ul>
         </section>
 
-        {/* Boutons sur la même ligne, à droite, alignés verticalement */}
-        <div className="mb-10 w-full h-20 flex flex-row justify-end items-center gap-3 pr-4">
+        {/* ✅ Boutons centrés au milieu de l'écran (vertical & horizontal) */}
+        <div className="w-full min-h-[40vh] flex flex-row justify-center items-center gap-3">
           <button
             type="button"
             onClick={() => setShowLogin((v) => !v)}
