@@ -4,20 +4,13 @@ import { useState, useEffect } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { getSupabase } from "../lib/supabaseClient"; // ✅ bon chemin depuis app/page.tsx
 
-// Petit carré vert — même style que sur l’autre page
+// Petit carré vert (même forme/couleur que dans le reste)
 function GreenSquare() {
   return (
     <span
       aria-hidden="true"
-      className="inline-block mr-2 align-middle"
-      style={{
-        width: 12,
-        height: 12,
-        borderRadius: 6,        // coins adoucis
-        backgroundColor: "#059669", // même vert
-        display: "inline-block",
-        flexShrink: 0,
-      }}
+      className="inline-block w-3 h-3 rounded-md mr-2 align-middle"
+      style={{ background: "var(--brand)" }}
     />
   );
 }
@@ -99,12 +92,6 @@ export default function HomePage() {
     }
   };
 
-  // style commun bouton vert (rectangle arrondi, texte blanc)
-  const btnGreen =
-    "inline-flex items-center justify-center rounded-xl px-4 py-2 text-base font-semibold shadow " +
-    "focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/30 " +
-    "active:translate-y-px transition";
-
   return (
     <main className="hide-topbar-menu pt-10 sm:pt-12 pb-12">
       <div className="container max-w-screen-lg mx-auto px-4">
@@ -134,24 +121,23 @@ export default function HomePage() {
           </ul>
         </section>
 
-        {/* CTA : Connecte-toi | ou | Créer un compte */}
+        {/* CTAs alignés sur .btn-dash + petit carré vert */}
         <div className="mt-2 mb-10 flex flex-wrap items-center gap-3">
           <button
             type="button"
             onClick={() => setShowLogin((v) => !v)}
             aria-expanded={showLogin}
             aria-controls="login-panel"
-            className={btnGreen}
-            style={{ backgroundColor: "#059669", color: "#fff" }}
+            className="btn-dash inline-flex items-center"
           >
             <GreenSquare />
             <span>Connecte-toi</span>
           </button>
 
-          {/* pastille “ou” verte */}
+          {/* pastille “ou” verte (même vert) */}
           <span
             className="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-semibold select-none shadow"
-            style={{ backgroundColor: "#059669", color: "#fff" }}
+            style={{ background: "var(--brand)", color: "#fff" }}
           >
             ou
           </span>
@@ -159,8 +145,7 @@ export default function HomePage() {
           <a
             href="/signup"
             role="button"
-            className={btnGreen}
-            style={{ backgroundColor: "#059669", color: "#fff" }}
+            className="btn-dash inline-flex items-center"
           >
             <GreenSquare />
             <span>Créer un compte</span>
@@ -218,10 +203,10 @@ export default function HomePage() {
                 </div>
               </div>
 
+              {/* Submit = même look .btn-dash + carré */}
               <button
                 type="submit"
-                className={btnGreen + " w-full"}
-                style={{ backgroundColor: "#059669", color: "#fff" }}
+                className="btn-dash inline-flex items-center w-full justify-center"
                 disabled={loading || !inputsReady}
               >
                 <GreenSquare />
@@ -246,3 +231,4 @@ export default function HomePage() {
     </main>
   );
 }
+
