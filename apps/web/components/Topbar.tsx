@@ -1,19 +1,25 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 export default function Topbar() {
   const [open, setOpen] = useState(false);
   const router = useRouter();
+  const pathname = usePathname();
   const firstBtnRef = useRef<HTMLButtonElement | null>(null);
+
+  // Pages où le bouton Menu doit être masqué
+  const hideMenu =
+    pathname === "/" ||
+    pathname === "/signin" ||
+    pathname === "/signup";
 
   const go = (href: string) => {
     setOpen(false);
     router.push(href);
   };
 
-  // Focus sur le premier élément quand on ouvre
   useEffect(() => {
     if (open) {
       const t = setTimeout(() => firstBtnRef.current?.focus(), 40);
@@ -23,41 +29,38 @@ export default function Topbar() {
 
   return (
     <>
-      {/* Barre fixe (40px) */}
       <header className="site-header fixed inset-x-0 top-0 z-[1000] border-b bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 shadow-sm">
         <div className="mx-auto max-w-screen-xl h-10 px-3 flex items-center justify-between">
-          {/* Bouton Menu (toggle) */}
-          <button
-            aria-label="Ouvrir/Fermer le menu"
-            onClick={() => setOpen((v) => !v)}
-            className="js-topbar-menu inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-[.99] transition"
-          >
-            {/* 3 barres */}
-            <span className="relative -ml-1 inline-block h-3 w-4">
-              <span className="absolute inset-x-0 top-0 h-[2px] bg-white" />
-              <span className="absolute inset-x-0 top-1.5 h-[2px] bg-white" />
-              <span className="absolute inset-x-0 bottom-0 h-[2px] bg-white" />
-            </span>
-            Menu
-          </button>
+          {/* Bouton Menu (masqué sur /, /signin, /signup) */}
+          {!hideMenu && (
+            <button
+              aria-label="Ouvrir/Fermer le menu"
+              onClick={() => setOpen((v) => !v)}
+              className="js-topbar-menu inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-[.99] transition"
+            >
+              <span className="relative -ml-1 inline-block h-3 w-4">
+                <span className="absolute inset-x-0 top-0 h-[2px] bg-white" />
+                <span className="absolute inset-x-0 top-1.5 h-[2px] bg-white" />
+                <span className="absolute inset-x-0 bottom-0 h-[2px] bg-white" />
+              </span>
+              Menu
+            </button>
+          )}
 
-          {/* Rien au centre/droite pour rester épuré */}
           <div />
           <div className="w-[42px]" />
         </div>
       </header>
 
-      {/* Panneau plein écran (ouvre/ferme avec le même bouton) */}
-      {open && (
+      {/* Panneau plein écran (affiché seulement si le bouton existe) */}
+      {!hideMenu && open && (
         <div className="fixed inset-0 z-[1100]" role="dialog" aria-modal="true">
-          {/* clic sur l’overlay ferme aussi */}
           <div
             className="absolute inset-0 bg-black/40"
             onClick={() => setOpen(false)}
             aria-hidden="true"
           />
           <div className="absolute inset-0 bg-white flex flex-col">
-            {/* petite barre top pour resp. encoche */}
             <div className="h-10" />
             <nav className="max-w-screen-md mx-auto w-full p-2 pt-[calc(env(safe-area-inset-top)+2px)]">
               <ul className="divide-y">
@@ -83,8 +86,6 @@ export default function Topbar() {
                 ))}
               </ul>
             </nav>
-
-            {/* rien en bas */}
             <div className="mt-auto" />
           </div>
         </div>
