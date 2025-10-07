@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 // ⬇️ Ajuste ce chemin si besoin : si ton fichier est apps/web/app/lib/supabaseClient.ts, garde "./lib/..."
-import { getSupabase } from "./lib/supabaseClient";
+import { getSupabase } from "../lib/supabaseClient";
 
 /** Petit carré vert (même style que sur la page profil) */
 function GreenSquare() {
