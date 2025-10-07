@@ -1,27 +1,34 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
-import { getSupabase } from "../lib/supabaseClient";
+// ⬇️ Ajuste ce chemin si besoin : si ton fichier est apps/web/app/lib/supabaseClient.ts, garde "./lib/..."
+import { getSupabase } from "./lib/supabaseClient";
 
-// Petit carré vert (même style que dans la page Profil)
+/** Petit carré vert (même style que sur la page profil) */
 function GreenSquare() {
   return (
     <span
       aria-hidden="true"
-      className="inline-block w-3 h-3 rounded-md mr-2 align-middle"
-      style={{ background: "var(--brand)" }}
+      className="inline-block"
+      style={{
+        width: 10,
+        height: 10,
+        borderRadius: 3,
+        backgroundColor: "#059669", // même vert que .btn-dash
+        marginRight: 8,
+      }}
     />
   );
 }
 
 export default function HomePage() {
-  // UI state
+  // UI
   const [showLogin, setShowLogin] = useState(false);
   const [inputsReady, setInputsReady] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  // Auth state
+  // Auth
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -45,7 +52,6 @@ export default function HomePage() {
     setError(null);
     try {
       const supabase = getSupabase();
-
       const emailTrim = email.trim().toLowerCase();
       const passTrim = password.trim();
 
@@ -96,7 +102,7 @@ export default function HomePage() {
     <main className="hide-topbar-menu pt-10 sm:pt-12 pb-12">
       <div className="container max-w-screen-lg mx-auto px-4">
         {/* Titre */}
-        <header className="mb-0 text-center">
+        <header className="mb-0">
           <h1
             className="font-bold leading-tight not-prose
                        [font-size:theme(fontSize.3xl)!important]
@@ -111,45 +117,45 @@ export default function HomePage() {
 
         {/* Accroche */}
         <section className="mb-8">
-          <div className="text-center">
-            <h3 className="text-xl sm:text-2xl font-semibold mb-4">
-              Séances personnalisées, conseils et suivi
-            </h3>
-          </div>
-          <ul className="space-y-3 text-gray-900 text-lg sm:text-xl leading-relaxed pl-5 list-disc max-w-2xl mx-auto">
+          <h3 className="text-xl sm:text-2xl font-semibold mb-4">
+            Séances personnalisées, conseils et suivi
+          </h3>
+          <ul className="space-y-3 text-gray-900 text-lg sm:text-xl leading-relaxed pl-5 list-disc">
             <li>✅ Programme personnalisé adapté à vos objectifs</li>
             <li>✅ Minuteur &amp; Musique intégrés pour vos séances</li>
             <li>✅ Recettes healthy &amp; conseils nutrition</li>
           </ul>
         </section>
 
-        {/* CTAs : 2 boutons CENTRÉS, sans séparateur */}
-        <div className="mt-2 mb-10 flex flex-wrap items-center justify-center gap-4 text-center">
-          <button
-            type="button"
-            onClick={() => setShowLogin((v) => !v)}
-            aria-expanded={showLogin}
-            aria-controls="login-panel"
-            className="btn-dash inline-flex items-center justify-center"
-          >
-            <GreenSquare />
-            <span>Connecte-toi</span>
-          </button>
+        {/* CTAs : 2 boutons décalés à droite (centrés sur très petit écran) */}
+        <div className="mt-2 mb-10 max-w-2xl sm:ml-auto sm:mr-0">
+          <div className="flex flex-wrap items-center gap-4 justify-center sm:justify-end">
+            <button
+              type="button"
+              onClick={() => setShowLogin((v) => !v)}
+              aria-expanded={showLogin}
+              aria-controls="login-panel"
+              className="btn-dash inline-flex items-center justify-center"
+            >
+              <GreenSquare />
+              <span>Connecte-toi</span>
+            </button>
 
-          <a
-            href="/signup"
-            role="button"
-            className="btn-dash inline-flex items-center justify-center"
-          >
-            <GreenSquare />
-            <span>Créer un compte</span>
-          </a>
+            <a
+              href="/signup"
+              role="button"
+              className="btn-dash inline-flex items-center justify-center"
+            >
+              <GreenSquare />
+              <span>Créer un compte</span>
+            </a>
+          </div>
         </div>
 
-        {/* Panneau de connexion inline CENTRÉ */}
+        {/* Panneau de connexion inline */}
         {showLogin && (
-          <div id="login-panel" className="max-w-md mx-auto">
-            <form onSubmit={handleLogin} className="space-y-4 text-left">
+          <div id="login-panel" className="max-w-md">
+            <form onSubmit={handleLogin} className="space-y-4">
               {/* Email */}
               <div>
                 <label className="block text-sm font-medium mb-1">Adresse e-mail</label>
@@ -197,17 +203,14 @@ export default function HomePage() {
                 </div>
               </div>
 
-              {/* Bouton submit CENTRÉ */}
-              <div className="flex justify-center">
-                <button
-                  type="submit"
-                  className="btn-dash inline-flex items-center justify-center"
-                  disabled={loading || !inputsReady}
-                >
-                  <GreenSquare />
-                  <span>{loading ? "Connexion..." : "Se connecter"}</span>
-                </button>
-              </div>
+              <button
+                type="submit"
+                className="btn-dash w-full inline-flex items-center justify-center"
+                disabled={loading || !inputsReady}
+              >
+                <GreenSquare />
+                <span>{loading ? "Connexion..." : "Se connecter"}</span>
+              </button>
 
               <button
                 type="button"
@@ -227,3 +230,4 @@ export default function HomePage() {
     </main>
   );
 }
+
