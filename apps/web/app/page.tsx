@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Eye, EyeOff } from "lucide-react";
-import { getSupabase } from "../lib/supabaseClient";
+import { getSupabase } from "../lib/supabaseClient"; // ✅ bon chemin depuis app/page.tsx
 
 export default function HomePage() {
   // UI state
@@ -33,8 +33,6 @@ export default function HomePage() {
     setMessage(null);
     setError(null);
     try {
-      // import dynamique pour éviter les soucis de résolution pendant le build
-      const { getSupabase } = await import("../lib/supabaseClient");
       const supabase = getSupabase();
 
       const emailTrim = email.trim().toLowerCase();
@@ -70,7 +68,6 @@ export default function HomePage() {
     setMessage(null);
     setError(null);
     try {
-      const { getSupabase } = await import("./lib/supabaseClient");
       const supabase = getSupabase();
       const { error } = await supabase.auth.resetPasswordForEmail(emailTrim, {
         redirectTo: `${window.location.origin}/reset-password`,
@@ -160,7 +157,9 @@ export default function HomePage() {
                 <input
                   type="email"
                   inputMode="email"
-                  autoComplete="off"
+                  autoComplete="email"
+                  autoCapitalize="none"
+                  spellCheck={false}
                   required
                   disabled={!inputsReady}
                   value={email}
@@ -177,7 +176,9 @@ export default function HomePage() {
                   <input
                     type={showPassword ? "text" : "password"}
                     inputMode="text"
-                    autoComplete="off"
+                    autoComplete="current-password"
+                    autoCapitalize="none"
+                    spellCheck={false}
                     required
                     disabled={!inputsReady}
                     value={password}
@@ -197,7 +198,12 @@ export default function HomePage() {
                 </div>
               </div>
 
-              <button type="submit" className={btnGreen + " w-full"} style={{ backgroundColor: "#059669", color: "#fff" }} disabled={loading || !inputsReady}>
+              <button
+                type="submit"
+                className={btnGreen + " w-full"}
+                style={{ backgroundColor: "#059669", color: "#fff" }}
+                disabled={loading || !inputsReady}
+              >
                 {loading ? "Connexion..." : "Se connecter"}
               </button>
 
@@ -219,3 +225,4 @@ export default function HomePage() {
     </main>
   );
 }
+
