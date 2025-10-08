@@ -198,17 +198,13 @@ export default function Page() {
       style={{
         paddingTop: 24,
         paddingBottom: 32,
-        fontSize: "var(--settings-fs, 12px)",
+        fontSize: "var(--settings-fs, 12px)", // même logique que l’autre page
       }}
     >
       <div className="page-header">
         <div>
-          <h1 className="h1" style={{ fontSize: 22 }}>
-            Import / Enregistrement
-          </h1>
-          <p className="lead">
-            Filme ou importe ta vidéo, ajoute ton ressenti puis lance l’analyse IA.
-          </p>
+          <h1 className="h1" style={{ fontSize: 22 }}>Import / Enregistrement</h1>
+          <p className="lead">Filme ou importe ta vidéo, ajoute ton ressenti puis lance l’analyse IA.</p>
         </div>
       </div>
 
@@ -467,6 +463,8 @@ function CoachAnalyzer() {
 
   const { issuesLine, correctionsLine } = faultsToLines(analysis);
 
+  const [muscleOpen, setMuscleOpen] = useState<string | null>(null);
+
   return (
     <>
       <div className="grid gap-6 lg:grid-cols-2">
@@ -474,7 +472,7 @@ function CoachAnalyzer() {
         <article className="card">
           <h3 style={{ marginTop: 0 }}>🎥 Import / Enregistrement</h3>
 
-          {/* Onglets Filmer / Importer : actif vert, inactif NOIR SUR BLANC */}
+          {/* Onglets Filmer / Importer */}
           <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
             <button
               onClick={() => setTab("record")}
@@ -558,7 +556,6 @@ function CoachAnalyzer() {
               {isAnalyzing ? "Analyse en cours" : cooldown > 0 ? `Patiente ${cooldown}s` : "Lancer l'analyse IA"}
             </button>
 
-            {/* Reset du textarea : NOIR SUR BLANC */}
             <button
               className="btn"
               type="button"
@@ -595,7 +592,7 @@ function CoachAnalyzer() {
           </p>
         )}
 
-        {/* GATE de confirmation : "Confirmer" vert, "Autre" NOIR/BLANC */}
+        {/* GATE de confirmation */}
         {analysis && showChoiceGate && (
           <div style={{ display: "grid", gap: 8 }}>
             <div className="text-sm">
@@ -658,8 +655,29 @@ function CoachAnalyzer() {
 
             <div>
               <h4 className="h4" style={{ fontSize: 14, margin: "8px 0 4px" }}>Muscles principalement sollicités</h4>
+
               {analysis.muscles?.length ? (
-                <p className="text-sm">{analysis.muscles.join(" - ")}</p>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {analysis.muscles.map((m, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => setMuscleOpen(m)}
+                      title="Voir l’emplacement"
+                      className="text-sm"
+                      style={{
+                        padding: "6px 10px",
+                        borderRadius: 999,
+                        border: "1px solid #d1d5db",
+                        background: "#ffffff",
+                        color: "#111827",
+                        cursor: "pointer"
+                      }}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
               ) : (
                 <p className="text-xs" style={{ color: "#6b7280" }}>— non détecté —</p>
               )}
@@ -683,34 +701,34 @@ function CoachAnalyzer() {
           </div>
         )}
       </article>
+
+      {/* Panneau Muscle Viewer */}
+      {muscleOpen && (
+        <MuscleViewer muscleName={muscleOpen} onClose={() => setMuscleOpen(null)} />
+      )}
     </>
   );
 }
 
 /* ===================== Upload/Record ===================== */
-/** Import minimaliste : UNIQUEMENT deux choix (Photos / Fichiers). */
+/** Import minimaliste : UNIQUEMENT deux choix (Galerie / Fichiers), boutons blancs. */
 function UploadDrop({ onFile }: { onFile: (file: File) => void }) {
   const photosRef = useRef<HTMLInputElement | null>(null);
   const filesRef  = useRef<HTMLInputElement | null>(null);
 
   const openPhotos = () => {
-    // Pas de `capture` → n'ouvre jamais la caméra.
-    // iOS/Android affichent la feuille de la bibliothèque (peuvent montrer "Prendre…", mais ce n'est pas lancé par nous).
-    photosRef.current?.click();
+    photosRef.current?.click(); // pas de capture → n’ouvre jamais la caméra
   };
 
   const openFiles = async () => {
-    // Tente le sélecteur de fichiers moderne, sinon fallback input invisible
     const anyWindow = window as any;
     try {
       if (anyWindow?.showOpenFilePicker) {
         const [handle] = await anyWindow.showOpenFilePicker({
           multiple: false,
           excludeAcceptAllOption: false,
-          types: [
-            { description: "Vidéos", accept: { "video/*": [".mp4", ".mov", ".webm", ".mkv", ".avi"] } },
-          ],
-          startIn: "videos", // ignoré si non supporté
+          types: [{ description: "Vidéos", accept: { "video/*": [".mp4", ".mov", ".webm", ".mkv", ".avi"] } }],
+          startIn: "videos",
         });
         if (handle) {
           const f = await handle.getFile();
@@ -719,7 +737,7 @@ function UploadDrop({ onFile }: { onFile: (file: File) => void }) {
         }
       }
     } catch {
-      /* annulé ou non supporté → fallback */
+      /* annulé / non supporté → fallback */
     }
     filesRef.current?.click();
   };
@@ -727,8 +745,13 @@ function UploadDrop({ onFile }: { onFile: (file: File) => void }) {
   return (
     <div className="card" style={{ padding: 16, display: "grid", gap: 10 }}>
       <div className="grid gap-2 sm:flex sm:gap-3">
-        <button type="button" className="btn btn-dash" onClick={openPhotos}>
-          📸 Photos
+        <button
+          type="button"
+          className="btn"
+          onClick={openPhotos}
+          style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
+        >
+          📸 Galerie
         </button>
         <button
           type="button"
@@ -740,12 +763,14 @@ function UploadDrop({ onFile }: { onFile: (file: File) => void }) {
         </button>
       </div>
 
-      {/* Inputs cachés pour les deux chemins (fallbacks) */}
+      {/* Inputs cachés pour les deux chemins (aucun "Choisir le fichier" visible) */}
       <input
         ref={photosRef}
         type="file"
         accept="video/*,image/*"
-        className="hidden"
+        aria-hidden
+        tabIndex={-1}
+        style={{ display: "none" }}
         onChange={(e) => {
           const f = e.target.files?.[0];
           if (f) onFile(f);
@@ -756,7 +781,9 @@ function UploadDrop({ onFile }: { onFile: (file: File) => void }) {
         ref={filesRef}
         type="file"
         accept="video/*"
-        className="hidden"
+        aria-hidden
+        tabIndex={-1}
+        style={{ display: "none" }}
         onChange={(e) => {
           const f = e.target.files?.[0];
           if (f) onFile(f);
@@ -952,3 +979,148 @@ function faultsToLines(a: AIAnalysis | null) {
   return { issuesLine, correctionsLine };
 }
 
+/* ===================== Muscle Viewer ===================== */
+/** Normalisation très permissive des noms de muscles (FR/EN, pluriel, accents). */
+function normMuscle(s: string) {
+  return (s || "")
+    .toLowerCase()
+    .normalize("NFD").replace(/\p{Diacritic}/gu, "")
+    .replace(/[\s\-’'"]/g, "")
+    .replace(/s$/,"");
+}
+
+/** Dictionnaire: nom -> régions à surligner dans la carte */
+const MUSCLE_MAP: Record<string, string[]> = {
+  // haut du corps
+  deltoide: ["deltoid_l","deltoid_r"],
+  deltoid: ["deltoid_l","deltoid_r"],
+  epaules: ["deltoid_l","deltoid_r"],
+  trapeze: ["traps"],
+  trapezius: ["traps"],
+  pectoraux: ["pecs"],
+  pectoral: ["pecs"],
+  chest: ["pecs"],
+  granddorsal: ["lats"],
+  lats: ["lats"],
+  dorsal: ["lats"],
+  biceps: ["biceps_l","biceps_r"],
+  triceps: ["triceps_l","triceps_r"],
+  avantbras: ["forearms_l","forearms_r"],
+  // tronc
+  abdominaux: ["abs"],
+  abdos: ["abs"],
+  core: ["abs","obliques"],
+  obliques: ["obliques"],
+  // bas du corps
+  fessiers: ["glutes"],
+  glute: ["glutes"],
+  quadriceps: ["quads_l","quads_r"],
+  quadricip: ["quads_l","quads_r"],
+  ischio: ["hams_l","hams_r"],
+  ischiojambier: ["hams_l","hams_r"],
+  hamstring: ["hams_l","hams_r"],
+  mollet: ["calf_l","calf_r"],
+  mollets: ["calf_l","calf_r"],
+  calves: ["calf_l","calf_r"],
+};
+
+/** Panneau modal + carte SVG */
+function MuscleViewer({ muscleName, onClose }: { muscleName: string; onClose: () => void }) {
+  const keys = MUSCLE_MAP[normMuscle(muscleName)] || [];
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-50 grid place-items-center"
+      style={{ background: "rgba(17,24,39,0.5)", padding: 16 }}
+      onClick={onClose}
+    >
+      <div
+        className="card"
+        style={{ maxWidth: 860, width: "100%", background: "#fff" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+          <h3 style={{ margin: 0 }}>📍 {muscleName}</h3>
+          <button className="btn" onClick={onClose} style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}>Fermer</button>
+        </div>
+
+        <p className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>
+          Schéma simplifié — zones en surbrillance indiquent l’emplacement du muscle.
+        </p>
+
+        <BodyMap highlightKeys={keys} />
+      </div>
+    </div>
+  );
+}
+
+/** Carte corps humain très légère (face + dos) — zones nommées via ids */
+function BodyMap({ highlightKeys }: { highlightKeys: string[] }) {
+  const H = new Set(highlightKeys);
+  const on = (id: string) => H.has(id) ? 1 : 0.12;
+
+  const partStyle = (active: boolean) => ({
+    fill: active ? "#22c55e" : "#9ca3af",
+    opacity: active ? 0.9 : 0.35,
+    transition: "all .2s ease",
+    stroke: active ? "#14532d" : "#6b7280",
+    strokeWidth: 1,
+  } as React.CSSProperties);
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 12 }}>
+      {/* Face */}
+      <svg viewBox="0 0 160 360" style={{ width: "100%", height: "auto", background: "#f9fafb", borderRadius: 12 }}>
+        {/* silhouette */}
+        <rect x="70" y="10" width="20" height="20" rx="10" style={{ fill: "#e5e7eb" }} />
+        <rect x="45" y="30" width="70" height="85" rx="12" style={{ fill: "#e5e7eb" }} />
+        {/* pecs */}
+        <rect id="pecs" x="52" y="60" width="56" height="18" rx="6" style={partStyle(!!on("pecs"))} />
+        {/* deltoids */}
+        <circle id="deltoid_l" cx="45" cy="65" r="12" style={partStyle(!!on("deltoid_l"))} />
+        <circle id="deltoid_r" cx="115" cy="65" r="12" style={partStyle(!!on("deltoid_r"))} />
+        {/* biceps/avant-bras */}
+        <rect id="biceps_l" x="26" y="85" width="16" height="36" rx="8" style={partStyle(!!on("biceps_l"))} />
+        <rect id="biceps_r" x="118" y="85" width="16" height="36" rx="8" style={partStyle(!!on("biceps_r"))} />
+        <rect id="forearms_l" x="26" y="122" width="16" height="36" rx="8" style={partStyle(!!on("forearms_l"))} />
+        <rect id="forearms_r" x="118" y="122" width="16" height="36" rx="8" style={partStyle(!!on("forearms_r"))} />
+        {/* abdos/obliques */}
+        <rect id="abs" x="66" y="92" width="28" height="40" rx="8" style={partStyle(!!on("abs"))} />
+        <rect id="obliques" x="56" y="96" width="12" height="36" rx="6" style={partStyle(!!on("obliques"))} />
+        <rect id="obliques2" x="94" y="96" width="12" height="36" rx="6" style={partStyle(!!on("obliques"))} />
+        {/* quads */}
+        <rect id="quads_l" x="60" y="150" width="18" height="52" rx="9" style={partStyle(!!on("quads_l"))} />
+        <rect id="quads_r" x="82" y="150" width="18" height="52" rx="9" style={partStyle(!!on("quads_r"))} />
+        {/* mollets */}
+        <rect id="calf_l" x="60" y="210" width="18" height="42" rx="9" style={partStyle(!!on("calf_l"))} />
+        <rect id="calf_r" x="82" y="210" width="18" height="42" rx="9" style={partStyle(!!on("calf_r"))} />
+      </svg>
+
+      {/* Dos */}
+      <svg viewBox="0 0 160 360" style={{ width: "100%", height: "auto", background: "#f9fafb", borderRadius: 12 }}>
+        {/* silhouette */}
+        <rect x="70" y="10" width="20" height="20" rx="10" style={{ fill: "#e5e7eb" }} />
+        <rect x="45" y="30" width="70" height="85" rx="12" style={{ fill: "#e5e7eb" }} />
+        {/* trapèzes */}
+        <polygon id="traps" points="80,40 52,60 108,60" style={partStyle(!!on("traps"))} />
+        {/* deltoids arrière */}
+        <circle id="deltoid_l_b" cx="45" cy="65" r="12" style={partStyle(!!on("deltoid_l"))} />
+        <circle id="deltoid_r_b" cx="115" cy="65" r="12" style={partStyle(!!on("deltoid_r"))} />
+        {/* dorsaux */}
+        <rect id="lats" x="50" y="70" width="60" height="28" rx="10" style={partStyle(!!on("lats"))} />
+        {/* triceps */}
+        <rect id="triceps_l" x="26" y="90" width="16" height="36" rx="8" style={partStyle(!!on("triceps_l"))} />
+        <rect id="triceps_r" x="118" y="90" width="16" height="36" rx="8" style={partStyle(!!on("triceps_r"))} />
+        {/* fessiers */}
+        <rect id="glutes" x="60" y="120" width="40" height="28" rx="10" style={partStyle(!!on("glutes"))} />
+        {/* ischios */}
+        <rect id="hams_l" x="60" y="150" width="18" height="52" rx="9" style={partStyle(!!on("hams_l"))} />
+        <rect id="hams_r" x="82" y="150" width="18" height="52" rx="9" style={partStyle(!!on("hams_r"))} />
+        {/* mollets */}
+        <rect id="calf_l_b" x="60" y="210" width="18" height="42" rx="9" style={partStyle(!!on("calf_l"))} />
+        <rect id="calf_r_b" x="82" y="210" width="18" height="42" rx="9" style={partStyle(!!on("calf_r"))} />
+      </svg>
+    </div>
+  );
+}
