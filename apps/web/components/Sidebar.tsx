@@ -42,6 +42,12 @@ export default function Sidebar() {
   // Filet de sécurité : replier à chaque changement de route
   useEffect(() => setOpen(false), [pathname]);
 
+  // Fermer APRÈS que le clic ait été géré par <Link> (fiable iOS)
+  const closeAfterClick = () => {
+    // laisse passer le click, puis ferme dès la prochaine frame
+    requestAnimationFrame(() => setOpen(false));
+  };
+
   return (
     <nav aria-label="Dashboard" style={{ paddingLeft: 10, paddingRight: 10 }}>
       {/* ===== Entête sticky collée en haut avec safe-area ===== */}
@@ -74,7 +80,7 @@ export default function Sidebar() {
             cursor: "pointer",
           }}
         >
-          {/* Carré dégradé (non interactif) */}
+          {/* Pastille verte (non interactive) */}
           <span
             aria-hidden
             style={{
@@ -87,7 +93,7 @@ export default function Sidebar() {
                 "linear-gradient(135deg,var(--brand,#22c55e),var(--brand2,#15803d))",
             }}
           />
-          {/* “Files-Menu” = bouton d’ouverture (noir) */}
+          {/* Bouton d’ouverture */}
           <b style={{ fontSize: 18, lineHeight: 1, color: "var(--text, #111)" }}>
             Files-Menu
           </b>
@@ -105,7 +111,7 @@ export default function Sidebar() {
       {/* ===== Liste des onglets — masquée par défaut ===== */}
       <ul
         id="sidebar-links"
-        // Force le display via style pour éviter tout conflit de classes
+        // Force le display via style (pas de conflit avec Tailwind)
         style={{
           display: open ? "block" : "none",
           listStyle: "none",
@@ -114,17 +120,13 @@ export default function Sidebar() {
           maxHeight: "calc(100dvh - 80px)",
           overflowY: "auto",
         }}
-        // Ferme AVANT la navigation (fiable iOS/Safari)
-        onPointerDownCapture={(e) => {
-          const el = e.target as HTMLElement | null;
-          if (el?.closest("a[href]")) setOpen(false);
-        }}
       >
         {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
           const active = pathname === href || pathname.startsWith(href + "/");
           return (
             <li key={href}>
-              <Link href={href} className="block no-underline">
+              {/* onClick -> ferme APRÈS le click pour ne pas casser la nav */}
+              <Link href={href} className="block no-underline" onClick={closeAfterClick}>
                 <div
                   style={{
                     padding: "10px 12px",
