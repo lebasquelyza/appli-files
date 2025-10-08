@@ -198,13 +198,17 @@ export default function Page() {
       style={{
         paddingTop: 24,
         paddingBottom: 32,
-        fontSize: "var(--settings-fs, 12px)", // même logique que l’autre page
+        fontSize: "var(--settings-fs, 12px)",
       }}
     >
       <div className="page-header">
         <div>
-          <h1 className="h1" style={{ fontSize: 22 }}>Import / Enregistrement</h1>
-          <p className="lead">Filme ou importe ta vidéo, ajoute ton ressenti puis lance l’analyse IA.</p>
+          <h1 className="h1" style={{ fontSize: 22 }}>
+            Import / Enregistrement
+          </h1>
+          <p className="lead">
+            Filme ou importe ta vidéo, ajoute ton ressenti puis lance l’analyse IA.
+          </p>
         </div>
       </div>
 
@@ -560,12 +564,7 @@ function CoachAnalyzer() {
               className="btn"
               type="button"
               onClick={() => setFeeling("")}
-              style={{
-                background: "#ffffff",
-                color: "#111827",
-                border: "1px solid #d1d5db",
-                fontWeight: 500
-              }}
+              style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
               disabled={isAnalyzing}
             >
               Réinitialiser
@@ -711,16 +710,27 @@ function CoachAnalyzer() {
 }
 
 /* ===================== Upload/Record ===================== */
-/** Import minimaliste : UNIQUEMENT deux choix (Galerie / Fichiers), boutons blancs. */
+/**
+ * iOS : 1 bouton "Importer" → laisse la feuille native Apple.
+ * Autres : 2 boutons "Galerie" / "Fichiers".
+ */
 function UploadDrop({ onFile }: { onFile: (file: File) => void }) {
-  const photosRef = useRef<HTMLInputElement | null>(null);
-  const filesRef  = useRef<HTMLInputElement | null>(null);
+  const galleryRef = useRef<HTMLInputElement | null>(null);
+  const filesRef   = useRef<HTMLInputElement | null>(null);
 
-  const openPhotos = () => {
-    photosRef.current?.click(); // pas de capture → n’ouvre jamais la caméra
+  const isIOS = () => {
+    if (typeof navigator === "undefined") return false;
+    const ua = navigator.userAgent || "";
+    const isIThing = /iPad|iPhone|iPod/i.test(ua);
+    const isTouchMac = (navigator.platform === "MacIntel" && (navigator as any).maxTouchPoints > 1);
+    return isIThing || isTouchMac;
   };
 
-  const openFiles = async () => {
+  const openGalerie = () => {
+    galleryRef.current?.click(); // pas de capture → l’iPhone affiche sa feuille (Photothèque / Prendre / Choisir)
+  };
+
+  const openFichiers = async () => {
     const anyWindow = window as any;
     try {
       if (anyWindow?.showOpenFilePicker) {
@@ -736,59 +746,60 @@ function UploadDrop({ onFile }: { onFile: (file: File) => void }) {
           return;
         }
       }
-    } catch {
-      /* annulé / non supporté → fallback */
-    }
+    } catch { /* annulé → fallback */ }
     filesRef.current?.click();
   };
 
   return (
     <div className="card" style={{ padding: 16, display: "grid", gap: 10 }}>
-      <div className="grid gap-2 sm:flex sm:gap-3">
-        <button
-          type="button"
-          className="btn"
-          onClick={openPhotos}
-          style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
-        >
-          📸 Galerie
-        </button>
-        <button
-          type="button"
-          className="btn"
-          onClick={openFiles}
-          style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
-        >
-          🗂️ Fichiers
-        </button>
-      </div>
+      {isIOS() ? (
+        <div className="grid gap-2 sm:flex sm:gap-3">
+          <button
+            type="button"
+            className="btn"
+            onClick={openGalerie}
+            style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
+          >
+            📥 Importer
+          </button>
+        </div>
+      ) : (
+        <div className="grid gap-2 sm:flex sm:gap-3">
+          <button
+            type="button"
+            className="btn"
+            onClick={openGalerie}
+            style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
+          >
+            📸 Galerie
+          </button>
+          <button
+            type="button"
+            className="btn"
+            onClick={openFichiers}
+            style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
+          >
+            🗂️ Fichiers
+          </button>
+        </div>
+      )}
 
-      {/* Inputs cachés pour les deux chemins (aucun "Choisir le fichier" visible) */}
+      {/* Inputs cachés (aucun "Choisir le fichier" visible) */}
       <input
-        ref={photosRef}
+        ref={galleryRef}
         type="file"
-        accept="video/*,image/*"
-        aria-hidden
-        tabIndex={-1}
+        accept="image/*,video/*"
+        aria-hidden tabIndex={-1}
         style={{ display: "none" }}
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) onFile(f);
-          e.currentTarget.value = "";
-        }}
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); e.currentTarget.value = ""; }}
       />
       <input
         ref={filesRef}
         type="file"
         accept="video/*"
-        aria-hidden
-        tabIndex={-1}
+        aria-hidden tabIndex={-1}
         style={{ display: "none" }}
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) onFile(f);
-          e.currentTarget.value = "";
-        }}
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); e.currentTarget.value = ""; }}
       />
     </div>
   );
@@ -980,7 +991,6 @@ function faultsToLines(a: AIAnalysis | null) {
 }
 
 /* ===================== Muscle Viewer ===================== */
-/** Normalisation très permissive des noms de muscles (FR/EN, pluriel, accents). */
 function normMuscle(s: string) {
   return (s || "")
     .toLowerCase()
@@ -988,10 +998,7 @@ function normMuscle(s: string) {
     .replace(/[\s\-’'"]/g, "")
     .replace(/s$/,"");
 }
-
-/** Dictionnaire: nom -> régions à surligner dans la carte */
 const MUSCLE_MAP: Record<string, string[]> = {
-  // haut du corps
   deltoide: ["deltoid_l","deltoid_r"],
   deltoid: ["deltoid_l","deltoid_r"],
   epaules: ["deltoid_l","deltoid_r"],
@@ -1006,12 +1013,10 @@ const MUSCLE_MAP: Record<string, string[]> = {
   biceps: ["biceps_l","biceps_r"],
   triceps: ["triceps_l","triceps_r"],
   avantbras: ["forearms_l","forearms_r"],
-  // tronc
   abdominaux: ["abs"],
   abdos: ["abs"],
   core: ["abs","obliques"],
   obliques: ["obliques"],
-  // bas du corps
   fessiers: ["glutes"],
   glute: ["glutes"],
   quadriceps: ["quads_l","quads_r"],
@@ -1024,7 +1029,6 @@ const MUSCLE_MAP: Record<string, string[]> = {
   calves: ["calf_l","calf_r"],
 };
 
-/** Panneau modal + carte SVG */
 function MuscleViewer({ muscleName, onClose }: { muscleName: string; onClose: () => void }) {
   const keys = MUSCLE_MAP[normMuscle(muscleName)] || [];
   return (
@@ -1055,7 +1059,6 @@ function MuscleViewer({ muscleName, onClose }: { muscleName: string; onClose: ()
   );
 }
 
-/** Carte corps humain très légère (face + dos) — zones nommées via ids */
 function BodyMap({ highlightKeys }: { highlightKeys: string[] }) {
   const H = new Set(highlightKeys);
   const on = (id: string) => H.has(id) ? 1 : 0.12;
@@ -1072,55 +1075,41 @@ function BodyMap({ highlightKeys }: { highlightKeys: string[] }) {
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 12 }}>
       {/* Face */}
       <svg viewBox="0 0 160 360" style={{ width: "100%", height: "auto", background: "#f9fafb", borderRadius: 12 }}>
-        {/* silhouette */}
         <rect x="70" y="10" width="20" height="20" rx="10" style={{ fill: "#e5e7eb" }} />
         <rect x="45" y="30" width="70" height="85" rx="12" style={{ fill: "#e5e7eb" }} />
-        {/* pecs */}
         <rect id="pecs" x="52" y="60" width="56" height="18" rx="6" style={partStyle(!!on("pecs"))} />
-        {/* deltoids */}
         <circle id="deltoid_l" cx="45" cy="65" r="12" style={partStyle(!!on("deltoid_l"))} />
         <circle id="deltoid_r" cx="115" cy="65" r="12" style={partStyle(!!on("deltoid_r"))} />
-        {/* biceps/avant-bras */}
         <rect id="biceps_l" x="26" y="85" width="16" height="36" rx="8" style={partStyle(!!on("biceps_l"))} />
         <rect id="biceps_r" x="118" y="85" width="16" height="36" rx="8" style={partStyle(!!on("biceps_r"))} />
         <rect id="forearms_l" x="26" y="122" width="16" height="36" rx="8" style={partStyle(!!on("forearms_l"))} />
         <rect id="forearms_r" x="118" y="122" width="16" height="36" rx="8" style={partStyle(!!on("forearms_r"))} />
-        {/* abdos/obliques */}
         <rect id="abs" x="66" y="92" width="28" height="40" rx="8" style={partStyle(!!on("abs"))} />
         <rect id="obliques" x="56" y="96" width="12" height="36" rx="6" style={partStyle(!!on("obliques"))} />
         <rect id="obliques2" x="94" y="96" width="12" height="36" rx="6" style={partStyle(!!on("obliques"))} />
-        {/* quads */}
         <rect id="quads_l" x="60" y="150" width="18" height="52" rx="9" style={partStyle(!!on("quads_l"))} />
         <rect id="quads_r" x="82" y="150" width="18" height="52" rx="9" style={partStyle(!!on("quads_r"))} />
-        {/* mollets */}
         <rect id="calf_l" x="60" y="210" width="18" height="42" rx="9" style={partStyle(!!on("calf_l"))} />
         <rect id="calf_r" x="82" y="210" width="18" height="42" rx="9" style={partStyle(!!on("calf_r"))} />
       </svg>
 
       {/* Dos */}
       <svg viewBox="0 0 160 360" style={{ width: "100%", height: "auto", background: "#f9fafb", borderRadius: 12 }}>
-        {/* silhouette */}
         <rect x="70" y="10" width="20" height="20" rx="10" style={{ fill: "#e5e7eb" }} />
         <rect x="45" y="30" width="70" height="85" rx="12" style={{ fill: "#e5e7eb" }} />
-        {/* trapèzes */}
         <polygon id="traps" points="80,40 52,60 108,60" style={partStyle(!!on("traps"))} />
-        {/* deltoids arrière */}
         <circle id="deltoid_l_b" cx="45" cy="65" r="12" style={partStyle(!!on("deltoid_l"))} />
         <circle id="deltoid_r_b" cx="115" cy="65" r="12" style={partStyle(!!on("deltoid_r"))} />
-        {/* dorsaux */}
         <rect id="lats" x="50" y="70" width="60" height="28" rx="10" style={partStyle(!!on("lats"))} />
-        {/* triceps */}
         <rect id="triceps_l" x="26" y="90" width="16" height="36" rx="8" style={partStyle(!!on("triceps_l"))} />
         <rect id="triceps_r" x="118" y="90" width="16" height="36" rx="8" style={partStyle(!!on("triceps_r"))} />
-        {/* fessiers */}
         <rect id="glutes" x="60" y="120" width="40" height="28" rx="10" style={partStyle(!!on("glutes"))} />
-        {/* ischios */}
         <rect id="hams_l" x="60" y="150" width="18" height="52" rx="9" style={partStyle(!!on("hams_l"))} />
         <rect id="hams_r" x="82" y="150" width="18" height="52" rx="9" style={partStyle(!!on("hams_r"))} />
-        {/* mollets */}
         <rect id="calf_l_b" x="60" y="210" width="18" height="42" rx="9" style={partStyle(!!on("calf_l"))} />
         <rect id="calf_r_b" x="82" y="210" width="18" height="42" rx="9" style={partStyle(!!on("calf_r"))} />
       </svg>
     </div>
   );
 }
+
