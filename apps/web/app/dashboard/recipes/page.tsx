@@ -1,9 +1,13 @@
+// apps/web/app/dashboard/recipes/page.tsx
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 
+/* ===================== Config Next ===================== */
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+/* ===================== Types ===================== */
 type Plan = "BASIC" | "PLUS" | "PREMIUM";
 type Rework = { ingredient: string; tips: string[] };
 type Recipe = {
@@ -20,7 +24,7 @@ type Recipe = {
   rework?: Rework[];
 };
 
-/* ---------------- Utils ---------------- */
+/* ===================== Utils ===================== */
 function planRank(p?: Plan) { return p === "PREMIUM" ? 3 : p === "PLUS" ? 2 : 1; }
 function isUnlocked(r: Recipe, userPlan: Plan) { return planRank(userPlan) >= planRank(r.minPlan); }
 function parseCsv(value?: string | string[]): string[] {
@@ -207,7 +211,6 @@ Règles:
       if (!r.title) return false;
       if (seen.has(r.id)) return false;
       seen.add(r.id);
-      // sécurité: exclure les allergènes demandés
       const ingLow = r.ingredients.map(i => i.toLowerCase());
       if (allergens.some(a => ingLow.includes(a))) return false;
       return true;
@@ -252,7 +255,7 @@ function personalizeFallback({
   return out;
 }
 
-/** ---- Server Action: appliquer filtres (aucune redirection abonnement) ---- */
+/* ===================== Filtres (Server Action) ===================== */
 async function applyFiltersAction(formData: FormData): Promise<void> {
   "use server";
   const params = new URLSearchParams();
@@ -265,7 +268,56 @@ async function applyFiltersAction(formData: FormData): Promise<void> {
   redirect(`/dashboard/recipes?${params.toString()}`);
 }
 
-/* ---------------- Page ---------------- */
+/* ===================== Sauvegarde via Cookie (Server Actions) ===================== */
+type SavedItem = { id: string; title: string };
+const SAVED_COOKIE = "saved_recipes_v1";
+
+function readSaved(): SavedItem[] {
+  try {
+    const raw = cookies().get(SAVED_COOKIE)?.value ?? "[]";
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr.filter(x => x && typeof x.id === "string" && typeof x.title === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeSaved(list: SavedItem[]) {
+  cookies().set(SAVED_COOKIE, JSON.stringify(list), {
+    path: "/",
+    httpOnly: false,      // accessible au client si besoin (ici non nécessaire)
+    sameSite: "lax",
+    maxAge: 60 * 60 * 24 * 365, // 1 an
+  });
+}
+
+async function saveRecipeAction(formData: FormData) {
+  "use server";
+  const id = String(formData.get("id") ?? "");
+  const title = String(formData.get("title") ?? "");
+  const returnTo = String(formData.get("returnTo") ?? "/dashboard/recipes");
+  if (!id || !title) redirect(returnTo);
+
+  const cur = readSaved();
+  if (!cur.some(x => x.id === id)) {
+    cur.push({ id, title });
+    writeSaved(cur);
+  }
+  redirect(returnTo);
+}
+
+async function removeRecipeAction(formData: FormData) {
+  "use server";
+  const id = String(formData.get("id") ?? "");
+  const returnTo = String(formData.get("returnTo") ?? "/dashboard/recipes");
+  if (!id) redirect(returnTo);
+
+  const cur = readSaved().filter(x => x.id !== id);
+  writeSaved(cur);
+  redirect(returnTo);
+}
+
+/* ===================== Page ===================== */
 export default async function Page({
   searchParams,
 }: {
@@ -344,6 +396,11 @@ export default async function Page({
 
   const disabled = plan === "BASIC";
 
+  // Lecture des recettes enregistrées (cookie)
+  const saved = readSaved();
+  const savedSet = new Set(saved.map(s => s.id));
+  const currentUrl = `/dashboard/recipes${baseQS}`;
+
   return (
     <>
       {/* spacer pour laisser passer le topbar FIXE (h-10 = 40px) */}
@@ -352,7 +409,6 @@ export default async function Page({
       <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
         <div className="page-header">
           <div>
-            {/* tailles de texte ajustées (plus petites + responsives) */}
             <h1
               className="h1"
               style={{ marginBottom: 2, fontSize: "clamp(20px, 2.2vw, 24px)", lineHeight: 1.15 }}
@@ -381,7 +437,7 @@ export default async function Page({
           </div>
         </div>
 
-        {/* CTA upgrade pour BASIC (affiché mais jamais de redirection auto) */}
+        {/* CTA upgrade pour BASIC */}
         {plan === "BASIC" && (
           <div className="card" style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:12 }}>
             <div>
@@ -392,13 +448,12 @@ export default async function Page({
           </div>
         )}
 
-        {/* Filtres */}
+        {/* =================== Filtres =================== */}
         <div className="section" style={{ marginTop: 12 }}>
           <div className="section-head" style={{ marginBottom: 8, display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
             <h2 style={{ margin:0, fontSize:"clamp(16px,1.9vw,18px)", lineHeight:1.2 }}>
               Contraintes & filtres
             </h2>
-            {/* Badge non coupé */}
             {disabled && (
               <span
                 className="badge"
@@ -454,15 +509,46 @@ export default async function Page({
           </form>
         </div>
 
-        {/* Healthy pour tous */}
+        {/* =================== Vos recettes enregistrées =================== */}
+        {saved.length > 0 && (
+          <section className="section" style={{ marginTop: 12 }}>
+            <div className="section-head" style={{ marginBottom: 8 }}>
+              <h2>Vos recettes enregistrées</h2>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-2">
+              {saved.map((s) => (
+                <article key={s.id} className="card" style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
+                  <a href={`/dashboard/recipes/${s.id}`} className="font-semibold" style={{ textDecoration:"none", color:"var(--text,#111)" }}>
+                    {s.title}
+                  </a>
+                  <form action={removeRecipeAction}>
+                    <input type="hidden" name="id" value={s.id} />
+                    <input type="hidden" name="returnTo" value={currentUrl} />
+                    <button type="submit" className="btn btn-outline">Retirer</button>
+                  </form>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* =================== Healthy pour tous =================== */}
         <section className="section" style={{ marginTop: 12 }}>
           <div className="section-head" style={{ marginBottom: 8 }}><h2>Healthy (pour tous)</h2></div>
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
-            {healthyPick.map((r) => <Card key={r.id} r={r} detailQS={encode(r)} />)}
+            {healthyPick.map((r) => (
+              <Card
+                key={r.id}
+                r={r}
+                detailQS={encode(r)}
+                isSaved={savedSet.has(r.id)}
+                currentUrl={currentUrl}
+              />
+            ))}
           </div>
         </section>
 
-        {/* Personnalisées IA */}
+        {/* =================== Personnalisées IA =================== */}
         {plan !== "BASIC" && (
           <section className="section" style={{ marginTop: 12 }}>
             <div className="section-head" style={{ marginBottom: 8 }}>
@@ -477,7 +563,15 @@ export default async function Page({
 
             {personalizedPick.length ? (
               <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
-                {personalizedPick.map((r) => <Card key={r.id} r={r} detailQS={encode(r)} />)}
+                {personalizedPick.map((r) => (
+                  <Card
+                    key={r.id}
+                    r={r}
+                    detailQS={encode(r)}
+                    isSaved={savedSet.has(r.id)}
+                    currentUrl={currentUrl}
+                  />
+                ))}
               </div>
             ) : (
               <div className="card text-sm" style={{ color:"#6b7280" }}>
@@ -492,7 +586,18 @@ export default async function Page({
   );
 }
 
-function Card({ r, detailQS }: { r: Recipe; detailQS: string; }) {
+/* ===================== Carte Recette ===================== */
+function Card({
+  r,
+  detailQS,
+  isSaved,
+  currentUrl,
+}: {
+  r: Recipe;
+  detailQS: string;
+  isSaved: boolean;
+  currentUrl: string;
+}) {
   const href = `/dashboard/recipes/${r.id}${detailQS}`;
   const ing = Array.isArray(r.ingredients) ? r.ingredients : [];
   const shown = ing.slice(0, 8);
@@ -504,10 +609,12 @@ function Card({ r, detailQS }: { r: Recipe; detailQS: string; }) {
         <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>{r.title}</h3>
         <span className="badge">{r.minPlan}</span>
       </div>
+
       <div className="text-sm" style={{ marginTop: 10, display: "flex", gap: 12, flexWrap: "wrap" }}>
         {typeof r.kcal === "number" && <span className="badge">{r.kcal} kcal</span>}
         {typeof r.timeMin === "number" && <span className="badge">{r.timeMin} min</span>}
       </div>
+
       <div className="text-sm" style={{ marginTop: 10 }}>
         <strong>Ingrédients</strong>
         <ul style={{ margin: "6px 0 0 16px" }}>
@@ -515,8 +622,28 @@ function Card({ r, detailQS }: { r: Recipe; detailQS: string; }) {
           {more > 0 && <li>+ {more} autre(s)…</li>}
         </ul>
       </div>
-      <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+
+      <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
         <a className="btn btn-dash" href={href}>Voir la recette</a>
+
+        {isSaved ? (
+          <form action={removeRecipeAction}>
+            <input type="hidden" name="id" value={r.id} />
+            <input type="hidden" name="returnTo" value={currentUrl} />
+            <button type="submit" className="btn btn-outline">
+              Enregistrée ✓ (Retirer)
+            </button>
+          </form>
+        ) : (
+          <form action={saveRecipeAction}>
+            <input type="hidden" name="id" value={r.id} />
+            <input type="hidden" name="title" value={r.title} />
+            <input type="hidden" name="returnTo" value={currentUrl} />
+            <button type="submit" className="btn btn-outline">
+              Enregistrer
+            </button>
+          </form>
+        )}
       </div>
     </article>
   );
