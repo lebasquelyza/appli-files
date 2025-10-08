@@ -1,97 +1,69 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+// ajuste l'import selon ton chemin/alias :
+import Sidebar from "@/components/Sidebar"; // ou: ../../components/Sidebar
 
 export default function ClientTopbar() {
   const [open, setOpen] = useState(false);
-  const router = useRouter();
-  const firstBtnRef = useRef<HTMLButtonElement | null>(null);
 
-  const go = (href: string) => {
-    setOpen(false);
-    router.push(href);
-  };
-
-  // Focus sur le premier élément quand on ouvre
   useEffect(() => {
-    if (open) {
-      const t = setTimeout(() => firstBtnRef.current?.focus(), 40);
-      return () => clearTimeout(t);
-    }
-  }, [open]);
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   return (
     <>
-      {/* Barre fixe (40px) + safe-area iOS */}
       <header
-        className="fixed inset-x-0 top-0 z-[1000] border-b bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 shadow-sm"
+        className="fixed inset-x-0 z-40 border-b bg-white/90 backdrop-blur supports-[backdrop-filter]:bg-white/70"
         style={{ paddingTop: "env(safe-area-inset-top)" }}
       >
-        {/* Hauteur réelle de la barre : 40px */}
-        <div className="mx-auto max-w-screen-xl h-10 px-3 flex items-center justify-between">
-          {/* Bouton Menu (toggle) */}
+        <div className="mx-auto max-w-screen-xl px-4 sm:px-6 h-10 flex items-center justify-between">
+          {/* 👉 'Files - Menu' ouvre le drawer (mobile). Sur desktop, pas d’action. */}
           <button
-            aria-label="Ouvrir/Fermer le menu"
-            onClick={() => setOpen((v) => !v)}
-            className="js-topbar-menu inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-[.99] transition"
+            className="font-bold text-lg leading-none select-none md:pointer-events-none md:cursor-default"
+            onClick={() => setOpen(true)}
+            aria-label="Ouvrir le menu"
+            style={{ cursor: "pointer" }}
           >
-            {/* 3 barres */}
-            <span className="relative -ml-1 inline-block h-3 w-4">
-              <span className="absolute inset-x-0 top-0 h-[2px] bg-white" />
-              <span className="absolute inset-x-0 top-1.5 h-[2px] bg-white" />
-              <span className="absolute inset-x-0 bottom-0 h-[2px] bg-white" />
-            </span>
-            Menu
+            Files - Menu
           </button>
 
-          {/* Rien au centre/droite pour rester épuré */}
-          <div />
-          <div className="w-[42px]" />
+          <div className="flex items-center gap-2">{/* actions à droite si besoin */}</div>
         </div>
       </header>
 
-      {/* Panneau plein écran (ouvre/ferme avec le même bouton) */}
       {open && (
-        <div className="fixed inset-0 z-[1100]" role="dialog" aria-modal="true">
-          {/* clic sur l’overlay ferme aussi */}
+        <>
           <div
-            className="absolute inset-0 bg-black/40"
+            className="fixed inset-0 z-50 bg-black/40 md:hidden"
             onClick={() => setOpen(false)}
-            aria-hidden="true"
+            aria-hidden
           />
-          <div className="absolute inset-0 bg-white flex flex-col">
-            {/* espace sous la barre fixe */}
-            <div style={{ height: "calc(env(safe-area-inset-top) + 40px)" }} />
-            <nav className="max-w-screen-md mx-auto w-full p-2">
-              <ul className="divide-y">
-                {[
-                  { href: "/dashboard", label: "Accueil" },
-                  { href: "/dashboard/calories", label: "Calories" },
-                  { href: "/dashboard/corrector", label: "Correcteur IA" },
-                  { href: "/dashboard/profile", label: "Profil" },
-                  { href: "/dashboard/abonnement", label: "Abonnement" },
-                  { href: "/dashboard/recipes", label: "Recettes" },
-                  { href: "/dashboard/progress", label: "Progression" },
-                  { href: "/dashboard/settings", label: "Réglages" },
-                ].map((item, i) => (
-                  <li key={item.href}>
-                    <button
-                      ref={i === 0 ? firstBtnRef : undefined}
-                      onClick={() => go(item.href)}
-                      className="w-full text-left py-3 text-lg rounded-md px-3 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-emerald-600/30"
-                    >
-                      {item.label}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </nav>
-
-            {/* rien en bas */}
-            <div className="mt-auto" />
-          </div>
-        </div>
+          <aside
+            className="fixed left-0 top-0 z-[60] h-dvh w-[84%] max-w-[320px] bg-white shadow-xl md:hidden"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Menu"
+            style={{ paddingTop: "calc(env(safe-area-inset-top) + 10px)" }}
+          >
+            <div className="flex items-center justify-between px-3 pb-2">
+              <b>Menu</b>
+              <button
+                className="rounded-md border px-2 py-1 text-sm"
+                onClick={() => setOpen(false)}
+                aria-label="Fermer le menu"
+              >
+                ✕
+              </button>
+            </div>
+            {/* Clique sur un lien => ferme le panneau */}
+            <div onClick={() => setOpen(false)}>
+              <Sidebar />
+            </div>
+          </aside>
+        </>
       )}
     </>
   );
