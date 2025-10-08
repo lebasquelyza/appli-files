@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Section } from "@/components/ui/Page";
+import { getSupabase } from "@/lib/supabaseClient"; // ⬅️ ajouté
 
 /* ======================= Police responsive ======================= */
 function useSettingsFontSize() {
@@ -306,6 +307,72 @@ type Prefs = {
 const LS_KEY = "app.prefs.v1";
 const DEFAULT_PREFS: Prefs = { language: "fr", theme: "system", reducedMotion: false };
 
+/* ======================= Composant suppression de compte ======================= */
+function DeleteAccountCard() {
+  const [confirm, setConfirm] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleDelete = async () => {
+    const supabase = getSupabase();
+    setLoading(true);
+    try {
+      const { data: { session } = {} } = await supabase.auth.getSession();
+      if (!session) {
+        alert("Veuillez vous reconnecter avant de supprimer votre compte.");
+        return;
+      }
+      // Appel de votre API sécurisée (à créer côté serveur)
+      const res = await fetch("/api/account/delete", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ reason: "user_requested" }),
+      });
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || "Erreur lors de la suppression");
+      }
+      alert("Votre compte a été supprimé. Au revoir 👋");
+      await supabase.auth.signOut();
+      window.location.href = "/";
+    } catch (e: any) {
+      alert(e?.message || "Impossible de supprimer le compte");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="card space-y-3">
+      <h3 className="font-semibold text-red-600 dark:text-red-400">Supprimer mon compte</h3>
+      <p className="opacity-80">
+        Cette action est <strong>irréversible</strong> : vos données et accès seront supprimés.
+        Pour confirmer, tapez <code className="px-1 py-0.5 rounded bg-red-50 dark:bg-red-900/30">SUPPRIMER</code> :
+      </p>
+      <input
+        type="text"
+        value={confirm}
+        onChange={(e) => setConfirm(e.target.value)}
+        placeholder="SUPPRIMER"
+        className="w-full rounded-[10px] border px-3 py-2 dark:bg-slate-900 dark:border-slate-700"
+        aria-label="Champ de confirmation de suppression"
+      />
+      <div className="flex items-center justify-end">
+        <button
+          type="button"
+          disabled={loading || confirm !== "SUPPRIMER"}
+          onClick={handleDelete}
+          className={`btn ${loading || confirm !== "SUPPRIMER" ? "opacity-60 cursor-not-allowed" : ""}`}
+        >
+          {loading ? "Suppression…" : "Supprimer définitivement"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /* ======================= Page principale ======================= */
 export default function Page() {
   useSettingsFontSize();
@@ -396,23 +463,8 @@ export default function Page() {
               </select>
             </div>
 
-            {/* Thème */}
-            <div className="card space-y-3">
-              <h3 className="font-semibold">Thème</h3>
-              <div className="flex flex-wrap gap-2">
-                {(["light", "dark", "system"] as const).map((t) => (
-                  <button
-                    key={t}
-                    type="button"
-                    className={btnGhost}
-                    aria-pressed={prefs.theme === t}
-                    onClick={() => setPrefs((p) => ({ ...p, theme: t }))}
-                  >
-                    {t === "light" ? "Clair" : t === "dark" ? "Sombre" : "Auto"}
-                  </button>
-                ))}
-              </div>
-            </div>
+            {/* 🔁 Remplacement du bloc Thème -> Supprimer mon compte */}
+            <DeleteAccountCard />
           </div>
         </Section>
 
