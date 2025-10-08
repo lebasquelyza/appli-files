@@ -8,15 +8,42 @@ export async function POST(req: Request) {
 
   if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  // Vérifier le token pour obtenir l'UID
-  const supaAnon = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+  const supaAnon = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+
   const { data: userData, error: uErr } = await supaAnon.auth.getUser(token);
-  if (uErr || !userData?.user) return NextResponse.json({ error: "Invalid token" }, { status: 401 });
+  if (uErr || !userData?.user) {
+    return NextResponse.json({ error: "Invalid token" }, { status: 401 });
+  }
 
-  // Supprimer avec la clé service role (sécurité: ne JAMAIS l’exposer au client)
-  const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
-  const { error: dErr } = await admin.auth.admin.deleteUser(userData.user.id);
+  // Récupère le motif facultatif
+  let reason: string | null = null;
+  let reasonText: string | null = null;
+  try {
+    const body = await req.json();
+    reason = body?.reason ?? null;
+    reasonText = body?.reasonText ?? null;
+  } catch {}
 
-  if (dErr) return NextResponse.json({ error: dErr.message }, { status: 500 });
+  // (Optionnel) journaliser le motif dans une table
+  // create table account_deletions (user_id uuid primary key, reason text, reason_text text, deleted_at timestamptz default now());
+  try {
+    const adminAnonWriter = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+    await adminAnonWriter
+      .from("account_deletions")
+      .insert({ user_id: userData.user.id, reason, reason_text: reasonText })
+      .throwOnError();
+
+    const { error: dErr } = await adminAnonWriter.auth.admin.deleteUser(userData.user.id);
+    if (dErr) throw dErr;
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || "Delete failed" }, { status: 500 });
+  }
+
   return NextResponse.json({ ok: true });
 }
