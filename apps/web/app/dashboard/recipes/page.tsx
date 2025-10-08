@@ -43,18 +43,15 @@ function pickRandomSeeded<T>(arr: T[], n: number, seed: number): T[] {
   return seededShuffle(arr, seed).slice(0, Math.max(0, Math.min(n, arr.length)));
 }
 
-/* ---- base64url JSON (Node + Edge + Browser safe) ---- */
+/* ---- base64url JSON ---- */
 function encodeB64UrlJson(data: any): string {
   const json = JSON.stringify(data);
   const B: any = (globalThis as any).Buffer;
 
-  // Node
   if (typeof window === "undefined" && B?.from) {
     return B.from(json, "utf8").toString("base64")
       .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/,"");
   }
-
-  // Edge/Browser
   const bytes = new TextEncoder().encode(json);
   let bin = "";
   for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
@@ -113,8 +110,7 @@ async function generateAIRecipes({
   count?: number;
 }): Promise<Recipe[]> {
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return []; // fallback si pas de clé
-
+  if (!apiKey) return [];
   const constraints: string[] = [];
   if (typeof kcal === "number" && !isNaN(kcal) && kcal > 0) {
     constraints.push(`- Viser ~${kcal} kcal par recette (±10%).`);
@@ -178,7 +174,6 @@ Règles:
     const data = await res.json();
     let payload: any = {};
     try { payload = JSON.parse(data?.choices?.[0]?.message?.content ?? "{}"); } catch {}
-
     const arr: any[] = Array.isArray(payload?.recipes) ? payload.recipes : [];
     const seen = new Set<string>();
     const clean: Recipe[] = arr.map((raw) => {
@@ -222,7 +217,7 @@ Règles:
   }
 }
 
-/* ---- fallback “personnalisation simple” si IA indisponible ---- */
+/* ---- fallback si IA indisponible ---- */
 function personalizeFallback({
   base, kcal, kcalMin, kcalMax, allergens, dislikes, plan,
 }: {
@@ -285,9 +280,9 @@ function readSaved(): SavedItem[] {
 function writeSaved(list: SavedItem[]) {
   cookies().set(SAVED_COOKIE, JSON.stringify(list), {
     path: "/",
-    httpOnly: false,      // accessible au client si besoin (ici non nécessaire)
+    httpOnly: false,
     sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 365, // 1 an
+    maxAge: 60 * 60 * 24 * 365,
   });
 }
 
@@ -323,7 +318,7 @@ export default async function Page({
 }: {
   searchParams?: { kcal?: string; kcalMin?: string; kcalMax?: string; allergens?: string; dislikes?: string; rnd?: string };
 }) {
-  // Lecture session (lazy) — aucune redirection selon le plan
+  // Lecture session — aucune redirection selon le plan
   let plan: Plan = "BASIC";
   try {
     const mod = await import("@/lib/session");
@@ -343,7 +338,7 @@ export default async function Page({
 
   const healthy = HEALTHY_BASE;
 
-  // bloc IA (réservé PLUS/PREMIUM) — pas de redirection si BASIC
+  // bloc IA (PLUS/PREMIUM)
   let personalized: Recipe[] = [];
   let relaxedNote: string | null = null;
 
@@ -403,7 +398,7 @@ export default async function Page({
 
   return (
     <>
-      {/* spacer pour laisser passer le topbar FIXE (h-10 = 40px) */}
+      {/* spacer pour laisser passer un topbar fixe éventuel */}
       <div className="h-10" aria-hidden="true" />
 
       <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
@@ -524,7 +519,9 @@ export default async function Page({
                   <form action={removeRecipeAction}>
                     <input type="hidden" name="id" value={s.id} />
                     <input type="hidden" name="returnTo" value={currentUrl} />
-                    <button type="submit" className="btn btn-outline">Retirer</button>
+                    <button type="submit" className="btn btn-outline" style={{ color: "var(--text, #111)" }}>
+                      Retirer
+                    </button>
                   </form>
                 </article>
               ))}
@@ -630,7 +627,7 @@ function Card({
           <form action={removeRecipeAction}>
             <input type="hidden" name="id" value={r.id} />
             <input type="hidden" name="returnTo" value={currentUrl} />
-            <button type="submit" className="btn btn-outline">
+            <button type="submit" className="btn btn-outline" style={{ color: "var(--text, #111)" }}>
               Enregistrée ✓ (Retirer)
             </button>
           </form>
@@ -639,7 +636,7 @@ function Card({
             <input type="hidden" name="id" value={r.id} />
             <input type="hidden" name="title" value={r.title} />
             <input type="hidden" name="returnTo" value={currentUrl} />
-            <button type="submit" className="btn btn-outline">
+            <button type="submit" className="btn btn-outline" style={{ color: "var(--text, #111)" }}>
               Enregistrer
             </button>
           </form>
