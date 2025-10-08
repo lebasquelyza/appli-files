@@ -1,7 +1,7 @@
 "use client";
 
-import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   ChevronDown, Home, User2, LineChart, Wand2, BookOpen,
@@ -10,7 +10,6 @@ import {
 
 type NavItem = { href: string; label: string; icon?: React.ComponentType<{ size?: number }> };
 
-/** ✅ Tous les onglets (unifiés) */
 const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Accueil", icon: Home },
   { href: "/dashboard/profile", label: "Mon profil", icon: User2 },
@@ -26,27 +25,15 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 export default function Sidebar() {
-  const router = useRouter();
   const pathname = usePathname();
+  const [open, setOpen] = useState(false); // fermé par défaut
 
-  // Fermé par défaut, s’ouvre uniquement au clic
-  const [open, setOpen] = useState(false);
-
-  // Replie dès que la route change (sécurité)
-  useEffect(() => { setOpen(false); }, [pathname]);
-
-  // Navigation contrôlée: on ferme d’abord, puis on push
-  const handleNav = (href: string) => (e: React.MouseEvent) => {
-    e.preventDefault();
-    setOpen(false);
-    setTimeout(() => {
-      if (pathname !== href) router.push(href);
-    }, 0);
-  };
+  // Sécurité: replier à chaque changement de route
+  useEffect(() => setOpen(false), [pathname]);
 
   return (
     <nav aria-label="Dashboard" className="px-[10px]">
-      {/* En-tête sticky : icône statique + bouton “Files - Menu” pour ouvrir/fermer */}
+      {/* En-tête sticky : seule cette zone ouvre/ferme le menu */}
       <div
         className="sticky top-0 z-10 pb-2"
         style={{
@@ -55,7 +42,7 @@ export default function Sidebar() {
         }}
       >
         <div className="flex items-center gap-3 px-2 pt-3">
-          {/* pastille verte NON cliquable */}
+          {/* pastille verte non interactive */}
           <span
             aria-hidden
             className="inline-block h-8 w-8 rounded-xl shadow"
@@ -63,7 +50,6 @@ export default function Sidebar() {
               background: "linear-gradient(135deg,var(--brand,#22c55e),var(--brand2,#15803d))",
             }}
           />
-          {/* 👉 Seul ce bouton ouvre/ferme le menu */}
           <button
             type="button"
             onClick={() => setOpen(o => !o)}
@@ -77,10 +63,16 @@ export default function Sidebar() {
         </div>
       </div>
 
-      {/* Liste complète des onglets : masquée si fermé */}
+      {/* Liste complète des onglets – masquée si fermé */}
       <ul
         id="sidebar-links"
         className={open ? "block" : "hidden"}
+        // 🔑 ferme AVANT la navigation (fiable sur iOS/Safari)
+        onPointerDownCapture={(e) => {
+          // ne ferme que si on clique un lien (pas le scroll)
+          const target = e.target as HTMLElement | null;
+          if (target?.closest("a[href]")) setOpen(false);
+        }}
         style={{
           listStyle: "none",
           padding: 0,
@@ -93,8 +85,7 @@ export default function Sidebar() {
           const active = pathname === href || pathname.startsWith(href + "/");
           return (
             <li key={href}>
-              {/* Link pour préfetch, mais clic intercepté pour fermer d’abord */}
-              <Link href={href} onClick={handleNav(href)} className="block font-semibold no-underline">
+              <Link href={href} className="block font-semibold no-underline">
                 <div
                   style={{
                     padding: "10px 12px",
@@ -107,9 +98,7 @@ export default function Sidebar() {
                       ? "linear-gradient(135deg,var(--brand,#22c55e),var(--brand2,#15803d))"
                       : "transparent",
                     border: active ? "1px solid rgba(22,163,74,.25)" : "1px solid transparent",
-                    boxShadow: active
-                      ? "var(--shadow, 0 10px 20px rgba(0,0,0,.08))"
-                      : "none",
+                    boxShadow: active ? "var(--shadow, 0 10px 20px rgba(0,0,0,.08))" : "none",
                     color: active ? "#fff" : "var(--text, #111)",
                   }}
                 >
