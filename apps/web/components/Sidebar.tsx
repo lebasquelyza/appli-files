@@ -10,7 +10,8 @@ import {
 
 type NavItem = { href: string; label: string; icon?: React.ComponentType<{ size?: number }> };
 
-const items: NavItem[] = [
+/** ✅ Tous les onglets (unifiés) */
+const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Accueil", icon: Home },
   { href: "/dashboard/profile", label: "Mon profil", icon: User2 },
   { href: "/dashboard/progress", label: "Mes progrès", icon: LineChart },
@@ -28,18 +29,16 @@ export default function Sidebar() {
   const router = useRouter();
   const pathname = usePathname();
 
-  // Toujours fermé par défaut
+  // Fermé par défaut, s’ouvre uniquement au clic
   const [open, setOpen] = useState(false);
 
-  // Fermer quand la route change (fallback)
+  // Replie dès que la route change (sécurité)
   useEffect(() => { setOpen(false); }, [pathname]);
 
-  // Nav contrôlée: ferme D'ABORD, puis push
+  // Navigation contrôlée: on ferme d’abord, puis on push
   const handleNav = (href: string) => (e: React.MouseEvent) => {
     e.preventDefault();
     setOpen(false);
-    // push juste après pour être certain que l'état est appliqué
-    // (et éviter un éventuel re-toggle visuel)
     setTimeout(() => {
       if (pathname !== href) router.push(href);
     }, 0);
@@ -47,7 +46,7 @@ export default function Sidebar() {
 
   return (
     <nav aria-label="Dashboard" className="px-[10px]">
-      {/* Entête sticky */}
+      {/* En-tête sticky : icône statique + bouton “Files - Menu” pour ouvrir/fermer */}
       <div
         className="sticky top-0 z-10 pb-2"
         style={{
@@ -56,7 +55,7 @@ export default function Sidebar() {
         }}
       >
         <div className="flex items-center gap-3 px-2 pt-3">
-          {/* Icône verte non interactive */}
+          {/* pastille verte NON cliquable */}
           <span
             aria-hidden
             className="inline-block h-8 w-8 rounded-xl shadow"
@@ -64,7 +63,7 @@ export default function Sidebar() {
               background: "linear-gradient(135deg,var(--brand,#22c55e),var(--brand2,#15803d))",
             }}
           />
-          {/* 👉 Seul ce bouton ouvre/ferme */}
+          {/* 👉 Seul ce bouton ouvre/ferme le menu */}
           <button
             type="button"
             onClick={() => setOpen(o => !o)}
@@ -78,17 +77,23 @@ export default function Sidebar() {
         </div>
       </div>
 
-      {/* Liste cachée si fermé */}
+      {/* Liste complète des onglets : masquée si fermé */}
       <ul
         id="sidebar-links"
         className={open ? "block" : "hidden"}
-        style={{ listStyle: "none", padding: 0, margin: 0, maxHeight: "calc(100dvh - 80px)", overflowY: "auto" }}
+        style={{
+          listStyle: "none",
+          padding: 0,
+          margin: 0,
+          maxHeight: "calc(100dvh - 80px)",
+          overflowY: "auto",
+        }}
       >
-        {items.map(({ href, label, icon: Icon }) => {
+        {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
           const active = pathname === href || pathname.startsWith(href + "/");
           return (
             <li key={href}>
-              {/* Link pour préfetch SEO, mais on contrôle le clic */}
+              {/* Link pour préfetch, mais clic intercepté pour fermer d’abord */}
               <Link href={href} onClick={handleNav(href)} className="block font-semibold no-underline">
                 <div
                   style={{
@@ -102,7 +107,9 @@ export default function Sidebar() {
                       ? "linear-gradient(135deg,var(--brand,#22c55e),var(--brand2,#15803d))"
                       : "transparent",
                     border: active ? "1px solid rgba(22,163,74,.25)" : "1px solid transparent",
-                    boxShadow: active ? "var(--shadow, 0 10px 20px rgba(0,0,0,.08))" : "none",
+                    boxShadow: active
+                      ? "var(--shadow, 0 10px 20px rgba(0,0,0,.08))"
+                      : "none",
                     color: active ? "#fff" : "var(--text, #111)",
                   }}
                 >
