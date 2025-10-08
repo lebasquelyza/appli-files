@@ -556,7 +556,8 @@ function CoachAnalyzer() {
 
           {blobUrl && (
             <div className="text-sm" style={{ marginTop: 12 }}>
-              <label className="label" style={{ marginBottom: 6 }}>Fichier chargé</label>
+              {/* libellé changé ici */}
+              <label className="label" style={{ marginBottom: 6 }}>rognö</label>
 
               {/* Bloc nom du fichier avec ellipse — MODIF #1 */}
               <div
