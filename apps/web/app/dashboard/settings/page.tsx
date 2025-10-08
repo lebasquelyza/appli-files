@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Section } from "@/components/ui/Page";
-import { getSupabase } from "@/lib/supabaseClient"; // ⬅️ ajouté
+import { getSupabase } from "@/lib/supabaseClient";
 
 /* ======================= Police responsive ======================= */
 function useSettingsFontSize() {
@@ -312,6 +312,19 @@ function DeleteAccountCard() {
   const [confirm, setConfirm] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // Motif (facultatif)
+  const REASONS = [
+    { value: "no_longer_needed", label: "Je n’en ai plus besoin" },
+    { value: "missing_features", label: "Il manque des fonctionnalités" },
+    { value: "too_expensive", label: "Trop cher / pas rentable" },
+    { value: "privacy_concerns", label: "Inquiétudes liées aux données" },
+    { value: "bugs_or_quality", label: "Bugs / qualité insatisfaisante" },
+    { value: "other", label: "Autre…" },
+  ] as const;
+
+  const [reason, setReason] = useState<string>("");
+  const [reasonText, setReasonText] = useState("");
+
   const handleDelete = async () => {
     const supabase = getSupabase();
     setLoading(true);
@@ -321,14 +334,19 @@ function DeleteAccountCard() {
         alert("Veuillez vous reconnecter avant de supprimer votre compte.");
         return;
       }
-      // Appel de votre API sécurisée (à créer côté serveur)
+
+      const payload = {
+        reason: reason || null,
+        reasonText: reason === "other" ? (reasonText.trim() || null) : null,
+      };
+
       const res = await fetch("/api/account/delete", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({ reason: "user_requested" }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const msg = await res.text();
@@ -344,12 +362,49 @@ function DeleteAccountCard() {
     }
   };
 
+  const canDelete = confirm === "SUPPRIMER" && !loading;
+
   return (
-    <div className="card space-y-3">
+    <div className="card space-y-4">
       <h3 className="font-semibold text-red-600 dark:text-red-400">Supprimer mon compte</h3>
+
+      {/* Motif facultatif */}
+      <div className="space-y-2">
+        <label className="font-medium">Pourquoi partez-vous ? (facultatif)</label>
+        <div className="grid sm:grid-cols-2 gap-2">
+          {REASONS.map((r) => (
+            <label
+              key={r.value}
+              className="flex items-center gap-2 rounded-[10px] border px-3 py-2 dark:bg-slate-900 dark:border-slate-700 cursor-pointer"
+            >
+              <input
+                type="radio"
+                name="delete-reason"
+                value={r.value}
+                checked={reason === r.value}
+                onChange={(e) => setReason(e.target.value)}
+                className="accent-current"
+              />
+              <span>{r.label}</span>
+            </label>
+          ))}
+        </div>
+
+        {reason === "other" && (
+          <textarea
+            value={reasonText}
+            onChange={(e) => setReasonText(e.target.value)}
+            rows={3}
+            placeholder="Dites-nous en plus (optionnel)"
+            className="mt-2 w-full rounded-[10px] border px-3 py-2 dark:bg-slate-900 dark:border-slate-700"
+          />
+        )}
+      </div>
+
       <p className="opacity-80">
         Cette action est <strong>irréversible</strong> : vos données et accès seront supprimés.
-        Pour confirmer, tapez <code className="px-1 py-0.5 rounded bg-red-50 dark:bg-red-900/30">SUPPRIMER</code> :
+        Pour confirmer, tapez{" "}
+        <code className="px-1 py-0.5 rounded bg-red-50 dark:bg-red-900/30">SUPPRIMER</code> :
       </p>
       <input
         type="text"
@@ -362,9 +417,9 @@ function DeleteAccountCard() {
       <div className="flex items-center justify-end">
         <button
           type="button"
-          disabled={loading || confirm !== "SUPPRIMER"}
+          disabled={!canDelete}
           onClick={handleDelete}
-          className={`btn ${loading || confirm !== "SUPPRIMER" ? "opacity-60 cursor-not-allowed" : ""}`}
+          className={`btn ${!canDelete ? "opacity-60 cursor-not-allowed" : ""}`}
         >
           {loading ? "Suppression…" : "Supprimer définitivement"}
         </button>
@@ -463,7 +518,7 @@ export default function Page() {
               </select>
             </div>
 
-            {/* 🔁 Remplacement du bloc Thème -> Supprimer mon compte */}
+            {/* 🔁 Bloc Thème remplacé par Supprimer mon compte */}
             <DeleteAccountCard />
           </div>
         </Section>
@@ -484,3 +539,4 @@ export default function Page() {
     </div>
   );
 }
+
