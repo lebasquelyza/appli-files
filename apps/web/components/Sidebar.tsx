@@ -1,11 +1,22 @@
+// apps/web/components/Sidebar.tsx
 "use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
-  ChevronDown, Home, User2, LineChart, Wand2, BookOpen,
-  Flame, Plug2, CreditCard, ClipboardList, Music2, Settings,
+  ChevronDown,
+  Home,
+  User2,
+  LineChart,
+  Wand2,
+  BookOpen,
+  Flame,
+  Plug2,
+  CreditCard,
+  ClipboardList,
+  Music2,
+  Settings,
 } from "lucide-react";
 
 type NavItem = { href: string; label: string; icon?: React.ComponentType<{ size?: number }> };
@@ -28,12 +39,12 @@ export default function Sidebar() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false); // fermé par défaut
 
-  // filet de sécu : replier à chaque changement de route
+  // Filet de sécurité : replier à chaque changement de route
   useEffect(() => setOpen(false), [pathname]);
 
   return (
     <nav aria-label="Dashboard" style={{ paddingLeft: 10, paddingRight: 10 }}>
-      {/* En-tête sticky tout en haut à gauche */}
+      {/* ===== En-tête sticky tout en haut ===== */}
       <div
         style={{
           position: "sticky",
@@ -46,7 +57,7 @@ export default function Sidebar() {
       >
         <button
           type="button"
-          onClick={() => setOpen(o => !o)}
+          onClick={() => setOpen((o) => !o)}
           aria-expanded={open}
           aria-controls="sidebar-links"
           style={{
@@ -75,8 +86,10 @@ export default function Sidebar() {
                 "linear-gradient(135deg,var(--brand,#22c55e),var(--brand2,#15803d))",
             }}
           />
-          {/* 👉 “Files” = bouton d’ouverture */}
-          <b style={{ fontSize: 18, lineHeight: 1 }}>Files</b>
+          {/* 👉 “Files-Menu” = bouton d’ouverture (noir) */}
+          <b style={{ fontSize: 18, lineHeight: 1, color: "var(--text, #111)" }}>
+            Files-Menu
+          </b>
           <ChevronDown
             size={16}
             style={{
@@ -88,10 +101,10 @@ export default function Sidebar() {
         </button>
       </div>
 
-      {/* Liste des onglets — MASQUÉE par défaut (display inline) */}
+      {/* ===== Liste des onglets — masquée par défaut ===== */}
       <ul
         id="sidebar-links"
-        // ✅ pas de classes tailwind; on force le display ici
+        // On force l’affichage en inline (pas de classes tailwind pour éviter tout conflit)
         style={{
           display: open ? "block" : "none",
           listStyle: "none",
@@ -100,7 +113,7 @@ export default function Sidebar() {
           maxHeight: "calc(100dvh - 80px)",
           overflowY: "auto",
         }}
-        // ferme AVANT la navigation (fiable iOS/Safari)
+        // 🔑 Ferme AVANT la navigation (fiable iOS/Safari)
         onPointerDownCapture={(e) => {
           const el = e.target as HTMLElement | null;
           if (el?.closest("a[href]")) setOpen(false);
@@ -123,9 +136,7 @@ export default function Sidebar() {
                       ? "linear-gradient(135deg,var(--brand,#22c55e),var(--brand2,#15803d))"
                       : "transparent",
                     border: active ? "1px solid rgba(22,163,74,.25)" : "1px solid transparent",
-                    boxShadow: active
-                      ? "0 10px 20px rgba(0,0,0,.08)"
-                      : "none",
+                    boxShadow: active ? "0 10px 20px rgba(0,0,0,.08)" : "none",
                     color: active ? "#fff" : "var(--text, #111)",
                     fontWeight: 600,
                     textDecoration: "none",
