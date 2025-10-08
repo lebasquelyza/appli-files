@@ -1,30 +1,34 @@
 // apps/web/app/dashboard/layout.tsx
 import type { ReactNode } from "react";
-import ClientTopbar from "./_components/ClientTopbar";
 import RegisterSW from "@/components/RegisterSW";
-import Sidebar from "../../components/Sidebar";
- // ⬅️ assure-toi que le chemin est bon
+import Sidebar from "../../components/Sidebar"; // adapte si besoin
 
 export const dynamic = "force-dynamic";
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
-  const topbarOffset = "calc(env(safe-area-inset-top) + 40px)";
+  const safeTop = "env(safe-area-inset-top)";
 
   return (
     <>
-      {/* Topbar spécifique au dashboard (si tu en veux une en plus de celle du root) */}
-      <ClientTopbar />
       <RegisterSW />
 
-      <div className="px-4 sm:px-6 max-w-screen-xl mx-auto" style={{ paddingTop: topbarOffset }}>
+      <div
+        className="px-4 sm:px-6 max-w-screen-xl mx-auto"
+        style={{
+          // plus de topbar -> uniquement le safe area
+          paddingTop: safeTop,
+          // si MobileTabbar défini, le main évite le chevauchement
+          paddingBottom: "var(--mobile-tabbar, 0px)",
+        }}
+      >
         <div className="grid gap-4 md:grid-cols-[240px_1fr]">
-          {/* Sidebar desktop */}
+          {/* Sidebar desktop (sticky) */}
           <aside
             className="hidden md:block"
             style={{
               position: "sticky",
-              top: topbarOffset,
-              height: `calc(100dvh - ${topbarOffset})`,
+              top: safeTop,
+              height: `calc(100dvh - ${safeTop})`,
               overflowY: "auto",
             }}
           >
