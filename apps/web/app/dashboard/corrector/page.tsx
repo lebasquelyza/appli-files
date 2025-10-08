@@ -57,16 +57,7 @@ function ProgressBar({ value }: { value: number }) {
   );
 }
 
-/* ========== Helpers UI (filename + status) ========== */
-function formatFileName(name: string, max = 36) {
-  if (!name) return "";
-  if (name.length <= max) return name;
-  const dot = name.lastIndexOf(".");
-  const ext = dot > 0 ? name.slice(dot) : "";
-  const base = name.slice(0, Math.max(0, max - ext.length - 1));
-  return `${base}…${ext}`;
-}
-
+/* ========== Helpers UI (status) ========== */
 function displayStatus(s: string) {
   if (!s) return s;
   const toMask = [
@@ -247,7 +238,6 @@ export default function Page() {
 function CoachAnalyzer() {
   const [tab, setTab] = useState<"record" | "upload">("record");
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
-  const [fileName, setFileName] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [feeling, setFeeling] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -272,7 +262,6 @@ function CoachAnalyzer() {
   const handleUpload = (f: File) => {
     const url = URL.createObjectURL(f);
     setBlobUrl(url);
-    setFileName(f.name);
     setFile(f);
     setAnalysis(null);
     setErrorMsg("");
@@ -342,13 +331,13 @@ function CoachAnalyzer() {
 
     try {
       // 0) EXTRACTION — RAPIDE
-      const { frames, timestamps } = await extractFramesFromFile(file, 8); // 12 -> 8
+      const { frames, timestamps } = await extractFramesFromFile(file, 8);
       if (!frames.length) throw new Error("Impossible d’extraire des images de la vidéo.");
       setProgress(12);
 
-      // 0b) MOSAÏQUES plus légères
+      // MOSAÏQUES légères
       const half = Math.ceil(frames.length / 2);
-      const mosaic1 = await makeMosaic(frames.slice(0, half), 3, 2, 960, 540, 0.5); // 1280x720 -> 960x540, q=0.5
+      const mosaic1 = await makeMosaic(frames.slice(0, half), 3, 2, 960, 540, 0.5);
       const mosaic2 = await makeMosaic(frames.slice(half), 3, 2, 960, 540, 0.5);
       const mosaics = [mosaic1, mosaic2];
       const midTime = timestamps[Math.floor(timestamps.length / 2)] || 0;
@@ -480,7 +469,7 @@ function CoachAnalyzer() {
   };
   const reset = () => {
     if (blobUrl) URL.revokeObjectURL(blobUrl);
-    setBlobUrl(null); setFileName(null); setFile(null);
+    setBlobUrl(null); setFile(null);
     setAnalysis(null); setFeeling(""); setProgress(0); setStatus("");
     setErrorMsg(""); setCooldown(0);
     setPredictedExercise(null); setShowChoiceGate(false);
@@ -498,7 +487,6 @@ function CoachAnalyzer() {
     gridTemplateColumns: "1fr",
     alignItems: "stretch",
   };
-  // >=1024px → 3 colonnes
   if (typeof window !== "undefined" && window.matchMedia && window.matchMedia("(min-width: 1024px)").matches) {
     (gridStyle as any).gridTemplateColumns = "repeat(3, 1fr)";
   }
@@ -559,7 +547,7 @@ function CoachAnalyzer() {
             <div className="text-sm" style={{ marginTop: 12 }}>
               <label className="label" style={{ marginBottom: 6 }}>fichier téléchargée</label>
 
-              {/* Bloc nom du fichier tronqué */}
+              {/* On n'affiche pas le nom du fichier */}
               <div
                 className="card"
                 style={{
@@ -570,11 +558,8 @@ function CoachAnalyzer() {
                 }}
               >
                 <div style={{ minWidth: 0, flex: 1, display: "flex", alignItems: "center" }}>
-                  <span
-                    title={fileName ?? "clip.webm"}
-                    style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                  >
-                    🎞️ {formatFileName(fileName ?? "clip.webm")}
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    🎞️ Vidéo importée
                   </span>
                 </div>
 
@@ -1077,7 +1062,7 @@ function faultsToLines(a: AIAnalysis | null) {
 }
 
 /* ===================== Muscle Viewer ===================== */
-/** Silhouette plus humaine, grise, sans repères. On n'affiche les zones qu'en surbrillance. */
+/** Silhouette humaine grise décorative (aucune interaction). */
 function normMuscle(s: string) {
   return (s || "")
     .toLowerCase()
@@ -1155,7 +1140,7 @@ function MuscleViewer({ muscleName, onClose }: { muscleName: string; onClose: ()
         </div>
 
         <p className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>
-          Silhouette simplifiée — seules les zones sélectionnées apparaissent en surbrillance.
+          Silhouette simplifiée — aucune zone cliquable, seules les zones sélectionnées sont mises en surbrillance.
         </p>
 
         <BodyMapHuman highlightKeys={keys} />
@@ -1164,7 +1149,7 @@ function MuscleViewer({ muscleName, onClose }: { muscleName: string; onClose: ()
   );
 }
 
-/** Silhouette humaine (face/dos) grise, pas de repères; on ne montre que les zones actives. */
+/** Silhouette humaine (face/dos) grise, purement décorative : pointer-events désactivés. */
 function BodyMapHuman({ highlightKeys }: { highlightKeys: string[] }) {
   const H = new Set(highlightKeys);
   const on = (id: string) => H.has(id);
@@ -1174,25 +1159,32 @@ function BodyMapHuman({ highlightKeys }: { highlightKeys: string[] }) {
     fill: "#22c55e",
     opacity: 0.9,
     transition: "opacity .15s ease",
+    pointerEvents: "none" as const, // pas cliquable
   });
 
   const baseFill = "#d1d5db"; // gris neutre
-  const panelStyle: React.CSSProperties = { width: "100%", height: "auto", background: "#f9fafb", borderRadius: 12, padding: 8 };
+  const panelStyle: React.CSSProperties = {
+    width: "100%",
+    height: "auto",
+    background: "#f9fafb",
+    borderRadius: 12,
+    padding: 8,
+    pointerEvents: "none", // désactive tout clic dans le SVG
+    userSelect: "none",
+    cursor: "default",
+  };
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 12 }}>
       {/* FACE */}
       <svg viewBox="0 0 180 360" style={panelStyle} aria-label="silhouette face">
-        {/* silhouette grise stylisée */}
         <path d="M90 18c-10 0-18 8-18 18v10c0 6 4 11 10 13l-2 6c-2 6-6 10-12 12-10 3-16 12-17 22-2 20-4 56 2 72 4 10 10 15 18 18 6 2 10 6 12 12 5 16 6 38 6 62h24c0-24 1-46 6-62 2-6 6-10 12-12 8-3 14-8 18-18 6-16 4-52 2-72-1-10-7-19-17-22-6-2-10-6-12-12l-2-6c6-2 10-7 10-13V36c0-10-8-18-18-18Z" fill={baseFill}/>
-        {/* jambes */}
         <path d="M66 270c-4 30-4 52-4 72h28v-50c0-8-4-16-10-22-4-4-10-0-14 0z" fill={baseFill}/>
         <path d="M114 270c4 30 4 52 4 72H90v-50c0-8 4-16 10-22 4-4 10-0 14 0z" fill={baseFill}/>
-        {/* bras */}
         <path d="M32 140c-2 26 2 44 10 54 6 8 14 12 22 14l6-20c-8-2-14-6-18-12-6-8-10-20-10-36l-10 0z" fill={baseFill}/>
         <path d="M148 140c2 26-2 44-10 54-6 8-14 12-22 14l-6-20c8-2 14-6 18-12 6-8 10-20 10-36l10 0z" fill={baseFill}/>
 
-        {/* SURBRILLANCE — on garde des positions proches des anciennes, mais invisibles si inactives */}
+        {/* SURBRILLANCE */}
         <rect id="pecs_f" x="58" y="64" width="64" height="22" rx="8" style={show(on("pecs_f"))} />
         <circle id="deltoid_l_f" cx="46" cy="72" r="14" style={show(on("deltoid_l_f"))} />
         <circle id="deltoid_r_f" cx="134" cy="72" r="14" style={show(on("deltoid_r_f"))} />
@@ -1211,16 +1203,12 @@ function BodyMapHuman({ highlightKeys }: { highlightKeys: string[] }) {
 
       {/* DOS */}
       <svg viewBox="0 0 180 360" style={panelStyle} aria-label="silhouette dos">
-        {/* silhouette grise stylisée */}
         <path d="M90 18c-10 0-18 8-18 18v10c0 6 4 11 10 13l-1 5c-2 8-7 13-13 16-10 3-16 12-17 22-2 18-4 54 2 70 4 10 10 15 18 18 6 2 10 6 12 12 5 16 6 38 6 62h24c0-24 1-46 6-62 2-6 6-10 12-12 8-3 14-8 18-18 6-16 4-52 2-70-1-10-7-19-17-22-6-2-11-8-13-16l-1-5c6-2 10-7 10-13V36c0-10-8-18-18-18Z" fill={baseFill}/>
-        {/* jambes */}
         <path d="M66 270c-4 30-4 52-4 72h28v-50c0-8-4-16-10-22-4-4-10-0-14 0z" fill={baseFill}/>
         <path d="M114 270c4 30 4 52 4 72H90v-50c0-8 4-16 10-22 4-4 10-0 14 0z" fill={baseFill}/>
-        {/* bras */}
         <path d="M32 140c-2 26 2 44 10 54 6 8 14 12 22 14l6-20c-8-2-14-6-18-12-6-8-10-20-10-36l-10 0z" fill={baseFill}/>
         <path d="M148 140c2 26-2 44-10 54-6 8-14 12-22 14l-6-20c8-2 14-6 18-12 6-8 10-20 10-36l10 0z" fill={baseFill}/>
 
-        {/* SURBRILLANCE dos */}
         <polygon id="traps_b" points="90,46 60,66 120,66" style={show(on("traps_b"))} />
         <rect id="lats_b" x="56" y="70" width="68" height="30" rx="10" style={show(on("lats_b"))} />
         <circle id="deltoid_l_b" cx="46" cy="72" r="14" style={show(on("deltoid_l_b"))} />
