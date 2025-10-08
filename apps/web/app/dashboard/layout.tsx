@@ -1,13 +1,10 @@
-// apps/web/app/dashboard/layout.tsx
 import type { ReactNode } from "react";
 import RegisterSW from "@/components/RegisterSW";
-import Sidebar from "../../components/Sidebar"; // garde ce chemin si ton Sidebar est bien là
+import Sidebar from "../../components/Sidebar";
 
 export const dynamic = "force-dynamic";
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
-  const safeTop = "env(safe-area-inset-top)";
-
   return (
     <>
       <RegisterSW />
@@ -15,16 +12,16 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       <div
         className="px-4 sm:px-6 max-w-screen-xl mx-auto"
         style={{
-          paddingTop: safeTop,                         // pas de topbar -> juste le safe area
-          paddingBottom: "var(--mobile-tabbar, 0px)",  // si tu utilises MobileTabbar
+          // ⬇️ plus de paddingTop ici (on le met dans la sidebar)
+          paddingTop: 0,
+          paddingBottom: "var(--mobile-tabbar, 0px)",
         }}
       >
-        {/* 👇 Sidebar visible UNIQUEMENT en mobile */}
+        {/* Sidebar uniquement en mobile */}
         <div className="md:hidden">
           <Sidebar />
         </div>
 
-        {/* Contenu (plein écran sur mobile & desktop) */}
         <section>{children}</section>
 
         <footer className="mt-10 py-4 text-center text-sm text-gray-500">
