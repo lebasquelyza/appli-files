@@ -198,14 +198,15 @@ export default function Page() {
       style={{
         paddingTop: 24,
         paddingBottom: 32,
-        fontSize: "var(--settings-fs, 12px)",
-        maxWidth: 1200,
-        margin: "0 auto"
+        fontSize: "var(--settings-fs, 12px)", // ⟵ même logique que la 1ère page
       }}
     >
       <div className="page-header">
         <div>
-          <h1 className="h1" style={{ fontSize: 22 }}>
+          <h1
+            className="h1"
+            style={{ fontSize: 22 }} // ⟵ titre fixe 22px comme sur l’autre page
+          >
             Import / Enregistrement
           </h1>
           <p className="lead">
@@ -314,7 +315,7 @@ function CoachAnalyzer() {
 
     setIsAnalyzing(true);
     setProgress(5);
-    setStatus("Files Examine…"); // libellé unique
+    setStatus("Files examine…"); // ← remplace le texte initial
     setErrorMsg("");
 
     try {
@@ -332,8 +333,10 @@ function CoachAnalyzer() {
       setProgress(20);
 
       // 1) UPLOAD
+      setStatus("Files examine…"); // ← remplace "Upload de la vidéo…"
       let fileUrl: string | undefined;
       if (file.size > CLIENT_PROXY_MAX_BYTES) {
+        setStatus("Files examine…"); // ← remplace "Fichier volumineux — upload signé…"
         const { readUrl } = await uploadWithSignedUrl(file);
         fileUrl = readUrl;
       } else {
@@ -341,6 +344,7 @@ function CoachAnalyzer() {
           const url = await uploadWithProxy(file);
           fileUrl = url;
         } catch {
+          setStatus("Files examine…"); // ← remplace "Proxy indisponible — upload signé…"
           const { readUrl } = await uploadWithSignedUrl(file);
           fileUrl = readUrl;
         }
@@ -351,6 +355,7 @@ function CoachAnalyzer() {
 
       // 2) APPEL IA
       void fakeProgress(setProgress, 80, 98);
+      setStatus("Files examine…"); // ← remplace "Analyse IA…"
 
       const baseHints =
         `Tu reçois des mosaïques issues d’une VIDEO (pas une photo). ` +
@@ -380,7 +385,10 @@ function CoachAnalyzer() {
           ? 20
           : 0;
 
-        if (res.status === 429 || res.status === 504) setCooldown(seconds);
+        if (res.status === 429 || res.status === 504) {
+          setCooldown(seconds);
+          setStatus(`Réessaie dans ${seconds}s…`);
+        }
 
         const txt = await res.text().catch(() => "");
         throw new Error(`analyze: HTTP ${res.status} ${txt}`);
@@ -429,10 +437,10 @@ function CoachAnalyzer() {
         setShowChoiceGate(true);
       }
       setProgress(100);
-      setStatus("Files Examine…");
+      setStatus("Analyse terminée — confirme l’exercice");
     } catch (e: any) {
       console.error(e);
-      const msg = e?.message || String(e);
+      const msg = e?.message || String(e));
       setErrorMsg(msg);
       setStatus("");
       alert(`Erreur pendant l'analyse: ${msg}`);
@@ -460,16 +468,15 @@ function CoachAnalyzer() {
   };
 
   const { issuesLine, correctionsLine } = faultsToLines(analysis);
-  const [muscleOpen, setMuscleOpen] = useState<string | null>(null);
 
   return (
     <>
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* 1. Import / Enregistrement */}
-        <article className="card flex flex-col">
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Colonne gauche : Capture */}
+        <article className="card">
           <h3 style={{ marginTop: 0 }}>🎥 Import / Enregistrement</h3>
 
-          {/* Onglets Filmer / Importer */}
+          {/* Onglets Filmer / Importer : actif vert, inactif NOIR SUR BLANC */}
           <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
             <button
               onClick={() => setTab("record")}
@@ -511,10 +518,8 @@ function CoachAnalyzer() {
           {blobUrl && (
             <div className="text-sm" style={{ marginTop: 12 }}>
               <label className="label" style={{ marginBottom: 6 }}>Fichier chargé</label>
-              <div className="card" style={{ padding: 8, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-                <span className="truncate" style={{ maxWidth: "60%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  🎞️ {fileName ?? "clip.webm"}
-                </span>
+              <div className="card" style={{ padding: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span className="truncate">🎞️ {fileName ?? "clip.webm"}</span>
                 <button
                   className="btn"
                   onClick={reset}
@@ -523,8 +528,7 @@ function CoachAnalyzer() {
                     background: "#ffffff",
                     color: "#111827",
                     border: "1px solid #d1d5db",
-                    fontWeight: 500,
-                    flexShrink: 0
+                    fontWeight: 500
                   }}
                 >
                   ↺ Réinitialiser
@@ -534,8 +538,8 @@ function CoachAnalyzer() {
           )}
         </article>
 
-        {/* 2. Ressenti */}
-        <article className="card flex flex-col">
+        {/* Colonne droite : Ressenti + action */}
+        <article className="card">
           <h3 style={{ marginTop: 0 }}>🎙️ Ton ressenti</h3>
           <label className="label">Comment tu te sens ?</label>
           <textarea
@@ -543,7 +547,7 @@ function CoachAnalyzer() {
             placeholder="Explique douleurs, fatigue, où tu as senti l'effort, RPE, etc."
             value={feeling}
             onChange={(e) => setFeeling(e.target.value)}
-            style={{ minHeight: 140, flexGrow: 1 }}
+            style={{ minHeight: 140 }}
           />
           <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
             <button
@@ -553,9 +557,10 @@ function CoachAnalyzer() {
               type="button"
             >
               {isAnalyzing ? <Spinner className="mr-2" /> : "✨"}{" "}
-              {isAnalyzing ? "Files Examine…" : cooldown > 0 ? `Patiente ${cooldown}s` : "Lancer l'analyse IA"}
+              {isAnalyzing ? "Analyse en cours" : cooldown > 0 ? `Patiente ${cooldown}s` : "Lancer l'analyse IA"}
             </button>
 
+            {/* Reset du textarea : NOIR SUR BLANC */}
             <button
               className="btn"
               type="button"
@@ -572,227 +577,148 @@ function CoachAnalyzer() {
             </button>
           </div>
 
-          {/* Progression (conservée) */}
           {(isAnalyzing || progress > 0 || errorMsg || status) && (
             <div style={{ marginTop: 12 }}>
               <ProgressBar value={progress} />
-              <p className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>
-                {isAnalyzing || progress < 100 ? "Files Examine…" : "Analyse terminée — confirme l’exercice"}
-              </p>
+              {status && <p className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>{status}</p>}
               {errorMsg && <p className="text-xs" style={{ color: "#dc2626", marginTop: 6 }}>Erreur : {errorMsg}</p>}
-            </div>
-          )}
-        </article>
-
-        {/* 3. Résumé IA */}
-        <article className="card flex flex-col">
-          <h3 style={{ marginTop: 0 }}>🧠 Résumé IA</h3>
-
-          {!analysis && (
-            <p className="text-sm" style={{ color: "#6b7280" }}>
-              Importe une vidéo puis lance l’analyse pour obtenir le résumé ici.
-            </p>
-          )}
-
-          {/* GATE de confirmation */}
-          {analysis && showChoiceGate && (
-            <div style={{ display: "grid", gap: 8 }}>
-              <div className="text-sm">
-                L’IA propose : <strong>{predictedExercise || "exercice_inconnu"}</strong>
-              </div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <button className="btn btn-dash" onClick={confirmPredicted} disabled={isAnalyzing} type="button">
-                  Confirmer « {predictedExercise || "exercice_inconnu"} »
-                </button>
-                <button
-                  className="btn"
-                  onClick={() => setOverrideOpen(true)}
-                  disabled={isAnalyzing}
-                  type="button"
-                  style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
-                >
-                  Autre
-                </button>
-              </div>
-
-              {overrideOpen && (
-                <div className="card" style={{ padding: 12 }}>
-                  <label className="label">Quel exercice fais-tu ?</label>
-                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <input
-                      className="input"
-                      placeholder="ex. Tractions, Fentes bulgares, Soulevé de terre…"
-                      value={overrideName}
-                      onChange={(e) => setOverrideName(e.target.value)}
-                    />
-                    <button
-                      className="btn"
-                      onClick={submitOverride}
-                      disabled={isAnalyzing || !overrideName.trim()}
-                      type="button"
-                      style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
-                    >
-                      Ré-analyser
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* RÉSULTATS */}
-          {analysis && !showChoiceGate && (
-            <div style={{ display: "grid", gap: 12 }}>
-              <div className="text-sm">
-                <span style={{ color: "#6b7280" }}>Exercice :</span>{" "}
-                <strong>{confirmedExercise || analysis.exercise || "inconnu"}</strong>
-              </div>
-
-              {analysis.overall?.trim() && (
-                <p className="text-sm" style={{ lineHeight: 1.6 }}>{analysis.overall.trim()}</p>
-              )}
-
-              <div>
-                <h4 className="h4" style={{ fontSize: 14, margin: "8px 0 4px" }}>Muscles principalement sollicités</h4>
-
-                {analysis.muscles?.length ? (
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                    {analysis.muscles.map((m, i) => (
-                      <button
-                        key={i}
-                        type="button"
-                        onClick={() => setMuscleOpen(m)}
-                        title="Voir l’emplacement"
-                        className="text-sm"
-                        style={{
-                          padding: "6px 10px",
-                          borderRadius: 999,
-                          border: "1px solid #d1d5db",
-                          background: "#ffffff",
-                          color: "#111827",
-                          cursor: "pointer"
-                        }}
-                      >
-                        {m}
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs" style={{ color: "#6b7280" }}>— non détecté —</p>
-                )}
-              </div>
-
-              {(issuesLine || correctionsLine) && (
-                <div style={{ display: "grid", gap: 4 }}>
-                  {issuesLine && <p className="text-sm"><strong>Erreur détectée :</strong> {issuesLine}</p>}
-                  {correctionsLine && <p className="text-sm"><strong>Corrections :</strong> {correctionsLine}</p>}
-                </div>
-              )}
             </div>
           )}
         </article>
       </div>
 
-      {/* Panneau Muscle Viewer */}
-      {muscleOpen && (
-        <MuscleViewer muscleName={muscleOpen} onClose={() => setMuscleOpen(null)} />
-      )}
+      {/* Résumé IA */}
+      <article className="card" style={{ marginTop: 16 }}>
+        <h3 style={{ marginTop: 0 }}>🧠 Résumé IA</h3>
+
+        {!analysis && (
+          <p className="text-sm" style={{ color: "#6b7280" }}>
+            Importe une vidéo puis lance l’analyse pour obtenir le résumé ici.
+          </p>
+        )}
+
+        {/* GATE de confirmation : "Confirmer" vert, "Autre" NOIR/BLANC */}
+        {analysis && showChoiceGate && (
+          <div style={{ display: "grid", gap: 8 }}>
+            <div className="text-sm">
+              L’IA propose : <strong>{predictedExercise || "exercice_inconnu"}</strong>
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button className="btn btn-dash" onClick={confirmPredicted} disabled={isAnalyzing} type="button">
+                Confirmer « {predictedExercise || "exercice_inconnu"} »
+              </button>
+              <button
+                className="btn"
+                onClick={() => setOverrideOpen(true)}
+                disabled={isAnalyzing}
+                type="button"
+                style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
+              >
+                Autre
+              </button>
+            </div>
+
+            {overrideOpen && (
+              <div className="card" style={{ padding: 12 }}>
+                <label className="label">Quel exercice fais-tu ?</label>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <input
+                    className="input"
+                    placeholder="ex. Tractions, Fentes bulgares, Soulevé de terre…"
+                    value={overrideName}
+                    onChange={(e) => setOverrideName(e.target.value)}
+                  />
+                  <button
+                    className="btn"
+                    onClick={submitOverride}
+                    disabled={isAnalyzing || !overrideName.trim()}
+                    type="button"
+                    style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
+                  >
+                    Ré-analyser
+                  </button>
+                </div>
+                <p className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>
+                  L’IA tiendra compte de ce nom pour corriger plus précisément.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* RÉSULTATS */}
+        {analysis && !showChoiceGate && (
+          <div style={{ display: "grid", gap: 12 }}>
+            <div className="text-sm">
+              <span style={{ color: "#6b7280" }}>Exercice :</span>{" "}
+              <strong>{confirmedExercise || analysis.exercise || "inconnu"}</strong>
+            </div>
+
+            {analysis.overall?.trim() && (
+              <p className="text-sm" style={{ lineHeight: 1.6 }}>{analysis.overall.trim()}</p>
+            )}
+
+            <div>
+              <h4 className="h4" style={{ fontSize: 14, margin: "8px 0 4px" }}>Muscles principalement sollicités</h4>
+              {analysis.muscles?.length ? (
+                <p className="text-sm">{analysis.muscles.join(" - ")}</p>
+              ) : (
+                <p className="text-xs" style={{ color: "#6b7280" }}>— non détecté —</p>
+              )}
+            </div>
+
+            {(issuesLine || correctionsLine) && (
+              <div style={{ display: "grid", gap: 4 }}>
+                {issuesLine && <p className="text-sm"><strong>Erreur détectée :</strong> {issuesLine}</p>}
+                {correctionsLine && <p className="text-sm"><strong>Corrections :</strong> {correctionsLine}</p>}
+              </div>
+            )}
+
+            {analysis.extras && analysis.extras.length > 0 && (
+              <details>
+                <summary style={{ cursor: "pointer" }}>Points complémentaires</summary>
+                <ul style={{ paddingLeft: 18, marginTop: 6 }} className="text-sm">
+                  {analysis.extras.map((x, i) => <li key={i} style={{ listStyle: "disc" }}>{x}</li>)}
+                </ul>
+              </details>
+            )}
+          </div>
+        )}
+      </article>
     </>
   );
 }
 
 /* ===================== Upload/Record ===================== */
-/**
- * iOS : 1 bouton "Importer" → laisse la feuille native Apple.
- * Autres : 2 boutons "Galerie" / "Fichiers".
- */
 function UploadDrop({ onFile }: { onFile: (file: File) => void }) {
-  const galleryRef = useRef<HTMLInputElement | null>(null);
-  const filesRef   = useRef<HTMLInputElement | null>(null);
-
-  const isIOS = () => {
-    if (typeof navigator === "undefined") return false;
-    const ua = navigator.userAgent || "";
-    const isIThing = /iPad|iPhone|iPod/i.test(ua);
-    const isTouchMac = (navigator.platform === "MacIntel" && (navigator as any).maxTouchPoints > 1);
-    return isIThing || isTouchMac;
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const onDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const f = e.dataTransfer.files?.[0];
+    if (f) onFile(f);
   };
-
-  const openGalerie = () => {
-    galleryRef.current?.click(); // iOS affichera sa feuille (Photothèque / Prendre / Choisir)
-  };
-
-  const openFichiers = async () => {
-    const anyWindow = window as any;
-    try {
-      if (anyWindow?.showOpenFilePicker) {
-        const [handle] = await anyWindow.showOpenFilePicker({
-          multiple: false,
-          excludeAcceptAllOption: false,
-          types: [{ description: "Vidéos", accept: { "video/*": [".mp4", ".mov", ".webm", ".mkv", ".avi"] } }],
-          startIn: "videos",
-        });
-        if (handle) {
-          const f = await handle.getFile();
-          if (f) onFile(f);
-          return;
-        }
-      }
-    } catch { /* annulé → fallback */ }
-    filesRef.current?.click();
-  };
-
   return (
-    <div className="card" style={{ padding: 16, display: "grid", gap: 10 }}>
-      {isIOS() ? (
-        <div className="grid gap-2 sm:flex sm:gap-3">
-          <button
-            type="button"
-            className="btn"
-            onClick={openGalerie}
-            style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
-          >
-            📥 Importer
-          </button>
-        </div>
-      ) : (
-        <div className="grid gap-2 sm:flex sm:gap-3">
-          <button
-            type="button"
-            className="btn"
-            onClick={openGalerie}
-            style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
-          >
-            📸 Galerie
-          </button>
-          <button
-            type="button"
-            className="btn"
-            onClick={openFichiers}
-            style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
-          >
-            🗂️ Fichiers
-          </button>
-        </div>
-      )}
-
-      {/* Inputs cachés */}
-      <input
-        ref={galleryRef}
-        type="file"
-        accept="image/*,video/*"
-        aria-hidden tabIndex={-1}
-        style={{ display: "none" }}
-        onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); e.currentTarget.value = ""; }}
-      />
-      <input
-        ref={filesRef}
-        type="file"
-        accept="video/*"
-        aria-hidden tabIndex={-1}
-        style={{ display: "none" }}
-        onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); e.currentTarget.value = ""; }}
-      />
+    <div onDragOver={(e) => e.preventDefault()} onDrop={onDrop} className="border-2 border-dashed rounded-2xl p-6 text-center">
+      <div className="mx-auto h-8 w-8 mb-2">☁️</div>
+      <p className="text-sm mb-2">Glisse une vidéo ici ou</p>
+      <div className="flex items-center justify-center gap-2">
+        <input
+          ref={inputRef}
+          type="file"
+          accept="video/*"
+          capture="environment"
+          className="hidden"
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); }}
+        />
+        <button
+          type="button"
+          className="btn"
+          onClick={() => inputRef.current?.click()}
+          style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
+        >
+          Choisir un fichier
+        </button>
+      </div>
     </div>
   );
 }
@@ -863,6 +789,7 @@ function VideoRecorder({ onRecorded }: { onRecorded: (file: File) => void }) {
 }
 
 /* ===== Helpers vidéo / images ===== */
+
 function getBestMimeType() {
   const candidates = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm", "video/mp4"];
   for (const c of candidates) {
@@ -879,6 +806,7 @@ async function fakeProgress(setter: (v: number) => void, from: number, to: numbe
     setter(Math.min(i, to));
   }
 }
+/** ➜ Extrait N frames JPEG (dataURL) d’un fichier vidéo local. */
 async function extractFramesFromFile(file: File, nFrames = 12): Promise<{ frames: string[]; timestamps: number[] }> {
   const videoURL = URL.createObjectURL(file);
   try {
@@ -953,7 +881,7 @@ async function makeMosaic(images: string[], gridW = 3, gridH = 2, outW = 1280, o
     const { width, height } = bestFit(img.width, img.height, cellW, cellH);
     const dx = x + Math.floor((cellW - width) / 2);
     const dy = y + Math.floor((cellH - height) / 2);
-    (ctx as any).drawImage(img as any, dx, dy, width, height);
+    ctx.drawImage(img as any, dx, dy, width, height);
   }
   return cvs.toDataURL("image/jpeg", quality);
 }
@@ -965,6 +893,8 @@ function loadImage(src: string): Promise<HTMLImageElement> {
     img.src = src;
   });
 }
+
+/* ---------- Agg util ---------- */
 function faultsToLines(a: AIAnalysis | null) {
   if (!a) return { issuesLine: "", correctionsLine: "" };
   const issues = (a?.faults || []).map(f => (f?.issue || "").trim()).filter(Boolean);
@@ -973,136 +903,4 @@ function faultsToLines(a: AIAnalysis | null) {
   const correctionsBase = faultCorrections.length ? faultCorrections : (a?.corrections || []);
   const correctionsLine = (correctionsBase || []).join(" - ");
   return { issuesLine, correctionsLine };
-}
-
-/* ===================== Muscle Viewer (affiche UNIQUEMENT le muscle demandé) ===================== */
-function normMuscle(s: string) {
-  return (s || "")
-    .toLowerCase()
-    .normalize("NFD").replace(/\p{Diacritic}/gu, "")
-    .replace(/[\s\-’'".,]/g, "")
-    .replace(/(le|la|les|du|de|des)/g, "")
-    .replace(/muscle(s)?$/,"")
-    .replace(/s$/,"");
-}
-const MUSCLE_MAP: Record<string, string[]> = {
-  epaule: ["deltoid_l_f","deltoid_r_f","deltoid_l_b","deltoid_r_b"],
-  epaules: ["deltoid_l_f","deltoid_r_f","deltoid_l_b","deltoid_r_b"],
-  deltoide: ["deltoid_l_f","deltoid_r_f","deltoid_l_b","deltoid_r_b"],
-  deltoid: ["deltoid_l_f","deltoid_r_f","deltoid_l_b","deltoid_r_b"],
-
-  dorsal: ["lats_b"],
-  dorsaux: ["lats_b"],
-  granddorsal: ["lats_b"],
-  lats: ["lats_b"],
-  trapeze: ["traps_b"],
-  trapezes: ["traps_b"],
-  trapezius: ["traps_b"],
-
-  pectoral: ["pecs_f"],
-  pectoraux: ["pecs_f"],
-  chest: ["pecs_f"],
-
-  biceps: ["biceps_l_f","biceps_r_f"],
-  triceps: ["triceps_l_b","triceps_r_b"],
-  avantbras: ["forearm_l_f","forearm_r_f"],
-  forearm: ["forearm_l_f","forearm_r_f"],
-
-  abdominaux: ["abs_f"],
-  abdos: ["abs_f"],
-  oblique: ["obliques_l_f","obliques_r_f"],
-  obliques: ["obliques_l_f","obliques_r_f"],
-
-  fessier: ["glutes_b"],
-  fessiers: ["glutes_b"],
-  glute: ["glutes_b"],
-
-  quadriceps: ["quads_l_f","quads_r_f"],
-  quadri: ["quads_l_f","quads_r_f"],
-
-  ischio: ["hams_l_b","hams_r_b"],
-  ischiojambier: ["hams_l_b","hams_r_b"],
-  hamstring: ["hams_l_b","hams_r_b"],
-
-  mollet: ["calf_l_b","calf_r_b","calf_l_f","calf_r_f"],
-  mollets: ["calf_l_b","calf_r_b","calf_l_f","calf_r_f"],
-  calves: ["calf_l_b","calf_r_b","calf_l_f","calf_r_f"],
-};
-
-function MuscleViewer({ muscleName, onClose }: { muscleName: string; onClose: () => void }) {
-  const keys = MUSCLE_MAP[normMuscle(muscleName)] || [];
-  return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      className="fixed inset-0 z-50 grid place-items-center"
-      style={{ background: "rgba(17,24,39,0.55)", padding: 16 }}
-      onClick={onClose}
-    >
-      <div
-        className="card"
-        style={{ maxWidth: 900, width: "100%", background: "#fff" }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-          <h3 style={{ margin: 0 }}>📍 {muscleName}</h3>
-          <button className="btn" onClick={onClose}
-            style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}>
-            Fermer
-          </button>
-        </div>
-
-        <BodyMapMinimal highlightKeys={keys} />
-      </div>
-    </div>
-  );
-}
-
-/** Minimal : on dessine UNIQUEMENT les zones demandées, sur fond neutre (pas de silhouette). */
-function BodyMapMinimal({ highlightKeys }: { highlightKeys: string[] }) {
-  const H = new Set(highlightKeys);
-  const on = (id: string) => H.has(id);
-
-  const paint = {
-    fill: "#22c55e",
-    stroke: "#14532d",
-    strokeWidth: 1,
-  } as React.CSSProperties;
-
-  return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 12 }}>
-      {/* FACE */}
-      <svg viewBox="0 0 180 360" style={{ width: "100%", height: "auto", background: "#f9fafb", borderRadius: 12, padding: 8 }}>
-        {on("pecs_f") && <rect x="58" y="64" width="64" height="22" rx="8" style={paint} />}
-        {on("deltoid_l_f") && <circle cx="46" cy="72" r="14" style={paint} />}
-        {on("deltoid_r_f") && <circle cx="134" cy="72" r="14" style={paint} />}
-        {on("biceps_l_f") && <rect x="28" y="94" width="16" height="38" rx="8" style={paint} />}
-        {on("biceps_r_f") && <rect x="136" y="94" width="16" height="38" rx="8" style={paint} />}
-        {on("forearm_l_f") && <rect x="28" y="134" width="16" height="36" rx="8" style={paint} />}
-        {on("forearm_r_f") && <rect x="136" y="134" width="16" height="36" rx="8" style={paint} />}
-        {on("abs_f") && <rect x="70" y="92" width="40" height="40" rx="8" style={paint} />}
-        {on("obliques_l_f") && <rect x="60" y="96" width="12" height="36" rx="6" style={paint} />}
-        {on("obliques_r_f") && <rect x="108" y="96" width="12" height="36" rx="6" style={paint} />}
-        {on("quads_l_f") && <rect x="64" y="152" width="18" height="52" rx="9" style={paint} />}
-        {on("quads_r_f") && <rect x="98" y="152" width="18" height="52" rx="9" style={paint} />}
-        {on("calf_l_f") && <rect x="64" y="214" width="18" height="42" rx="9" style={paint} />}
-        {on("calf_r_f") && <rect x="98" y="214" width="18" height="42" rx="9" style={paint} />}
-      </svg>
-
-      {/* DOS */}
-      <svg viewBox="0 0 180 360" style={{ width: "100%", height: "auto", background: "#f9fafb", borderRadius: 12, padding: 8 }}>
-        {on("traps_b") && <polygon points="90,46 60,66 120,66" style={paint} />}
-        {on("lats_b") && <rect x="56" y="70" width="68" height="30" rx="10" style={paint} />}
-        {on("deltoid_l_b") && <circle cx="46" cy="72" r="14" style={paint} />}
-        {on("deltoid_r_b") && <circle cx="134" cy="72" r="14" style={paint} />}
-        {on("triceps_l_b") && <rect x="28" y="94" width="16" height="38" rx="8" style={paint} />}
-        {on("triceps_r_b") && <rect x="136" y="94" width="16" height="38" rx="8" style={paint} />}
-        {on("glutes_b") && <rect x="66" y="122" width="48" height="28" rx="10" style={paint} />}
-        {on("hams_l_b") && <rect x="64" y="152" width="18" height="52" rx="9" style={paint} />}
-        {on("hams_r_b") && <rect x="98" y="152" width="18" height="52" rx="9" style={paint} />}
-        {on("calf_l_b") && <rect x="64" y="214" width="18" height="42" rx="9" style={paint} />}
-        {on("calf_r_b") && <rect x="98" y="214" width="18" height="42" rx="9" style={paint} />}
-      </svg>
-    </div>
-  );
 }
