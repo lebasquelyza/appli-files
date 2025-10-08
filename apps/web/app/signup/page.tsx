@@ -102,7 +102,7 @@ export default function SignupPage() {
 
         {/* Petit message de bienvenue */}
         <p className="text-center text-sm text-gray-600 mb-6">
-          Bienvenue 👋 Crée ton compte pour commencer.
+          Bienvenue 👋
         </p>
 
         <form onSubmit={handleSignup} className="space-y-4">
