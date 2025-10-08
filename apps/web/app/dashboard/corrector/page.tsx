@@ -199,6 +199,8 @@ export default function Page() {
         paddingTop: 24,
         paddingBottom: 32,
         fontSize: "var(--settings-fs, 12px)",
+        maxWidth: 1200,
+        margin: "0 auto"
       }}
     >
       <div className="page-header">
@@ -382,10 +384,7 @@ function CoachAnalyzer() {
           ? 20
           : 0;
 
-        if (res.status === 429 || res.status === 504) {
-          setCooldown(seconds);
-          setStatus(`Réessaie dans ${seconds}s…`);
-        }
+        if (res.status === 429 || res.status === 504) setCooldown(seconds);
 
         const txt = await res.text().catch(() => "");
         throw new Error(`analyze: HTTP ${res.status} ${txt}`);
@@ -466,14 +465,31 @@ function CoachAnalyzer() {
   };
 
   const { issuesLine, correctionsLine } = faultsToLines(analysis);
-
   const [muscleOpen, setMuscleOpen] = useState<string | null>(null);
+
+  /* ====== LAYOUT : 3 cartes alignées, même taille ====== */
+  const gridStyle: React.CSSProperties = {
+    display: "grid",
+    gap: 16,
+    gridTemplateColumns: "1fr",
+    alignItems: "stretch",
+  };
+  // >=1024px → 3 colonnes
+  if (typeof window !== "undefined" && window.matchMedia && window.matchMedia("(min-width: 1024px)").matches) {
+    (gridStyle as any).gridTemplateColumns = "repeat(3, 1fr)";
+  }
+
+  const cardStyle: React.CSSProperties = {
+    height: "100%",
+    display: "flex",
+    flexDirection: "column",
+  };
 
   return (
     <>
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Colonne gauche : Capture */}
-        <article className="card">
+      <div style={gridStyle}>
+        {/* 1. Import / Enregistrement */}
+        <article className="card" style={cardStyle}>
           <h3 style={{ marginTop: 0 }}>🎥 Import / Enregistrement</h3>
 
           {/* Onglets Filmer / Importer */}
@@ -538,8 +554,8 @@ function CoachAnalyzer() {
           )}
         </article>
 
-        {/* Colonne droite : Ressenti + action */}
-        <article className="card">
+        {/* 2. Ressenti */}
+        <article className="card" style={cardStyle}>
           <h3 style={{ marginTop: 0 }}>🎙️ Ton ressenti</h3>
           <label className="label">Comment tu te sens ?</label>
           <textarea
@@ -547,7 +563,7 @@ function CoachAnalyzer() {
             placeholder="Explique douleurs, fatigue, où tu as senti l'effort, RPE, etc."
             value={feeling}
             onChange={(e) => setFeeling(e.target.value)}
-            style={{ minHeight: 140 }}
+            style={{ minHeight: 140, flexGrow: 1 }}
           />
           <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
             <button
@@ -564,7 +580,12 @@ function CoachAnalyzer() {
               className="btn"
               type="button"
               onClick={() => setFeeling("")}
-              style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
+              style={{
+                background: "#ffffff",
+                color: "#111827",
+                border: "1px solid #d1d5db",
+                fontWeight: 500
+              }}
               disabled={isAnalyzing}
             >
               Réinitialiser
@@ -579,127 +600,127 @@ function CoachAnalyzer() {
             </div>
           )}
         </article>
-      </div>
 
-      {/* Résumé IA */}
-      <article className="card" style={{ marginTop: 16 }}>
-        <h3 style={{ marginTop: 0 }}>🧠 Résumé IA</h3>
+        {/* 3. Résumé IA (centré et même taille) */}
+        <article className="card" style={cardStyle}>
+          <h3 style={{ marginTop: 0 }}>🧠 Résumé IA</h3>
 
-        {!analysis && (
-          <p className="text-sm" style={{ color: "#6b7280" }}>
-            Importe une vidéo puis lance l’analyse pour obtenir le résumé ici.
-          </p>
-        )}
+          {!analysis && (
+            <p className="text-sm" style={{ color: "#6b7280" }}>
+              Importe une vidéo puis lance l’analyse pour obtenir le résumé ici.
+            </p>
+          )}
 
-        {/* GATE de confirmation */}
-        {analysis && showChoiceGate && (
-          <div style={{ display: "grid", gap: 8 }}>
-            <div className="text-sm">
-              L’IA propose : <strong>{predictedExercise || "exercice_inconnu"}</strong>
-            </div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button className="btn btn-dash" onClick={confirmPredicted} disabled={isAnalyzing} type="button">
-                Confirmer « {predictedExercise || "exercice_inconnu"} »
-              </button>
-              <button
-                className="btn"
-                onClick={() => setOverrideOpen(true)}
-                disabled={isAnalyzing}
-                type="button"
-                style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
-              >
-                Autre
-              </button>
-            </div>
-
-            {overrideOpen && (
-              <div className="card" style={{ padding: 12 }}>
-                <label className="label">Quel exercice fais-tu ?</label>
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <input
-                    className="input"
-                    placeholder="ex. Tractions, Fentes bulgares, Soulevé de terre…"
-                    value={overrideName}
-                    onChange={(e) => setOverrideName(e.target.value)}
-                  />
-                  <button
-                    className="btn"
-                    onClick={submitOverride}
-                    disabled={isAnalyzing || !overrideName.trim()}
-                    type="button"
-                    style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
-                  >
-                    Ré-analyser
-                  </button>
-                </div>
-                <p className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>
-                  L’IA tiendra compte de ce nom pour corriger plus précisément.
-                </p>
+          {/* GATE de confirmation */}
+          {analysis && showChoiceGate && (
+            <div style={{ display: "grid", gap: 8 }}>
+              <div className="text-sm">
+                L’IA propose : <strong>{predictedExercise || "exercice_inconnu"}</strong>
               </div>
-            )}
-          </div>
-        )}
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button className="btn btn-dash" onClick={confirmPredicted} disabled={isAnalyzing} type="button">
+                  Confirmer « {predictedExercise || "exercice_inconnu"} »
+                </button>
+                <button
+                  className="btn"
+                  onClick={() => setOverrideOpen(true)}
+                  disabled={isAnalyzing}
+                  type="button"
+                  style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
+                >
+                  Autre
+                </button>
+              </div>
 
-        {/* RÉSULTATS */}
-        {analysis && !showChoiceGate && (
-          <div style={{ display: "grid", gap: 12 }}>
-            <div className="text-sm">
-              <span style={{ color: "#6b7280" }}>Exercice :</span>{" "}
-              <strong>{confirmedExercise || analysis.exercise || "inconnu"}</strong>
-            </div>
-
-            {analysis.overall?.trim() && (
-              <p className="text-sm" style={{ lineHeight: 1.6 }}>{analysis.overall.trim()}</p>
-            )}
-
-            <div>
-              <h4 className="h4" style={{ fontSize: 14, margin: "8px 0 4px" }}>Muscles principalement sollicités</h4>
-
-              {analysis.muscles?.length ? (
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  {analysis.muscles.map((m, i) => (
+              {overrideOpen && (
+                <div className="card" style={{ padding: 12 }}>
+                  <label className="label">Quel exercice fais-tu ?</label>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <input
+                      className="input"
+                      placeholder="ex. Tractions, Fentes bulgares, Soulevé de terre…"
+                      value={overrideName}
+                      onChange={(e) => setOverrideName(e.target.value)}
+                    />
                     <button
-                      key={i}
+                      className="btn"
+                      onClick={submitOverride}
+                      disabled={isAnalyzing || !overrideName.trim()}
                       type="button"
-                      onClick={() => setMuscleOpen(m)}
-                      title="Voir l’emplacement"
-                      className="text-sm"
-                      style={{
-                        padding: "6px 10px",
-                        borderRadius: 999,
-                        border: "1px solid #d1d5db",
-                        background: "#ffffff",
-                        color: "#111827",
-                        cursor: "pointer"
-                      }}
+                      style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
                     >
-                      {m}
+                      Ré-analyser
                     </button>
-                  ))}
+                  </div>
+                  <p className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>
+                    L’IA tiendra compte de ce nom pour corriger plus précisément.
+                  </p>
                 </div>
-              ) : (
-                <p className="text-xs" style={{ color: "#6b7280" }}>— non détecté —</p>
               )}
             </div>
+          )}
 
-            {(issuesLine || correctionsLine) && (
-              <div style={{ display: "grid", gap: 4 }}>
-                {issuesLine && <p className="text-sm"><strong>Erreur détectée :</strong> {issuesLine}</p>}
-                {correctionsLine && <p className="text-sm"><strong>Corrections :</strong> {correctionsLine}</p>}
+          {/* RÉSULTATS */}
+          {analysis && !showChoiceGate && (
+            <div style={{ display: "grid", gap: 12 }}>
+              <div className="text-sm">
+                <span style={{ color: "#6b7280" }}>Exercice :</span>{" "}
+                <strong>{confirmedExercise || analysis.exercise || "inconnu"}</strong>
               </div>
-            )}
 
-            {analysis.extras && analysis.extras.length > 0 && (
-              <details>
-                <summary style={{ cursor: "pointer" }}>Points complémentaires</summary>
-                <ul style={{ paddingLeft: 18, marginTop: 6 }} className="text-sm">
-                  {analysis.extras.map((x, i) => <li key={i} style={{ listStyle: "disc" }}>{x}</li>)}
-                </ul>
-              </details>
-            )}
-          </div>
-        )}
-      </article>
+              {analysis.overall?.trim() && (
+                <p className="text-sm" style={{ lineHeight: 1.6 }}>{analysis.overall.trim()}</p>
+              )}
+
+              <div>
+                <h4 className="h4" style={{ fontSize: 14, margin: "8px 0 4px" }}>Muscles principalement sollicités</h4>
+
+                {analysis.muscles?.length ? (
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {analysis.muscles.map((m, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => setMuscleOpen(m)}
+                        title="Voir l’emplacement"
+                        className="text-sm"
+                        style={{
+                          padding: "6px 10px",
+                          borderRadius: 999,
+                          border: "1px solid #d1d5db",
+                          background: "#ffffff",
+                          color: "#111827",
+                          cursor: "pointer"
+                        }}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs" style={{ color: "#6b7280" }}>— non détecté —</p>
+                )}
+              </div>
+
+              {(issuesLine || correctionsLine) && (
+                <div style={{ display: "grid", gap: 4 }}>
+                  {issuesLine && <p className="text-sm"><strong>Erreur détectée :</strong> {issuesLine}</p>}
+                  {correctionsLine && <p className="text-sm"><strong>Corrections :</strong> {correctionsLine}</p>}
+                </div>
+              )}
+
+              {analysis.extras && analysis.extras.length > 0 && (
+                <details>
+                  <summary style={{ cursor: "pointer" }}>Points complémentaires</summary>
+                  <ul style={{ paddingLeft: 18, marginTop: 6 }} className="text-sm">
+                    {analysis.extras.map((x, i) => <li key={i} style={{ listStyle: "disc" }}>{x}</li>)}
+                  </ul>
+                </details>
+              )}
+            </div>
+          )}
+        </article>
+      </div>
 
       {/* Panneau Muscle Viewer */}
       {muscleOpen && (
@@ -727,7 +748,7 @@ function UploadDrop({ onFile }: { onFile: (file: File) => void }) {
   };
 
   const openGalerie = () => {
-    galleryRef.current?.click(); // pas de capture → l’iPhone affiche sa feuille (Photothèque / Prendre / Choisir)
+    galleryRef.current?.click(); // iOS affichera sa feuille (Photothèque / Prendre / Choisir)
   };
 
   const openFichiers = async () => {
@@ -784,7 +805,7 @@ function UploadDrop({ onFile }: { onFile: (file: File) => void }) {
         </div>
       )}
 
-      {/* Inputs cachés (aucun "Choisir le fichier" visible) */}
+      {/* Inputs cachés */}
       <input
         ref={galleryRef}
         type="file"
@@ -871,10 +892,6 @@ function VideoRecorder({ onRecorded }: { onRecorded: (file: File) => void }) {
 }
 
 /* ===== Helpers vidéo / images ===== */
-
-const exampleFeeling =
-  "Séance de squats. RPE 8. Genou droit un peu instable, bas du dos fatigué, j'ai surtout senti les quadris brûler sur les dernières reps.";
-
 function getBestMimeType() {
   const candidates = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm", "video/mp4"];
   for (const c of candidates) {
@@ -891,7 +908,6 @@ async function fakeProgress(setter: (v: number) => void, from: number, to: numbe
     setter(Math.min(i, to));
   }
 }
-/** ➜ Extrait N frames JPEG (dataURL) d’un fichier vidéo local. */
 async function extractFramesFromFile(file: File, nFrames = 12): Promise<{ frames: string[]; timestamps: number[] }> {
   const videoURL = URL.createObjectURL(file);
   try {
@@ -978,8 +994,6 @@ function loadImage(src: string): Promise<HTMLImageElement> {
     img.src = src;
   });
 }
-
-/* ---------- Agg util ---------- */
 function faultsToLines(a: AIAnalysis | null) {
   if (!a) return { issuesLine: "", correctionsLine: "" };
   const issues = (a?.faults || []).map(f => (f?.issue || "").trim()).filter(Boolean);
@@ -990,43 +1004,58 @@ function faultsToLines(a: AIAnalysis | null) {
   return { issuesLine, correctionsLine };
 }
 
-/* ===================== Muscle Viewer ===================== */
+/* ===================== Muscle Viewer (mapping précis + silhouette propre) ===================== */
 function normMuscle(s: string) {
   return (s || "")
     .toLowerCase()
     .normalize("NFD").replace(/\p{Diacritic}/gu, "")
-    .replace(/[\s\-’'"]/g, "")
+    .replace(/[\s\-’'".,]/g, "")
+    .replace(/(le|la|les|du|de|des)/g, "")
+    .replace(/muscle(s)?$/,"")
     .replace(/s$/,"");
 }
 const MUSCLE_MAP: Record<string, string[]> = {
-  deltoide: ["deltoid_l","deltoid_r"],
-  deltoid: ["deltoid_l","deltoid_r"],
-  epaules: ["deltoid_l","deltoid_r"],
-  trapeze: ["traps"],
-  trapezius: ["traps"],
-  pectoraux: ["pecs"],
-  pectoral: ["pecs"],
-  chest: ["pecs"],
-  granddorsal: ["lats"],
-  lats: ["lats"],
-  dorsal: ["lats"],
-  biceps: ["biceps_l","biceps_r"],
-  triceps: ["triceps_l","triceps_r"],
-  avantbras: ["forearms_l","forearms_r"],
-  abdominaux: ["abs"],
-  abdos: ["abs"],
-  core: ["abs","obliques"],
-  obliques: ["obliques"],
-  fessiers: ["glutes"],
-  glute: ["glutes"],
-  quadriceps: ["quads_l","quads_r"],
-  quadricip: ["quads_l","quads_r"],
-  ischio: ["hams_l","hams_r"],
-  ischiojambier: ["hams_l","hams_r"],
-  hamstring: ["hams_l","hams_r"],
-  mollet: ["calf_l","calf_r"],
-  mollets: ["calf_l","calf_r"],
-  calves: ["calf_l","calf_r"],
+  epaule: ["deltoid_l_f","deltoid_r_f","deltoid_l_b","deltoid_r_b"],
+  epaules: ["deltoid_l_f","deltoid_r_f","deltoid_l_b","deltoid_r_b"],
+  deltoide: ["deltoid_l_f","deltoid_r_f","deltoid_l_b","deltoid_r_b"],
+  deltoid: ["deltoid_l_f","deltoid_r_f","deltoid_l_b","deltoid_r_b"],
+
+  dorsal: ["lats_b"],
+  dorsaux: ["lats_b"],
+  granddorsal: ["lats_b"],
+  lats: ["lats_b"],
+  trapeze: ["traps_b","traps_f"],
+  trapezes: ["traps_b","traps_f"],
+  trapezius: ["traps_b","traps_f"],
+
+  pectoral: ["pecs_f"],
+  pectoraux: ["pecs_f"],
+  chest: ["pecs_f"],
+
+  biceps: ["biceps_l_f","biceps_r_f"],
+  triceps: ["triceps_l_b","triceps_r_b"],
+  avantbras: ["forearm_l_f","forearm_r_f"],
+  forearm: ["forearm_l_f","forearm_r_f"],
+
+  abdominaux: ["abs_f"],
+  abdos: ["abs_f"],
+  oblique: ["obliques_l_f","obliques_r_f"],
+  obliques: ["obliques_l_f","obliques_r_f"],
+
+  fessier: ["glutes_b"],
+  fessiers: ["glutes_b"],
+  glute: ["glutes_b"],
+
+  quadriceps: ["quads_l_f","quads_r_f"],
+  quadri: ["quads_l_f","quads_r_f"],
+
+  ischio: ["hams_l_b","hams_r_b"],
+  ischiojambier: ["hams_l_b","hams_r_b"],
+  hamstring: ["hams_l_b","hams_r_b"],
+
+  mollet: ["calf_l_b","calf_r_b","calf_l_f","calf_r_f"],
+  mollets: ["calf_l_b","calf_r_b","calf_l_f","calf_r_f"],
+  calves: ["calf_l_b","calf_r_b","calf_l_f","calf_r_f"],
 };
 
 function MuscleViewer({ muscleName, onClose }: { muscleName: string; onClose: () => void }) {
@@ -1036,80 +1065,98 @@ function MuscleViewer({ muscleName, onClose }: { muscleName: string; onClose: ()
       role="dialog"
       aria-modal="true"
       className="fixed inset-0 z-50 grid place-items-center"
-      style={{ background: "rgba(17,24,39,0.5)", padding: 16 }}
+      style={{ background: "rgba(17,24,39,0.55)", padding: 16 }}
       onClick={onClose}
     >
       <div
         className="card"
-        style={{ maxWidth: 860, width: "100%", background: "#fff" }}
+        style={{ maxWidth: 900, width: "100%", background: "#fff" }}
         onClick={(e) => e.stopPropagation()}
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
           <h3 style={{ margin: 0 }}>📍 {muscleName}</h3>
-          <button className="btn" onClick={onClose} style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}>Fermer</button>
+          <button className="btn" onClick={onClose}
+            style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}>
+            Fermer
+          </button>
         </div>
 
         <p className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>
-          Schéma simplifié — zones en surbrillance indiquent l’emplacement du muscle.
+          Schéma simplifié — les zones en surbrillance indiquent l’emplacement du muscle.
         </p>
 
-        <BodyMap highlightKeys={keys} />
+        <BodyMapClean highlightKeys={keys} />
       </div>
     </div>
   );
 }
 
-function BodyMap({ highlightKeys }: { highlightKeys: string[] }) {
+/** Silhouette face/dos minimaliste — ids compatibles MUSCLE_MAP */
+function BodyMapClean({ highlightKeys }: { highlightKeys: string[] }) {
   const H = new Set(highlightKeys);
-  const on = (id: string) => H.has(id) ? 1 : 0.12;
-
-  const partStyle = (active: boolean) => ({
-    fill: active ? "#22c55e" : "#9ca3af",
-    opacity: active ? 0.9 : 0.35,
-    transition: "all .2s ease",
-    stroke: active ? "#14532d" : "#6b7280",
+  const on = (id: string) => H.has(id);
+  const paint = (active: boolean) => ({
+    fill: active ? "#22c55e" : "#e5e7eb",
+    stroke: active ? "#16a34a" : "#c7cdd4",
     strokeWidth: 1,
+    transition: "all .15s ease",
   } as React.CSSProperties);
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 12 }}>
-      {/* Face */}
-      <svg viewBox="0 0 160 360" style={{ width: "100%", height: "auto", background: "#f9fafb", borderRadius: 12 }}>
-        <rect x="70" y="10" width="20" height="20" rx="10" style={{ fill: "#e5e7eb" }} />
-        <rect x="45" y="30" width="70" height="85" rx="12" style={{ fill: "#e5e7eb" }} />
-        <rect id="pecs" x="52" y="60" width="56" height="18" rx="6" style={partStyle(!!on("pecs"))} />
-        <circle id="deltoid_l" cx="45" cy="65" r="12" style={partStyle(!!on("deltoid_l"))} />
-        <circle id="deltoid_r" cx="115" cy="65" r="12" style={partStyle(!!on("deltoid_r"))} />
-        <rect id="biceps_l" x="26" y="85" width="16" height="36" rx="8" style={partStyle(!!on("biceps_l"))} />
-        <rect id="biceps_r" x="118" y="85" width="16" height="36" rx="8" style={partStyle(!!on("biceps_r"))} />
-        <rect id="forearms_l" x="26" y="122" width="16" height="36" rx="8" style={partStyle(!!on("forearms_l"))} />
-        <rect id="forearms_r" x="118" y="122" width="16" height="36" rx="8" style={partStyle(!!on("forearms_r"))} />
-        <rect id="abs" x="66" y="92" width="28" height="40" rx="8" style={partStyle(!!on("abs"))} />
-        <rect id="obliques" x="56" y="96" width="12" height="36" rx="6" style={partStyle(!!on("obliques"))} />
-        <rect id="obliques2" x="94" y="96" width="12" height="36" rx="6" style={partStyle(!!on("obliques"))} />
-        <rect id="quads_l" x="60" y="150" width="18" height="52" rx="9" style={partStyle(!!on("quads_l"))} />
-        <rect id="quads_r" x="82" y="150" width="18" height="52" rx="9" style={partStyle(!!on("quads_r"))} />
-        <rect id="calf_l" x="60" y="210" width="18" height="42" rx="9" style={partStyle(!!on("calf_l"))} />
-        <rect id="calf_r" x="82" y="210" width="18" height="42" rx="9" style={partStyle(!!on("calf_r"))} />
+      {/* FACE */}
+      <svg viewBox="0 0 180 360" style={{ width: "100%", height: "auto", background: "#f9fafb", borderRadius: 12, padding: 8 }}>
+        <g opacity="0.15">
+          <circle cx="90" cy="26" r="18" fill="#9ca3af" />
+          <rect x="52" y="46" width="76" height="96" rx="14" fill="#9ca3af" />
+          <rect x="66" y="142" width="48" height="140" rx="16" fill="#9ca3af" />
+          <rect x="46" y="142" width="18" height="110" rx="10" fill="#9ca3af" />
+          <rect x="116" y="142" width="18" height="110" rx="10" fill="#9ca3af" />
+          <rect x="62" y="282" width="22" height="58" rx="10" fill="#9ca3af" />
+          <rect x="96" y="282" width="22" height="58" rx="10" fill="#9ca3af" />
+        </g>
+
+        <rect id="pecs_f" x="58" y="64" width="64" height="22" rx="8" style={paint(on("pecs_f"))} />
+        <circle id="deltoid_l_f" cx="46" cy="72" r="14" style={paint(on("deltoid_l_f"))} />
+        <circle id="deltoid_r_f" cx="134" cy="72" r="14" style={paint(on("deltoid_r_f"))} />
+        <rect id="biceps_l_f" x="28" y="94" width="16" height="38" rx="8" style={paint(on("biceps_l_f"))} />
+        <rect id="biceps_r_f" x="136" y="94" width="16" height="38" rx="8" style={paint(on("biceps_r_f"))} />
+        <rect id="forearm_l_f" x="28" y="134" width="16" height="36" rx="8" style={paint(on("forearm_l_f"))} />
+        <rect id="forearm_r_f" x="136" y="134" width="16" height="36" rx="8" style={paint(on("forearm_r_f"))} />
+        <rect id="abs_f" x="70" y="92" width="40" height="40" rx="8" style={paint(on("abs_f"))} />
+        <rect id="obliques_l_f" x="60" y="96" width="12" height="36" rx="6" style={paint(on("obliques_l_f"))} />
+        <rect id="obliques_r_f" x="108" y="96" width="12" height="36" rx="6" style={paint(on("obliques_r_f"))} />
+        <rect id="quads_l_f" x="64" y="152" width="18" height="52" rx="9" style={paint(on("quads_l_f"))} />
+        <rect id="quads_r_f" x="98" y="152" width="18" height="52" rx="9" style={paint(on("quads_r_f"))} />
+        <rect id="calf_l_f" x="64" y="214" width="18" height="42" rx="9" style={paint(on("calf_l_f"))} />
+        <rect id="calf_r_f" x="98" y="214" width="18" height="42" rx="9" style={paint(on("calf_r_f"))} />
       </svg>
 
-      {/* Dos */}
-      <svg viewBox="0 0 160 360" style={{ width: "100%", height: "auto", background: "#f9fafb", borderRadius: 12 }}>
-        <rect x="70" y="10" width="20" height="20" rx="10" style={{ fill: "#e5e7eb" }} />
-        <rect x="45" y="30" width="70" height="85" rx="12" style={{ fill: "#e5e7eb" }} />
-        <polygon id="traps" points="80,40 52,60 108,60" style={partStyle(!!on("traps"))} />
-        <circle id="deltoid_l_b" cx="45" cy="65" r="12" style={partStyle(!!on("deltoid_l"))} />
-        <circle id="deltoid_r_b" cx="115" cy="65" r="12" style={partStyle(!!on("deltoid_r"))} />
-        <rect id="lats" x="50" y="70" width="60" height="28" rx="10" style={partStyle(!!on("lats"))} />
-        <rect id="triceps_l" x="26" y="90" width="16" height="36" rx="8" style={partStyle(!!on("triceps_l"))} />
-        <rect id="triceps_r" x="118" y="90" width="16" height="36" rx="8" style={partStyle(!!on("triceps_r"))} />
-        <rect id="glutes" x="60" y="120" width="40" height="28" rx="10" style={partStyle(!!on("glutes"))} />
-        <rect id="hams_l" x="60" y="150" width="18" height="52" rx="9" style={partStyle(!!on("hams_l"))} />
-        <rect id="hams_r" x="82" y="150" width="18" height="52" rx="9" style={partStyle(!!on("hams_r"))} />
-        <rect id="calf_l_b" x="60" y="210" width="18" height="42" rx="9" style={partStyle(!!on("calf_l"))} />
-        <rect id="calf_r_b" x="82" y="210" width="18" height="42" rx="9" style={partStyle(!!on("calf_r"))} />
+      {/* DOS */}
+      <svg viewBox="0 0 180 360" style={{ width: "100%", height: "auto", background: "#f9fafb", borderRadius: 12, padding: 8 }}>
+        <g opacity="0.15">
+          <circle cx="90" cy="26" r="18" fill="#9ca3af" />
+          <rect x="52" y="46" width="76" height="96" rx="14" fill="#9ca3af" />
+          <rect x="66" y="142" width="48" height="140" rx="16" fill="#9ca3af" />
+          <rect x="46" y="142" width="18" height="110" rx="10" fill="#9ca3af" />
+          <rect x="116" y="142" width="18" height="110" rx="10" fill="#9ca3af" />
+          <rect x="62" y="282" width="22" height="58" rx="10" fill="#9ca3af" />
+          <rect x="96" y="282" width="22" height="58" rx="10" fill="#9ca3af" />
+        </g>
+
+        <polygon id="traps_b" points="90,46 60,66 120,66" style={paint(on("traps_b"))} />
+        <polygon id="traps_f" points="90,46 60,66 120,66" opacity="0" />
+        <rect id="lats_b" x="56" y="70" width="68" height="30" rx="10" style={paint(on("lats_b"))} />
+        <circle id="deltoid_l_b" cx="46" cy="72" r="14" style={paint(on("deltoid_l_b"))} />
+        <circle id="deltoid_r_b" cx="134" cy="72" r="14" style={paint(on("deltoid_r_b"))} />
+        <rect id="triceps_l_b" x="28" y="94" width="16" height="38" rx="8" style={paint(on("triceps_l_b"))} />
+        <rect id="triceps_r_b" x="136" y="94" width="16" height="38" rx="8" style={paint(on("triceps_r_b"))} />
+        <rect id="glutes_b" x="66" y="122" width="48" height="28" rx="10" style={paint(on("glutes_b"))} />
+        <rect id="hams_l_b" x="64" y="152" width="18" height="52" rx="9" style={paint(on("hams_l_b"))} />
+        <rect id="hams_r_b" x="98" y="152" width="18" height="52" rx="9" style={paint(on("hams_r_b"))} />
+        <rect id="calf_l_b" x="64" y="214" width="18" height="42" rx="9" style={paint(on("calf_l_b"))} />
+        <rect id="calf_r_b" x="98" y="214" width="18" height="42" rx="9" style={paint(on("calf_r_b"))} />
       </svg>
     </div>
   );
 }
-
