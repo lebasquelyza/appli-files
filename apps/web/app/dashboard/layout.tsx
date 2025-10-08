@@ -15,14 +15,17 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       <div
         className="px-4 sm:px-6 max-w-screen-xl mx-auto"
         style={{
-          // plus de topbar -> uniquement le safe area
-          paddingTop: safeTop,
-          // si MobileTabbar défini, le main évite le chevauchement
-          paddingBottom: "var(--mobile-tabbar, 0px)",
+          paddingTop: safeTop,                         // plus de topbar -> juste le safe area
+          paddingBottom: "var(--mobile-tabbar, 0px)",  // évite chevauchement si MobileTabbar
         }}
       >
+        {/* ⬇️ Sidebar en MOBILE : “Files” en haut, menu pliable au clic */}
+        <div className="md:hidden">
+          <Sidebar />
+        </div>
+
         <div className="grid gap-4 md:grid-cols-[240px_1fr]">
-          {/* Sidebar desktop (sticky) */}
+          {/* ⬅️ Sidebar en DESKTOP : colonne sticky */}
           <aside
             className="hidden md:block"
             style={{
@@ -46,3 +49,4 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     </>
   );
 }
+
