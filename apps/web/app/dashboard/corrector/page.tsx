@@ -57,6 +57,29 @@ function ProgressBar({ value }: { value: number }) {
   );
 }
 
+/* ========== Helpers UI (filename + status) — AJOUT #1 ========== */
+function formatFileName(name: string, max = 36) {
+  if (!name) return "";
+  if (name.length <= max) return name;
+  const dot = name.lastIndexOf(".");
+  const ext = dot > 0 ? name.slice(dot) : "";
+  const base = name.slice(0, Math.max(0, max - ext.length - 1));
+  return `${base}…${ext}`;
+}
+
+function displayStatus(s: string) {
+  if (!s) return s;
+  const toMask = [
+    "Fichier volumineux — upload signé…",
+    "Proxy indisponible — upload signé…",
+    "Upload de la vidéo…",
+    "Préparation des images…",
+    "Analyse IA…",
+  ];
+  if (toMask.some(p => s.startsWith(p))) return "( Files examine... )";
+  return s;
+}
+
 /* ===================== Vocabulaire & Variations ===================== */
 function randInt(max: number) {
   if (typeof crypto !== "undefined" && "getRandomValues" in crypto) {
@@ -534,13 +557,32 @@ function CoachAnalyzer() {
           {blobUrl && (
             <div className="text-sm" style={{ marginTop: 12 }}>
               <label className="label" style={{ marginBottom: 6 }}>Fichier chargé</label>
-              <div className="card" style={{ padding: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span className="truncate">🎞️ {fileName ?? "clip.webm"}</span>
+
+              {/* Bloc nom du fichier avec ellipse — MODIF #1 */}
+              <div
+                className="card"
+                style={{
+                  padding: 8,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8
+                }}
+              >
+                <div style={{ minWidth: 0, flex: 1, display: "flex", alignItems: "center" }}>
+                  <span
+                    title={fileName ?? "clip.webm"}
+                    style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                  >
+                    🎞️ {formatFileName(fileName ?? "clip.webm")}
+                  </span>
+                </div>
+
                 <button
                   className="btn"
                   onClick={reset}
                   type="button"
                   style={{
+                    flexShrink: 0,
                     background: "#ffffff",
                     color: "#111827",
                     border: "1px solid #d1d5db",
@@ -595,7 +637,8 @@ function CoachAnalyzer() {
           {(isAnalyzing || progress > 0 || errorMsg || status) && (
             <div style={{ marginTop: 12 }}>
               <ProgressBar value={progress} />
-              {status && <p className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>{status}</p>}
+              {/* Affichage statut masqué → "( Files examine... )" — MODIF #2 */}
+              {status && <p className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>{displayStatus(status)}</p>}
               {errorMsg && <p className="text-xs" style={{ color: "#dc2626", marginTop: 6 }}>Erreur : {errorMsg}</p>}
             </div>
           )}
