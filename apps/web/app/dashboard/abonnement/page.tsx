@@ -90,10 +90,11 @@ async function choosePlanAction(formData: FormData) {
   ];
   if (addOn) line_items.push({ price: addOn, quantity: 1 });
 
-  // Création de la session Checkout (mode abonnement)
+  // Création de la session Checkout (mode abonnement) — carte + SEPA uniquement
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
     line_items,
+    payment_method_types: ["card", "sepa_debit"],
     allow_promotion_codes: true,
     success_url: `${origin}/dashboard/abonnement/success?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${origin}/dashboard/abonnement?canceled=1`,
