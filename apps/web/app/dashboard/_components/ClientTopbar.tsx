@@ -1,8 +1,8 @@
+// apps/web/app/dashboard/_components/ClientTopbar.tsx
 "use client";
 
 import { useEffect, useState } from "react";
-// ajuste l'import selon ton chemin/alias :
-import Sidebar from "@/components/Sidebar"; // ou: ../../components/Sidebar
+import Sidebar from "@/components/Sidebar"; // ajuste le chemin si besoin
 
 export default function ClientTopbar() {
   const [open, setOpen] = useState(false);
@@ -20,17 +20,14 @@ export default function ClientTopbar() {
         style={{ paddingTop: "env(safe-area-inset-top)" }}
       >
         <div className="mx-auto max-w-screen-xl px-4 sm:px-6 h-10 flex items-center justify-between">
-          {/* 👉 'Files - Menu' ouvre le drawer (mobile). Sur desktop, pas d’action. */}
           <button
             className="font-bold text-lg leading-none select-none md:pointer-events-none md:cursor-default"
             onClick={() => setOpen(true)}
             aria-label="Ouvrir le menu"
-            style={{ cursor: "pointer" }}
           >
             Files - Menu
           </button>
-
-          <div className="flex items-center gap-2">{/* actions à droite si besoin */}</div>
+          <div />
         </div>
       </header>
 
@@ -48,17 +45,7 @@ export default function ClientTopbar() {
             aria-label="Menu"
             style={{ paddingTop: "calc(env(safe-area-inset-top) + 10px)" }}
           >
-            <div className="flex items-center justify-between px-3 pb-2">
-              <b>Menu</b>
-              <button
-                className="rounded-md border px-2 py-1 text-sm"
-                onClick={() => setOpen(false)}
-                aria-label="Fermer le menu"
-              >
-                ✕
-              </button>
-            </div>
-            {/* Clique sur un lien => ferme le panneau */}
+            {/* ⚠️ GARDE SEULEMENT ÇA : pas d’autre liste/menu au-dessus */}
             <div onClick={() => setOpen(false)}>
               <Sidebar />
             </div>
