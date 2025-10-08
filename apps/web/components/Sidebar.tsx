@@ -2,10 +2,27 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, Home, User2, LineChart, Wand2, BookOpen, Flame, Plug2, CreditCard, ClipboardList, Music2, Settings } from "lucide-react";
+import { useEffect, useState } from "react";
+import {
+  ChevronDown,
+  Home,
+  User2,
+  LineChart,
+  Wand2,
+  BookOpen,
+  Flame,
+  Plug2,
+  CreditCard,
+  ClipboardList,
+  Music2,
+  Settings,
+} from "lucide-react";
 
-type NavItem = { href: string; label: string; icon?: React.ComponentType<{ size?: number; className?: string }> };
+type NavItem = {
+  href: string;
+  label: string;
+  icon?: React.ComponentType<{ size?: number }>;
+};
 
 const items: NavItem[] = [
   { href: "/dashboard", label: "Accueil", icon: Home },
@@ -24,38 +41,19 @@ const items: NavItem[] = [
 export default function Sidebar() {
   const pathname = usePathname();
 
-  // ouvert en desktop, fermé par défaut en mobile
+  // ✅ fermé par défaut, s’ouvre uniquement au clic
   const [open, setOpen] = useState(false);
 
-  // media query (md)
-  const mql = useMemo(
-    () => (typeof window !== "undefined" ? window.matchMedia("(min-width: 768px)") : null),
-    []
-  );
-
-  // sync initiale + au resize
+  // refermer automatiquement quand la route change
   useEffect(() => {
-    if (!mql) return;
-    const sync = () => setOpen(mql.matches);
-    sync();
-    mql.addEventListener?.("change", sync);
-    return () => mql.removeEventListener?.("change", sync);
-  }, [mql]);
-
-  // refermer auto après navigation (mobile)
-  useEffect(() => {
-    if (!mql || mql.matches) return;
     setOpen(false);
-  }, [pathname, mql]);
+  }, [pathname]);
 
-  const handleLinkClick = () => {
-    if (!mql || mql.matches) return; // desktop => ne pas refermer
-    setOpen(false);
-  };
+  const handleLinkClick = () => setOpen(false);
 
   return (
     <nav aria-label="Dashboard" className="px-[10px]">
-      {/* ===== Header sticky : "Files - Menu" (design comme ta capture) ===== */}
+      {/* Header sticky “Files - Menu” */}
       <div
         className="sticky top-0 z-10 pb-3"
         style={{
@@ -69,30 +67,29 @@ export default function Sidebar() {
           onClick={() => setOpen((o) => !o)}
           aria-expanded={open}
           aria-controls="sidebar-links"
-          className="w-full flex items-center gap-3 px-2 pt-3 pb-1 rounded-md hover:bg-gray-50 md:hover:bg-transparent md:cursor-default md:pointer-events-none"
+          className="w-full flex items-center gap-3 px-2 pt-3 pb-1 rounded-md hover:bg-gray-50"
           style={{ textAlign: "left" }}
         >
-          {/* carré dégradé comme l’avatar de la capture */}
           <span
             aria-hidden
             className="inline-block h-8 w-8 rounded-xl shadow"
             style={{
-              background: "linear-gradient(135deg,var(--brand,#22c55e),var(--brand2,#15803d))",
+              background:
+                "linear-gradient(135deg,var(--brand,#22c55e),var(--brand2,#15803d))",
             }}
           />
           <b className="text-xl leading-none">Files - Menu</b>
-          {/* chevron visible uniquement en mobile */}
           <ChevronDown
             size={16}
-            className={`ml-auto transition-transform md:hidden ${open ? "rotate-180" : ""}`}
+            className={`ml-auto transition-transform ${open ? "rotate-180" : ""}`}
           />
         </button>
       </div>
 
-      {/* ===== Liste des liens : cachée en mobile tant que non ouverte ===== */}
+      {/* Liste : cachée tant que !open */}
       <ul
         id="sidebar-links"
-        className={`${open ? "block" : "hidden"} md:block`}
+        className={open ? "block" : "hidden"}
         style={{
           listStyle: "none",
           padding: 0,
@@ -101,15 +98,13 @@ export default function Sidebar() {
           overflowY: "auto",
         }}
       >
-        {items.map((it) => {
-          const active = pathname === it.href || pathname.startsWith(it.href + "/");
-          const Icon = it.icon;
+        {items.map(({ href, label, icon: Icon }) => {
+          const active = pathname === href || pathname.startsWith(href + "/");
           return (
-            <li key={it.href}>
+            <li key={href}>
               <Link
-                href={it.href}
+                href={href}
                 onClick={handleLinkClick}
-                aria-current={active ? "page" : undefined}
                 className="block font-semibold no-underline"
                 style={{
                   padding: "10px 12px",
@@ -121,13 +116,17 @@ export default function Sidebar() {
                   background: active
                     ? "linear-gradient(135deg,var(--brand,#22c55e),var(--brand2,#15803d))"
                     : "transparent",
-                  border: active ? "1px solid rgba(22,163,74,.25)" : "1px solid transparent",
-                  boxShadow: active ? "var(--shadow, 0 10px 20px rgba(0,0,0,.08))" : "none",
+                  border: active
+                    ? "1px solid rgba(22,163,74,.25)"
+                    : "1px solid transparent",
+                  boxShadow: active
+                    ? "var(--shadow, 0 10px 20px rgba(0,0,0,.08))"
+                    : "none",
                   color: active ? "#fff" : "var(--text, #111)",
                 }}
               >
                 {Icon ? <Icon size={18} /> : null}
-                <span>{it.label}</span>
+                <span>{label}</span>
               </Link>
             </li>
           );
@@ -136,6 +135,4 @@ export default function Sidebar() {
     </nav>
   );
 }
-
-
 
