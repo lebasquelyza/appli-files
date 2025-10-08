@@ -49,7 +49,8 @@ export default function SignupPage() {
       let friendly = raw;
 
       if (/user.*registered/i.test(raw)) {
-        friendly = "Cet e-mail a déjà un compte. Essaie ‘Mot de passe oublié ?’ pour réinitialiser.";
+        friendly =
+          "Cet e-mail a déjà un compte. Essaie ‘Mot de passe oublié ?’ pour réinitialiser.";
       } else if (/password/i.test(raw) && /length|weak|least/i.test(raw)) {
         friendly = "Mot de passe trop faible (vérifie la longueur minimale définie).";
       } else if (/redirect/i.test(raw) && /url/i.test(raw)) {
@@ -92,12 +93,17 @@ export default function SignupPage() {
     <main className="hide-topbar-menu pt-14 py-16">
       <div className="container max-w-md mx-auto">
         <h1
-          className="not-prose font-bold mb-6 text-center
+          className="not-prose font-bold mb-2 text-center
                      [font-size:theme(fontSize.2xl)!important]
                      sm:[font-size:theme(fontSize.3xl)!important]"
         >
           Créer un compte
         </h1>
+
+        {/* Petit message de bienvenue */}
+        <p className="text-center text-sm text-gray-600 mb-6">
+          Bienvenue 👋 Crée ton compte pour commencer.
+        </p>
 
         <form onSubmit={handleSignup} className="space-y-4">
           <div>
@@ -149,12 +155,7 @@ export default function SignupPage() {
             {loading ? "Création..." : "Créer mon compte"}
           </button>
 
-          <p className="text-center text-sm text-gray-600 mt-3">
-            Déjà un compte ?{" "}
-            <a href="/signin" className="text-emerald-600 hover:underline">
-              Se connecter
-            </a>
-          </p>
+          {/* Bloc “Déjà un compte ? Se connecter” supprimé */}
 
           <button
             type="button"
@@ -172,3 +173,4 @@ export default function SignupPage() {
     </main>
   );
 }
+
