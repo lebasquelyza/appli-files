@@ -1,22 +1,11 @@
-// apps/web/components/Sidebar.tsx
 "use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
-  ChevronDown,
-  Home,
-  User2,
-  LineChart,
-  Wand2,
-  BookOpen,
-  Flame,
-  Plug2,
-  CreditCard,
-  ClipboardList,
-  Music2,
-  Settings,
+  ChevronDown, Home, User2, LineChart, Wand2, BookOpen,
+  Flame, Plug2, CreditCard, ClipboardList, Music2, Settings,
 } from "lucide-react";
 
 type NavItem = { href: string; label: string; icon?: React.ComponentType<{ size?: number }> };
@@ -39,66 +28,89 @@ export default function Sidebar() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false); // fermé par défaut
 
-  // filet de sécurité : replier à chaque changement de route
+  // filet de sécu : replier à chaque changement de route
   useEffect(() => setOpen(false), [pathname]);
 
   return (
-    <nav aria-label="Dashboard" className="px-[10px]">
-      {/* ===== Entête sticky tout en haut à gauche ===== */}
+    <nav aria-label="Dashboard" style={{ paddingLeft: 10, paddingRight: 10 }}>
+      {/* En-tête sticky tout en haut à gauche */}
       <div
-        className="sticky top-0 z-10 pb-2"
         style={{
+          position: "sticky",
+          top: 0,
+          zIndex: 10,
+          paddingBottom: 8,
           background: "linear-gradient(180deg,#fff 70%,rgba(255,255,255,0) 100%)",
           borderBottom: "1px solid rgba(0,0,0,0.06)",
         }}
       >
         <button
           type="button"
-          onClick={() => setOpen((o) => !o)}
+          onClick={() => setOpen(o => !o)}
           aria-expanded={open}
           aria-controls="sidebar-links"
-          className="w-full flex items-center gap-3 px-2 pt-3 pb-1 rounded-md text-left hover:bg-gray-50 focus:outline-none"
+          style={{
+            width: "100%",
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            padding: "12px 8px 6px 8px",
+            borderRadius: 8,
+            textAlign: "left",
+            background: "transparent",
+            border: "none",
+            cursor: "pointer",
+          }}
         >
-          {/* Carré dégradé (statique / non interactif) */}
+          {/* Carré dégradé (non interactif) */}
           <span
             aria-hidden
-            className="inline-block h-8 w-8 rounded-xl shadow"
             style={{
+              display: "inline-block",
+              height: 32,
+              width: 32,
+              borderRadius: 12,
+              boxShadow: "0 6px 16px rgba(0,0,0,.08)",
               background:
                 "linear-gradient(135deg,var(--brand,#22c55e),var(--brand2,#15803d))",
             }}
           />
           {/* 👉 “Files” = bouton d’ouverture */}
-          <b className="text-xl leading-none">Files</b>
+          <b style={{ fontSize: 18, lineHeight: 1 }}>Files</b>
           <ChevronDown
             size={16}
-            className={`ml-auto transition-transform ${open ? "rotate-180" : ""}`}
+            style={{
+              marginLeft: "auto",
+              transition: "transform .2s",
+              transform: open ? "rotate(180deg)" : "rotate(0deg)",
+            }}
           />
         </button>
       </div>
 
-      {/* ===== Liste complète — masquée tant que fermé ===== */}
+      {/* Liste des onglets — MASQUÉE par défaut (display inline) */}
       <ul
         id="sidebar-links"
-        className={open ? "block" : "hidden"}
-        // ferme AVANT la navigation (fiable iOS/Safari)
-        onPointerDownCapture={(e) => {
-          const el = e.target as HTMLElement | null;
-          if (el?.closest("a[href]")) setOpen(false);
-        }}
+        // ✅ pas de classes tailwind; on force le display ici
         style={{
+          display: open ? "block" : "none",
           listStyle: "none",
           padding: 0,
           margin: 0,
           maxHeight: "calc(100dvh - 80px)",
           overflowY: "auto",
         }}
+        // ferme AVANT la navigation (fiable iOS/Safari)
+        onPointerDownCapture={(e) => {
+          const el = e.target as HTMLElement | null;
+          if (el?.closest("a[href]")) setOpen(false);
+        }}
       >
         {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
           const active = pathname === href || pathname.startsWith(href + "/");
           return (
             <li key={href}>
-              <Link href={href} className="block no-underline font-semibold">
+              <Link href={href} className="block no-underline">
                 <div
                   style={{
                     padding: "10px 12px",
@@ -112,9 +124,11 @@ export default function Sidebar() {
                       : "transparent",
                     border: active ? "1px solid rgba(22,163,74,.25)" : "1px solid transparent",
                     boxShadow: active
-                      ? "var(--shadow, 0 10px 20px rgba(0,0,0,.08))"
+                      ? "0 10px 20px rgba(0,0,0,.08)"
                       : "none",
-                    color: active ? "#fff" : "var(--text,#111)",
+                    color: active ? "#fff" : "var(--text, #111)",
+                    fontWeight: 600,
+                    textDecoration: "none",
                   }}
                 >
                   {Icon ? <Icon size={18} /> : null}
