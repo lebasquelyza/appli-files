@@ -66,35 +66,19 @@ async function choosePlanAction(formData: FormData) {
     headers().get("origin") ||
     "http://localhost:3000";
 
-  // --- VALIDATION + TYPAGE SÛR DES PRICE IDS ---
-  const planPriceRaw = PRICE_IDS[plan] as string | undefined;
-  if (!planPriceRaw || !planPriceRaw.startsWith("price_")) {
-    console.error("PRICE_IDS plan manquant/invalide:", { plan, value: planPriceRaw });
-    redirect("/dashboard/abonnement?error=price_plan_invalide");
-  }
-  const planPrice: string = planPriceRaw;
-
-  const addOnRaw = (PRICE_IDS.CPLUS as any)[option] as string | null | undefined;
-  let addOn: string | null = null;
-  if (typeof addOnRaw === "string" && addOnRaw.trim() !== "") {
-    if (!addOnRaw.startsWith("price_")) {
-      console.error("PRICE_IDS option invalide:", { option, value: addOnRaw });
-      redirect("/dashboard/abonnement?error=price_option_invalide");
-    }
-    addOn = addOnRaw;
-  }
-  // --- FIN ---
+  // Pas de blocage/validation côté code : on caste directement
+  const planPrice = PRICE_IDS[plan] as string;
+  const addOn = (PRICE_IDS.CPLUS as any)[option] as string | null | undefined;
 
   const line_items: Array<{ price: string; quantity: number }> = [
     { price: planPrice, quantity: 1 },
   ];
   if (addOn) line_items.push({ price: addOn, quantity: 1 });
 
-  // Création de la session Checkout (mode abonnement) — carte + SEPA uniquement
+  // Laisse Stripe décider des moyens de paiement activés (pas de payment_method_types ici)
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
     line_items,
-    payment_method_types: ["card", "sepa_debit"],
     allow_promotion_codes: true,
     success_url: `${origin}/dashboard/abonnement/success?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${origin}/dashboard/abonnement?canceled=1`,
@@ -106,7 +90,6 @@ async function choosePlanAction(formData: FormData) {
     // customer: s?.stripeCustomerId || undefined,
   });
 
-  // Redirection vers la page de paiement Stripe
   redirect(session.url!);
 }
 
