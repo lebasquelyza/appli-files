@@ -18,11 +18,7 @@ import {
   Settings,
 } from "lucide-react";
 
-type NavItem = {
-  href: string;
-  label: string;
-  icon?: React.ComponentType<{ size?: number }>;
-};
+type NavItem = { href: string; label: string; icon?: React.ComponentType<{ size?: number }> };
 
 const items: NavItem[] = [
   { href: "/dashboard", label: "Accueil", icon: Home },
@@ -41,35 +37,26 @@ const items: NavItem[] = [
 export default function Sidebar() {
   const pathname = usePathname();
 
-  // ✅ fermé par défaut, s’ouvre uniquement au clic
+  // 🔒 Toujours fermé par défaut (mobile & desktop)
   const [open, setOpen] = useState(false);
 
-  // refermer automatiquement quand la route change
-  useEffect(() => {
-    setOpen(false);
-  }, [pathname]);
+  // Se referme à chaque navigation
+  useEffect(() => setOpen(false), [pathname]);
 
   const handleLinkClick = () => setOpen(false);
 
   return (
     <nav aria-label="Dashboard" className="px-[10px]">
-      {/* Header sticky “Files - Menu” */}
+      {/* ===== En-tête sticky ===== */}
       <div
-        className="sticky top-0 z-10 pb-3"
+        className="sticky top-0 z-10 pb-2"
         style={{
-          background:
-            "linear-gradient(180deg, rgba(255,255,255,1) 70%, rgba(255,255,255,0) 100%)",
-          borderBottom: "1px solid rgba(0,0,0,0.05)",
+          background: "linear-gradient(180deg, rgba(255,255,255,1) 70%, rgba(255,255,255,0) 100%)",
+          borderBottom: "1px solid rgba(0,0,0,0.06)",
         }}
       >
-        <button
-          type="button"
-          onClick={() => setOpen((o) => !o)}
-          aria-expanded={open}
-          aria-controls="sidebar-links"
-          className="w-full flex items-center gap-3 px-2 pt-3 pb-1 rounded-md hover:bg-gray-50"
-          style={{ textAlign: "left" }}
-        >
+        <div className="flex items-center gap-3 px-2 pt-3">
+          {/* Icône verte statique (NON cliquable) */}
           <span
             aria-hidden
             className="inline-block h-8 w-8 rounded-xl shadow"
@@ -78,15 +65,24 @@ export default function Sidebar() {
                 "linear-gradient(135deg,var(--brand,#22c55e),var(--brand2,#15803d))",
             }}
           />
-          <b className="text-xl leading-none">Files - Menu</b>
-          <ChevronDown
-            size={16}
-            className={`ml-auto transition-transform ${open ? "rotate-180" : ""}`}
-          />
-        </button>
+          {/* 👉 Seul ce bouton ouvre/ferme le menu */}
+          <button
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            aria-expanded={open}
+            aria-controls="sidebar-links"
+            className="inline-flex items-center gap-1 font-bold text-base text-blue-600 hover:underline focus:outline-none"
+          >
+            Files&nbsp;-&nbsp;Menu
+            <ChevronDown
+              size={16}
+              className={`transition-transform ${open ? "rotate-180" : ""}`}
+            />
+          </button>
+        </div>
       </div>
 
-      {/* Liste : cachée tant que !open */}
+      {/* ===== Liste des liens (masquée si fermé) ===== */}
       <ul
         id="sidebar-links"
         className={open ? "block" : "hidden"}
@@ -135,4 +131,3 @@ export default function Sidebar() {
     </nav>
   );
 }
-
