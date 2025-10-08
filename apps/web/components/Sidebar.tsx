@@ -1,11 +1,22 @@
+// apps/web/components/Sidebar.tsx
 "use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
-  ChevronDown, Home, User2, LineChart, Wand2, BookOpen,
-  Flame, Plug2, CreditCard, ClipboardList, Music2, Settings,
+  ChevronDown,
+  Home,
+  User2,
+  LineChart,
+  Wand2,
+  BookOpen,
+  Flame,
+  Plug2,
+  CreditCard,
+  ClipboardList,
+  Music2,
+  Settings,
 } from "lucide-react";
 
 type NavItem = { href: string; label: string; icon?: React.ComponentType<{ size?: number }> };
@@ -28,12 +39,12 @@ export default function Sidebar() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false); // fermé par défaut
 
-  // Sécurité: replier à chaque changement de route
+  // filet de sécurité : replier à chaque changement de route
   useEffect(() => setOpen(false), [pathname]);
 
   return (
     <nav aria-label="Dashboard" className="px-[10px]">
-      {/* En-tête sticky : seule cette zone ouvre/ferme le menu */}
+      {/* ===== Entête sticky tout en haut à gauche ===== */}
       <div
         className="sticky top-0 z-10 pb-2"
         style={{
@@ -41,37 +52,39 @@ export default function Sidebar() {
           borderBottom: "1px solid rgba(0,0,0,0.06)",
         }}
       >
-        <div className="flex items-center gap-3 px-2 pt-3">
-          {/* pastille verte non interactive */}
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+          aria-controls="sidebar-links"
+          className="w-full flex items-center gap-3 px-2 pt-3 pb-1 rounded-md text-left hover:bg-gray-50 focus:outline-none"
+        >
+          {/* Carré dégradé (statique / non interactif) */}
           <span
             aria-hidden
             className="inline-block h-8 w-8 rounded-xl shadow"
             style={{
-              background: "linear-gradient(135deg,var(--brand,#22c55e),var(--brand2,#15803d))",
+              background:
+                "linear-gradient(135deg,var(--brand,#22c55e),var(--brand2,#15803d))",
             }}
           />
-          <button
-            type="button"
-            onClick={() => setOpen(o => !o)}
-            aria-expanded={open}
-            aria-controls="sidebar-links"
-            className="inline-flex items-center gap-1 font-bold text-base text-blue-600 hover:underline focus:outline-none"
-          >
-            Files&nbsp;-&nbsp;Menu
-            <ChevronDown size={16} className={`transition-transform ${open ? "rotate-180" : ""}`} />
-          </button>
-        </div>
+          {/* 👉 “Files” = bouton d’ouverture */}
+          <b className="text-xl leading-none">Files</b>
+          <ChevronDown
+            size={16}
+            className={`ml-auto transition-transform ${open ? "rotate-180" : ""}`}
+          />
+        </button>
       </div>
 
-      {/* Liste complète des onglets – masquée si fermé */}
+      {/* ===== Liste complète — masquée tant que fermé ===== */}
       <ul
         id="sidebar-links"
         className={open ? "block" : "hidden"}
-        // 🔑 ferme AVANT la navigation (fiable sur iOS/Safari)
+        // ferme AVANT la navigation (fiable iOS/Safari)
         onPointerDownCapture={(e) => {
-          // ne ferme que si on clique un lien (pas le scroll)
-          const target = e.target as HTMLElement | null;
-          if (target?.closest("a[href]")) setOpen(false);
+          const el = e.target as HTMLElement | null;
+          if (el?.closest("a[href]")) setOpen(false);
         }}
         style={{
           listStyle: "none",
@@ -85,7 +98,7 @@ export default function Sidebar() {
           const active = pathname === href || pathname.startsWith(href + "/");
           return (
             <li key={href}>
-              <Link href={href} className="block font-semibold no-underline">
+              <Link href={href} className="block no-underline font-semibold">
                 <div
                   style={{
                     padding: "10px 12px",
@@ -98,8 +111,10 @@ export default function Sidebar() {
                       ? "linear-gradient(135deg,var(--brand,#22c55e),var(--brand2,#15803d))"
                       : "transparent",
                     border: active ? "1px solid rgba(22,163,74,.25)" : "1px solid transparent",
-                    boxShadow: active ? "var(--shadow, 0 10px 20px rgba(0,0,0,.08))" : "none",
-                    color: active ? "#fff" : "var(--text, #111)",
+                    boxShadow: active
+                      ? "var(--shadow, 0 10px 20px rgba(0,0,0,.08))"
+                      : "none",
+                    color: active ? "#fff" : "var(--text,#111)",
                   }}
                 >
                   {Icon ? <Icon size={18} /> : null}
