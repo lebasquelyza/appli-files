@@ -1,4 +1,4 @@
-  "use client";
+"use client";
 
 import { useEffect, useRef, useState } from "react";
 
@@ -198,14 +198,14 @@ export default function Page() {
       style={{
         paddingTop: 24,
         paddingBottom: 32,
-        fontSize: "var(--settings-fs, 12px)", // ⟵ même logique que la 1ère page
+        fontSize: "var(--settings-fs, 12px)",
       }}
     >
       <div className="page-header">
         <div>
           <h1
             className="h1"
-            style={{ fontSize: 22 }} // ⟵ titre fixe 22px comme sur l’autre page
+            style={{ fontSize: 22 }}
           >
             Import / Enregistrement
           </h1>
@@ -268,7 +268,7 @@ function CoachAnalyzer() {
     fd.append("file", f);
     fd.append("filename", f.name);
     fd.append("contentType", f.type || "application/octet-stream");
-    const res = await fetch("/api/videos/proxy-upload", { method: "POST", body: fd });
+    const res = await fetch("/api/videos/proxy-upload", { method: "POST",      body: fd });
     if (!res.ok) {
       const txt = await res.text().catch(() => "");
       let detail = "";
@@ -692,34 +692,104 @@ function CoachAnalyzer() {
 
 /* ===================== Upload/Record ===================== */
 function UploadDrop({ onFile }: { onFile: (file: File) => void }) {
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  const photoRef = useRef<HTMLInputElement | null>(null);
+  const fileRef  = useRef<HTMLInputElement | null>(null);
+
   const onDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     const f = e.dataTransfer.files?.[0];
     if (f) onFile(f);
   };
+
+  const openPhotos = () => {
+    // iOS/Safari : cet input ouvre "Photothèque / Prendre une photo/vidéo / Parcourir"
+    // On n’utilise PAS l’attribut capture ici pour ne pas lancer la caméra.
+    photoRef.current?.click();
+  };
+
+  const openFiles = async () => {
+    // File System Access API (Chrome/Edge/Safari récents) → vrai sélecteur "Fichiers"
+    const anyWindow = window as any;
+    try {
+      if (anyWindow?.showOpenFilePicker) {
+        const [handle] = await anyWindow.showOpenFilePicker({
+          multiple: false,
+          excludeAcceptAllOption: false,
+          types: [
+            {
+              description: "Vidéos",
+              accept: { "video/*": [".mp4", ".mov", ".webm", ".mkv", ".avi"] },
+            },
+          ],
+        });
+        if (handle) {
+          const file = await handle.getFile();
+          if (file) onFile(file);
+          return;
+        }
+      }
+    } catch {
+      // Annulation ou non support → fallback input
+    }
+    fileRef.current?.click();
+  };
+
   return (
-    <div onDragOver={(e) => e.preventDefault()} onDrop={onDrop} className="border-2 border-dashed rounded-2xl p-6 text-center">
+    <div
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={onDrop}
+      className="border-2 border-dashed rounded-2xl p-6 text-center"
+    >
       <div className="mx-auto h-8 w-8 mb-2">☁️</div>
-      <p className="text-sm mb-2">Glisse une vidéo ici ou</p>
-      <div className="flex items-center justify-center gap-2">
-        <input
-          ref={inputRef}
-          type="file"
-          accept="video/*"
-          capture="environment"
-          className="hidden"
-          onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); }}
-        />
+      <p className="text-sm mb-3">Glisse une vidéo ici ou choisis une source :</p>
+
+      <div className="flex items-center justify-center gap-2 flex-wrap">
+        <button
+          type="button"
+          className="btn btn-dash"
+          onClick={openPhotos}
+        >
+          📸 Depuis la photothèque
+        </button>
+
         <button
           type="button"
           className="btn"
-          onClick={() => inputRef.current?.click()}
+          onClick={openFiles}
           style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
         >
-          Choisir un fichier
+          🗂️ Depuis Fichiers
         </button>
+
+        {/* Inputs cachés (fallbacks / iOS) */}
+        <input
+          ref={photoRef}
+          type="file"
+          accept="video/*,image/*"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) onFile(f);
+            e.currentTarget.value = "";
+          }}
+        />
+        <input
+          ref={fileRef}
+          type="file"
+          accept="video/*"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) onFile(f);
+            e.currentTarget.value = "";
+          }}
+        />
       </div>
+
+      <p className="text-xs text-gray-500 mt-3">
+        Astuce iOS : si la feuille Apple s’ouvre, choisis <em>Photothèque</em> pour la galerie
+        ou <em>Parcourir</em> pour l’app Fichiers.
+      </p>
     </div>
   );
 }
@@ -885,7 +955,7 @@ async function makeMosaic(images: string[], gridW = 3, gridH = 2, outW = 1280, o
     const { width, height } = bestFit(img.width, img.height, cellW, cellH);
     const dx = x + Math.floor((cellW - width) / 2);
     const dy = y + Math.floor((cellH - height) / 2);
-    ctx.drawImage(img as any, dx, dy, width, height);
+    (ctx as any).drawImage(img as any, dx, dy, width, height);
   }
   return cvs.toDataURL("image/jpeg", quality);
 }
