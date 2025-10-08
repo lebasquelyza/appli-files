@@ -57,7 +57,7 @@ function ProgressBar({ value }: { value: number }) {
   );
 }
 
-/* ========== Helpers UI (filename + status) — AJOUT ========== */
+/* ========== Helpers UI (filename + status) ========== */
 function formatFileName(name: string, max = 36) {
   if (!name) return "";
   if (name.length <= max) return name;
@@ -341,14 +341,15 @@ function CoachAnalyzer() {
     setErrorMsg("");
 
     try {
-      // 0) EXTRACTION
-      const { frames, timestamps } = await extractFramesFromFile(file, 12);
+      // 0) EXTRACTION — RAPIDE
+      const { frames, timestamps } = await extractFramesFromFile(file, 8); // 12 -> 8
       if (!frames.length) throw new Error("Impossible d’extraire des images de la vidéo.");
       setProgress(12);
 
+      // 0b) MOSAÏQUES plus légères
       const half = Math.ceil(frames.length / 2);
-      const mosaic1 = await makeMosaic(frames.slice(0, half), 3, 2, 1280, 720, 0.6);
-      const mosaic2 = await makeMosaic(frames.slice(half), 3, 2, 1280, 720, 0.6);
+      const mosaic1 = await makeMosaic(frames.slice(0, half), 3, 2, 960, 540, 0.5); // 1280x720 -> 960x540, q=0.5
+      const mosaic2 = await makeMosaic(frames.slice(half), 3, 2, 960, 540, 0.5);
       const mosaics = [mosaic1, mosaic2];
       const midTime = timestamps[Math.floor(timestamps.length / 2)] || 0;
 
@@ -556,10 +557,9 @@ function CoachAnalyzer() {
 
           {blobUrl && (
             <div className="text-sm" style={{ marginTop: 12 }}>
-              {/* libellé mis à jour ici */}
               <label className="label" style={{ marginBottom: 6 }}>fichier téléchargée</label>
 
-              {/* Bloc nom du fichier avec ellipse */}
+              {/* Bloc nom du fichier tronqué */}
               <div
                 className="card"
                 style={{
@@ -638,14 +638,13 @@ function CoachAnalyzer() {
           {(isAnalyzing || progress > 0 || errorMsg || status) && (
             <div style={{ marginTop: 12 }}>
               <ProgressBar value={progress} />
-              {/* Affichage statut masqué → "( Files examine... )" */}
               {status && <p className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>{displayStatus(status)}</p>}
               {errorMsg && <p className="text-xs" style={{ color: "#dc2626", marginTop: 6 }}>Erreur : {errorMsg}</p>}
             </div>
           )}
         </article>
 
-        {/* 3. Résumé IA (centré et même taille) */}
+        {/* 3. Résumé IA */}
         <article className="card" style={cardStyle}>
           <h3 style={{ marginTop: 0 }}>🧠 Résumé IA</h3>
 
@@ -775,10 +774,6 @@ function CoachAnalyzer() {
 }
 
 /* ===================== Upload/Record ===================== */
-/**
- * iOS : 1 bouton "Importer" → laisse la feuille native Apple.
- * Autres : 2 boutons "Galerie" / "Fichiers".
- */
 function UploadDrop({ onFile }: { onFile: (file: File) => void }) {
   const galleryRef = useRef<HTMLInputElement | null>(null);
   const filesRef   = useRef<HTMLInputElement | null>(null);
@@ -792,7 +787,7 @@ function UploadDrop({ onFile }: { onFile: (file: File) => void }) {
   };
 
   const openGalerie = () => {
-    galleryRef.current?.click(); // iOS affichera sa feuille (Photothèque / Prendre / Choisir)
+    galleryRef.current?.click();
   };
 
   const openFichiers = async () => {
@@ -935,7 +930,7 @@ function VideoRecorder({ onRecorded }: { onRecorded: (file: File) => void }) {
   );
 }
 
-/* ===== Helpers vidéo / images ===== */
+/* ===== Helpers vidéo / images (optimisés) ===== */
 function getBestMimeType() {
   const candidates = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm", "video/mp4"];
   for (const c of candidates) {
@@ -952,14 +947,21 @@ async function fakeProgress(setter: (v: number) => void, from: number, to: numbe
     setter(Math.min(i, to));
   }
 }
-async function extractFramesFromFile(file: File, nFrames = 12): Promise<{ frames: string[]; timestamps: number[] }> {
+async function extractFramesFromFile(
+  file: File,
+  nFrames = 8
+): Promise<{ frames: string[]; timestamps: number[] }> {
   const videoURL = URL.createObjectURL(file);
-  try {
-    const video = document.createElement("video");
-    video.src = videoURL;
-    (video as any).muted = true;
-    (video as any).playsInline = true;
+  const video = document.createElement("video");
+  (video as any).muted = true;
+  (video as any).playsInline = true;
+  video.src = videoURL;
 
+  const TARGET_W = 480;
+  const TARGET_H = 270;
+  const JPEG_Q = 0.5;
+
+  try {
     await new Promise<void>((resolve, reject) => {
       video.onloadedmetadata = () => resolve();
       video.onerror = () => reject(new Error("Impossible de lire la vidéo côté client."));
@@ -974,21 +976,47 @@ async function extractFramesFromFile(file: File, nFrames = 12): Promise<{ frames
 
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
+    canvas.width = TARGET_W;
+    canvas.height = TARGET_H;
+
     const frames: string[] = [];
     const timestamps: number[] = [];
-    const targetW = 640, targetH = 360;
+
+    const drawFrame = async () => {
+      try {
+        const bmp = await createImageBitmap(video as any);
+        ctx.drawImage(bmp as any, 0, 0, TARGET_W, TARGET_H);
+        (bmp as any).close?.();
+      } catch {
+        ctx.drawImage(video as any, 0, 0, TARGET_W, TARGET_H);
+      }
+      frames.push(canvas.toDataURL("image/jpeg", JPEG_Q));
+    };
+
+    const hasRVFC = typeof (video as any).requestVideoFrameCallback === "function";
 
     for (const t of times) {
-      await seek((video as unknown) as HTMLVideoElement, t);
-      const vw = (video as any).videoWidth || targetW;
-      const vh = (video as any).videoHeight || targetH;
-      const { width, height } = bestFit(vw, vh, targetW, targetH);
-      canvas.width = width; canvas.height = height;
-      ctx.drawImage(video as any, 0, 0, width, height);
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.6);
-      frames.push(dataUrl);
-      timestamps.push(Math.round(t));
+      if (hasRVFC) {
+        (video as any).currentTime = Math.min(Math.max(0, t), (video as any).duration || t);
+        await new Promise<void>((resolve) => {
+          (video as any).requestVideoFrameCallback(async () => {
+            await drawFrame();
+            timestamps.push(Math.round(t));
+            resolve();
+          });
+          setTimeout(async () => { // garde-fou
+            await drawFrame();
+            timestamps.push(Math.round(t));
+            resolve();
+          }, 300);
+        });
+      } else {
+        await seek(video as any, t);
+        await drawFrame();
+        timestamps.push(Math.round(t));
+      }
     }
+
     return { frames, timestamps };
   } finally {
     URL.revokeObjectURL(videoURL);
@@ -1012,7 +1040,7 @@ function bestFit(w: number, h: number, maxW: number, maxH: number) {
   const r = Math.min(maxW / w, maxH / h);
   return { width: Math.round(w * r), height: Math.round(h * r) };
 }
-async function makeMosaic(images: string[], gridW = 3, gridH = 2, outW = 1280, outH = 720, quality = 0.6): Promise<string> {
+async function makeMosaic(images: string[], gridW = 3, gridH = 2, outW = 960, outH = 540, quality = 0.5): Promise<string> {
   const cvs = document.createElement("canvas");
   const ctx = cvs.getContext("2d")!;
   cvs.width = outW; cvs.height = outH;
@@ -1048,7 +1076,8 @@ function faultsToLines(a: AIAnalysis | null) {
   return { issuesLine, correctionsLine };
 }
 
-/* ===================== Muscle Viewer (mapping précis + silhouette propre) ===================== */
+/* ===================== Muscle Viewer ===================== */
+/** Silhouette plus humaine, grise, sans repères. On n'affiche les zones qu'en surbrillance. */
 function normMuscle(s: string) {
   return (s || "")
     .toLowerCase()
@@ -1068,9 +1097,9 @@ const MUSCLE_MAP: Record<string, string[]> = {
   dorsaux: ["lats_b"],
   granddorsal: ["lats_b"],
   lats: ["lats_b"],
-  trapeze: ["traps_b","traps_f"],
-  trapezes: ["traps_b","traps_f"],
-  trapezius: ["traps_b","traps_f"],
+  trapeze: ["traps_b"],
+  trapezes: ["traps_b"],
+  trapezius: ["traps_b"],
 
   pectoral: ["pecs_f"],
   pectoraux: ["pecs_f"],
@@ -1126,80 +1155,83 @@ function MuscleViewer({ muscleName, onClose }: { muscleName: string; onClose: ()
         </div>
 
         <p className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>
-          Schéma simplifié — les zones en surbrillance indiquent l’emplacement du muscle.
+          Silhouette simplifiée — seules les zones sélectionnées apparaissent en surbrillance.
         </p>
 
-        <BodyMapClean highlightKeys={keys} />
+        <BodyMapHuman highlightKeys={keys} />
       </div>
     </div>
   );
 }
 
-/** Silhouette face/dos minimaliste — ids compatibles MUSCLE_MAP */
-function BodyMapClean({ highlightKeys }: { highlightKeys: string[] }) {
+/** Silhouette humaine (face/dos) grise, pas de repères; on ne montre que les zones actives. */
+function BodyMapHuman({ highlightKeys }: { highlightKeys: string[] }) {
   const H = new Set(highlightKeys);
   const on = (id: string) => H.has(id);
-  const paint = (active: boolean) => ({
-    fill: active ? "#22c55e" : "#e5e7eb",
-    stroke: active ? "#16a34a" : "#c7cdd4",
-    strokeWidth: 1,
-    transition: "all .15s ease",
-  } as React.CSSProperties);
+
+  const show = (active: boolean) => ({
+    display: active ? "block" as const : "none" as const,
+    fill: "#22c55e",
+    opacity: 0.9,
+    transition: "opacity .15s ease",
+  });
+
+  const baseFill = "#d1d5db"; // gris neutre
+  const panelStyle: React.CSSProperties = { width: "100%", height: "auto", background: "#f9fafb", borderRadius: 12, padding: 8 };
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 12 }}>
       {/* FACE */}
-      <svg viewBox="0 0 180 360" style={{ width: "100%", height: "auto", background: "#f9fafb", borderRadius: 12, padding: 8 }}>
-        <g opacity="0.15">
-          <circle cx="90" cy="26" r="18" fill="#9ca3af" />
-          <rect x="52" y="46" width="76" height="96" rx="14" fill="#9ca3af" />
-          <rect x="66" y="142" width="48" height="140" rx="16" fill="#9ca3af" />
-          <rect x="46" y="142" width="18" height="110" rx="10" fill="#9ca3af" />
-          <rect x="116" y="142" width="18" height="110" rx="10" fill="#9ca3af" />
-          <rect x="62" y="282" width="22" height="58" rx="10" fill="#9ca3af" />
-          <rect x="96" y="282" width="22" height="58" rx="10" fill="#9ca3af" />
-        </g>
+      <svg viewBox="0 0 180 360" style={panelStyle} aria-label="silhouette face">
+        {/* silhouette grise stylisée */}
+        <path d="M90 18c-10 0-18 8-18 18v10c0 6 4 11 10 13l-2 6c-2 6-6 10-12 12-10 3-16 12-17 22-2 20-4 56 2 72 4 10 10 15 18 18 6 2 10 6 12 12 5 16 6 38 6 62h24c0-24 1-46 6-62 2-6 6-10 12-12 8-3 14-8 18-18 6-16 4-52 2-72-1-10-7-19-17-22-6-2-10-6-12-12l-2-6c6-2 10-7 10-13V36c0-10-8-18-18-18Z" fill={baseFill}/>
+        {/* jambes */}
+        <path d="M66 270c-4 30-4 52-4 72h28v-50c0-8-4-16-10-22-4-4-10-0-14 0z" fill={baseFill}/>
+        <path d="M114 270c4 30 4 52 4 72H90v-50c0-8 4-16 10-22 4-4 10-0 14 0z" fill={baseFill}/>
+        {/* bras */}
+        <path d="M32 140c-2 26 2 44 10 54 6 8 14 12 22 14l6-20c-8-2-14-6-18-12-6-8-10-20-10-36l-10 0z" fill={baseFill}/>
+        <path d="M148 140c2 26-2 44-10 54-6 8-14 12-22 14l-6-20c8-2 14-6 18-12 6-8 10-20 10-36l10 0z" fill={baseFill}/>
 
-        <rect id="pecs_f" x="58" y="64" width="64" height="22" rx="8" style={paint(on("pecs_f"))} />
-        <circle id="deltoid_l_f" cx="46" cy="72" r="14" style={paint(on("deltoid_l_f"))} />
-        <circle id="deltoid_r_f" cx="134" cy="72" r="14" style={paint(on("deltoid_r_f"))} />
-        <rect id="biceps_l_f" x="28" y="94" width="16" height="38" rx="8" style={paint(on("biceps_l_f"))} />
-        <rect id="biceps_r_f" x="136" y="94" width="16" height="38" rx="8" style={paint(on("biceps_r_f"))} />
-        <rect id="forearm_l_f" x="28" y="134" width="16" height="36" rx="8" style={paint(on("forearm_l_f"))} />
-        <rect id="forearm_r_f" x="136" y="134" width="16" height="36" rx="8" style={paint(on("forearm_r_f"))} />
-        <rect id="abs_f" x="70" y="92" width="40" height="40" rx="8" style={paint(on("abs_f"))} />
-        <rect id="obliques_l_f" x="60" y="96" width="12" height="36" rx="6" style={paint(on("obliques_l_f"))} />
-        <rect id="obliques_r_f" x="108" y="96" width="12" height="36" rx="6" style={paint(on("obliques_r_f"))} />
-        <rect id="quads_l_f" x="64" y="152" width="18" height="52" rx="9" style={paint(on("quads_l_f"))} />
-        <rect id="quads_r_f" x="98" y="152" width="18" height="52" rx="9" style={paint(on("quads_r_f"))} />
-        <rect id="calf_l_f" x="64" y="214" width="18" height="42" rx="9" style={paint(on("calf_l_f"))} />
-        <rect id="calf_r_f" x="98" y="214" width="18" height="42" rx="9" style={paint(on("calf_r_f"))} />
+        {/* SURBRILLANCE — on garde des positions proches des anciennes, mais invisibles si inactives */}
+        <rect id="pecs_f" x="58" y="64" width="64" height="22" rx="8" style={show(on("pecs_f"))} />
+        <circle id="deltoid_l_f" cx="46" cy="72" r="14" style={show(on("deltoid_l_f"))} />
+        <circle id="deltoid_r_f" cx="134" cy="72" r="14" style={show(on("deltoid_r_f"))} />
+        <rect id="biceps_l_f" x="28" y="94" width="16" height="38" rx="8" style={show(on("biceps_l_f"))} />
+        <rect id="biceps_r_f" x="136" y="94" width="16" height="38" rx="8" style={show(on("biceps_r_f"))} />
+        <rect id="forearm_l_f" x="28" y="134" width="16" height="36" rx="8" style={show(on("forearm_l_f"))} />
+        <rect id="forearm_r_f" x="136" y="134" width="16" height="36" rx="8" style={show(on("forearm_r_f"))} />
+        <rect id="abs_f" x="70" y="92" width="40" height="40" rx="8" style={show(on("abs_f"))} />
+        <rect id="obliques_l_f" x="60" y="96" width="12" height="36" rx="6" style={show(on("obliques_l_f"))} />
+        <rect id="obliques_r_f" x="108" y="96" width="12" height="36" rx="6" style={show(on("obliques_r_f"))} />
+        <rect id="quads_l_f" x="64" y="152" width="18" height="52" rx="9" style={show(on("quads_l_f"))} />
+        <rect id="quads_r_f" x="98" y="152" width="18" height="52" rx="9" style={show(on("quads_r_f"))} />
+        <rect id="calf_l_f" x="64" y="214" width="18" height="42" rx="9" style={show(on("calf_l_f"))} />
+        <rect id="calf_r_f" x="98" y="214" width="18" height="42" rx="9" style={show(on("calf_r_f"))} />
       </svg>
 
       {/* DOS */}
-      <svg viewBox="0 0 180 360" style={{ width: "100%", height: "auto", background: "#f9fafb", borderRadius: 12, padding: 8 }}>
-        <g opacity="0.15">
-          <circle cx="90" cy="26" r="18" fill="#9ca3af" />
-          <rect x="52" y="46" width="76" height="96" rx="14" fill="#9ca3af" />
-          <rect x="66" y="142" width="48" height="140" rx="16" fill="#9ca3af" />
-          <rect x="46" y="142" width="18" height="110" rx="10" fill="#9ca3af" />
-          <rect x="116" y="142" width="18" height="110" rx="10" fill="#9ca3af" />
-          <rect x="62" y="282" width="22" height="58" rx="10" fill="#9ca3af" />
-          <rect x="96" y="282" width="22" height="58" rx="10" fill="#9ca3af" />
-        </g>
+      <svg viewBox="0 0 180 360" style={panelStyle} aria-label="silhouette dos">
+        {/* silhouette grise stylisée */}
+        <path d="M90 18c-10 0-18 8-18 18v10c0 6 4 11 10 13l-1 5c-2 8-7 13-13 16-10 3-16 12-17 22-2 18-4 54 2 70 4 10 10 15 18 18 6 2 10 6 12 12 5 16 6 38 6 62h24c0-24 1-46 6-62 2-6 6-10 12-12 8-3 14-8 18-18 6-16 4-52 2-70-1-10-7-19-17-22-6-2-11-8-13-16l-1-5c6-2 10-7 10-13V36c0-10-8-18-18-18Z" fill={baseFill}/>
+        {/* jambes */}
+        <path d="M66 270c-4 30-4 52-4 72h28v-50c0-8-4-16-10-22-4-4-10-0-14 0z" fill={baseFill}/>
+        <path d="M114 270c4 30 4 52 4 72H90v-50c0-8 4-16 10-22 4-4 10-0 14 0z" fill={baseFill}/>
+        {/* bras */}
+        <path d="M32 140c-2 26 2 44 10 54 6 8 14 12 22 14l6-20c-8-2-14-6-18-12-6-8-10-20-10-36l-10 0z" fill={baseFill}/>
+        <path d="M148 140c2 26-2 44-10 54-6 8-14 12-22 14l-6-20c8-2 14-6 18-12 6-8 10-20 10-36l10 0z" fill={baseFill}/>
 
-        <polygon id="traps_b" points="90,46 60,66 120,66" style={paint(on("traps_b"))} />
-        <polygon id="traps_f" points="90,46 60,66 120,66" opacity="0" />
-        <rect id="lats_b" x="56" y="70" width="68" height="30" rx="10" style={paint(on("lats_b"))} />
-        <circle id="deltoid_l_b" cx="46" cy="72" r="14" style={paint(on("deltoid_l_b"))} />
-        <circle id="deltoid_r_b" cx="134" cy="72" r="14" style={paint(on("deltoid_r_b"))} />
-        <rect id="triceps_l_b" x="28" y="94" width="16" height="38" rx="8" style={paint(on("triceps_l_b"))} />
-        <rect id="triceps_r_b" x="136" y="94" width="16" height="38" rx="8" style={paint(on("triceps_r_b"))} />
-        <rect id="glutes_b" x="66" y="122" width="48" height="28" rx="10" style={paint(on("glutes_b"))} />
-        <rect id="hams_l_b" x="64" y="152" width="18" height="52" rx="9" style={paint(on("hams_l_b"))} />
-        <rect id="hams_r_b" x="98" y="152" width="18" height="52" rx="9" style={paint(on("hams_r_b"))} />
-        <rect id="calf_l_b" x="64" y="214" width="18" height="42" rx="9" style={paint(on("calf_l_b"))} />
-        <rect id="calf_r_b" x="98" y="214" width="18" height="42" rx="9" style={paint(on("calf_r_b"))} />
+        {/* SURBRILLANCE dos */}
+        <polygon id="traps_b" points="90,46 60,66 120,66" style={show(on("traps_b"))} />
+        <rect id="lats_b" x="56" y="70" width="68" height="30" rx="10" style={show(on("lats_b"))} />
+        <circle id="deltoid_l_b" cx="46" cy="72" r="14" style={show(on("deltoid_l_b"))} />
+        <circle id="deltoid_r_b" cx="134" cy="72" r="14" style={show(on("deltoid_r_b"))} />
+        <rect id="triceps_l_b" x="28" y="94" width="16" height="38" rx="8" style={show(on("triceps_l_b"))} />
+        <rect id="triceps_r_b" x="136" y="94" width="16" height="38" rx="8" style={show(on("triceps_r_b"))} />
+        <rect id="glutes_b" x="66" y="122" width="48" height="28" rx="10" style={show(on("glutes_b"))} />
+        <rect id="hams_l_b" x="64" y="152" width="18" height="52" rx="9" style={show(on("hams_l_b"))} />
+        <rect id="hams_r_b" x="98" y="152" width="18" height="52" rx="9" style={show(on("hams_r_b"))} />
+        <rect id="calf_l_b" x="64" y="214" width="18" height="42" rx="9" style={show(on("calf_l_b"))} />
+        <rect id="calf_r_b" x="98" y="214" width="18" height="42" rx="9" style={show(on("calf_r_b"))} />
       </svg>
     </div>
   );
