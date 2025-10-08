@@ -203,10 +203,7 @@ export default function Page() {
     >
       <div className="page-header">
         <div>
-          <h1
-            className="h1"
-            style={{ fontSize: 22 }}
-          >
+          <h1 className="h1" style={{ fontSize: 22 }}>
             Import / Enregistrement
           </h1>
           <p className="lead">
@@ -268,7 +265,7 @@ function CoachAnalyzer() {
     fd.append("file", f);
     fd.append("filename", f.name);
     fd.append("contentType", f.type || "application/octet-stream");
-    const res = await fetch("/api/videos/proxy-upload", { method: "POST",      body: fd });
+    const res = await fetch("/api/videos/proxy-upload", { method: "POST", body: fd });
     if (!res.ok) {
       const txt = await res.text().catch(() => "");
       let detail = "";
@@ -691,24 +688,19 @@ function CoachAnalyzer() {
 }
 
 /* ===================== Upload/Record ===================== */
+/** Import minimaliste : UNIQUEMENT deux choix (Photos / Fichiers). */
 function UploadDrop({ onFile }: { onFile: (file: File) => void }) {
-  const photoRef = useRef<HTMLInputElement | null>(null);
-  const fileRef  = useRef<HTMLInputElement | null>(null);
-
-  const onDrop = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    const f = e.dataTransfer.files?.[0];
-    if (f) onFile(f);
-  };
+  const photosRef = useRef<HTMLInputElement | null>(null);
+  const filesRef  = useRef<HTMLInputElement | null>(null);
 
   const openPhotos = () => {
-    // iOS/Safari : cet input ouvre "Photothèque / Prendre une photo/vidéo / Parcourir"
-    // On n’utilise PAS l’attribut capture ici pour ne pas lancer la caméra.
-    photoRef.current?.click();
+    // Pas de `capture` → n'ouvre jamais la caméra.
+    // iOS/Android affichent la feuille de la bibliothèque (peuvent montrer "Prendre…", mais ce n'est pas lancé par nous).
+    photosRef.current?.click();
   };
 
   const openFiles = async () => {
-    // File System Access API (Chrome/Edge/Safari récents) → vrai sélecteur "Fichiers"
+    // Tente le sélecteur de fichiers moderne, sinon fallback input invisible
     const anyWindow = window as any;
     try {
       if (anyWindow?.showOpenFilePicker) {
@@ -716,80 +708,61 @@ function UploadDrop({ onFile }: { onFile: (file: File) => void }) {
           multiple: false,
           excludeAcceptAllOption: false,
           types: [
-            {
-              description: "Vidéos",
-              accept: { "video/*": [".mp4", ".mov", ".webm", ".mkv", ".avi"] },
-            },
+            { description: "Vidéos", accept: { "video/*": [".mp4", ".mov", ".webm", ".mkv", ".avi"] } },
           ],
+          startIn: "videos", // ignoré si non supporté
         });
         if (handle) {
-          const file = await handle.getFile();
-          if (file) onFile(file);
+          const f = await handle.getFile();
+          if (f) onFile(f);
           return;
         }
       }
     } catch {
-      // Annulation ou non support → fallback input
+      /* annulé ou non supporté → fallback */
     }
-    fileRef.current?.click();
+    filesRef.current?.click();
   };
 
   return (
-    <div
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={onDrop}
-      className="border-2 border-dashed rounded-2xl p-6 text-center"
-    >
-      <div className="mx-auto h-8 w-8 mb-2">☁️</div>
-      <p className="text-sm mb-3">Glisse une vidéo ici ou choisis une source :</p>
-
-      <div className="flex items-center justify-center gap-2 flex-wrap">
-        <button
-          type="button"
-          className="btn btn-dash"
-          onClick={openPhotos}
-        >
-          📸 Depuis la photothèque
+    <div className="card" style={{ padding: 16, display: "grid", gap: 10 }}>
+      <div className="grid gap-2 sm:flex sm:gap-3">
+        <button type="button" className="btn btn-dash" onClick={openPhotos}>
+          📸 Photos
         </button>
-
         <button
           type="button"
           className="btn"
           onClick={openFiles}
           style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
         >
-          🗂️ Depuis Fichiers
+          🗂️ Fichiers
         </button>
-
-        {/* Inputs cachés (fallbacks / iOS) */}
-        <input
-          ref={photoRef}
-          type="file"
-          accept="video/*,image/*"
-          className="hidden"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) onFile(f);
-            e.currentTarget.value = "";
-          }}
-        />
-        <input
-          ref={fileRef}
-          type="file"
-          accept="video/*"
-          className="hidden"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) onFile(f);
-            e.currentTarget.value = "";
-          }}
-        />
       </div>
 
-      <p className="text-xs text-gray-500 mt-3">
-        Astuce iOS : si la feuille Apple s’ouvre, choisis <em>Photothèque</em> pour la galerie
-        ou <em>Parcourir</em> pour l’app Fichiers.
-      </p>
+      {/* Inputs cachés pour les deux chemins (fallbacks) */}
+      <input
+        ref={photosRef}
+        type="file"
+        accept="video/*,image/*"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) onFile(f);
+          e.currentTarget.value = "";
+        }}
+      />
+      <input
+        ref={filesRef}
+        type="file"
+        accept="video/*"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) onFile(f);
+          e.currentTarget.value = "";
+        }}
+      />
     </div>
   );
 }
@@ -978,3 +951,4 @@ function faultsToLines(a: AIAnalysis | null) {
   const correctionsLine = (correctionsBase || []).join(" - ");
   return { issuesLine, correctionsLine };
 }
+
