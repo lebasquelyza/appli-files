@@ -57,7 +57,7 @@ function ProgressBar({ value }: { value: number }) {
   );
 }
 
-/* ========== Helpers UI (filename + status) — AJOUT #1 ========== */
+/* ========== Helpers UI (filename + status) — AJOUT ========== */
 function formatFileName(name: string, max = 36) {
   if (!name) return "";
   if (name.length <= max) return name;
@@ -556,10 +556,10 @@ function CoachAnalyzer() {
 
           {blobUrl && (
             <div className="text-sm" style={{ marginTop: 12 }}>
-              {/* libellé changé ici */}
-              <label className="label" style={{ marginBottom: 6 }}>rognö</label>
+              {/* libellé mis à jour ici */}
+              <label className="label" style={{ marginBottom: 6 }}>fichier téléchargée</label>
 
-              {/* Bloc nom du fichier avec ellipse — MODIF #1 */}
+              {/* Bloc nom du fichier avec ellipse */}
               <div
                 className="card"
                 style={{
@@ -638,7 +638,7 @@ function CoachAnalyzer() {
           {(isAnalyzing || progress > 0 || errorMsg || status) && (
             <div style={{ marginTop: 12 }}>
               <ProgressBar value={progress} />
-              {/* Affichage statut masqué → "( Files examine... )" — MODIF #2 */}
+              {/* Affichage statut masqué → "( Files examine... )" */}
               {status && <p className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>{displayStatus(status)}</p>}
               {errorMsg && <p className="text-xs" style={{ color: "#dc2626", marginTop: 6 }}>Erreur : {errorMsg}</p>}
             </div>
@@ -979,7 +979,7 @@ async function extractFramesFromFile(file: File, nFrames = 12): Promise<{ frames
     const targetW = 640, targetH = 360;
 
     for (const t of times) {
-      await seek(video as any, t);
+      await seek((video as unknown) as HTMLVideoElement, t);
       const vw = (video as any).videoWidth || targetW;
       const vh = (video as any).videoHeight || targetH;
       const { width, height } = bestFit(vw, vh, targetW, targetH);
