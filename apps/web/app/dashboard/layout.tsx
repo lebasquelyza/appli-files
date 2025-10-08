@@ -2,7 +2,7 @@
 import type { ReactNode } from "react";
 import ClientTopbar from "./_components/ClientTopbar";
 import RegisterSW from "@/components/RegisterSW";
-import Sidebar from "../../components/layout/Sidebar";
+import Sidebar from "../../components/Sidebar";
  // ⬅️ assure-toi que le chemin est bon
 
 export const dynamic = "force-dynamic";
