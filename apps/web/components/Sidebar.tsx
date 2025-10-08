@@ -44,14 +44,15 @@ export default function Sidebar() {
 
   return (
     <nav aria-label="Dashboard" style={{ paddingLeft: 10, paddingRight: 10 }}>
-      {/* ===== En-tête sticky tout en haut ===== */}
+      {/* ===== Entête sticky collée en haut avec safe-area ===== */}
       <div
         style={{
           position: "sticky",
           top: 0,
           zIndex: 10,
-          paddingBottom: 8,
-          background: "linear-gradient(180deg,#fff 70%,rgba(255,255,255,0) 100%)",
+          paddingTop: "env(safe-area-inset-top)",
+          paddingBottom: 6,
+          background: "linear-gradient(180deg,#fff 75%,rgba(255,255,255,0) 100%)",
           borderBottom: "1px solid rgba(0,0,0,0.06)",
         }}
       >
@@ -65,7 +66,7 @@ export default function Sidebar() {
             display: "flex",
             alignItems: "center",
             gap: 12,
-            padding: "12px 8px 6px 8px",
+            padding: "8px 8px 4px 8px",
             borderRadius: 8,
             textAlign: "left",
             background: "transparent",
@@ -86,7 +87,7 @@ export default function Sidebar() {
                 "linear-gradient(135deg,var(--brand,#22c55e),var(--brand2,#15803d))",
             }}
           />
-          {/* 👉 “Files-Menu” = bouton d’ouverture (noir) */}
+          {/* “Files-Menu” = bouton d’ouverture (noir) */}
           <b style={{ fontSize: 18, lineHeight: 1, color: "var(--text, #111)" }}>
             Files-Menu
           </b>
@@ -104,7 +105,7 @@ export default function Sidebar() {
       {/* ===== Liste des onglets — masquée par défaut ===== */}
       <ul
         id="sidebar-links"
-        // On force l’affichage en inline (pas de classes tailwind pour éviter tout conflit)
+        // Force le display via style pour éviter tout conflit de classes
         style={{
           display: open ? "block" : "none",
           listStyle: "none",
@@ -113,7 +114,7 @@ export default function Sidebar() {
           maxHeight: "calc(100dvh - 80px)",
           overflowY: "auto",
         }}
-        // 🔑 Ferme AVANT la navigation (fiable iOS/Safari)
+        // Ferme AVANT la navigation (fiable iOS/Safari)
         onPointerDownCapture={(e) => {
           const el = e.target as HTMLElement | null;
           if (el?.closest("a[href]")) setOpen(false);
@@ -153,3 +154,4 @@ export default function Sidebar() {
     </nav>
   );
 }
+
