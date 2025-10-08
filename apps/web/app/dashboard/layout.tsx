@@ -1,3 +1,4 @@
+// apps/web/app/dashboard/layout.tsx
 import type { ReactNode } from "react";
 import RegisterSW from "@/components/RegisterSW";
 import Sidebar from "../../components/Sidebar";
@@ -12,12 +13,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       <div
         className="px-4 sm:px-6 max-w-screen-xl mx-auto"
         style={{
-          // ⬇️ plus de paddingTop ici (on le met dans la sidebar)
-          paddingTop: 0,
+          // ⬅️ annule le paddingTop global du RootLayout
+          marginTop: "calc(-40px - env(safe-area-inset-top))",
           paddingBottom: "var(--mobile-tabbar, 0px)",
         }}
       >
-        {/* Sidebar uniquement en mobile */}
         <div className="md:hidden">
           <Sidebar />
         </div>
@@ -31,4 +31,3 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     </>
   );
 }
-
