@@ -314,7 +314,7 @@ function CoachAnalyzer() {
 
     setIsAnalyzing(true);
     setProgress(5);
-    setStatus("Préparation des images…");
+    setStatus("Files Examine…"); // libellé unique
     setErrorMsg("");
 
     try {
@@ -332,10 +332,8 @@ function CoachAnalyzer() {
       setProgress(20);
 
       // 1) UPLOAD
-      setStatus("Upload de la vidéo…");
       let fileUrl: string | undefined;
       if (file.size > CLIENT_PROXY_MAX_BYTES) {
-        setStatus("Fichier volumineux — upload signé…");
         const { readUrl } = await uploadWithSignedUrl(file);
         fileUrl = readUrl;
       } else {
@@ -343,7 +341,6 @@ function CoachAnalyzer() {
           const url = await uploadWithProxy(file);
           fileUrl = url;
         } catch {
-          setStatus("Proxy indisponible — upload signé…");
           const { readUrl } = await uploadWithSignedUrl(file);
           fileUrl = readUrl;
         }
@@ -354,7 +351,6 @@ function CoachAnalyzer() {
 
       // 2) APPEL IA
       void fakeProgress(setProgress, 80, 98);
-      setStatus("Analyse IA…");
 
       const baseHints =
         `Tu reçois des mosaïques issues d’une VIDEO (pas une photo). ` +
@@ -432,9 +428,8 @@ function CoachAnalyzer() {
       } else {
         setShowChoiceGate(true);
       }
-      setOverrideOpen(false);
       setProgress(100);
-      setStatus("Analyse terminée — confirme l’exercice");
+      setStatus("Files Examine…");
     } catch (e: any) {
       console.error(e);
       const msg = e?.message || String(e);
@@ -467,29 +462,11 @@ function CoachAnalyzer() {
   const { issuesLine, correctionsLine } = faultsToLines(analysis);
   const [muscleOpen, setMuscleOpen] = useState<string | null>(null);
 
-  /* ====== LAYOUT : 3 cartes alignées, même taille ====== */
-  const gridStyle: React.CSSProperties = {
-    display: "grid",
-    gap: 16,
-    gridTemplateColumns: "1fr",
-    alignItems: "stretch",
-  };
-  // >=1024px → 3 colonnes
-  if (typeof window !== "undefined" && window.matchMedia && window.matchMedia("(min-width: 1024px)").matches) {
-    (gridStyle as any).gridTemplateColumns = "repeat(3, 1fr)";
-  }
-
-  const cardStyle: React.CSSProperties = {
-    height: "100%",
-    display: "flex",
-    flexDirection: "column",
-  };
-
   return (
     <>
-      <div style={gridStyle}>
+      <div className="grid gap-6 lg:grid-cols-3">
         {/* 1. Import / Enregistrement */}
-        <article className="card" style={cardStyle}>
+        <article className="card flex flex-col">
           <h3 style={{ marginTop: 0 }}>🎥 Import / Enregistrement</h3>
 
           {/* Onglets Filmer / Importer */}
@@ -534,8 +511,10 @@ function CoachAnalyzer() {
           {blobUrl && (
             <div className="text-sm" style={{ marginTop: 12 }}>
               <label className="label" style={{ marginBottom: 6 }}>Fichier chargé</label>
-              <div className="card" style={{ padding: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span className="truncate">🎞️ {fileName ?? "clip.webm"}</span>
+              <div className="card" style={{ padding: 8, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                <span className="truncate" style={{ maxWidth: "60%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  🎞️ {fileName ?? "clip.webm"}
+                </span>
                 <button
                   className="btn"
                   onClick={reset}
@@ -544,7 +523,8 @@ function CoachAnalyzer() {
                     background: "#ffffff",
                     color: "#111827",
                     border: "1px solid #d1d5db",
-                    fontWeight: 500
+                    fontWeight: 500,
+                    flexShrink: 0
                   }}
                 >
                   ↺ Réinitialiser
@@ -555,7 +535,7 @@ function CoachAnalyzer() {
         </article>
 
         {/* 2. Ressenti */}
-        <article className="card" style={cardStyle}>
+        <article className="card flex flex-col">
           <h3 style={{ marginTop: 0 }}>🎙️ Ton ressenti</h3>
           <label className="label">Comment tu te sens ?</label>
           <textarea
@@ -573,7 +553,7 @@ function CoachAnalyzer() {
               type="button"
             >
               {isAnalyzing ? <Spinner className="mr-2" /> : "✨"}{" "}
-              {isAnalyzing ? "Analyse en cours" : cooldown > 0 ? `Patiente ${cooldown}s` : "Lancer l'analyse IA"}
+              {isAnalyzing ? "Files Examine…" : cooldown > 0 ? `Patiente ${cooldown}s` : "Lancer l'analyse IA"}
             </button>
 
             <button
@@ -592,17 +572,20 @@ function CoachAnalyzer() {
             </button>
           </div>
 
+          {/* Progression (conservée) */}
           {(isAnalyzing || progress > 0 || errorMsg || status) && (
             <div style={{ marginTop: 12 }}>
               <ProgressBar value={progress} />
-              {status && <p className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>{status}</p>}
+              <p className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>
+                {isAnalyzing || progress < 100 ? "Files Examine…" : "Analyse terminée — confirme l’exercice"}
+              </p>
               {errorMsg && <p className="text-xs" style={{ color: "#dc2626", marginTop: 6 }}>Erreur : {errorMsg}</p>}
             </div>
           )}
         </article>
 
-        {/* 3. Résumé IA (centré et même taille) */}
-        <article className="card" style={cardStyle}>
+        {/* 3. Résumé IA */}
+        <article className="card flex flex-col">
           <h3 style={{ marginTop: 0 }}>🧠 Résumé IA</h3>
 
           {!analysis && (
@@ -652,9 +635,6 @@ function CoachAnalyzer() {
                       Ré-analyser
                     </button>
                   </div>
-                  <p className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>
-                    L’IA tiendra compte de ce nom pour corriger plus précisément.
-                  </p>
                 </div>
               )}
             </div>
@@ -707,15 +687,6 @@ function CoachAnalyzer() {
                   {issuesLine && <p className="text-sm"><strong>Erreur détectée :</strong> {issuesLine}</p>}
                   {correctionsLine && <p className="text-sm"><strong>Corrections :</strong> {correctionsLine}</p>}
                 </div>
-              )}
-
-              {analysis.extras && analysis.extras.length > 0 && (
-                <details>
-                  <summary style={{ cursor: "pointer" }}>Points complémentaires</summary>
-                  <ul style={{ paddingLeft: 18, marginTop: 6 }} className="text-sm">
-                    {analysis.extras.map((x, i) => <li key={i} style={{ listStyle: "disc" }}>{x}</li>)}
-                  </ul>
-                </details>
               )}
             </div>
           )}
@@ -1004,7 +975,7 @@ function faultsToLines(a: AIAnalysis | null) {
   return { issuesLine, correctionsLine };
 }
 
-/* ===================== Muscle Viewer (mapping précis + silhouette propre) ===================== */
+/* ===================== Muscle Viewer (affiche UNIQUEMENT le muscle demandé) ===================== */
 function normMuscle(s: string) {
   return (s || "")
     .toLowerCase()
@@ -1024,9 +995,9 @@ const MUSCLE_MAP: Record<string, string[]> = {
   dorsaux: ["lats_b"],
   granddorsal: ["lats_b"],
   lats: ["lats_b"],
-  trapeze: ["traps_b","traps_f"],
-  trapezes: ["traps_b","traps_f"],
-  trapezius: ["traps_b","traps_f"],
+  trapeze: ["traps_b"],
+  trapezes: ["traps_b"],
+  trapezius: ["traps_b"],
 
   pectoral: ["pecs_f"],
   pectoraux: ["pecs_f"],
@@ -1081,81 +1052,56 @@ function MuscleViewer({ muscleName, onClose }: { muscleName: string; onClose: ()
           </button>
         </div>
 
-        <p className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>
-          Schéma simplifié — les zones en surbrillance indiquent l’emplacement du muscle.
-        </p>
-
-        <BodyMapClean highlightKeys={keys} />
+        <BodyMapMinimal highlightKeys={keys} />
       </div>
     </div>
   );
 }
 
-/** Silhouette face/dos minimaliste — ids compatibles MUSCLE_MAP */
-function BodyMapClean({ highlightKeys }: { highlightKeys: string[] }) {
+/** Minimal : on dessine UNIQUEMENT les zones demandées, sur fond neutre (pas de silhouette). */
+function BodyMapMinimal({ highlightKeys }: { highlightKeys: string[] }) {
   const H = new Set(highlightKeys);
   const on = (id: string) => H.has(id);
-  const paint = (active: boolean) => ({
-    fill: active ? "#22c55e" : "#e5e7eb",
-    stroke: active ? "#16a34a" : "#c7cdd4",
+
+  const paint = {
+    fill: "#22c55e",
+    stroke: "#14532d",
     strokeWidth: 1,
-    transition: "all .15s ease",
-  } as React.CSSProperties);
+  } as React.CSSProperties;
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 12 }}>
       {/* FACE */}
       <svg viewBox="0 0 180 360" style={{ width: "100%", height: "auto", background: "#f9fafb", borderRadius: 12, padding: 8 }}>
-        <g opacity="0.15">
-          <circle cx="90" cy="26" r="18" fill="#9ca3af" />
-          <rect x="52" y="46" width="76" height="96" rx="14" fill="#9ca3af" />
-          <rect x="66" y="142" width="48" height="140" rx="16" fill="#9ca3af" />
-          <rect x="46" y="142" width="18" height="110" rx="10" fill="#9ca3af" />
-          <rect x="116" y="142" width="18" height="110" rx="10" fill="#9ca3af" />
-          <rect x="62" y="282" width="22" height="58" rx="10" fill="#9ca3af" />
-          <rect x="96" y="282" width="22" height="58" rx="10" fill="#9ca3af" />
-        </g>
-
-        <rect id="pecs_f" x="58" y="64" width="64" height="22" rx="8" style={paint(on("pecs_f"))} />
-        <circle id="deltoid_l_f" cx="46" cy="72" r="14" style={paint(on("deltoid_l_f"))} />
-        <circle id="deltoid_r_f" cx="134" cy="72" r="14" style={paint(on("deltoid_r_f"))} />
-        <rect id="biceps_l_f" x="28" y="94" width="16" height="38" rx="8" style={paint(on("biceps_l_f"))} />
-        <rect id="biceps_r_f" x="136" y="94" width="16" height="38" rx="8" style={paint(on("biceps_r_f"))} />
-        <rect id="forearm_l_f" x="28" y="134" width="16" height="36" rx="8" style={paint(on("forearm_l_f"))} />
-        <rect id="forearm_r_f" x="136" y="134" width="16" height="36" rx="8" style={paint(on("forearm_r_f"))} />
-        <rect id="abs_f" x="70" y="92" width="40" height="40" rx="8" style={paint(on("abs_f"))} />
-        <rect id="obliques_l_f" x="60" y="96" width="12" height="36" rx="6" style={paint(on("obliques_l_f"))} />
-        <rect id="obliques_r_f" x="108" y="96" width="12" height="36" rx="6" style={paint(on("obliques_r_f"))} />
-        <rect id="quads_l_f" x="64" y="152" width="18" height="52" rx="9" style={paint(on("quads_l_f"))} />
-        <rect id="quads_r_f" x="98" y="152" width="18" height="52" rx="9" style={paint(on("quads_r_f"))} />
-        <rect id="calf_l_f" x="64" y="214" width="18" height="42" rx="9" style={paint(on("calf_l_f"))} />
-        <rect id="calf_r_f" x="98" y="214" width="18" height="42" rx="9" style={paint(on("calf_r_f"))} />
+        {on("pecs_f") && <rect x="58" y="64" width="64" height="22" rx="8" style={paint} />}
+        {on("deltoid_l_f") && <circle cx="46" cy="72" r="14" style={paint} />}
+        {on("deltoid_r_f") && <circle cx="134" cy="72" r="14" style={paint} />}
+        {on("biceps_l_f") && <rect x="28" y="94" width="16" height="38" rx="8" style={paint} />}
+        {on("biceps_r_f") && <rect x="136" y="94" width="16" height="38" rx="8" style={paint} />}
+        {on("forearm_l_f") && <rect x="28" y="134" width="16" height="36" rx="8" style={paint} />}
+        {on("forearm_r_f") && <rect x="136" y="134" width="16" height="36" rx="8" style={paint} />}
+        {on("abs_f") && <rect x="70" y="92" width="40" height="40" rx="8" style={paint} />}
+        {on("obliques_l_f") && <rect x="60" y="96" width="12" height="36" rx="6" style={paint} />}
+        {on("obliques_r_f") && <rect x="108" y="96" width="12" height="36" rx="6" style={paint} />}
+        {on("quads_l_f") && <rect x="64" y="152" width="18" height="52" rx="9" style={paint} />}
+        {on("quads_r_f") && <rect x="98" y="152" width="18" height="52" rx="9" style={paint} />}
+        {on("calf_l_f") && <rect x="64" y="214" width="18" height="42" rx="9" style={paint} />}
+        {on("calf_r_f") && <rect x="98" y="214" width="18" height="42" rx="9" style={paint} />}
       </svg>
 
       {/* DOS */}
       <svg viewBox="0 0 180 360" style={{ width: "100%", height: "auto", background: "#f9fafb", borderRadius: 12, padding: 8 }}>
-        <g opacity="0.15">
-          <circle cx="90" cy="26" r="18" fill="#9ca3af" />
-          <rect x="52" y="46" width="76" height="96" rx="14" fill="#9ca3af" />
-          <rect x="66" y="142" width="48" height="140" rx="16" fill="#9ca3af" />
-          <rect x="46" y="142" width="18" height="110" rx="10" fill="#9ca3af" />
-          <rect x="116" y="142" width="18" height="110" rx="10" fill="#9ca3af" />
-          <rect x="62" y="282" width="22" height="58" rx="10" fill="#9ca3af" />
-          <rect x="96" y="282" width="22" height="58" rx="10" fill="#9ca3af" />
-        </g>
-
-        <polygon id="traps_b" points="90,46 60,66 120,66" style={paint(on("traps_b"))} />
-        <polygon id="traps_f" points="90,46 60,66 120,66" opacity="0" />
-        <rect id="lats_b" x="56" y="70" width="68" height="30" rx="10" style={paint(on("lats_b"))} />
-        <circle id="deltoid_l_b" cx="46" cy="72" r="14" style={paint(on("deltoid_l_b"))} />
-        <circle id="deltoid_r_b" cx="134" cy="72" r="14" style={paint(on("deltoid_r_b"))} />
-        <rect id="triceps_l_b" x="28" y="94" width="16" height="38" rx="8" style={paint(on("triceps_l_b"))} />
-        <rect id="triceps_r_b" x="136" y="94" width="16" height="38" rx="8" style={paint(on("triceps_r_b"))} />
-        <rect id="glutes_b" x="66" y="122" width="48" height="28" rx="10" style={paint(on("glutes_b"))} />
-        <rect id="hams_l_b" x="64" y="152" width="18" height="52" rx="9" style={paint(on("hams_l_b"))} />
-        <rect id="hams_r_b" x="98" y="152" width="18" height="52" rx="9" style={paint(on("hams_r_b"))} />
-        <rect id="calf_l_b" x="64" y="214" width="18" height="42" rx="9" style={paint(on("calf_l_b"))} />
-        <rect id="calf_r_b" x="98" y="214" width="18" height="42" rx="9" style={paint(on("calf_r_b"))} />
+        {on("traps_b") && <polygon points="90,46 60,66 120,66" style={paint} />}
+        {on("lats_b") && <rect x="56" y="70" width="68" height="30" rx="10" style={paint} />}
+        {on("deltoid_l_b") && <circle cx="46" cy="72" r="14" style={paint} />}
+        {on("deltoid_r_b") && <circle cx="134" cy="72" r="14" style={paint} />}
+        {on("triceps_l_b") && <rect x="28" y="94" width="16" height="38" rx="8" style={paint} />}
+        {on("triceps_r_b") && <rect x="136" y="94" width="16" height="38" rx="8" style={paint} />}
+        {on("glutes_b") && <rect x="66" y="122" width="48" height="28" rx="10" style={paint} />}
+        {on("hams_l_b") && <rect x="64" y="152" width="18" height="52" rx="9" style={paint} />}
+        {on("hams_r_b") && <rect x="98" y="152" width="18" height="52" rx="9" style={paint} />}
+        {on("calf_l_b") && <rect x="64" y="214" width="18" height="42" rx="9" style={paint} />}
+        {on("calf_r_b") && <rect x="98" y="214" width="18" height="42" rx="9" style={paint} />}
       </svg>
     </div>
   );
