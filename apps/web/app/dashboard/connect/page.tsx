@@ -46,10 +46,7 @@ const INTEGRATIONS: Integration[] = [
     cookieFlag: "conn_strava",
     cookieName: "conn_strava_name",
   },
-  // Apple Santé disponible (import export.zip)
   { id: "apple-health", name: "Apple Santé", subtitle: "iPhone / Apple Watch", status: "available", icon: "" },
-
-  // Google Fit désormais disponible (OAuth)
   {
     id: "google-fit",
     name: "Google Fit",
@@ -60,8 +57,6 @@ const INTEGRATIONS: Integration[] = [
     disconnectPath: "/api/oauth/google-fit/disconnect",
     cookieFlag: "conn_google_fit",
   },
-
-  // À venir
   { id: "garmin",   name: "Garmin",   subtitle: "Montres GPS",        status: "coming-soon", icon: "⌚️", connectHref: "/api/oauth/garmin/start" },
   { id: "fitbit",   name: "Fitbit",   subtitle: "Capteurs & sommeil", status: "coming-soon", icon: "💠", connectHref: "/api/oauth/fitbit/start" },
   { id: "withings", name: "Withings", subtitle: "Balances & santé",    status: "coming-soon", icon: "⚖️", connectHref: "/api/oauth/withings/start" },
@@ -104,29 +99,29 @@ export default async function Page(props: {
         searchParams.connected ||
         searchParams.disconnected ||
         searchParams.error) && (
-        <Section title=" ">
+        <Section title=" " className="!pt-2">
           {searchParams.connected && (
-            <div className="card" style={{ border: "1px solid rgba(16,185,129,.35)", background: "rgba(16,185,129,.08)", fontWeight: 600 }}>
+            <div className="card text-sm sm:text-base" style={{ border: "1px solid rgba(16,185,129,.35)", background: "rgba(16,185,129,.08)", fontWeight: 600 }}>
               ✓ {searchParams.connected} connecté.
             </div>
           )}
           {searchParams.disconnected && (
-            <div className="card" style={{ border: "1px solid rgba(107,114,128,.35)", background: "rgba(107,114,128,.08)", fontWeight: 600 }}>
+            <div className="card text-sm sm:text-base" style={{ border: "1px solid rgba(107,114,128,.35)", background: "rgba(107,114,128,.08)", fontWeight: 600 }}>
               {searchParams.disconnected} déconnecté.
             </div>
           )}
           {searchParams.subscribed && (
-            <div className="card" style={{ border: "1px solid rgba(16,185,129,.35)", background: "rgba(16,185,129,.08)", fontWeight: 600 }}>
+            <div className="card text-sm sm:text-base" style={{ border: "1px solid rgba(16,185,129,.35)", background: "rgba(16,185,129,.08)", fontWeight: 600 }}>
               ✓ Nous te préviendrons dès qu’une intégration sera disponible.
             </div>
           )}
           {searchParams.unsubscribed && (
-            <div className="card" style={{ border: "1px solid rgba(107,114,128,.35)", background: "rgba(107,114,128,.08)", fontWeight: 600 }}>
+            <div className="card text-sm sm:text-base" style={{ border: "1px solid rgba(107,114,128,.35)", background: "rgba(107,114,128,.08)", fontWeight: 600 }}>
               Prévenez-moi désactivé.
             </div>
           )}
           {searchParams.error && (
-            <div className="card" style={{ border: "1px solid rgba(239,68,68,.35)", background: "rgba(239,68,68,.08)", fontWeight: 600 }}>
+            <div className="card text-sm sm:text-base" style={{ border: "1px solid rgba(239,68,68,.35)", background: "rgba(239,68,68,.08)", fontWeight: 600 }}>
               ⚠️ Erreur : {searchParams.error}
             </div>
           )}
@@ -135,29 +130,40 @@ export default async function Page(props: {
 
       {/* Intégrations */}
       <Section title="Intégrations">
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        {/* 1 colonne en mobile, espaces plus serrés */}
+        <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {INTEGRATIONS.map((it) => {
             const isConnected = it.cookieFlag ? jar.get(it.cookieFlag)?.value === "1" : false;
             const connName = it.cookieName ? jar.get(it.cookieName)?.value : undefined;
             const nameSuffix = connName ? ` : ${connName}` : "";
 
             return (
-              <article key={it.id} className="card" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                <div className="flex items-start justify-between gap-3">
-                  <div>
+              <article
+                key={it.id}
+                className="card p-3 sm:p-4"
+                style={{ display: "flex", flexDirection: "column", gap: 8 }}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <span aria-hidden>{it.icon ?? "🔗"}</span>
-                      <h3 className="font-semibold" style={{ margin: 0 }}>{it.name}</h3>
+                      <span aria-hidden className="shrink-0">{it.icon ?? "🔗"}</span>
+                      <h3 className="font-semibold text-sm sm:text-base truncate" style={{ margin: 0 }}>
+                        {it.name}
+                      </h3>
                     </div>
                     {it.subtitle && (
-                      <div className="text-sm" style={{ color: "var(--muted)", marginTop: 4 }}>{it.subtitle}</div>
+                      <div className="text-xs sm:text-sm" style={{ color: "var(--muted)", marginTop: 4 }}>
+                        {it.subtitle}
+                      </div>
                     )}
                   </div>
-                  <span className="badge">{isConnected ? "Connecté" : it.status === "available" ? "Disponible" : "À venir"}</span>
+                  <span className="badge text-xs sm:text-sm shrink-0">
+                    {isConnected ? "Connecté" : it.status === "available" ? "Disponible" : "À venir"}
+                  </span>
                 </div>
 
                 {/* Description par intégration */}
-                <p className="text-sm" style={{ color: "var(--muted)" }}>
+                <p className="text-xs sm:text-sm" style={{ color: "var(--muted)" }}>
                   {it.id === "strava" ? (
                     isConnected
                       ? <>Compte relié{nameSuffix}. Les activités récentes pourront être importées.</>
@@ -173,24 +179,24 @@ export default async function Page(props: {
                   )}
                 </p>
 
-                {/* Actions par intégration */}
-                <div className="flex gap-2">
+                {/* Actions : empilées en mobile, pleine largeur pour éviter les débordements */}
+                <div className="flex flex-col sm:flex-row gap-2 w-full">
                   {/* Strava */}
                   {it.id === "strava" && (
                     it.status === "available" ? (
                       isConnected ? (
-                        <form method="POST" action={it.disconnectPath || "/api/oauth/strava/disconnect"}>
-                          <button className="btn btn-outline" type="submit" style={{ color: "#111" }}>
+                        <form method="POST" action={it.disconnectPath || "/api/oauth/strava/disconnect"} className="w-full sm:w-auto">
+                          <button className="btn btn-outline w-full sm:w-auto" type="submit" style={{ color: "#111" }}>
                             Déconnecter
                           </button>
                         </form>
                       ) : (
-                        <a className="btn-dash" href={it.connectHref}>Connecter</a>
+                        <a className="btn-dash w-full sm:w-auto text-center" href={it.connectHref}>Connecter</a>
                       )
                     ) : (
                       <>
-                        <button className="btn-dash" type="button" disabled title="Bientôt disponible">Connecter</button>
-                        <button className="btn btn-outline" type="button" disabled title="Bientôt disponible" style={{ color: "#111" }}>
+                        <button className="btn-dash w-full sm:w-auto" type="button" disabled title="Bientôt disponible">Connecter</button>
+                        <button className="btn btn-outline w-full sm:w-auto" type="button" disabled title="Bientôt disponible" style={{ color: "#111" }}>
                           En savoir plus
                         </button>
                       </>
@@ -199,36 +205,36 @@ export default async function Page(props: {
 
                   {/* Apple Santé */}
                   {it.id === "apple-health" && (
-                    <a className="btn-dash" href="#apple-import">Importer export.zip</a>
+                    <a className="btn-dash w-full sm:w-auto text-center" href="#apple-import">Importer export.zip</a>
                   )}
 
                   {/* Google Fit */}
                   {it.id === "google-fit" && (
                     it.status === "available" ? (
                       isConnected ? (
-                        <form method="POST" action={it.disconnectPath || "/api/oauth/google-fit/disconnect"}>
-                          <button className="btn btn-outline" type="submit" style={{ color: "#111" }}>
+                        <form method="POST" action={it.disconnectPath || "/api/oauth/google-fit/disconnect"} className="w-full sm:w-auto">
+                          <button className="btn btn-outline w-full sm:w-auto" type="submit" style={{ color: "#111" }}>
                             Déconnecter
                           </button>
                         </form>
                       ) : (
-                        <a className="btn-dash" href={it.connectHref}>Connecter</a>
+                        <a className="btn-dash w-full sm:w-auto text-center" href={it.connectHref}>Connecter</a>
                       )
                     ) : (
                       <>
-                        <button className="btn-dash" type="button" disabled title="Bientôt disponible">Connecter</button>
-                        <button className="btn btn-outline" type="button" disabled title="Bientôt disponible" style={{ color: "#111" }}>
+                        <button className="btn-dash w-full sm:w-auto" type="button" disabled title="Bientôt disponible">Connecter</button>
+                        <button className="btn btn-outline w-full sm:w-auto" type="button" disabled title="Bientôt disponible" style={{ color: "#111" }}>
                           En savoir plus
                         </button>
                       </>
                     )
                   )}
 
-                  {/* Par défaut (autres à venir) */}
+                  {/* Par défaut */}
                   {!(it.id === "strava" || it.id === "apple-health" || it.id === "google-fit") && (
                     <>
-                      <button className="btn-dash" type="button" disabled title="Bientôt disponible">Connecter</button>
-                      <button className="btn btn-outline" type="button" disabled title="Bientôt disponible" style={{ color: "#111" }}>
+                      <button className="btn-dash w-full sm:w-auto" type="button" disabled title="Bientôt disponible">Connecter</button>
+                      <button className="btn btn-outline w-full sm:w-auto" type="button" disabled title="Bientôt disponible" style={{ color: "#111" }}>
                         En savoir plus
                       </button>
                     </>
@@ -247,21 +253,21 @@ export default async function Page(props: {
             const acts = await fetchRecentActivities(6);
             if (!acts.length) {
               return (
-                <div className="card text-sm" style={{ color: "var(--muted)" }}>
+                <div className="card text-xs sm:text-sm" style={{ color: "var(--muted)" }}>
                   Aucune activité récente trouvée (ou accès non autorisé).
                 </div>
               );
             }
             return (
-              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {acts.map((a) => (
-                  <article key={a.id} className="card" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <article key={a.id} className="card p-3 sm:p-4" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     <div className="flex items-center justify-between">
-                      <h3 className="font-semibold" style={{ margin: 0 }}>{a.name || a.type}</h3>
-                      <span className="badge">{a.type}</span>
+                      <h3 className="font-semibold text-sm sm:text-base truncate" style={{ margin: 0 }}>{a.name || a.type}</h3>
+                      <span className="badge text-xs sm:text-sm">{a.type}</span>
                     </div>
-                    <div className="text-sm" style={{ color: "var(--muted)" }}>{fmtDate(a.start_date_local)}</div>
-                    <div className="text-sm" style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                    <div className="text-xs sm:text-sm" style={{ color: "var(--muted)" }}>{fmtDate(a.start_date_local)}</div>
+                    <div className="text-xs sm:text-sm" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       <span className="badge">{fmtKm(a.distance)}</span>
                       <span className="badge">{fmtPaceOrSpeed(a)}</span>
                       {a.total_elevation_gain ? <span className="badge">{Math.round(a.total_elevation_gain)} m D+</span> : null}
@@ -278,12 +284,12 @@ export default async function Page(props: {
       <Section title="Importer depuis Apple Santé (export.zip)">
         <div
           id="apple-import"
-          className="card"
-          style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}
+          className="card p-3 sm:p-4"
+          style={{ display: "flex", alignItems: "stretch", justifyContent: "space-between", gap: 12 }}
         >
-          <div>
-            <strong>Importer un export Apple Santé</strong>
-            <div className="text-sm" style={{ color: "var(--muted)" }}>
+          <div className="min-w-0">
+            <strong className="text-sm sm:text-base block">Importer un export Apple Santé</strong>
+            <div className="text-xs sm:text-sm" style={{ color: "var(--muted)" }}>
               Sur iPhone : Santé → Profil → <b>Exporter toutes les données</b> → partage le <b>export.zip</b>,
               puis importe-le ici.
             </div>
@@ -293,10 +299,16 @@ export default async function Page(props: {
             method="POST"
             action="/api/apple-health/import"
             encType="multipart/form-data"
-            className="flex items-center gap:2"
+            className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto"
           >
-            <input type="file" name="file" accept=".zip" required className="text-sm" />
-            <button className="btn-dash" type="submit">Importer</button>
+            <input
+              type="file"
+              name="file"
+              accept=".zip"
+              required
+              className="text-xs sm:text-sm max-w-full"
+            />
+            <button className="btn-dash w-full sm:w-auto" type="submit">Importer</button>
           </form>
         </div>
       </Section>
@@ -308,21 +320,21 @@ export default async function Page(props: {
             const acts = readAppleRecent();
             if (!acts.length) {
               return (
-                <div className="card text-sm" style={{ color: "var(--muted)" }}>
+                <div className="card text-xs sm:text-sm" style={{ color: "var(--muted)" }}>
                   Aucune activité trouvée dans l’export.
                 </div>
               );
             }
             return (
-              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {acts.map((a, idx) => (
-                  <article key={idx} className="card" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <article key={idx} className="card p-3 sm:p-4" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     <div className="flex items-center justify-between">
-                      <h3 className="font-semibold" style={{ margin: 0 }}>{fmtAppleType(a.type)}</h3>
-                      <span className="badge">Apple</span>
+                      <h3 className="font-semibold text-sm sm:text-base truncate" style={{ margin: 0 }}>{fmtAppleType(a.type)}</h3>
+                      <span className="badge text-xs sm:text-sm">Apple</span>
                     </div>
-                    <div className="text-sm" style={{ color: "var(--muted)" }}>{fmtAppleDate(a.start)}</div>
-                    <div className="text-sm" style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                    <div className="text-xs sm:text-sm" style={{ color: "var(--muted)" }}>{fmtAppleDate(a.start)}</div>
+                    <div className="text-xs sm:text-sm" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       {fmtKmApple(a.distanceKm) && <span className="badge">{fmtKmApple(a.distanceKm)}</span>}
                       {fmtDuration(a.duration) && <span className="badge">{fmtDuration(a.duration)}</span>}
                       {a.energyKcal ? <span className="badge">{Math.round(a.energyKcal)} kcal</span> : null}
@@ -340,24 +352,24 @@ export default async function Page(props: {
         <Section title="Dernières performances (Google Fit)">
           {await (async () => {
             const acts = await fetchGfRecentActivities(14);
-            const list = acts.length ? acts : readGfRecentFromCookie(); // petit fallback
+            const list = acts.length ? acts : readGfRecentFromCookie();
             if (!list.length) {
               return (
-                <div className="card text-sm" style={{ color: "var(--muted)" }}>
+                <div className="card text-xs sm:text-sm" style={{ color: "var(--muted)" }}>
                   Aucune session récente (ou autorisations insuffisantes).
                 </div>
               );
             }
             return (
-              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {list.map((a) => (
-                  <article key={a.id} className="card" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <article key={a.id} className="card p-3 sm:p-4" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     <div className="flex items-center justify-between">
-                      <h3 className="font-semibold" style={{ margin: 0 }}>{a.name || a.type || "Session"}</h3>
-                      <span className="badge">Google Fit</span>
+                      <h3 className="font-semibold text-sm sm:text-base truncate" style={{ margin: 0 }}>{a.name || a.type || "Session"}</h3>
+                      <span className="badge text-xs sm:text-sm">Google Fit</span>
                     </div>
-                    <div className="text-sm" style={{ color: "var(--muted)" }}>{fmtDateGf(a.start)}</div>
-                    <div className="text-sm" style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                    <div className="text-xs sm:text-sm" style={{ color: "var(--muted)" }}>{fmtDateGf(a.start)}</div>
+                    <div className="text-xs sm:text-sm" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       {a.distanceKm ? <span className="badge">{fmtKmGf(a.distanceKm)}</span> : null}
                       {a.steps ? <span className="badge">{a.steps.toLocaleString("fr-FR")} pas</span> : null}
                       {a.caloriesKcal ? <span className="badge">{a.caloriesKcal} kcal</span> : null}
@@ -372,22 +384,22 @@ export default async function Page(props: {
 
       {/* Alerte de dispo */}
       <Section title="Recevoir une alerte">
-        <div className="card" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-          <div>
-            <strong>Préviens-moi quand les intégrations arrivent</strong>
-            <div className="text-sm" style={{ color: "var(--muted)" }}>
+        <div className="card p-3 sm:p-4" style={{ display: "flex", alignItems: "stretch", justifyContent: "space-between", gap: 12 }}>
+          <div className="min-w-0">
+            <strong className="text-sm sm:text-base block">Préviens-moi quand les intégrations arrivent</strong>
+            <div className="text-xs sm:text-sm" style={{ color: "var(--muted)" }}>
               Notification dans l’app (préférence stockée en local).
             </div>
           </div>
 
-          <form action={subscribeAction} className="flex items-center gap-2">
+          <form action={subscribeAction} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
             <input type="hidden" name="want" value={isSubscribed ? "0" : "1"} />
             {isSubscribed ? (
-              <button className="btn btn-outline" type="submit" style={{ color: "#111" }}>
+              <button className="btn btn-outline w-full sm:w-auto" type="submit" style={{ color: "#111" }}>
                 Désactiver
               </button>
             ) : (
-              <button className="btn-dash" type="submit">Me prévenir</button>
+              <button className="btn-dash w-full sm:w-auto" type="submit">Me prévenir</button>
             )}
           </form>
         </div>
