@@ -1,437 +1,647 @@
-import { cookies } from "next/headers";
+// apps/web/app/dashboard/recipes/page.tsx
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 
+/* ===================== Config Next ===================== */
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-type EntryType = "steps" | "load" | "weight";
-
-type ProgressEntry = {
+/* ===================== Types ===================== */
+type Plan = "BASIC" | "PLUS" | "PREMIUM";
+type Rework = { ingredient: string; tips: string[] };
+type Recipe = {
   id: string;
-  type: EntryType;
-  date: string;      // YYYY-MM-DD
-  value: number;     // pas / kg
-  reps?: number;     // seulement pour "load"
-  note?: string;
-  createdAt: string; // ISO
+  title: string;
+  subtitle?: string;
+  kcal?: number;
+  timeMin?: number;
+  tags: string[];
+  goals: string[];
+  minPlan: Plan;
+  ingredients: string[];
+  steps: string[];
+  rework?: Rework[];
 };
 
-type Store = { entries: ProgressEntry[] };
+/* ===================== Utils ===================== */
+function planRank(p?: Plan) { return p === "PREMIUM" ? 3 : p === "PLUS" ? 2 : 1; }
+function isUnlocked(r: Recipe, userPlan: Plan) { return planRank(userPlan) >= planRank(r.minPlan); }
+function parseCsv(value?: string | string[]): string[] {
+  const raw = Array.isArray(value) ? value.join(",") : value ?? "";
+  return raw.split(/[,|]/).map((s) => s.trim().toLowerCase()).filter(Boolean);
+}
 
-function parseStore(val?: string | null): Store {
-  if (!val) return { entries: [] };
+/* --- random déterministe --- */
+function seededPRNG(seed: number) { let s = seed >>> 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 2 ** 32); }
+function seededShuffle<T>(arr: T[], seed: number): T[] {
+  const rand = seededPRNG(seed); const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  return a;
+}
+function pickRandomSeeded<T>(arr: T[], n: number, seed: number): T[] {
+  return seededShuffle(arr, seed).slice(0, Math.max(0, Math.min(n, arr.length)));
+}
+
+/* ---- base64url JSON ---- */
+function encodeB64UrlJson(data: any): string {
+  const json = JSON.stringify(data);
+  const B: any = (globalThis as any).Buffer;
+
+  if (typeof window === "undefined" && B?.from) {
+    return B.from(json, "utf8").toString("base64")
+      .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/,"");
+  }
+  const bytes = new TextEncoder().encode(json);
+  let bin = "";
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  const btoaFn: ((s: string) => string) | undefined = (globalThis as any).btoa;
+  let b64: string;
+  if (typeof btoaFn === "function") b64 = btoaFn(bin);
+  else if (B?.from) b64 = B.from(bin, "binary").toString("base64");
+  else b64 = "";
+  return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/,"");
+}
+
+/* ---- dictionnaire "re-travailler" (fallback) ---- */
+const REWORK_TIPS: Record<string, string[]> = {
+  "brocoli": ["Rôti au four parmesan-citron", "Wok soja-sésame", "Velouté crème légère"],
+  "saumon": ["Mariné miso/soja", "Papillote citron-aneth", "Rillettes au yaourt"],
+  "tofu": ["Mariné puis snacké", "Panure maïzena + sauce douce", "Émietté façon brouillade"],
+  "poivron": ["Confit puis pelé", "Coulis doux", "Grillé salade"],
+  "champignons": ["Poêlés très chauds", "Hachés en bolo", "Rôtis entiers"],
+  "courgette": ["Tagliatelles ail-citron", "Gratin ricotta-menthe", "Galettes râpées"],
+  "épinards": ["Sautés minute", "Pesto doux", "Fondue légère"],
+  "lentilles": ["Dal coco", "Salade tiède", "Soupe carotte-cumin"],
+};
+
+/* ---- base healthy (dispo pour tous) ---- */
+const HEALTHY_BASE: Recipe[] = [
+  { id:"salade-quinoa", title:"Salade de quinoa croquante", subtitle:"Pois chiches, concombre, citron",
+    kcal:520, timeMin:15, tags:["végétarien","sans-gluten"], goals:["equilibre"], minPlan:"BASIC",
+    ingredients:["quinoa","pois chiches","concombre","citron","huile d'olive","sel","poivre","persil"], steps:["Rincer, cuire, assaisonner"] },
+  { id:"bowl-poulet-riz", title:"Bowl poulet & riz complet", subtitle:"Avocat, maïs, yaourt grec",
+    kcal:640, timeMin:20, tags:["protéiné"], goals:["prise de masse","equilibre"], minPlan:"BASIC",
+    ingredients:["poulet","riz complet","avocat","maïs","yaourt grec","cumin","citron","sel","poivre"], steps:["Cuire riz, saisir poulet, assembler"] },
+  { id:"omelette-herbes", title:"Omelette champignons & fines herbes", subtitle:"Rapide du matin",
+    kcal:420, timeMin:10, tags:["rapide","sans-gluten"], goals:["equilibre"], minPlan:"BASIC",
+    ingredients:["œufs","champignons","ciboulette","beurre","sel","poivre","parmesan"], steps:["Battre, cuire, plier"] },
+  { id:"saumon-four", title:"Saumon au four & légumes rôtis", subtitle:"Carottes, brocoli, citron",
+    kcal:580, timeMin:25, tags:["omega-3","sans-gluten"], goals:["equilibre","santé"], minPlan:"BASIC",
+    ingredients:["saumon","brocoli","carottes","citron","huile d'olive","ail","sel","poivre"], steps:["Préchauffer, rôtir, servir"] },
+  { id:"curry-chiche", title:"Curry de pois chiches coco", subtitle:"Vegan & réconfortant",
+    kcal:600, timeMin:30, tags:["vegan","sans-gluten"], goals:["equilibre"], minPlan:"BASIC",
+    ingredients:["pois chiches","lait de coco","tomates concassées","oignon","ail","curry","riz basmati","sel"], steps:["Suer, mijoter, servir"] },
+  { id:"tofu-brocoli-wok", title:"Tofu sauté au brocoli (wok)", subtitle:"Sauce soja-sésame",
+    kcal:530, timeMin:15, tags:["vegan","rapide"], goals:["sèche","equilibre"], minPlan:"BASIC",
+    ingredients:["tofu ferme","brocoli","sauce soja","ail","gingembre","graines de sésame","huile","maïzena"], steps:["Saisir, lier, napper"] },
+];
+
+/* ========= Mode IA pour PLUS/PREMIUM ========= */
+async function generateAIRecipes({
+  plan,
+  kcal, kcalMin, kcalMax,
+  allergens, dislikes,
+  count = 12,
+}: {
+  plan: Plan;
+  kcal?: number; kcalMin?: number; kcalMax?: number;
+  allergens: string[]; dislikes: string[];
+  count?: number;
+}): Promise<Recipe[]> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return [];
+  const constraints: string[] = [];
+  if (typeof kcal === "number" && !isNaN(kcal) && kcal > 0) {
+    constraints.push(`- Viser ~${kcal} kcal par recette (±10%).`);
+  } else {
+    const hasMin = typeof kcalMin === "number" && !isNaN(kcalMin) && kcalMin > 0;
+    const hasMax = typeof kcalMax === "number" && !isNaN(kcalMax) && kcalMax > 0;
+    if (hasMin && hasMax) constraints.push(`- Respecter une plage ${kcalMin}-${kcalMax} kcal.`);
+    else if (hasMin) constraints.push(`- Minimum ${kcalMin} kcal.`);
+    else if (hasMax) constraints.push(`- Maximum ${kcalMax} kcal.`);
+  }
+  if (allergens.length) constraints.push(`- Exclure strictement: ${allergens.join(", ")}.`);
+  if (dislikes.length) constraints.push(`- Si un ingrédient non-aimé apparaît, ne pas le supprimer: proposer une section "rework" avec 2-3 façons de le cuisiner autrement.`);
+
+  const prompt =
+`Tu es un chef-nutritionniste. Renvoie UNIQUEMENT du JSON valide (pas de texte).
+Utilisateur:
+- Plan: ${plan}
+- Allergènes/Intolérances: ${allergens.join(", ") || "aucun"}
+- Aliments non aimés (à re-travailler): ${dislikes.join(", ") || "aucun"}
+- Nombre de recettes: ${count}
+
+Contraintes:
+${constraints.join("\n")}
+
+Schéma TypeScript (exemple):
+Recipe = {
+  id: string, title: string, subtitle?: string,
+  kcal?: number, timeMin?: number, tags: string[],
+  goals: string[], minPlan: "BASIC" | "PLUS" | "PREMIUM",
+  ingredients: string[], steps: string[],
+  rework?: { ingredient: string, tips: string[] }[]
+}
+
+Règles:
+- minPlan = "${plan}" pour toutes les recettes.
+- Variété: végétarien/vegan/protéiné/rapide/sans-gluten...
+- Ingrédients simples du quotidien.
+- steps = 3–6 étapes courtes.
+- Renvoyer {"recipes": Recipe[]}.`;
+
   try {
-    const obj = JSON.parse(val);
-    if (Array.isArray(obj?.entries)) return { entries: obj.entries as ProgressEntry[] };
-    return { entries: [] };
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        temperature: 0.7,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: "Tu parles français et tu réponds en JSON strict." },
+          { role: "user", content: prompt },
+        ],
+      }),
+      cache: "no-store",
+    });
+
+    if (!res.ok) return [];
+    const data = await res.json();
+    let payload: any = {};
+    try { payload = JSON.parse(data?.choices?.[0]?.message?.content ?? "{}"); } catch {}
+    const arr: any[] = Array.isArray(payload?.recipes) ? payload.recipes : [];
+    const seen = new Set<string>();
+    const clean: Recipe[] = arr.map((raw) => {
+      const title = String(raw?.title ?? "").trim();
+      const id = String(raw?.id || title || Math.random().toString(36).slice(2)).trim()
+        .toLowerCase().replace(/[^a-z0-9-]+/g, "-");
+      const ingr = Array.isArray(raw?.ingredients) ? raw.ingredients.map((x: any) => String(x)) : [];
+      const steps = Array.isArray(raw?.steps) ? raw.steps.map((x: any) => String(x)) : [];
+      const rework: Rework[] | undefined = Array.isArray(raw?.rework)
+        ? raw.rework.map((x: any) => ({
+            ingredient: String(x?.ingredient || "").toLowerCase(),
+            tips: Array.isArray(x?.tips) ? x.tips.map((t: any) => String(t)) : []
+          }))
+        : undefined;
+      const minPlan: Plan = (plan === "PREMIUM" ? "PREMIUM" : "PLUS");
+
+      return {
+        id, title,
+        subtitle: raw?.subtitle ? String(raw.subtitle) : undefined,
+        kcal: typeof raw?.kcal === "number" ? raw.kcal : undefined,
+        timeMin: typeof raw?.timeMin === "number" ? raw.timeMin : undefined,
+        tags: Array.isArray(raw?.tags) ? raw.tags.map((t: any) => String(t)) : [],
+        goals: Array.isArray(raw?.goals) ? raw.goals.map((g: any) => String(g)) : [],
+        minPlan,
+        ingredients: ingr,
+        steps,
+        rework,
+      } as Recipe;
+    }).filter((r) => {
+      if (!r.title) return false;
+      if (seen.has(r.id)) return false;
+      seen.add(r.id);
+      const ingLow = r.ingredients.map(i => i.toLowerCase());
+      if (allergens.some(a => ingLow.includes(a))) return false;
+      return true;
+    });
+
+    return clean;
   } catch {
-    return { entries: [] };
+    return [];
   }
 }
 
-function fmtDate(dateISO: string) {
+/* ---- fallback si IA indisponible ---- */
+function personalizeFallback({
+  base, kcal, kcalMin, kcalMax, allergens, dislikes, plan,
+}: {
+  base: Recipe[];
+  kcal?: number; kcalMin?: number; kcalMax?: number;
+  allergens: string[]; dislikes: string[]; plan: Plan;
+}): Recipe[] {
+  let filtered = base.filter(r => {
+    const ing = r.ingredients.map(i => i.toLowerCase());
+    return !allergens.some(a => ing.includes(a));
+  });
+  if (typeof kcal === "number" && !isNaN(kcal) && kcal > 0) {
+    const tol = Math.max(75, Math.round(kcal * 0.15));
+    filtered = filtered.filter(r => typeof r.kcal === "number" && Math.abs((r.kcal || 0) - kcal) <= tol);
+  } else {
+    const hasMin = typeof kcalMin === "number" && !isNaN(kcalMin) && kcalMin > 0;
+    const hasMax = typeof kcalMax === "number" && !isNaN(kcalMax) && kcalMax > 0;
+    if (hasMin) filtered = filtered.filter(r => (r.kcal || 0) >= (kcalMin as number));
+    if (hasMax) filtered = filtered.filter(r => (r.kcal || 0) <= (kcalMax as number));
+  }
+  const dislikesSet = new Set(dislikes);
+  const out: Recipe[] = filtered.map<Recipe>(r => {
+    const ingLower = r.ingredients.map(i => i.toLowerCase());
+    const hits = [...dislikesSet].filter(d => ingLower.includes(d));
+    const minPlan: Plan = (plan === "PREMIUM" ? "PREMIUM" : "PLUS");
+    if (!hits.length) return { ...r, minPlan };
+    const tips: Rework[] = hits.map(h => ({ ingredient: h, tips: REWORK_TIPS[h] ?? ["Changer la cuisson", "Assaisonnement différent", "Mixer/hacher pour texture"] }));
+    return { ...r, minPlan, rework: tips };
+  });
+  return out;
+}
+
+/* ===================== Filtres (Server Action) ===================== */
+async function applyFiltersAction(formData: FormData): Promise<void> {
+  "use server";
+  const params = new URLSearchParams();
+  const fields = ["kcal","kcalMin","kcalMax","allergens","dislikes"] as const;
+  for (const f of fields) {
+    const val = (formData.get(f) ?? "").toString().trim();
+    if (val) params.set(f, val);
+  }
+  params.set("rnd", String(Date.now()));
+  redirect(`/dashboard/recipes?${params.toString()}`);
+}
+
+/* ===================== Sauvegarde via Cookie (Server Actions) ===================== */
+type SavedItem = { id: string; title: string };
+const SAVED_COOKIE = "saved_recipes_v1";
+
+function readSaved(): SavedItem[] {
   try {
-    const d = new Date(dateISO);
-    if (!isNaN(d.getTime())) {
-      return d.toLocaleDateString("fr-FR", { year: "numeric", month: "long", day: "numeric" });
-    }
-  } catch {}
-  return dateISO;
-}
-
-function uid() {
-  return "id-" + Math.random().toString(36).slice(2, 10);
-}
-
-/* ====== Helpers semaine (lundi → dimanche) ====== */
-function startOfWeekMonday(d: Date) {
-  const ld = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const day = ld.getDay(); // 0=Dim..6=Sam
-  const diffSinceMonday = (day + 6) % 7; // Lundi=0
-  ld.setDate(ld.getDate() - diffSinceMonday);
-  return ld;
-}
-function endOfWeekFromMonday(monday: Date) {
-  const s = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate());
-  s.setDate(s.getDate() + 6);
-  return s;
-}
-function toYMD(d: Date) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const da = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${da}`;
-}
-function parseYMDLocal(s: string) {
-  const [y, m, d] = s.split("-").map(Number);
-  return new Date(y, (m || 1) - 1, d || 1);
-}
-
-function entryBadgeStyles(t: EntryType): React.CSSProperties {
-  switch (t) {
-    case "steps":
-      return { border: "1px solid rgba(14,165,233,.25)", background: "rgba(14,165,233,.08)", color: "#0369a1" };
-    case "load":
-      return { border: "1px solid rgba(245,158,11,.25)", background: "rgba(245,158,11,.08)", color: "#92400e" };
-    case "weight":
-      return { border: "1px solid rgba(139,92,246,.25)", background: "rgba(139,92,246,.08)", color: "#5b21b6" };
+    const raw = cookies().get(SAVED_COOKIE)?.value ?? "[]";
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr.filter(x => x && typeof x.id === "string" && typeof x.title === "string") : [];
+  } catch {
+    return [];
   }
 }
 
-/** ------ Server Actions ------ */
-async function addProgressAction(formData: FormData) {
-  "use server";
-  const type = (formData.get("type") || "").toString() as EntryType;
-  const date = (formData.get("date") || "").toString();
-  const valueStr = (formData.get("value") || "").toString().replace(",", ".");
-  const repsStr = (formData.get("reps") || "").toString().replace(",", ".");
-  const note = (formData.get("note") || "").toString().slice(0, 240);
-
-  if (!["steps", "load", "weight"].includes(type)) redirect("/dashboard/progress?error=type");
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) redirect("/dashboard/progress?error=date");
-
-  const value = Number(valueStr);
-  const reps = repsStr ? Number(repsStr) : undefined;
-  if (!isFinite(value) || value <= 0) redirect("/dashboard/progress?error=valeur");
-
-  const jar = cookies();
-  const store = parseStore(jar.get("app_progress")?.value);
-
-  const entry: ProgressEntry = {
-    id: uid(),
-    type,
-    date,
-    value,
-    reps: type === "load" && isFinite(Number(reps)) && Number(reps) > 0 ? Number(reps) : undefined,
-    note: note || undefined,
-    createdAt: new Date().toISOString(),
-  };
-
-  const next: Store = { entries: [entry, ...store.entries].slice(0, 400) };
-
-  jar.set("app_progress", JSON.stringify(next), {
+function writeSaved(list: SavedItem[]) {
+  cookies().set(SAVED_COOKIE, JSON.stringify(list), {
     path: "/",
+    httpOnly: false,
     sameSite: "lax",
     maxAge: 60 * 60 * 24 * 365,
-    httpOnly: false,
   });
-
-  redirect("/dashboard/progress?success=1");
 }
 
-async function deleteEntryAction(formData: FormData) {
+async function saveRecipeAction(formData: FormData) {
   "use server";
-  const id = (formData.get("id") || "").toString();
-  if (!id) redirect("/dashboard/progress");
+  const id = String(formData.get("id") ?? "");
+  const title = String(formData.get("title") ?? "");
+  const returnTo = String(formData.get("returnTo") ?? "/dashboard/recipes");
+  if (!id || !title) redirect(returnTo);
 
-  const jar = cookies();
-  const store = parseStore(jar.get("app_progress")?.value);
-  const next: Store = { entries: store.entries.filter(e => e.id !== id) };
-
-  jar.set("app_progress", JSON.stringify(next), {
-    path: "/",
-    sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 365,
-    httpOnly: false,
-  });
-
-  redirect("/dashboard/progress?deleted=1");
+  const cur = readSaved();
+  if (!cur.some(x => x.id === id)) {
+    cur.push({ id, title });
+    writeSaved(cur);
+  }
+  redirect(returnTo);
 }
 
-/** ------ Page ------ */
+async function removeRecipeAction(formData: FormData) {
+  "use server";
+  const id = String(formData.get("id") ?? "");
+  const returnTo = String(formData.get("returnTo") ?? "/dashboard/recipes");
+  if (!id) redirect(returnTo);
+
+  const cur = readSaved().filter(x => x.id !== id);
+  writeSaved(cur);
+  redirect(returnTo);
+}
+
+/* ===================== Page ===================== */
 export default async function Page({
   searchParams,
-}: { searchParams?: { success?: string; error?: string; deleted?: string } }) {
-  const jar = cookies();
-  const store = parseStore(jar.get("app_progress")?.value);
+}: {
+  searchParams?: { kcal?: string; kcalMin?: string; kcalMax?: string; allergens?: string; dislikes?: string; rnd?: string };
+}) {
+  // Lecture session — aucune redirection selon le plan
+  let plan: Plan = "BASIC";
+  try {
+    const mod = await import("@/lib/session");
+    const s: any = await mod.getSession().catch(() => ({}));
+    plan = (s?.plan as Plan) || "BASIC";
+  } catch {}
 
-  const recent = [...store.entries]
-    .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""))
-    .slice(0, 12);
+  const kcal = Number(searchParams?.kcal ?? "");
+  const kcalMin = Number(searchParams?.kcalMin ?? "");
+  const kcalMax = Number(searchParams?.kcalMax ?? "");
+  const allergens = parseCsv(searchParams?.allergens);
+  const dislikes = parseCsv(searchParams?.dislikes);
 
-  const lastByType: Record<EntryType, ProgressEntry | undefined> = {
-    steps: store.entries.find(e => e.type === "steps"),
-    load: store.entries.find(e => e.type === "load"),
-    weight: store.entries.find(e => e.type === "weight"),
-  };
+  const hasKcalTarget = !isNaN(kcal) && kcal > 0;
+  const hasKcalMin = !isNaN(kcalMin) && kcalMin > 0;
+  const hasKcalMax = !isNaN(kcalMax) && kcalMax > 0;
 
-  const today = new Date();
-  const yyyy = today.getFullYear();
-  const mm = String(today.getMonth() + 1).padStart(2, "0");
-  const dd = String(today.getDate()).padStart(2, "0");
-  const defaultDate = `${yyyy}-${mm}-${dd}`;
+  const healthy = HEALTHY_BASE;
 
-  // Semaine en cours
-  const monday = startOfWeekMonday(today);
-  const sunday = endOfWeekFromMonday(monday);
-  const mondayYMD = toYMD(monday);
-  const sundayYMD = toYMD(sunday);
+  // bloc IA (PLUS/PREMIUM)
+  let personalized: Recipe[] = [];
+  let relaxedNote: string | null = null;
 
-  const stepsThisWeek = store.entries
-    .filter(e => e.type === "steps")
-    .filter(e => {
-      const d = parseYMDLocal(e.date);
-      return d >= monday && d <= sunday;
-    })
-    .reduce((sum, e) => sum + (Number(e.value) || 0), 0);
+  if (plan !== "BASIC") {
+    const ai = await generateAIRecipes({
+      plan,
+      kcal: hasKcalTarget ? kcal : undefined,
+      kcalMin: hasKcalMin ? kcalMin : undefined,
+      kcalMax: hasKcalMax ? kcalMax : undefined,
+      allergens, dislikes,
+      count: 16,
+    });
 
-  const daysCovered = new Set(
-    store.entries
-      .filter(e => e.type === "steps")
-      .filter(e => {
-        const d = parseYMDLocal(e.date);
-        return d >= monday && d <= sunday;
-      })
-      .map(e => e.date)
-  ).size;
+    personalized = ai.length
+      ? ai
+      : personalizeFallback({
+          base: HEALTHY_BASE,
+          kcal: hasKcalTarget ? kcal : undefined,
+          kcalMin: hasKcalMin ? kcalMin : undefined,
+          kcalMax: hasKcalMax ? kcalMax : undefined,
+          allergens, dislikes, plan,
+        });
 
-  const avgPerDay = daysCovered > 0 ? Math.round(stepsThisWeek / daysCovered) : 0;
-  const hasWeekData = stepsThisWeek > 0 && daysCovered > 0;
+    if (personalized.length === 0) {
+      const relaxed = personalizeFallback({ base: HEALTHY_BASE, allergens, dislikes, plan });
+      if (relaxed.length) {
+        personalized = relaxed;
+        relaxedNote = "Ajustement automatique : contrainte calories relâchée (allergènes respectés).";
+      } else {
+        personalized = HEALTHY_BASE.map(r => ({ ...r, minPlan: plan }));
+        relaxedNote = "Ajustement automatique : suggestions healthy compatibles avec vos contraintes.";
+      }
+    }
+  }
+
+  // cartes à afficher
+  const seed = Number(searchParams?.rnd ?? "0") || 123456789;
+  const healthyPick = pickRandomSeeded(healthy, 4, seed);
+  const personalizedPick = pickRandomSeeded(personalized, 6, seed);
+
+  // QS gardés (pour Voir la recette)
+  const qsParts: string[] = [];
+  if (hasKcalTarget) qsParts.push(`kcal=${kcal}`);
+  if (hasKcalMin) qsParts.push(`kcalMin=${kcalMin}`);
+  if (hasKcalMax) qsParts.push(`kcalMax=${kcalMax}`);
+  if (allergens.length) qsParts.push(`allergens=${encodeURIComponent(allergens.join(","))}`);
+  if (dislikes.length) qsParts.push(`dislikes=${encodeURIComponent(dislikes.join(","))}`);
+  const baseQS = qsParts.length ? `?${qsParts.join("&")}` : "";
+  const encode = (r: Recipe) => `${baseQS}${baseQS ? "&" : "?"}data=${encodeB64UrlJson(r)}`;
+
+  const disabled = plan === "BASIC";
+
+  // Lecture des recettes enregistrées (cookie)
+  const saved = readSaved();
+  const savedSet = new Set(saved.map(s => s.id));
+  const currentUrl = `/dashboard/recipes${baseQS}`;
 
   return (
-    <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
-      {/* Header (mêmes tailles que “Recettes”) */}
-      <div className="page-header">
-        <div>
-          <h1
-            className="h1"
-            style={{ marginBottom: 2, fontSize: "clamp(20px, 2.2vw, 24px)", lineHeight: 1.15 }}
-          >
-            Mes progrès
-          </h1>
-          <p
-            className="lead"
-            style={{ marginTop: 4, fontSize: "clamp(12px, 1.6vw, 14px)", lineHeight: 1.35, color: "#4b5563" }}
-          >
-            Ajoutez vos pas, vos charges et votre poids. Vos données restent en local (cookie).
-          </p>
-        </div>
-        <a
-          href="/dashboard"
-          className="btn btn-outline"
-          style={{ color: "#111", padding: "6px 10px", lineHeight: 1.2 }}
-        >
-          ← Retour
-        </a>
-      </div>
+    <>
+      {/* spacer pour laisser passer un topbar fixe éventuel */}
+      <div className="h-10" aria-hidden="true" />
 
-      {/* Messages */}
-      <div className="space-y-3">
-        {!!searchParams?.success && (
-          <div className="card" style={{ border: "1px solid rgba(16,185,129,.35)", background: "rgba(16,185,129,.08)", fontWeight: 600 }}>
-            ✓ Entrée enregistrée.
-          </div>
-        )}
-        {!!searchParams?.deleted && (
-          <div className="card" style={{ border: "1px solid rgba(59,130,246,.35)", background: "rgba(59,130,246,.08)", fontWeight: 600 }}>
-            Entrée supprimée.
-          </div>
-        )}
-        {!!searchParams?.error && (
-          <div className="card" style={{ border: "1px solid rgba(239,68,68,.35)", background: "rgba(239,68,68,.08)", fontWeight: 600 }}>
-            ⚠️ Erreur : {searchParams.error}
-          </div>
-        )}
-      </div>
+      <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
+        <div className="page-header">
+          <div>
+            <h1
+              className="h1"
+              style={{ marginBottom: 2, fontSize: "clamp(20px, 2.2vw, 24px)", lineHeight: 1.15 }}
+            >
+              Recettes
+            </h1>
+            <p
+              className="lead"
+              style={{ marginTop: 4, fontSize: "clamp(12px, 1.6vw, 14px)", lineHeight: 1.35, color: "#4b5563" }}
+            >
+              Healthy pour tous. Pour PLUS/PREMIUM, l’IA adapte aux calories, allergies et aliments à re-travailler.
+            </p>
 
-      {/* === 1) Section Formulaire === */}
-      <div className="section" style={{ marginTop: 12 }}>
-        <div className="section-head" style={{ marginBottom: 8 }}>
-          <h2 style={{ margin: 0, fontSize: "clamp(16px, 1.9vw, 18px)", lineHeight: 1.2 }}>Ajouter une entrée</h2>
+            {/* Récap filtres actifs */}
+            <div className="text-xs" style={{color:"#6b7280", marginTop:8}}>
+              Filtres actifs — 
+              {hasKcalTarget && <> cible: ~{kcal} kcal</>}
+              {!hasKcalTarget && (hasKcalMin || hasKcalMax) && <> plage: {hasKcalMin? kcalMin:"…"}–{hasKcalMax? kcalMax:"…"} kcal</>}
+              {allergens.length ? <> · allergènes: {allergens.join(", ")}</> : null}
+              {dislikes.length ? <> · non aimés: {dislikes.join(", ")}</> : null}
+              {(!hasKcalTarget && !hasKcalMin && !hasKcalMax && !allergens.length && !dislikes.length) && " aucun"}
+            </div>
+          </div>
+          <div className="text-sm">
+            Votre formule : <span className="badge" style={{ marginLeft: 6 }}>{plan}</span>
+          </div>
         </div>
 
-        <div className="card">
-          <form action={addProgressAction} className="grid gap-6 lg:grid-cols-3">
+        {/* CTA upgrade pour BASIC */}
+        {plan === "BASIC" && (
+          <div className="card" style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:12 }}>
             <div>
-              <label className="label">Type</label>
-              <select name="type" className="input" defaultValue="steps" required>
-                <option value="steps">Pas (steps)</option>
-                <option value="load">Charges portées (kg)</option>
-                <option value="weight">Poids (kg)</option>
-              </select>
-              <div className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>
-                Pour <b>charges</b>, vous pouvez renseigner les <b>répétitions</b> ci-dessous.
+              <strong>Débloquez la personnalisation IA</strong>
+              <div className="text-sm" style={{ color:"#6b7280" }}>Filtre calories, exclusions allergènes & “re-travailler” les aliments non aimés.</div>
+            </div>
+            <a className="btn btn-dash" href="/dashboard/abonnement">Passer à PLUS</a>
+          </div>
+        )}
+
+        {/* =================== Filtres =================== */}
+        <div className="section" style={{ marginTop: 12 }}>
+          <div className="section-head" style={{ marginBottom: 8, display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+            <h2 style={{ margin:0, fontSize:"clamp(16px,1.9vw,18px)", lineHeight:1.2 }}>
+              Contraintes & filtres
+            </h2>
+            {disabled && (
+              <span
+                className="badge"
+                style={{ display: "inline-block", whiteSpace: "nowrap", verticalAlign: "middle" }}
+              >
+                Réservé PLUS/PREMIUM
+              </span>
+            )}
+          </div>
+
+          <form action={applyFiltersAction} className="grid gap-6 lg:grid-cols-2" >
+            <fieldset disabled={disabled} style={{ display:"contents" }}>
+              <div>
+                <label className="label">Cible calories (kcal)</label>
+                <input className="input" type="number" name="kcal" placeholder="ex: 600" defaultValue={hasKcalTarget ? String(kcal) : ""} />
               </div>
-            </div>
+              <div className="grid gap-6 sm:grid-cols-2">
+                <div>
+                  <label className="label">Min kcal</label>
+                  <input className="input" type="number" name="kcalMin" placeholder="ex: 450" defaultValue={hasKcalMin ? String(kcalMin) : ""} />
+                </div>
+                <div>
+                  <label className="label">Max kcal</label>
+                  <input className="input" type="number" name="kcalMax" placeholder="ex: 700" defaultValue={hasKcalMax ? String(kcalMax) : ""} />
+                </div>
+              </div>
 
-            <div>
-              <label className="label">Date</label>
-              <input className="input" type="date" name="date" required defaultValue={defaultDate} />
-            </div>
+              <div>
+                <label className="label">Allergènes / intolérances (séparés par virgules)</label>
+                <input className="input" type="text" name="allergens" placeholder="arachide, lactose, gluten" defaultValue={allergens.join(", ")} />
+              </div>
 
-            <div>
-              <label className="label">Valeur</label>
-              <input className="input" type="number" name="value" step="any" placeholder="ex: 8000 (pas) / 60 (kg)" required />
-            </div>
+              <div>
+                <label className="label">Aliments non aimés (re-travailler)</label>
+                <input className="input" type="text" name="dislikes" placeholder="brocoli, saumon, tofu..." defaultValue={dislikes.join(", ")} />
+                <div className="text-xs" style={{ color:"#6b7280", marginTop:4 }}>
+                  On les garde, mais on propose une autre façon de les cuisiner.
+                </div>
+              </div>
+            </fieldset>
 
-            <div>
-              <label className="label">Répétitions (optionnel, charges)</label>
-              <input className="input" type="number" name="reps" step="1" placeholder="ex: 8" />
-            </div>
-
-            <div className="lg:col-span-2">
-              <label className="label">Note (optionnel)</label>
-              <input className="input" type="text" name="note" placeholder="ex: Marche rapide, Squat barre, etc." />
-            </div>
-
-            <div className="lg:col-span-3" style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
-              <button className="btn btn-dash" type="submit">Enregistrer</button>
+            <div className="flex items-center justify-between lg:col-span-2">
+              <div className="text-sm" style={{ color: "#6b7280" }}>
+                {disabled ? "Passez à PLUS pour activer les filtres." : "Ajustez les filtres puis régénérez."}
+              </div>
+              <div style={{ display: "flex", gap: 10 }}>
+                <a href="/dashboard/recipes" className="btn btn-outline" style={{ color: "#111" }}>
+                  Réinitialiser
+                </a>
+                <button className="btn btn-dash" type="submit" disabled={disabled}>Régénérer</button>
+              </div>
             </div>
           </form>
         </div>
-      </div>
 
-      {/* === 2) Semaine en cours (card) === */}
-      <section className="section" style={{ marginTop: 12 }}>
-        <div className="section-head" style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h2 style={{ margin: 0, fontSize: "clamp(16px, 1.9vw, 18px)", lineHeight: 1.2 }}>Pas — semaine en cours</h2>
-          <span className="text-xs" style={{ color: "#6b7280" }}>Semaine = lundi → dimanche</span>
-        </div>
-
-        <article className="card" style={{ display: "block", gap: 12 }}>
-          <div>
-            <div className="text-sm" style={{ color: "#6b7280" }}>
-              Du <b>{fmtDate(mondayYMD)}</b> au <b>{fmtDate(sundayYMD)}</b>
+        {/* =================== Vos recettes enregistrées =================== */}
+        {saved.length > 0 && (
+          <section className="section" style={{ marginTop: 12 }}>
+            <div className="section-head" style={{ marginBottom: 8 }}>
+              <h2>Vos recettes enregistrées</h2>
             </div>
-
-            {hasWeekData ? (
-              <div
-                className="grid"
-                style={{
-                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                  gap: 12,
-                  marginTop: 12,
-                }}
-              >
-                {/* Bloc Total */}
-                <div className="card" style={{ padding: 12 }}>
-                  <div className="text-sm" style={{ color: "#6b7280" }}>Total</div>
-                  <div style={{ fontSize: 22, fontWeight: 900 }}>
-                    {stepsThisWeek.toLocaleString("fr-FR")}{" "}
-                    <span className="text-xs" style={{ color: "#6b7280", fontWeight: 400 }}>pas</span>
-                  </div>
-                </div>
-
-                {/* Bloc Moyenne / jour */}
-                <div className="card" style={{ padding: 12 }}>
-                  <div className="text-sm" style={{ color: "#6b7280" }}>Moyenne / jour</div>
-                  <div style={{ fontSize: 22, fontWeight: 900 }}>
-                    {avgPerDay.toLocaleString("fr-FR")}{" "}
-                    <span className="text-xs" style={{ color: "#6b7280", fontWeight: 400 }}>pas/jour</span>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="text-sm" style={{ color: "#6b7280", marginTop: 10 }}>
-                Aucune donnée saisie pour cette semaine. Ajoutez une entrée ci-dessus pour voir vos stats.
-              </div>
-            )}
-          </div>
-        </article>
-      </section>
-
-      {/* === 3) Dernières valeurs (cards en grille) === */}
-      <section className="section" style={{ marginTop: 12 }}>
-        <div className="section-head" style={{ marginBottom: 8 }}>
-          <h2 style={{ margin: 0, fontSize: "clamp(16px, 1.9vw, 18px)", lineHeight: 1.2 }}>Dernières valeurs</h2>
-        </div>
-
-        <div className="grid gap-6 lg:grid-cols-3">
-          {/* Pas */}
-          <article className="card">
-            <div className="flex items-center justify-between">
-              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>Pas</h3>
-              <span className="badge">Steps</span>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-2">
+              {saved.map((s) => (
+                <article key={s.id} className="card" style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
+                  <a href={`/dashboard/recipes/${s.id}`} className="font-semibold" style={{ textDecoration:"none", color:"var(--text,#111)" }}>
+                    {s.title}
+                  </a>
+                  <form action={removeRecipeAction}>
+                    <input type="hidden" name="id" value={s.id} />
+                    <input type="hidden" name="returnTo" value={currentUrl} />
+                    <button type="submit" className="btn btn-outline" style={{ color: "var(--text, #111)" }}>
+                      Retirer
+                    </button>
+                  </form>
+                </article>
+              ))}
             </div>
-            {lastByType.steps ? (
-              <div style={{ marginTop: 8 }}>
-                <div style={{ fontSize: 22, fontWeight: 900 }}>{lastByType.steps.value.toLocaleString("fr-FR")} pas</div>
-                <div className="text-sm" style={{ color: "#6b7280" }}>{fmtDate(lastByType.steps.date)}</div>
-              </div>
-            ) : (
-              <div className="text-sm" style={{ color: "#6b7280", marginTop: 6 }}>Aucune donnée.</div>
-            )}
-          </article>
+          </section>
+        )}
 
-          {/* Charges */}
-          <article className="card">
-            <div className="flex items-center justify-between">
-              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>Charges</h3>
-              <span className="badge">Load</span>
-            </div>
-            {lastByType.load ? (
-              <div style={{ marginTop: 8 }}>
-                <div style={{ fontSize: 22, fontWeight: 900 }}>
-                  {lastByType.load.value} kg{lastByType.load.reps ? ` × ${lastByType.load.reps}` : ""}
-                </div>
-                <div className="text-sm" style={{ color: "#6b7280" }}>{fmtDate(lastByType.load.date)}</div>
-              </div>
-            ) : (
-              <div className="text-sm" style={{ color: "#6b7280", marginTop: 6 }}>Aucune donnée.</div>
-            )}
-          </article>
-
-          {/* Poids */}
-          <article className="card">
-            <div className="flex items-center justify-between">
-              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>Poids</h3>
-              <span className="badge">Weight</span>
-            </div>
-            {lastByType.weight ? (
-              <div style={{ marginTop: 8 }}>
-                <div style={{ fontSize: 22, fontWeight: 900 }}>{lastByType.weight.value} kg</div>
-                <div className="text-sm" style={{ color: "#6b7280" }}>{fmtDate(lastByType.weight.date)}</div>
-              </div>
-            ) : (
-              <div className="text-sm" style={{ color: "#6b7280", marginTop: 6 }}>Aucune donnée.</div>
-            )}
-          </article>
-        </div>
-      </section>
-
-      {/* === 4) Entrées récentes (liste en cartes) === */}
-      <section className="section" style={{ marginTop: 12 }}>
-        <div className="section-head" style={{ marginBottom: 8 }}>
-          <h2 style={{ margin: 0, fontSize: "clamp(16px, 1.9vw, 18px)", lineHeight: 1.2 }}>Entrées récentes</h2>
-        </div>
-
-        {recent.length === 0 ? (
-          <div className="card text-sm" style={{ color: "#6b7280" }}>
-            Pas encore de données — commencez en ajoutant une entrée ci-dessus.
-          </div>
-        ) : (
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {recent.map((e) => (
-              <article key={e.id} className="card" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <div className="flex items-center justify-between">
-                  <strong style={{ fontSize: 18 }}>
-                    {e.type === "steps" && "Pas"}
-                    {e.type === "load" && "Charges"}
-                    {e.type === "weight" && "Poids"}
-                  </strong>
-                  <span className="badge">{fmtDate(e.date)}</span>
-                </div>
-
-                <div style={{ fontSize: 18, fontWeight: 800 }}>
-                  {e.type === "steps" && `${e.value.toLocaleString("fr-FR")} pas`}
-                  {e.type === "load" && `${e.value} kg${e.reps ? ` × ${e.reps}` : ""}`}
-                  {e.type === "weight" && `${e.value} kg`}
-                </div>
-
-                {e.note && <div className="text-sm" style={{ color: "#6b7280" }}>{e.note}</div>}
-
-                <form action={deleteEntryAction} style={{ marginTop: 4 }}>
-                  <input type="hidden" name="id" value={e.id} />
-                  <button className="btn btn-outline" type="submit" style={{ color: "#111" }}>
-                    Supprimer
-                  </button>
-                </form>
-              </article>
+        {/* =================== Healthy pour tous =================== */}
+        <section className="section" style={{ marginTop: 12 }}>
+          <div className="section-head" style={{ marginBottom: 8 }}><h2>Healthy (pour tous)</h2></div>
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
+            {healthyPick.map((r) => (
+              <Card
+                key={r.id}
+                r={r}
+                detailQS={encode(r)}
+                isSaved={savedSet.has(r.id)}
+                currentUrl={currentUrl}
+              />
             ))}
           </div>
+        </section>
+
+        {/* =================== Personnalisées IA =================== */}
+        {plan !== "BASIC" && (
+          <section className="section" style={{ marginTop: 12 }}>
+            <div className="section-head" style={{ marginBottom: 8 }}>
+              <h2>Recettes personnalisées (IA)</h2>
+            </div>
+
+            {relaxedNote && (
+              <div className="text-xs" style={{ color:"#6b7280", marginBottom:8 }}>
+                {relaxedNote}
+              </div>
+            )}
+
+            {personalizedPick.length ? (
+              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
+                {personalizedPick.map((r) => (
+                  <Card
+                    key={r.id}
+                    r={r}
+                    detailQS={encode(r)}
+                    isSaved={savedSet.has(r.id)}
+                    currentUrl={currentUrl}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="card text-sm" style={{ color:"#6b7280" }}>
+                Aucune recette correspondant exactement à vos filtres pour le moment.
+                Essayez d’élargir la plage calorique ou de réduire les exclusions.
+              </div>
+            )}
+          </section>
         )}
-      </section>
-    </div>
+      </div>
+    </>
+  );
+}
+
+/* ===================== Carte Recette ===================== */
+function Card({
+  r,
+  detailQS,
+  isSaved,
+  currentUrl,
+}: {
+  r: Recipe;
+  detailQS: string;
+  isSaved: boolean;
+  currentUrl: string;
+}) {
+  const href = `/dashboard/recipes/${r.id}${detailQS}`;
+  const ing = Array.isArray(r.ingredients) ? r.ingredients : [];
+  const shown = ing.slice(0, 8);
+  const more = Math.max(0, ing.length - shown.length);
+
+  return (
+    <article className="card" style={{ overflow: "hidden" }}>
+      <div className="flex items-center justify-between">
+        <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>{r.title}</h3>
+        <span className="badge">{r.minPlan}</span>
+      </div>
+
+      <div className="text-sm" style={{ marginTop: 10, display: "flex", gap: 12, flexWrap: "wrap" }}>
+        {typeof r.kcal === "number" && <span className="badge">{r.kcal} kcal</span>}
+        {typeof r.timeMin === "number" && <span className="badge">{r.timeMin} min</span>}
+      </div>
+
+      <div className="text-sm" style={{ marginTop: 10 }}>
+        <strong>Ingrédients</strong>
+        <ul style={{ margin: "6px 0 0 16px" }}>
+          {shown.map((i, idx) => <li key={idx}>{i}</li>)}
+          {more > 0 && <li>+ {more} autre(s)…</li>}
+        </ul>
+      </div>
+
+      <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
+        <a className="btn btn-dash" href={href}>Voir la recette</a>
+
+        {isSaved ? (
+          <form action={removeRecipeAction}>
+            <input type="hidden" name="id" value={r.id} />
+            <input type="hidden" name="returnTo" value={currentUrl} />
+            <button type="submit" className="btn btn-outline" style={{ color: "var(--text, #111)" }}>
+              Enregistrée ✓ (Retirer)
+            </button>
+          </form>
+        ) : (
+          <form action={saveRecipeAction}>
+            <input type="hidden" name="id" value={r.id} />
+            <input type="hidden" name="title" value={r.title} />
+            <input type="hidden" name="returnTo" value={currentUrl} />
+            <button type="submit" className="btn btn-outline" style={{ color: "var(--text, #111)" }}>
+              Enregistrer
+            </button>
+          </form>
+        )}
+      </div>
+    </article>
   );
 }
