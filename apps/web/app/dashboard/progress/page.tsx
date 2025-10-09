@@ -286,7 +286,7 @@ export default async function Page({
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h2 style={{ margin: 0, fontSize: "clamp(16px, 1.9vw, 18px)", lineHeight: 1.2 }}>Pas — semaine en cours</h2>
-          <span className="text-xs" style={{ color: "#6b7280" }}>Semaine = lundi → dimanche</span>
+          {/* Texte "Semaine = lundi → dimanche" supprimé ici */}
         </div>
 
         <article className="card" style={{ display: "block", gap: 12 }}>
@@ -435,3 +435,4 @@ export default async function Page({
     </div>
   );
 }
+
