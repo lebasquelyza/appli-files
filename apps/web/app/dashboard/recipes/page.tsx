@@ -289,44 +289,36 @@ export default async function Page({
           <span className="text-xs" style={{ color: "#6b7280" }}>Semaine = lundi → dimanche</span>
         </div>
 
-        <article className="card" style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 12 }}>
+        <article className="card" style={{ display: "block", gap: 12 }}>
           <div>
             <div className="text-sm" style={{ color: "#6b7280" }}>
               Du <b>{fmtDate(mondayYMD)}</b> au <b>{fmtDate(sundayYMD)}</b>
             </div>
 
             {hasWeekData ? (
-              <div style={{ marginTop: 12 }}>
-                <div
-                  className="card"
-                  style={{
-                    padding: 12,
-                    display: "grid",
-                    gridTemplateColumns: "1fr auto",
-                    rowGap: 8,
-                    columnGap: 16,
-                  }}
-                >
-                  {/* Ligne 1 : Total */}
-                  <div className="text-sm" style={{ color: "#6b7280", alignSelf: "center" }}>
-                    Total
-                  </div>
-                  <div style={{ fontSize: 22, fontWeight: 900, textAlign: "right" }}>
+              <div
+                className="grid"
+                style={{
+                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                  gap: 12,
+                  marginTop: 12,
+                }}
+              >
+                {/* Bloc Total */}
+                <div className="card" style={{ padding: 12 }}>
+                  <div className="text-sm" style={{ color: "#6b7280" }}>Total</div>
+                  <div style={{ fontSize: 22, fontWeight: 900 }}>
                     {stepsThisWeek.toLocaleString("fr-FR")}{" "}
-                    <span className="text-xs" style={{ color: "#6b7280", fontWeight: 400 }}>
-                      pas
-                    </span>
+                    <span className="text-xs" style={{ color: "#6b7280", fontWeight: 400 }}>pas</span>
                   </div>
+                </div>
 
-                  {/* Ligne 2 : Moyenne / jour */}
-                  <div className="text-sm" style={{ color: "#6b7280", alignSelf: "center" }}>
-                    Moyenne / jour
-                  </div>
-                  <div style={{ fontSize: 22, fontWeight: 900, textAlign: "right" }}>
+                {/* Bloc Moyenne / jour */}
+                <div className="card" style={{ padding: 12 }}>
+                  <div className="text-sm" style={{ color: "#6b7280" }}>Moyenne / jour</div>
+                  <div style={{ fontSize: 22, fontWeight: 900 }}>
                     {avgPerDay.toLocaleString("fr-FR")}{" "}
-                    <span className="text-xs" style={{ color: "#6b7280", fontWeight: 400 }}>
-                      pas/jour
-                    </span>
+                    <span className="text-xs" style={{ color: "#6b7280", fontWeight: 400 }}>pas/jour</span>
                   </div>
                 </div>
               </div>
@@ -336,8 +328,6 @@ export default async function Page({
               </div>
             )}
           </div>
-
-          <div className="text-xs" style={{ color: "#6b7280" }}>Semaine locale FR</div>
         </article>
       </section>
 
