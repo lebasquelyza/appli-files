@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { PageHeader, Section } from "@/components/ui/Page";
+import { Section } from "@/components/ui/Page"; // on garde Section si tu l'utilises ailleurs
 
 import { fetchRecentActivities, fmtKm, fmtPaceOrSpeed, fmtDate } from "@/lib/strava";
 import {
@@ -88,49 +88,77 @@ export default async function Page(props: {
   const isGoogleFitConnected = jar.get("conn_google_fit")?.value === "1";
 
   return (
-    <>
-      <PageHeader
-        title="Connecte tes données"
-        subtitle="Santé, capteurs, etc. — synchronise automatiquement tes activités et mesures."
-      />
+    <div
+      className="container"
+      style={{
+        paddingTop: 24,
+        paddingBottom: 32,
+        fontSize: "var(--settings-fs, 12px)", // ⟵ même échelle que ton exemple
+      }}
+    >
+      {/* Header — même gabarit que l’exemple (22px) */}
+      <div className="page-header">
+        <div>
+          <h1 className="h1" style={{ fontSize: 22 }}>Connecte tes données</h1>
+          <p className="lead">Santé, capteurs, etc. — synchronise automatiquement tes activités et mesures.</p>
+        </div>
+        <a
+          href="/dashboard"
+          className="btn"
+          style={{
+            background: "#ffffff",
+            color: "#111827",
+            border: "1px solid #d1d5db",
+            fontWeight: 500,
+            padding: "6px 10px",
+            lineHeight: 1.2
+          }}
+        >
+          ← Retour
+        </a>
+      </div>
 
+      {/* Alerts (même densité) */}
       {(searchParams.subscribed ||
         searchParams.unsubscribed ||
         searchParams.connected ||
         searchParams.disconnected ||
         searchParams.error) && (
-        <Section title=" " className="!pt-2">
+        <div className="space-y-3">
           {searchParams.connected && (
-            <div className="card text-sm sm:text-base" style={{ border: "1px solid rgba(16,185,129,.35)", background: "rgba(16,185,129,.08)", fontWeight: 600 }}>
+            <div className="card" style={{ border: "1px solid rgba(16,185,129,.35)", background: "rgba(16,185,129,.08)", fontWeight: 600 }}>
               ✓ {searchParams.connected} connecté.
             </div>
           )}
           {searchParams.disconnected && (
-            <div className="card text-sm sm:text-base" style={{ border: "1px solid rgba(107,114,128,.35)", background: "rgba(107,114,128,.08)", fontWeight: 600 }}>
+            <div className="card" style={{ border: "1px solid rgba(107,114,128,.35)", background: "rgba(107,114,128,.08)", fontWeight: 600 }}>
               {searchParams.disconnected} déconnecté.
             </div>
           )}
           {searchParams.subscribed && (
-            <div className="card text-sm sm:text-base" style={{ border: "1px solid rgba(16,185,129,.35)", background: "rgba(16,185,129,.08)", fontWeight: 600 }}>
+            <div className="card" style={{ border: "1px solid rgba(16,185,129,.35)", background: "rgba(16,185,129,.08)", fontWeight: 600 }}>
               ✓ Nous te préviendrons dès qu’une intégration sera disponible.
             </div>
           )}
           {searchParams.unsubscribed && (
-            <div className="card text-sm sm:text-base" style={{ border: "1px solid rgba(107,114,128,.35)", background: "rgba(107,114,128,.08)", fontWeight: 600 }}>
+            <div className="card" style={{ border: "1px solid rgba(107,114,128,.35)", background: "rgba(107,114,128,.08)", fontWeight: 600 }}>
               Prévenez-moi désactivé.
             </div>
           )}
           {searchParams.error && (
-            <div className="card text-sm sm:text-base" style={{ border: "1px solid rgba(239,68,68,.35)", background: "rgba(239,68,68,.08)", fontWeight: 600 }}>
+            <div className="card" style={{ border: "1px solid rgba(239,68,68,.35)", background: "rgba(239,68,68,.08)", fontWeight: 600 }}>
               ⚠️ Erreur : {searchParams.error}
             </div>
           )}
-        </Section>
+        </div>
       )}
 
-      {/* Intégrations */}
-      <Section title="Intégrations">
-        {/* 1 colonne en mobile, espaces plus serrés */}
+      {/* Intégrations — densité alignée */}
+      <div className="section" style={{ marginTop: 12 }}>
+        <div className="section-head" style={{ marginBottom: 8 }}>
+          <h2>Intégrations</h2>
+        </div>
+
         <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {INTEGRATIONS.map((it) => {
             const isConnected = it.cookieFlag ? jar.get(it.cookieFlag)?.value === "1" : false;
@@ -138,23 +166,15 @@ export default async function Page(props: {
             const nameSuffix = connName ? ` : ${connName}` : "";
 
             return (
-              <article
-                key={it.id}
-                className="card p-3 sm:p-4"
-                style={{ display: "flex", flexDirection: "column", gap: 8 }}
-              >
+              <article key={it.id} className="card p-3 sm:p-4" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <span aria-hidden className="shrink-0">{it.icon ?? "🔗"}</span>
-                      <h3 className="font-semibold text-sm sm:text-base truncate" style={{ margin: 0 }}>
-                        {it.name}
-                      </h3>
+                      <h3 className="font-semibold text-sm sm:text-base truncate" style={{ margin: 0 }}>{it.name}</h3>
                     </div>
                     {it.subtitle && (
-                      <div className="text-xs sm:text-sm" style={{ color: "var(--muted)", marginTop: 4 }}>
-                        {it.subtitle}
-                      </div>
+                      <div className="text-xs sm:text-sm" style={{ color: "var(--muted)", marginTop: 4 }}>{it.subtitle}</div>
                     )}
                   </div>
                   <span className="badge text-xs sm:text-sm shrink-0">
@@ -162,7 +182,6 @@ export default async function Page(props: {
                   </span>
                 </div>
 
-                {/* Description par intégration */}
                 <p className="text-xs sm:text-sm" style={{ color: "var(--muted)" }}>
                   {it.id === "strava" ? (
                     isConnected
@@ -179,7 +198,6 @@ export default async function Page(props: {
                   )}
                 </p>
 
-                {/* Actions : empilées en mobile, pleine largeur pour éviter les débordements */}
                 <div className="flex flex-col sm:flex-row gap-2 w-full">
                   {/* Strava */}
                   {it.id === "strava" && (
@@ -244,11 +262,15 @@ export default async function Page(props: {
             );
           })}
         </div>
-      </Section>
+      </div>
 
       {/* Dernières performances Strava */}
       {isStravaConnected && (
-        <Section title="Dernières performances (Strava)">
+        <div className="section" style={{ marginTop: 12 }}>
+          <div className="section-head" style={{ marginBottom: 8 }}>
+            <h2>Dernières performances (Strava)</h2>
+          </div>
+
           {await (async () => {
             const acts = await fetchRecentActivities(6);
             if (!acts.length) {
@@ -277,11 +299,15 @@ export default async function Page(props: {
               </div>
             );
           })()}
-        </Section>
+        </div>
       )}
 
-      {/* Importer depuis Apple Santé */}
-      <Section title="Importer depuis Apple Santé (export.zip)">
+      {/* Import Apple Santé */}
+      <div className="section" style={{ marginTop: 12 }}>
+        <div className="section-head" style={{ marginBottom: 8 }}>
+          <h2>Importer depuis Apple Santé (export.zip)</h2>
+        </div>
+
         <div
           id="apple-import"
           className="card p-3 sm:p-4"
@@ -290,8 +316,7 @@ export default async function Page(props: {
           <div className="min-w-0">
             <strong className="text-sm sm:text-base block">Importer un export Apple Santé</strong>
             <div className="text-xs sm:text-sm" style={{ color: "var(--muted)" }}>
-              Sur iPhone : Santé → Profil → <b>Exporter toutes les données</b> → partage le <b>export.zip</b>,
-              puis importe-le ici.
+              Sur iPhone : Santé → Profil → <b>Exporter toutes les données</b> → partage le <b>export.zip</b>, puis importe-le ici.
             </div>
           </div>
 
@@ -301,21 +326,19 @@ export default async function Page(props: {
             encType="multipart/form-data"
             className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto"
           >
-            <input
-              type="file"
-              name="file"
-              accept=".zip"
-              required
-              className="text-xs sm:text-sm max-w-full"
-            />
+            <input type="file" name="file" accept=".zip" required className="text-xs sm:text-sm max-w-full" />
             <button className="btn-dash w-full sm:w-auto" type="submit">Importer</button>
           </form>
         </div>
-      </Section>
+      </div>
 
       {/* Dernières performances Apple Santé */}
       {isAppleConnected && (
-        <Section title="Dernières performances (Apple Santé)">
+        <div className="section" style={{ marginTop: 12 }}>
+          <div className="section-head" style={{ marginBottom: 8 }}>
+            <h2>Dernières performances (Apple Santé)</h2>
+          </div>
+
           {(() => {
             const acts = readAppleRecent();
             if (!acts.length) {
@@ -344,12 +367,16 @@ export default async function Page(props: {
               </div>
             );
           })()}
-        </Section>
+        </div>
       )}
 
       {/* Dernières performances Google Fit */}
       {isGoogleFitConnected && (
-        <Section title="Dernières performances (Google Fit)">
+        <div className="section" style={{ marginTop: 12 }}>
+          <div className="section-head" style={{ marginBottom: 8 }}>
+            <h2>Dernières performances (Google Fit)</h2>
+          </div>
+
           {await (async () => {
             const acts = await fetchGfRecentActivities(14);
             const list = acts.length ? acts : readGfRecentFromCookie();
@@ -379,11 +406,15 @@ export default async function Page(props: {
               </div>
             );
           })()}
-        </Section>
+        </div>
       )}
 
       {/* Alerte de dispo */}
-      <Section title="Recevoir une alerte">
+      <div className="section" style={{ marginTop: 12 }}>
+        <div className="section-head" style={{ marginBottom: 8 }}>
+          <h2>Recevoir une alerte</h2>
+        </div>
+
         <div className="card p-3 sm:p-4" style={{ display: "flex", alignItems: "stretch", justifyContent: "space-between", gap: 12 }}>
           <div className="min-w-0">
             <strong className="text-sm sm:text-base block">Préviens-moi quand les intégrations arrivent</strong>
@@ -403,7 +434,7 @@ export default async function Page(props: {
             )}
           </form>
         </div>
-      </Section>
-    </>
+      </div>
+    </div>
   );
 }
