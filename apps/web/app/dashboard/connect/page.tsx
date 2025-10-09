@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { Section } from "@/components/ui/Page"; // on garde Section si tu l'utilises ailleurs
+import { Section } from "@/components/ui/Page";
 
 import { fetchRecentActivities, fmtKm, fmtPaceOrSpeed, fmtDate } from "@/lib/strava";
 import {
@@ -35,31 +35,12 @@ type Integration = {
 };
 
 const INTEGRATIONS: Integration[] = [
-  {
-    id: "strava",
-    name: "Strava",
-    subtitle: "Course, vélo, activités",
-    status: "available",
-    icon: "🟧",
-    connectHref: "/api/oauth/strava/start",
-    disconnectPath: "/api/oauth/strava/disconnect",
-    cookieFlag: "conn_strava",
-    cookieName: "conn_strava_name",
-  },
+  { id: "strava", name: "Strava", subtitle: "Course, vélo, activités", status: "available", icon: "🟧", connectHref: "/api/oauth/strava/start", disconnectPath: "/api/oauth/strava/disconnect", cookieFlag: "conn_strava", cookieName: "conn_strava_name" },
   { id: "apple-health", name: "Apple Santé", subtitle: "iPhone / Apple Watch", status: "available", icon: "" },
-  {
-    id: "google-fit",
-    name: "Google Fit",
-    subtitle: "Android / WearOS",
-    status: "available",
-    icon: "🤖",
-    connectHref: "/api/oauth/google-fit/start",
-    disconnectPath: "/api/oauth/google-fit/disconnect",
-    cookieFlag: "conn_google_fit",
-  },
-  { id: "garmin",   name: "Garmin",   subtitle: "Montres GPS",        status: "coming-soon", icon: "⌚️", connectHref: "/api/oauth/garmin/start" },
-  { id: "fitbit",   name: "Fitbit",   subtitle: "Capteurs & sommeil", status: "coming-soon", icon: "💠", connectHref: "/api/oauth/fitbit/start" },
-  { id: "withings", name: "Withings", subtitle: "Balances & santé",    status: "coming-soon", icon: "⚖️", connectHref: "/api/oauth/withings/start" },
+  { id: "google-fit", name: "Google Fit", subtitle: "Android / WearOS", status: "available", icon: "🤖", connectHref: "/api/oauth/google-fit/start", disconnectPath: "/api/oauth/google-fit/disconnect", cookieFlag: "conn_google_fit" },
+  { id: "garmin", name: "Garmin", subtitle: "Montres GPS", status: "coming-soon", icon: "⌚️", connectHref: "/api/oauth/garmin/start" },
+  { id: "fitbit", name: "Fitbit", subtitle: "Capteurs & sommeil", status: "coming-soon", icon: "💠", connectHref: "/api/oauth/fitbit/start" },
+  { id: "withings", name: "Withings", subtitle: "Balances & santé", status: "coming-soon", icon: "⚖️", connectHref: "/api/oauth/withings/start" },
 ];
 
 /* ---------- Server Action : abonnement à l’alerte intégrations ---------- */
@@ -68,10 +49,7 @@ async function subscribeAction(formData: FormData) {
   const want = (formData.get("want") || "").toString() === "1";
   const jar = cookies();
   jar.set("app_notify_integrations", want ? "1" : "0", {
-    path: "/",
-    sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 365,
-    httpOnly: false,
+    path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365, httpOnly: false,
   });
   redirect(`/dashboard/connect?${want ? "subscribed=1" : "unsubscribed=1"}`);
 }
@@ -90,13 +68,9 @@ export default async function Page(props: {
   return (
     <div
       className="container"
-      style={{
-        paddingTop: 24,
-        paddingBottom: 32,
-        fontSize: "var(--settings-fs, 12px)", // ⟵ même échelle que ton exemple
-      }}
+      style={{ paddingTop: 24, paddingBottom: 32, fontSize: "var(--settings-fs, 12px)" }}
     >
-      {/* Header — même gabarit que l’exemple (22px) */}
+      {/* Header */}
       <div className="page-header">
         <div>
           <h1 className="h1" style={{ fontSize: 22 }}>Connecte tes données</h1>
@@ -105,25 +79,14 @@ export default async function Page(props: {
         <a
           href="/dashboard"
           className="btn"
-          style={{
-            background: "#ffffff",
-            color: "#111827",
-            border: "1px solid #d1d5db",
-            fontWeight: 500,
-            padding: "6px 10px",
-            lineHeight: 1.2
-          }}
+          style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500, padding: "6px 10px", lineHeight: 1.2 }}
         >
           ← Retour
         </a>
       </div>
 
-      {/* Alerts (même densité) */}
-      {(searchParams.subscribed ||
-        searchParams.unsubscribed ||
-        searchParams.connected ||
-        searchParams.disconnected ||
-        searchParams.error) && (
+      {/* Alerts */}
+      {(searchParams.subscribed || searchParams.unsubscribed || searchParams.connected || searchParams.disconnected || searchParams.error) && (
         <div className="space-y-3">
           {searchParams.connected && (
             <div className="card" style={{ border: "1px solid rgba(16,185,129,.35)", background: "rgba(16,185,129,.08)", fontWeight: 600 }}>
@@ -153,7 +116,7 @@ export default async function Page(props: {
         </div>
       )}
 
-      {/* Intégrations — densité alignée */}
+      {/* Intégrations */}
       <div className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
           <h2>Intégrations</h2>
@@ -184,15 +147,11 @@ export default async function Page(props: {
 
                 <p className="text-xs sm:text-sm" style={{ color: "var(--muted)" }}>
                   {it.id === "strava" ? (
-                    isConnected
-                      ? <>Compte relié{nameSuffix}. Les activités récentes pourront être importées.</>
-                      : <>Connexion sécurisée via OAuth pour lire tes activités.</>
+                    isConnected ? <>Compte relié{nameSuffix}. Les activités récentes pourront être importées.</> : <>Connexion sécurisée via OAuth pour lire tes activités.</>
                   ) : it.id === "apple-health" ? (
                     <>Importe ton <b>export.zip</b> pour afficher tes activités (pas d’OAuth Apple sur le Web).</>
                   ) : it.id === "google-fit" ? (
-                    isConnected
-                      ? <>Compte Google Fit relié. Les sessions récentes peuvent être lues (lecture seule).</>
-                      : <>Connexion sécurisée via OAuth pour lire tes sessions Google Fit.</>
+                    isConnected ? <>Compte Google Fit relié. Les sessions récentes peuvent être lues (lecture seule).</> : <>Connexion sécurisée via OAuth pour lire tes sessions Google Fit.</>
                   ) : (
                     <>Bientôt : connexion sécurisée via OAuth. Tes données restent sous ton contrôle.</>
                   )}
@@ -221,9 +180,11 @@ export default async function Page(props: {
                     )
                   )}
 
-                  {/* Apple Santé */}
+                  {/* Apple Santé — on garde le texte d’info mais plus de bloc d’upload plus bas */}
                   {it.id === "apple-health" && (
-                    <a className="btn-dash w-full sm:w-auto text-center" href="#apple-import">Importer export.zip</a>
+                    <span className="text-xs sm:text-sm" style={{ color: "var(--muted)" }}>
+                      (Import depuis Profil)
+                    </span>
                   )}
 
                   {/* Google Fit */}
@@ -270,15 +231,10 @@ export default async function Page(props: {
           <div className="section-head" style={{ marginBottom: 8 }}>
             <h2>Dernières performances (Strava)</h2>
           </div>
-
           {await (async () => {
             const acts = await fetchRecentActivities(6);
             if (!acts.length) {
-              return (
-                <div className="card text-xs sm:text-sm" style={{ color: "var(--muted)" }}>
-                  Aucune activité récente trouvée (ou accès non autorisé).
-                </div>
-              );
+              return <div className="card text-xs sm:text-sm" style={{ color: "var(--muted)" }}>Aucune activité récente trouvée (ou accès non autorisé).</div>;
             }
             return (
               <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -302,35 +258,7 @@ export default async function Page(props: {
         </div>
       )}
 
-      {/* Import Apple Santé */}
-      <div className="section" style={{ marginTop: 12 }}>
-        <div className="section-head" style={{ marginBottom: 8 }}>
-          <h2>Importer depuis Apple Santé (export.zip)</h2>
-        </div>
-
-        <div
-          id="apple-import"
-          className="card p-3 sm:p-4"
-          style={{ display: "flex", alignItems: "stretch", justifyContent: "space-between", gap: 12 }}
-        >
-          <div className="min-w-0">
-            <strong className="text-sm sm:text-base block">Importer un export Apple Santé</strong>
-            <div className="text-xs sm:text-sm" style={{ color: "var(--muted)" }}>
-              Sur iPhone : Santé → Profil → <b>Exporter toutes les données</b> → partage le <b>export.zip</b>, puis importe-le ici.
-            </div>
-          </div>
-
-          <form
-            method="POST"
-            action="/api/apple-health/import"
-            encType="multipart/form-data"
-            className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto"
-          >
-            <input type="file" name="file" accept=".zip" required className="text-xs sm:text-sm max-w-full" />
-            <button className="btn-dash w-full sm:w-auto" type="submit">Importer</button>
-          </form>
-        </div>
-      </div>
+      {/* ⛔️ Bloc “Importer depuis Apple Santé (export.zip)” — SUPPRIMÉ */}
 
       {/* Dernières performances Apple Santé */}
       {isAppleConnected && (
@@ -338,15 +266,10 @@ export default async function Page(props: {
           <div className="section-head" style={{ marginBottom: 8 }}>
             <h2>Dernières performances (Apple Santé)</h2>
           </div>
-
           {(() => {
             const acts = readAppleRecent();
             if (!acts.length) {
-              return (
-                <div className="card text-xs sm:text-sm" style={{ color: "var(--muted)" }}>
-                  Aucune activité trouvée dans l’export.
-                </div>
-              );
+              return <div className="card text-xs sm:text-sm" style={{ color: "var(--muted)" }}>Aucune activité trouvée dans l’export.</div>;
             }
             return (
               <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -370,51 +293,11 @@ export default async function Page(props: {
         </div>
       )}
 
-      {/* Dernières performances Google Fit */}
-      {isGoogleFitConnected && (
-        <div className="section" style={{ marginTop: 12 }}>
-          <div className="section-head" style={{ marginBottom: 8 }}>
-            <h2>Dernières performances (Google Fit)</h2>
-          </div>
-
-          {await (async () => {
-            const acts = await fetchGfRecentActivities(14);
-            const list = acts.length ? acts : readGfRecentFromCookie();
-            if (!list.length) {
-              return (
-                <div className="card text-xs sm:text-sm" style={{ color: "var(--muted)" }}>
-                  Aucune session récente (ou autorisations insuffisantes).
-                </div>
-              );
-            }
-            return (
-              <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {list.map((a) => (
-                  <article key={a.id} className="card p-3 sm:p-4" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    <div className="flex items-center justify-between">
-                      <h3 className="font-semibold text-sm sm:text-base truncate" style={{ margin: 0 }}>{a.name || a.type || "Session"}</h3>
-                      <span className="badge text-xs sm:text-sm">Google Fit</span>
-                    </div>
-                    <div className="text-xs sm:text-sm" style={{ color: "var(--muted)" }}>{fmtDateGf(a.start)}</div>
-                    <div className="text-xs sm:text-sm" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      {a.distanceKm ? <span className="badge">{fmtKmGf(a.distanceKm)}</span> : null}
-                      {a.steps ? <span className="badge">{a.steps.toLocaleString("fr-FR")} pas</span> : null}
-                      {a.caloriesKcal ? <span className="badge">{a.caloriesKcal} kcal</span> : null}
-                    </div>
-                  </article>
-                ))}
-              </div>
-            );
-          })()}
-        </div>
-      )}
-
       {/* Alerte de dispo */}
       <div className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
           <h2>Recevoir une alerte</h2>
         </div>
-
         <div className="card p-3 sm:p-4" style={{ display: "flex", alignItems: "stretch", justifyContent: "space-between", gap: 12 }}>
           <div className="min-w-0">
             <strong className="text-sm sm:text-base block">Préviens-moi quand les intégrations arrivent</strong>
