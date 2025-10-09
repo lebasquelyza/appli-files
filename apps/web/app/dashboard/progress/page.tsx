@@ -286,7 +286,7 @@ export default async function Page({
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h2 style={{ margin: 0, fontSize: "clamp(16px, 1.9vw, 18px)", lineHeight: 1.2 }}>Pas — semaine en cours</h2>
-          {/* Texte "Semaine = lundi → dimanche" supprimé ici */}
+          {/* texte à droite supprimé */}
         </div>
 
         <article className="card" style={{ display: "block", gap: 12 }}>
@@ -342,7 +342,7 @@ export default async function Page({
           <article className="card">
             <div className="flex items-center justify-between">
               <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>Pas</h3>
-              <span className="badge">Steps</span>
+              {/* badge supprimé */}
             </div>
             {lastByType.steps ? (
               <div style={{ marginTop: 8 }}>
@@ -358,7 +358,7 @@ export default async function Page({
           <article className="card">
             <div className="flex items-center justify-between">
               <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>Charges</h3>
-              <span className="badge">Load</span>
+              {/* badge supprimé */}
             </div>
             {lastByType.load ? (
               <div style={{ marginTop: 8 }}>
@@ -376,7 +376,7 @@ export default async function Page({
           <article className="card">
             <div className="flex items-center justify-between">
               <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>Poids</h3>
-              <span className="badge">Weight</span>
+              {/* badge supprimé */}
             </div>
             {lastByType.weight ? (
               <div style={{ marginTop: 8 }}>
