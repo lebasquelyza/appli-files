@@ -2,6 +2,9 @@
 
 import * as React from "react";
 import { useSession, signIn, signOut } from "next-auth/react";
+import dynamic from "next/dynamic";
+const Timer = dynamic(() => import("@/components/Timer"), { ssr: false });
+
 
 export default function MusicPage() {
   const s = useSession();                       // 👈 pas de déstructuration
