@@ -4,6 +4,8 @@ import * as React from "react";
 import { useSession, signIn, signOut } from "next-auth/react";
 import dynamic from "next/dynamic";
 const Timer = dynamic(() => import("@/components/Timer"), { ssr: false });
+const SpotifyPlayer = dynamic(() => import("@/components/SpotifyPlayer"), { ssr: false });
+
 
 
 export default function MusicPage() {
@@ -41,5 +43,13 @@ export default function MusicPage() {
 
       <div className="card">Page minimale OK ✅ — on va réintroduire les composants ensuite.</div>
     </main>
+    {session ? (
+  <SpotifyPlayer />
+) : (
+  <p className="text-sm" style={{ color: "var(--muted, #6b7280)" }}>
+    Connecte ton compte Spotify pour utiliser le lecteur.
+  </p>
+)}
+
   );
 }
