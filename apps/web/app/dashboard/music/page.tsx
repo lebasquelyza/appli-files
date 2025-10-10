@@ -34,6 +34,10 @@ export default function MusicPage() {
           </button>
         )}
       </div>
+      <div className="card">
+  <Timer />
+</div>
+
 
       <div className="card">Page minimale OK ✅ — on va réintroduire les composants ensuite.</div>
     </main>
