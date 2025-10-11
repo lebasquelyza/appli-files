@@ -3,13 +3,13 @@
 import * as React from "react";
 import { useSession, signIn, signOut } from "next-auth/react";
 import dynamic from "next/dynamic";
+
+// (optionnel) dé-commente si tu réintègres ces composants
 const Timer = dynamic(() => import("@/components/Timer"), { ssr: false });
 const SpotifyPlayer = dynamic(() => import("@/components/SpotifyPlayer"), { ssr: false });
 
-
-
 export default function MusicPage() {
-  const s = useSession();                       // 👈 pas de déstructuration
+  const s = useSession();
   const session = s?.data ?? null;
   const status: "loading" | "authenticated" | "unauthenticated" =
     (s?.status as any) ?? "unauthenticated";
@@ -36,20 +36,20 @@ export default function MusicPage() {
           </button>
         )}
       </div>
-      <div className="card">
-  <Timer />
-</div>
-
 
       <div className="card">Page minimale OK ✅ — on va réintroduire les composants ensuite.</div>
-    </main>
-    {session ? (
-  <SpotifyPlayer />
-) : (
-  <p className="text-sm" style={{ color: "var(--muted, #6b7280)" }}>
-    Connecte ton compte Spotify pour utiliser le lecteur.
-  </p>
-)}
 
+      {/* ⬇️ Garde le conditionnel DANS <main>, pas après */}
+      {session ? (
+        <SpotifyPlayer />
+      ) : (
+        <p className="text-sm" style={{ color: "var(--muted, #6b7280)" }}>
+          Connecte ton compte Spotify pour utiliser le lecteur.
+        </p>
+      )}
+
+      {/* Exemple : réactiver le Timer ici, toujours à l’intérieur de <main> */}
+      {/* <div className="card"><Timer /></div> */}
+    </main>
   );
 }
