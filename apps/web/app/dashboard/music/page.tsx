@@ -1,28 +1,21 @@
-// apps/web/app/dashboard/music/page.tsx
 "use client";
 
 import * as React from "react";
 import { useSession, signIn, signOut } from "next-auth/react";
-import dynamic from "next/dynamic";
+import nextDynamic from "next/dynamic"; // ✅ alias pour éviter le conflit de nom
 
-export const dynamic = "force-dynamic";
+export const dynamic = "force-dynamic"; // ✅ garde le nom exact pour la config Next.js
 export const revalidate = 0;
 
-const SpotifyPlayer = dynamic(() => import("@/components/SpotifyPlayer"), { ssr: false });
-// const Timer = dynamic(() => import("@/components/Timer"), { ssr: false }); // si besoin
+const SpotifyPlayer = nextDynamic(() => import("@/components/SpotifyPlayer"), { ssr: false });
+// Active si tu veux afficher le Timer aussi
+// const Timer = nextDynamic(() => import("@/components/Timer"), { ssr: false });
 
 export default function MusicPage() {
   const s = useSession();
   const session = s?.data ?? null;
-  const status: "loading" | "authenticated" | "unauthenticated" = (s?.status as any) ?? "unauthenticated";
-
-  // 🔐 Si pas connecté → lance l’OAuth Spotify automatiquement
-  React.useEffect(() => {
-    if (status === "unauthenticated") {
-      // redirect:true par défaut — garde le callback sur /dashboard/music
-      signIn("spotify", { callbackUrl: "/dashboard/music" });
-    }
-  }, [status]);
+  const status: "loading" | "authenticated" | "unauthenticated" =
+    (s?.status as any) ?? "unauthenticated";
 
   if (status === "loading") return <main className="p-6">Chargement…</main>;
 
@@ -31,17 +24,23 @@ export default function MusicPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Musique</h1>
         {session ? (
-          <button onClick={() => signOut({ callbackUrl: "/dashboard/music" })} className="btn-dash">
+          <button
+            onClick={() => signOut({ callbackUrl: "/dashboard/music" })}
+            className="btn-dash"
+          >
             Se déconnecter
           </button>
         ) : (
-          <button onClick={() => signIn("spotify", { callbackUrl: "/dashboard/music" })} className="btn-dash">
+          <button
+            onClick={() => signIn("spotify", { callbackUrl: "/dashboard/music" })}
+            className="btn-dash"
+          >
             Se connecter
           </button>
         )}
       </div>
 
-      {/* Petit debug visible pour toi */}
+      {/* Debug utile tant que tu finalises l’auth */}
       <div className="text-xs" style={{ color: "#6b7280" }}>
         session status: <b>{status}</b>
       </div>
@@ -50,10 +49,11 @@ export default function MusicPage() {
         <SpotifyPlayer />
       ) : (
         <p className="text-sm" style={{ color: "var(--muted, #6b7280)" }}>
-          Redirection vers Spotify… Si ça boucle, vérifie NEXTAUTH_URL et la callback Spotify.
+          Connecte ton compte Spotify pour utiliser le lecteur.
         </p>
       )}
 
+      {/* Exemple si tu veux réactiver le Timer */}
       {/* <div className="card"><Timer /></div> */}
     </main>
   );
