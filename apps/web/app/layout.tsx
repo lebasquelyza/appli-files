@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import type { Metadata, Viewport } from "next";
 import TopbarGate from "./_components/TopbarGate";
 import "./globals.css";
-import Providers from "@/components/Providers";
+import Providers from "@/components/Providers"; // ✅ ton SessionProvider
 
 export const metadata: Metadata = {
   title: "Files Coaching",
@@ -36,14 +36,14 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="fr">
       <body className="bg-white text-gray-900 min-h-dvh">
-        {/* Affiche la Topbar seulement hors /, /signin, /signup */}
-        <TopbarGate />
+        <Providers>
+          {/* ✅ Topbar incluse dans le provider — elle pourra aussi utiliser useSession */}
+          <TopbarGate />
 
-        {/* Padding-top constant (40px) pour compenser la topbar si elle est présente.
-           Ce petit offset ne gêne pas si la topbar est cachée. */}
-        <main style={{ paddingTop: "calc(env(safe-area-inset-top) + 40px)" }}>
-          {children}
-        </main>
+          <main style={{ paddingTop: "calc(env(safe-area-inset-top) + 40px)" }}>
+            {children}
+          </main>
+        </Providers>
 
         {/* Fallback runtime: expose env publiques si besoin */}
         <script
