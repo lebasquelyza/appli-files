@@ -1,3 +1,4 @@
+// apps/web/components/Timer.tsx
 "use client";
 import { useEffect, useRef, useState } from "react";
 
@@ -16,13 +17,11 @@ export default function Timer() {
 
   // ====== AUDIO (typesafe) ======
   const audioCtxRef = useRef<AudioContext | null>(null);
+  const audioUnlockedRef = useRef(false); // ✅ iOS: déverrouillé par geste
 
   async function ensureAudioCtx(): Promise<AudioContext | null> {
     try {
-      // En environnement Next, cette page est "use client", mais on reste prudent:
       if (typeof window === "undefined") return null;
-
-      // webkitAudioContext n'est pas typé par TS -> on caste en any
       const Ctx: any = (window as any).AudioContext || (window as any).webkitAudioContext;
       if (!Ctx) return null;
 
@@ -40,6 +39,21 @@ export default function Timer() {
     }
   }
 
+  // ✅ Déverrouillage iOS/Android : jouer une frame silencieuse sur geste utilisateur
+  async function unlockAudioWithSilence() {
+    try {
+      if (audioUnlockedRef.current) return;
+      const ctx = await ensureAudioCtx();
+      if (!ctx) return;
+      const buffer = ctx.createBuffer(1, 1, 22050);
+      const src = ctx.createBufferSource();
+      src.buffer = buffer;
+      src.connect(ctx.destination);
+      src.start(0);
+      audioUnlockedRef.current = true;
+    } catch {}
+  }
+
   async function playFinishChime() {
     const ctx = await ensureAudioCtx();
     if (!ctx) return;
@@ -52,7 +66,6 @@ export default function Timer() {
       osc.connect(gain);
       gain.connect(ctx.destination);
 
-      // enveloppe courte et audible
       gain.gain.setValueAtTime(0.0001, start);
       gain.gain.linearRampToValueAtTime(0.85, start + 0.015);
       gain.gain.exponentialRampToValueAtTime(0.001, start + dur);
@@ -62,7 +75,7 @@ export default function Timer() {
     };
 
     const now = ctx.currentTime;
-    // double chime “exercice fini”
+    // double chime “exercice fini” — ne coupe pas Spotify (même sortie audio, autre source)
     makeNote(1318.51, now + 0.00, 0.18); // E6
     makeNote(1760.00, now + 0.20, 0.20); // A6
   }
@@ -83,9 +96,9 @@ export default function Timer() {
     intervalRef.current = window.setInterval(() => {
       setSecondsLeft((s) => {
         if (s <= 1) {
-          // stop & son de fin
           if (intervalRef.current) { window.clearInterval(intervalRef.current); intervalRef.current = null; }
-          void playFinishChime();
+          // ✅ ne joue le bip que si l’audio a été déverrouillé par un geste avant
+          if (audioUnlockedRef.current) void playFinishChime();
           return 0;
         }
         return s - 1;
@@ -97,23 +110,23 @@ export default function Timer() {
     };
   }, [running]);
 
-  // ▶️ Démarrer / ⏸️ Pause  (pause n'efface rien)
+  // ▶️ Démarrer / ⏸️ Pause
   const toggle = async () => {
     if (running) {
-      // PAUSE : on arrête juste l’intervalle, on NE réinitialise PAS secondsLeft
       setRunning(false);
       return;
     }
-    // START/RESUME : on s'assure que l'audio sera autorisé à jouer à la fin
+    // ✅ START/RESUME : déverrouille franchement (iOS) + prépare le contexte
+    await unlockAudioWithSilence();
     await ensureAudioCtx();
     if (secondsLeft > 0) setRunning(true);
   };
 
-  // 🔄 Réinitialiser (remet à la valeur initiale choisie)
+  // 🔄 Réinitialiser
   const reset  = async () => {
     setRunning(false);
     setSecondsLeft(initialRef.current);
-    // Prépare l'audio à la prochaine fin si l'utilisateur relance
+    // Optionnel : on prépare l'audio pour un prochain départ
     await ensureAudioCtx();
   };
 
@@ -132,14 +145,14 @@ export default function Timer() {
   const fmt = `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 
   // === RING (SVG) ===
-  const size = 220;                  // largeur/hauteur du SVG
-  const stroke = 12;                 // épaisseur du trait
-  const r = (size - stroke) / 2;     // rayon
+  const size = 220;
+  const stroke = 12;
+  const r = (size - stroke) / 2;
   const cx = size/2, cy = size/2;
-  const C = 2 * Math.PI * r;         // circonférence
+  const C = 2 * Math.PI * r;
 
   const pctDone = 1 - Math.min(1, Math.max(0, secondsLeft / (initialRef.current || 1)));
-  const dashOffset = C * (1 - pctDone); // 0 = plein, C = vide
+  const dashOffset = C * (1 - pctDone);
 
   return (
     <section
@@ -156,16 +169,7 @@ export default function Timer() {
                 <stop offset="100%" stopColor="var(--brand2)" />
               </linearGradient>
             </defs>
-
-            {/* Track (fond) */}
-            <circle
-              cx={cx} cy={cy} r={r}
-              stroke="rgba(0,0,0,.08)"
-              strokeWidth={stroke}
-              fill="none"
-            />
-
-            {/* Progress (tourne à partir du haut) */}
+            <circle cx={cx} cy={cy} r={r} stroke="rgba(0,0,0,.08)" strokeWidth={stroke} fill="none" />
             <g transform={`rotate(-90 ${cx} ${cy})`}>
               <circle
                 cx={cx} cy={cy} r={r}
@@ -179,8 +183,6 @@ export default function Timer() {
               />
             </g>
           </svg>
-
-          {/* Temps centré */}
           <div
             style={{
               position:"absolute", inset:0, display:"grid", placeItems:"center",
@@ -195,7 +197,6 @@ export default function Timer() {
 
       {/* Sélecteurs centrés */}
       <div className="flex flex-col items-center gap-4">
-        {/* Minutes */}
         <div className="flex items-center gap-3">
           <label className="text-sm" style={{color:"var(--muted)"}}>Minutes</label>
           <input
@@ -208,7 +209,6 @@ export default function Timer() {
           />
         </div>
 
-        {/* +0 / +15 / +30 / +45 secondes */}
         <div
           className="inline-flex gap-1.5 rounded-[12px]"
           style={{ padding:"8px", background:"var(--panel)", border:"1px solid rgba(0,0,0,.06)" }}
@@ -232,7 +232,6 @@ export default function Timer() {
           ))}
         </div>
 
-        {/* Presets */}
         <div className="flex flex-wrap justify-center gap-3">
           <button type="button" disabled={running} onClick={() => applyPreset(30)}
             style={{ background:"var(--panel)", color:"var(--text)", border:"1px solid rgba(0,0,0,.06)", borderRadius:"var(--radius)", padding:".6rem .9rem", fontWeight:700, fontSize:".9rem", boxShadow:"var(--shadow)" }}>
@@ -249,7 +248,7 @@ export default function Timer() {
         </div>
       </div>
 
-      {/* Actions centrées */}
+      {/* Actions */}
       <div className="flex justify-center gap-4">
         <button onClick={toggle} className="btn-dash">{running ? "Pause" : "Démarrer"}</button>
         <button onClick={reset} className="btn-dash">Réinitialiser</button>
@@ -257,3 +256,4 @@ export default function Timer() {
     </section>
   );
 }
+
