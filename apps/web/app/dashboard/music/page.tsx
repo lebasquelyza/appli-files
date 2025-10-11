@@ -3,15 +3,15 @@
 
 import * as React from "react";
 import { useSession, signIn, signOut } from "next-auth/react";
-import nextDynamic from "next/dynamic"; // alias pour éviter le conflit avec `export const dynamic`
+import nextDynamic from "next/dynamic";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-// ⏱️ Timer reste un fichier séparé (apps/web/components/Timer.tsx)
+// Timer reste un fichier séparé
 const Timer = nextDynamic(() => import("@/components/Timer"), { ssr: false });
 
-// --- Types locaux pour l'affichage ---
+// Types locaux
 type NowPlaying = {
   name: string;
   artists: string;
@@ -20,7 +20,7 @@ type NowPlaying = {
   device?: string | null;
 };
 
-// --- Helper pour l’API Web Spotify (mobile-safe) ---
+// API helper (safe)
 async function spFetch<T = any>(token: string, path: string, init: RequestInit = {}): Promise<T | null> {
   const res = await fetch(`https://api.spotify.com/v1${path}`, {
     ...init,
@@ -37,18 +37,22 @@ async function spFetch<T = any>(token: string, path: string, init: RequestInit =
 }
 
 export default function MusicPage() {
+  // ⚠️ ne jamais déstructurer agressivement — mobile peut renvoyer undefined
   const s = useSession();
   const session = s?.data ?? null;
   const status: "loading" | "authenticated" | "unauthenticated" = (s?.status as any) ?? "unauthenticated";
-
-  // ⚠️ Assure-toi que tu exposes bien l'accessToken dans la session NextAuth
   const token = (session as any)?.accessToken as string | undefined;
 
-  // --- État “Now Playing” directement dans la page ---
+  // État “Now Playing” + debug
   const [now, setNow] = React.useState<NowPlaying | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const [mounted, setMounted] = React.useState(false);
+
+  React.useEffect(() => setMounted(true), []);
 
   React.useEffect(() => {
+    // pas de fetch avant montage (évite bizarreries iOS/PWA)
+    if (!mounted) return;
     if (status !== "authenticated" || !token) return;
 
     let stop = false;
@@ -69,7 +73,6 @@ export default function MusicPage() {
       }
     };
 
-    // 1er fetch + polling + refresh au retour d’onglet
     load();
     const id = window.setInterval(load, 6000);
     const onVis = () => { if (!document.hidden) load(); };
@@ -80,7 +83,7 @@ export default function MusicPage() {
       window.clearInterval(id);
       document.removeEventListener("visibilitychange", onVis);
     };
-  }, [status, token]);
+  }, [mounted, status, token]);
 
   if (status === "loading") {
     return <main className="p-6">Chargement…</main>;
@@ -101,9 +104,14 @@ export default function MusicPage() {
         )}
       </div>
 
+      {/* Petit bandeau debug (aide à diagnostiquer mobile) */}
+      <div className="text-xs" style={{ color: "#6b7280" }}>
+        status: <b>{status}</b> · mounted: <b>{String(mounted)}</b> · token: <b>{token ? "oui" : "non"}</b>
+      </div>
+
       {session ? (
         <>
-          {/* 🎵 Musique en cours (intégrée ici, sans SDK → compatible iOS/Android) */}
+          {/* Musique en cours — via Web API (mobile-safe) */}
           <section className="space-y-3">
             {error && (
               <div className="text-xs" style={{ color: "#dc2626" }}>
@@ -157,22 +165,13 @@ export default function MusicPage() {
               </div>
 
               <div className="flex gap-2">
-                <a className="btn btn-outline" href="spotify://" aria-label="Ouvrir Spotify">
-                  Ouvrir
-                </a>
-                <a
-                  className="btn btn-outline"
-                  href="https://open.spotify.com/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Web
-                </a>
+                <a className="btn btn-outline" href="spotify://" aria-label="Ouvrir Spotify">Ouvrir</a>
+                <a className="btn btn-outline" href="https://open.spotify.com/" target="_blank" rel="noopener noreferrer">Web</a>
               </div>
             </div>
           </section>
 
-          {/* ⏱️ Minuteur (fichier séparé) */}
+          {/* Minuteur (fichier séparé) */}
           <section className="card">
             <h2 className="text-lg font-semibold" style={{ marginTop: 0 }}>
               Minuteur
