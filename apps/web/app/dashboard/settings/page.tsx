@@ -543,9 +543,37 @@ export default function Page() {
           <LegalModal />
         </Section>
 
-        {/* ===== Déconnexion centrée, en dessous (pas collée) ===== */}
-        <LogoutCentered />
-      </div>
+        /* ======================= Déconnexion centrée (sous Cookies & Mentions) ======================= */
+function LogoutCentered() {
+  const [loading, setLoading] = useState(false);
+
+  const handleLogout = async () => {
+    const supabase = getSupabase();
+    setLoading(true);
+    try {
+      await supabase.auth.signOut();
+      window.location.href = "/";
+    } catch (e: any) {
+      alert(e?.message || "Déconnexion impossible");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="mt-16 min-h-[35vh] grid place-items-center">
+      <button
+        type="button"
+        onClick={handleLogout}
+        disabled={loading}
+        // reset complet pour éviter tout style global (bleu)
+        className="appearance-none bg-transparent border-0 shadow-none no-underline
+                   text-black dark:text-black !text-black text-lg md:text-xl font-semibold"
+        style={{ color: "#000", WebkitTextFillColor: "#000" }}
+        aria-label="Se déconnecter"
+      >
+        {loading ? "Déconnexion…" : "Se déconnecter"}
+      </button>
     </div>
   );
 }
