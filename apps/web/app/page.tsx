@@ -118,9 +118,9 @@ export default function HomePage() {
           </ul>
         </section>
 
-        {/* ⬇️ Boutons centrés et verts (seule partie modifiée) */}
-        <section className="w-full min-h-[calc(100dvh-40px)] grid place-items-center">
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+        {/* ⬇️ Boutons plus bas et centrés horizontalement (seule partie modifiée) */}
+        <section className="w-full min-h-[60dvh] grid items-end justify-center">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mb-8">
             <button
               type="button"
               onClick={() => setShowLogin((v) => !v)}
