@@ -543,7 +543,7 @@ export default function Page() {
           <LegalModal />
         </Section>
 
-        /* ======================= Déconnexion centrée (sous Cookies & Mentions) ======================= */
+      /* ======================= Déconnexion centrée (sous Cookies & Mentions) ======================= */
 function LogoutCentered() {
   const [loading, setLoading] = useState(false);
 
@@ -566,9 +566,7 @@ function LogoutCentered() {
         type="button"
         onClick={handleLogout}
         disabled={loading}
-        // reset complet pour éviter tout style global (bleu)
-        className="appearance-none bg-transparent border-0 shadow-none no-underline
-                   text-black dark:text-black !text-black text-lg md:text-xl font-semibold"
+        className="appearance-none bg-transparent border-0 shadow-none no-underline text-black dark:text-black text-lg md:text-xl font-semibold"
         style={{ color: "#000", WebkitTextFillColor: "#000" }}
         aria-label="Se déconnecter"
       >
