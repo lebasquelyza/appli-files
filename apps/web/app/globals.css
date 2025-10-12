@@ -336,3 +336,5 @@ body:has(main.hide-topbar-menu) .js-topbar-menu {
          shadow hover:bg-emerald-700
          active:translate-y-px transition;
 }
+/* ex. global.css */
+button[aria-label="Se déconnecter"] { color:#000 !important; }
