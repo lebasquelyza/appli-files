@@ -26,18 +26,10 @@ function getSystemPrefersDark() {
 
 /* ======================= Styles boutons ======================= */
 const btnGhost =
-  "rounded-full border px-4 py-2 shadow-sm transition active:scale-[0.99] " +
-  "bg-white text-slate-900 border-slate-200 hover:bg-gray-50 " +
-  "dark:bg-slate-900 dark:text-slate-100 dark:border-slate-700 dark:hover:bg-slate-800";
+  "rounded-full border px-4 py-2 shadow-sm transition active:scale-[0.99] bg-white text-slate-900 border-slate-200 hover:bg-gray-50 dark:bg-slate-900 dark:text-slate-100 dark:border-slate-700 dark:hover:bg-slate-800";
 
 /* ======================= Jours (menu) ======================= */
-function DaysDropdown({
-  value,
-  onChange,
-}: {
-  value: number[];
-  onChange: (days: number[]) => void;
-}) {
+function DaysDropdown({ value, onChange }: { value: number[]; onChange: (days: number[]) => void }) {
   const labelsFull = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement | null>(null);
@@ -55,43 +47,24 @@ function DaysDropdown({
     };
   }, []);
 
-  const toggle = (d: number) =>
-    onChange(value.includes(d) ? value.filter((x) => x !== d) : [...value, d]);
+  const toggle = (d: number) => onChange(value.includes(d) ? value.filter((x) => x !== d) : [...value, d]);
 
   return (
     <div className="relative inline-block" ref={wrap}>
-      <button
-        type="button"
-        className={`${btnGhost} inline-flex items-center`}
-        onClick={() => setOpen((o) => !o)}
-        style={{ fontSize: "var(--settings-fs)" }}
-      >
+      <button type="button" className={`${btnGhost} inline-flex items-center`} onClick={() => setOpen((o) => !o)} style={{ fontSize: "var(--settings-fs)" }}>
         <span className="font-medium">Jours</span>
       </button>
 
       {open && (
-        <div
-          role="menu"
-          aria-label="Sélection des jours"
-          className="absolute z-50 mt-2 w-64 rounded-2xl border bg-white p-3 shadow-lg dark:bg-slate-900 dark:border-slate-700"
-          style={{ fontSize: "var(--settings-fs)" }}
-        >
+        <div role="menu" aria-label="Sélection des jours" className="absolute z-50 mt-2 w-64 rounded-2xl border bg-white p-3 shadow-lg dark:bg-slate-900 dark:border-slate-700" style={{ fontSize: "var(--settings-fs)" }}>
           <ul className="space-y-2">
             {labelsFull.map((lbl, i) => {
               const d = i + 1;
               const checked = value.includes(d);
               return (
                 <li key={d} className="flex items-center gap-3">
-                  <input
-                    id={`day-${d}`}
-                    type="checkbox"
-                    className="accent-current"
-                    checked={checked}
-                    onChange={() => toggle(d)}
-                  />
-                  <label htmlFor={`day-${d}`} className="cursor-pointer">
-                    {lbl}
-                  </label>
+                  <input id={`day-${d}`} type="checkbox" className="accent-current" checked={checked} onChange={() => toggle(d)} />
+                  <label htmlFor={`day-${d}`} className="cursor-pointer">{lbl}</label>
                 </li>
               );
             })}
@@ -99,12 +72,8 @@ function DaysDropdown({
 
           <div className="mt-3 flex items-center justify-end pt-2 border-t dark:border-slate-700">
             <div className="flex gap-2">
-              <button type="button" className={`${btnGhost} px-3 py-1`} onClick={() => setOpen(false)}>
-                OK
-              </button>
-              <button type="button" className={`${btnGhost} px-3 py-1`} onClick={() => onChange([])}>
-                Tout vider
-              </button>
+              <button type="button" className={`${btnGhost} px-3 py-1`} onClick={() => setOpen(false)}>OK</button>
+              <button type="button" className={`${btnGhost} px-3 py-1`} onClick={() => onChange([])}>Tout vider</button>
             </div>
           </div>
         </div>
@@ -114,13 +83,7 @@ function DaysDropdown({
 }
 
 /* ======================= Heure (menu) ======================= */
-function TimeDropdown({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (time: string) => void;
-}) {
+function TimeDropdown({ value, onChange }: { value: string; onChange: (time: string) => void }) {
   const [open, setOpen] = useState(false);
   const [temp, setTemp] = useState(value);
   const wrap = useRef<HTMLDivElement | null>(null);
@@ -147,34 +110,15 @@ function TimeDropdown({
 
   return (
     <div className="relative inline-block" ref={wrap}>
-      <button
-        type="button"
-        className={`${btnGhost} inline-flex items-center`}
-        onClick={() => setOpen((o) => !o)}
-        style={{ fontSize: "var(--settings-fs)" }}
-      >
+      <button type="button" className={`${btnGhost} inline-flex items-center`} onClick={() => setOpen((o) => !o)} style={{ fontSize: "var(--settings-fs)" }}>
         <span className="font-medium">Heure</span>
       </button>
 
       {open && (
-        <div
-          role="dialog"
-          aria-label="Sélection de l'heure"
-          className="absolute right-0 z-50 mt-2 w-56 rounded-2xl border bg-white p-3 shadow-lg dark:bg-slate-900 dark:border-slate-700"
-          style={{ fontSize: "var(--settings-fs)" }}
-        >
-          <input
-            type="time"
-            value={temp}
-            onChange={(e) => setTemp(e.target.value)}
-            step={300}
-            className="w-full rounded-[10px] border px-3 py-2 dark:bg-slate-900 dark:border-slate-700"
-            style={{ fontSize: "var(--settings-fs)" }}
-          />
+        <div role="dialog" aria-label="Sélection de l'heure" className="absolute right-0 z-50 mt-2 w-56 rounded-2xl border bg-white p-3 shadow-lg dark:bg-slate-900 dark:border-slate-700" style={{ fontSize: "var(--settings-fs)" }}>
+          <input type="time" value={temp} onChange={(e) => setTemp(e.target.value)} step={300} className="w-full rounded-[10px] border px-3 py-2 dark:bg-slate-900 dark:border-slate-700" style={{ fontSize: "var(--settings-fs)" }} />
           <div className="mt-3 flex items-center justify-end pt-2 border-t dark:border-slate-700">
-            <button type="button" className={`${btnGhost} px-3 py-1`} onClick={apply}>
-              OK
-            </button>
+            <button type="button" className={`${btnGhost} px-3 py-1`} onClick={apply}>OK</button>
           </div>
         </div>
       )}
@@ -192,11 +136,7 @@ function PushScheduleForm() {
     try {
       const { getDeviceId } = await import("@/lib/pushClient");
       const deviceId = getDeviceId();
-      const res = await fetch("/api/push/prefs", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deviceId, time, days, tz }),
-      });
+      const res = await fetch("/api/push/prefs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ deviceId, time, days, tz }) });
       if (!res.ok) throw new Error("Erreur");
       alert("Rappel enregistré ✅");
     } catch (e) {
@@ -213,9 +153,7 @@ function PushScheduleForm() {
         <TimeDropdown value={time} onChange={setTime} />
       </div>
       <div className="flex items-center justify-end">
-        <button type="button" className="btn-dash" onClick={save}>
-          Enregistrer
-        </button>
+        <button type="button" className="btn-dash" onClick={save}>Enregistrer</button>
       </div>
     </div>
   );
@@ -234,9 +172,7 @@ function LegalModal() {
 
   return (
     <div>
-      <button type="button" className={btnGhost} onClick={() => setOpen(true)}>
-        Voir les mentions légales
-      </button>
+      <button type="button" className={btnGhost} onClick={() => setOpen(true)}>Voir les mentions légales</button>
 
       {open && (
         <>
@@ -244,14 +180,7 @@ function LegalModal() {
           <div className="fixed inset-0 z-[101] flex sm:items-center items-end justify-center sm:p-4 p-0">
             <div
               ref={panelRef}
-              className="
-                w-full sm:max-w-3xl bg-white shadow-2xl
-                sm:rounded-2xl sm:border sm:p-6 p-4
-                sm:max-h-[85dvh] sm:h-auto
-                h-[92dvh] max-h-[100svh]
-                overflow-y-auto overscroll-contain
-                dark:bg-slate-900 dark:border-slate-700
-              "
+              className="w-full sm:max-w-3xl bg-white shadow-2xl sm:rounded-2xl sm:border sm:p-6 p-4 sm:max-h-[85dvh] sm:h-auto h-[92dvh] max-h-[100svh] overflow-y-auto overscroll-contain dark:bg-slate-900 dark:border-slate-700"
               style={{ fontSize: "var(--settings-fs)", WebkitOverflowScrolling: "touch", touchAction: "pan-y" }}
               role="dialog"
               aria-modal="true"
@@ -259,23 +188,13 @@ function LegalModal() {
             >
               <div className="flex items-start justify-between gap-4">
                 <h3 className="text-base font-semibold">Mentions légales</h3>
-                <button aria-label="Fermer" className={btnGhost} onClick={() => setOpen(false)}>
-                  Fermer
-                </button>
+                <button aria-label="Fermer" className={btnGhost} onClick={() => setOpen(false)}>Fermer</button>
               </div>
 
               <div className="mt-3 space-y-4 leading-relaxed">
-                <p className="opacity-80">
-                  Ici vos mentions légales (éditeur du site, hébergeur, propriété intellectuelle,
-                  données personnelles, cookies, contact, etc.). Remplacez ce texte par votre contenu
-                  lorsque vos informations seront prêtes.
-                </p>
-
+                <p className="opacity-80">Ici vos mentions légales (éditeur du site, hébergeur, propriété intellectuelle, données personnelles, cookies, contact, etc.). Remplacez ce texte par votre contenu lorsque vos informations seront prêtes.</p>
                 <h4 className="font-semibold">Cookies</h4>
-                <p className="opacity-80">
-                  Ce site utilise des cookies nécessaires au bon fonctionnement et, le cas échéant,
-                  pour la mesure d’audience.
-                </p>
+                <p className="opacity-80">Ce site utilise des cookies nécessaires au bon fonctionnement et, le cas échéant, pour la mesure d’audience.</p>
               </div>
             </div>
           </div>
@@ -321,17 +240,11 @@ function DeleteAccountCard() {
         return;
       }
 
-      const payload = {
-        reason: reason || null,
-        reasonText: reason === "other" ? (reasonText.trim() || null) : null,
-      };
+      const payload = { reason: reason || null, reasonText: reason === "other" ? (reasonText.trim() || null) : null };
 
       const res = await fetch("/api/account/delete", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
         body: JSON.stringify(payload),
       });
       if (!res.ok) {
@@ -358,54 +271,25 @@ function DeleteAccountCard() {
         <label className="font-medium">Pourquoi partez-vous ? (facultatif)</label>
         <div className="grid sm:grid-cols-2 gap-2">
           {REASONS.map((r) => (
-            <label
-              key={r.value}
-              className="flex items-center gap-2 rounded-[10px] border px-3 py-2 dark:bg-slate-900 dark:border-slate-700 cursor-pointer"
-            >
-              <input
-                type="radio"
-                name="delete-reason"
-                value={r.value}
-                checked={reason === r.value}
-                onChange={(e) => setReason(e.target.value)}
-                className="accent-current"
-              />
+            <label key={r.value} className="flex items-center gap-2 rounded-[10px] border px-3 py-2 dark:bg-slate-900 dark:border-slate-700 cursor-pointer">
+              <input type="radio" name="delete-reason" value={r.value} checked={reason === r.value} onChange={(e) => setReason(e.target.value)} className="accent-current" />
               <span>{r.label}</span>
             </label>
           ))}
         </div>
 
         {reason === "other" && (
-          <textarea
-            value={reasonText}
-            onChange={(e) => setReasonText(e.target.value)}
-            rows={3}
-            placeholder="Dites-nous en plus (optionnel)"
-            className="mt-2 w-full rounded-[10px] border px-3 py-2 dark:bg-slate-900 dark:border-slate-700"
-          />
+          <textarea value={reasonText} onChange={(e) => setReasonText(e.target.value)} rows={3} placeholder="Dites-nous en plus (optionnel)" className="mt-2 w-full rounded-[10px] border px-3 py-2 dark:bg-slate-900 dark:border-slate-700" />
         )}
       </div>
 
       <p className="opacity-80">
-        Cette action est <strong>irréversible</strong> : vos données et accès seront supprimés.
-        Pour confirmer, tapez{" "}
+        Cette action est <strong>irréversible</strong> : vos données et accès seront supprimés. Pour confirmer, tapez{" "}
         <code className="px-1 py-0.5 rounded bg-red-50 dark:bg-red-900/30">SUPPRIMER</code> :
       </p>
-      <input
-        type="text"
-        value={confirm}
-        onChange={(e) => setConfirm(e.target.value)}
-        placeholder="SUPPRIMER"
-        className="w-full rounded-[10px] border px-3 py-2 dark:bg-slate-900 dark:border-slate-700"
-        aria-label="Champ de confirmation de suppression"
-      />
+      <input type="text" value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="SUPPRIMER" className="w-full rounded-[10px] border px-3 py-2 dark:bg-slate-900 dark:border-slate-700" aria-label="Champ de confirmation de suppression" />
       <div className="flex items-center justify-end">
-        <button
-          type="button"
-          disabled={!canDelete}
-          onClick={handleDelete}
-          className={`btn ${!canDelete ? "opacity-60 cursor-not-allowed" : ""}`}
-        >
+        <button type="button" disabled={!canDelete} onClick={handleDelete} className={`btn ${!canDelete ? "opacity-60 cursor-not-allowed" : ""}`}>
           {loading ? "Suppression…" : "Supprimer définitivement"}
         </button>
       </div>
@@ -414,136 +298,6 @@ function DeleteAccountCard() {
 }
 
 /* ======================= Déconnexion centrée (sous Cookies & Mentions) ======================= */
-function LogoutCentered() {
-  const [loading, setLoading] = useState(false);
-  const handleLogout = async () => {
-    const supabase = getSupabase();
-    setLoading(true);
-    try {
-      await supabase.auth.signOut();
-      window.location.href = "/";
-    } catch (e: any) {
-      alert(e?.message || "Déconnexion impossible");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="mt-16 min-h-[35vh] grid place-items-center">
-      <button
-        type="button"
-        onClick={handleLogout}
-        disabled={loading}
-        // Pas de classe 'btn' pour éviter un style blanc : on force noir.
-        className="px-0 py-0 bg-transparent border-0 shadow-none text-slate-900 dark:text-slate-900 text-lg md:text-xl font-semibold"
-        aria-label="Se déconnecter"
-      >
-        {loading ? "Déconnexion…" : "Se déconnecter"}
-      </button>
-    </div>
-  );
-}
-
-/* ======================= Page principale ======================= */
-export default function Page() {
-  useSettingsFontSize();
-
-  const [prefs, setPrefs] = useState<Prefs>(DEFAULT_PREFS);
-  const [loaded, setLoaded] = useState(false);
-
-  useLayoutEffect(() => {
-    let initial: Prefs = DEFAULT_PREFS;
-    let hadStored = false;
-    try {
-      const raw = localStorage.getItem(LS_KEY);
-      if (raw) {
-        hadStored = true;
-        initial = { ...DEFAULT_PREFS, ...JSON.parse(raw) };
-      }
-    } catch {}
-    setPrefs(initial);
-
-    const isDark = hadStored
-      ? (initial.theme === "dark" || (initial.theme === "system" && getSystemPrefersDark()))
-      : false;
-    applyThemeToRoot(isDark);
-
-    setLoaded(true);
-  }, []);
-
-  useEffect(() => {
-    if (!loaded) return;
-    try {
-      localStorage.setItem(LS_KEY, JSON.stringify(prefs));
-    } catch {}
-    const isDark =
-      prefs.theme === "dark" || (prefs.theme === "system" && getSystemPrefersDark());
-    applyThemeToRoot(isDark);
-  }, [prefs, loaded]);
-
-  useEffect(() => {
-    if (!loaded) return;
-    const mql = window.matchMedia?.("(prefers-color-scheme: dark)");
-    if (!mql) return;
-    const onChange = () => {
-      if (prefs.theme === "system") applyThemeToRoot(mql.matches);
-    };
-    mql.addEventListener?.("change", onChange);
-    return () => mql.removeEventListener?.("change", onChange);
-  }, [prefs.theme, loaded]);
-
-  return (
-    <div className="container" style={{ paddingTop: 24, paddingBottom: 24 }}>
-      <div className="mb-2">
-        <h1
-          className="h1"
-          style={{ fontSize: "clamp(20px, 2.2vw, 24px)", lineHeight: 1.15, color: "var(--text)" }}
-        >
-          Réglages
-        </h1>
-      </div>
-
-      <div style={{ fontSize: "var(--settings-fs)" }}>
-        {/* ======================= Section Général ======================= */}
-        <Section title="Général">
-          <div className="grid gap-6 md:grid-cols-2">
-            {/* Langue */}
-            <div className="card space-y-3">
-              <h3 className="font-semibold">Langue</h3>
-              <select
-                className="rounded-[10px] border px-3 py-2 w-full dark:bg-slate-900 dark:border-slate-700"
-                value={prefs.language}
-                onChange={(e) =>
-                  setPrefs((p) => ({ ...p, language: e.target.value as Prefs["language"] }))
-                }
-                disabled={!loaded}
-              >
-                <option value="fr">Français (FR)</option>
-                <option value="en">English (EN)</option>
-                <option value="de">Deutsch (DE)</option>
-              </select>
-            </div>
-
-            {/* Supprimer mon compte */}
-            <DeleteAccountCard />
-          </div>
-        </Section>
-
-        {/* ======================= Section Notifications ======================= */}
-        <Section title="Rappel Motivation ">
-          <PushScheduleForm />
-        </Section>
-
-        {/* ======================= Section Cookies & Mentions ======================= */}
-        <Section title="Cookies & Mentions légales">
-          <p className="opacity-70 mb-4">
-            Consultez ici notre politique de cookies et les mentions légales du site.
-          </p>
-          <LegalModal />
-        </Section>
-
-      /* ======================= Déconnexion centrée (sous Cookies & Mentions) ======================= */
 function LogoutCentered() {
   const [loading, setLoading] = useState(false);
 
@@ -572,6 +326,95 @@ function LogoutCentered() {
       >
         {loading ? "Déconnexion…" : "Se déconnecter"}
       </button>
+    </div>
+  );
+}
+
+/* ======================= Page principale ======================= */
+export default function Page() {
+  useSettingsFontSize();
+
+  const [prefs, setPrefs] = useState<Prefs>(DEFAULT_PREFS);
+  const [loaded, setLoaded] = useState(false);
+
+  useLayoutEffect(() => {
+    let initial: Prefs = DEFAULT_PREFS;
+    let hadStored = false;
+    try {
+      const raw = localStorage.getItem(LS_KEY);
+      if (raw) {
+        hadStored = true;
+        initial = { ...DEFAULT_PREFS, ...JSON.parse(raw) };
+      }
+    } catch {}
+    setPrefs(initial);
+
+    const isDark = hadStored ? initial.theme === "dark" || (initial.theme === "system" && getSystemPrefersDark()) : false;
+    applyThemeToRoot(isDark);
+
+    setLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    if (!loaded) return;
+    try {
+      localStorage.setItem(LS_KEY, JSON.stringify(prefs));
+    } catch {}
+    const isDark = prefs.theme === "dark" || (prefs.theme === "system" && getSystemPrefersDark());
+    applyThemeToRoot(isDark);
+  }, [prefs, loaded]);
+
+  useEffect(() => {
+    if (!loaded) return;
+    const mql = window.matchMedia?.("(prefers-color-scheme: dark)");
+    if (!mql) return;
+    const onChange = () => {
+      if (prefs.theme === "system") applyThemeToRoot(mql.matches);
+    };
+    mql.addEventListener?.("change", onChange);
+    return () => mql.removeEventListener?.("change", onChange);
+  }, [prefs.theme, loaded]);
+
+  return (
+    <div className="container" style={{ paddingTop: 24, paddingBottom: 24 }}>
+      <div className="mb-2">
+        <h1 className="h1" style={{ fontSize: "clamp(20px, 2.2vw, 24px)", lineHeight: 1.15, color: "var(--text)" }}>
+          Réglages
+        </h1>
+      </div>
+
+      <div style={{ fontSize: "var(--settings-fs)" }}>
+        {/* ======================= Section Général ======================= */}
+        <Section title="Général">
+          <div className="grid gap-6 md:grid-cols-2">
+            <div className="card space-y-3">
+              <h3 className="font-semibold">Langue</h3>
+              <select className="rounded-[10px] border px-3 py-2 w-full dark:bg-slate-900 dark:border-slate-700" value={prefs.language} onChange={(e) => setPrefs((p) => ({ ...p, language: e.target.value as Prefs["language"] }))} disabled={!loaded}>
+                <option value="fr">Français (FR)</option>
+                <option value="en">English (EN)</option>
+                <option value="de">Deutsch (DE)</option>
+              </select>
+            </div>
+
+            {/* Supprimer mon compte */}
+            <DeleteAccountCard />
+          </div>
+        </Section>
+
+        {/* ======================= Section Notifications ======================= */}
+        <Section title="Rappel Motivation ">
+          <PushScheduleForm />
+        </Section>
+
+        {/* ======================= Section Cookies & Mentions ======================= */}
+        <Section title="Cookies & Mentions légales">
+          <p className="opacity-70 mb-4">Consultez ici notre politique de cookies et les mentions légales du site.</p>
+          <LegalModal />
+        </Section>
+
+        {/* ===== Déconnexion centrée, en dessous (pas collée) ===== */}
+        <LogoutCentered />
+      </div>
     </div>
   );
 }
