@@ -90,23 +90,6 @@ export default function HomePage() {
     whiteSpace: "nowrap",
   };
 
-  /* >>> AJOUT: styles dédiés aux 2 CTA centraux uniquement <<< */
-  const ctaPrimaryStyle: React.CSSProperties = {
-    ...pillStyle,
-    padding: "12px 22px",
-    boxShadow: "0 14px 28px rgba(34,197,94,.35)",
-  };
-  const ctaSecondaryStyle: React.CSSProperties = {
-    background: "#ffffff",
-    color: "#16a34a",
-    textDecoration: "none",
-    borderRadius: 9999,
-    border: "2px solid #a7f3d0",
-  };
-  const ctaEnhanceClass =
-    "transition duration-150 will-change-transform hover:-translate-y-0.5 active:translate-y-0 " +
-    "hover:shadow-lg focus-visible:ring-4 focus-visible:ring-emerald-500/30";
-
   return (
     <main className="hide-topbar-menu pt-10 sm:pt-12 pb-12">
       <div className="container max-w-screen-lg mx-auto px-4">
@@ -135,27 +118,35 @@ export default function HomePage() {
           </ul>
         </section>
 
-        {/* ⬇️ Boutons centrés pile au milieu de l'écran (compense le padding-top 40px du layout) */}
+        {/* ⬇️ Boutons centrés et verts (seule partie modifiée) */}
         <section className="w-full min-h-[calc(100dvh-40px)] grid place-items-center">
-          <div className="flex gap-3">
-            {/* SECONDARY — Connecte-toi */}
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
             <button
               type="button"
               onClick={() => setShowLogin((v) => !v)}
               aria-expanded={showLogin}
               aria-controls="login-panel"
-              className={`${pillClass} ${ctaEnhanceClass} bg-white text-emerald-600 border-2 border-emerald-200 hover:bg-emerald-50`}
-              style={ctaSecondaryStyle}
+              className={`${pillClass} transition hover:-translate-y-0.5 active:translate-y-0`}
+              style={{
+                ...pillStyle,
+                background: "#16a34a", // vert
+                boxShadow: "0 10px 22px rgba(22,163,74,.35)",
+                padding: "12px 22px",
+              }}
             >
               Connecte-toi
             </button>
 
-            {/* PRIMARY — Créer un compte */}
             <button
               type="button"
               onClick={() => (window.location.href = "/signup")}
-              className={`${pillClass} ${ctaEnhanceClass}`}
-              style={ctaPrimaryStyle}
+              className={`${pillClass} transition hover:-translate-y-0.5 active:translate-y-0`}
+              style={{
+                ...pillStyle,
+                background: "#16a34a", // vert
+                boxShadow: "0 10px 22px rgba(22,163,74,.35)",
+                padding: "12px 22px",
+              }}
               aria-label="Créer un compte"
             >
               Créer un compte
@@ -239,5 +230,3 @@ export default function HomePage() {
     </main>
   );
 }
-
-
