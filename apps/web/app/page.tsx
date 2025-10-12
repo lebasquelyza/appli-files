@@ -118,9 +118,9 @@ export default function HomePage() {
           </ul>
         </section>
 
-        {/* ⬇️ Boutons plus bas et centrés horizontalement (seule partie modifiée) */}
-        <section className="w-full min-h-[60dvh] grid items-end justify-center">
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mb-8">
+        {/* ⬇️ Boutons centrés HORIZONTALEMENT et PLUS BAS (vh au lieu de dvh) */}
+        <section className="w-full min-h-[60vh] grid">
+          <div className="justify-self-center self-end mb-10 flex flex-col sm:flex-row items-center gap-3">
             <button
               type="button"
               onClick={() => setShowLogin((v) => !v)}
@@ -129,7 +129,7 @@ export default function HomePage() {
               className={`${pillClass} transition hover:-translate-y-0.5 active:translate-y-0`}
               style={{
                 ...pillStyle,
-                background: "#16a34a", // vert
+                background: "#16a34a",
                 boxShadow: "0 10px 22px rgba(22,163,74,.35)",
                 padding: "12px 22px",
               }}
@@ -143,7 +143,7 @@ export default function HomePage() {
               className={`${pillClass} transition hover:-translate-y-0.5 active:translate-y-0`}
               style={{
                 ...pillStyle,
-                background: "#16a34a", // vert
+                background: "#16a34a",
                 boxShadow: "0 10px 22px rgba(22,163,74,.35)",
                 padding: "12px 22px",
               }}
