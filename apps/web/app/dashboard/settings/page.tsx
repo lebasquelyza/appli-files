@@ -149,38 +149,38 @@ function TimeDropdown({
 
   return (
     <div className="relative inline-block" ref={wrap}>
-      <button
-        type="button"
-        className={`${btnGhost} inline-flex items-center`}
-        onClick={() => setOpen((o) => !o)}
+    <button
+      type="button"
+      className={`${btnGhost} inline-flex items-center`}
+      onClick={() => setOpen((o) => !o)}
+      style={{ fontSize: "var(--settings-fs)" }}
+    >
+      <span className="font-medium">Heure</span>
+    </button>
+
+    {open && (
+      <div
+        role="dialog"
+        aria-label="Sélection de l'heure"
+        className="absolute right-0 z-50 mt-2 w-56 rounded-2xl border bg-white p-3 shadow-lg dark:bg-slate-900 dark:border-slate-700"
         style={{ fontSize: "var(--settings-fs)" }}
       >
-        <span className="font-medium">Heure</span>
-      </button>
-
-      {open && (
-        <div
-          role="dialog"
-          aria-label="Sélection de l'heure"
-          className="absolute right-0 z-50 mt-2 w-56 rounded-2xl border bg-white p-3 shadow-lg dark:bg-slate-900 dark:border-slate-700"
+        <input
+          type="time"
+          value={temp}
+          onChange={(e) => setTemp(e.target.value)}
+          step={300}
+          className="w-full rounded-[10px] border px-3 py-2 dark:bg-slate-900 dark:border-slate-700"
           style={{ fontSize: "var(--settings-fs)" }}
-        >
-          <input
-            type="time"
-            value={temp}
-            onChange={(e) => setTemp(e.target.value)}
-            step={300}
-            className="w-full rounded-[10px] border px-3 py-2 dark:bg-slate-900 dark:border-slate-700"
-            style={{ fontSize: "var(--settings-fs)" }}
-          />
-          <div className="mt-3 flex items-center justify-end pt-2 border-t dark:border-slate-700">
-            <button type="button" className={`${btnGhost} px-3 py-1`} onClick={apply}>
-              OK
-            </button>
-          </div>
+        />
+        <div className="mt-3 flex items-center justify-end pt-2 border-t dark:border-slate-700">
+          <button type="button" className={`${btnGhost} px-3 py-1`} onClick={apply}>
+            OK
+          </button>
         </div>
-      )}
-    </div>
+      </div>
+    )}
+  </div>
   );
 }
 
@@ -428,6 +428,42 @@ function DeleteAccountCard() {
   );
 }
 
+/* ======================= Composant Déconnexion ======================= */
+function LogoutCard() {
+  const [loading, setLoading] = useState(false);
+
+  const handleLogout = async () => {
+    const supabase = getSupabase();
+    setLoading(true);
+    try {
+      await supabase.auth.signOut();
+      // Redirection après déconnexion (ajuste la route si besoin)
+      window.location.href = "/";
+    } catch (e: any) {
+      alert(e?.message || "Déconnexion impossible");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="card space-y-3">
+      <h3 className="font-semibold">Se déconnecter</h3>
+      <p className="opacity-80">Ferme votre session sur cet appareil.</p>
+      <div className="flex items-center justify-end">
+        <button
+          type="button"
+          onClick={handleLogout}
+          className={`btn ${loading ? "opacity-60 cursor-not-allowed" : ""}`}
+          disabled={loading}
+        >
+          {loading ? "Déconnexion…" : "Déconnexion"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /* ======================= Page principale ======================= */
 export default function Page() {
   useSettingsFontSize();
@@ -518,8 +554,11 @@ export default function Page() {
               </select>
             </div>
 
-            {/* 🔁 Bloc Thème remplacé par Supprimer mon compte */}
+            {/* Supprimer mon compte */}
             <DeleteAccountCard />
+
+            {/* 🔐 Déconnexion */}
+            <LogoutCard />
           </div>
         </Section>
 
