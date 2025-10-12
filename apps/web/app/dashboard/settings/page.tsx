@@ -267,7 +267,8 @@ function LegalModal() {
               <div className="mt-3 space-y-4 leading-relaxed">
                 <p className="opacity-80">
                   Ici vos mentions légales (éditeur du site, hébergeur, propriété intellectuelle,
-                  données personnelles, cookies, contact, etc.). Remplacez ce texte par votre contenu.
+                  données personnelles, cookies, contact, etc.). Remplacez ce texte par votre contenu
+                  lorsque vos informations seront prêtes.
                 </p>
 
                 <h4 className="font-semibold">Cookies</h4>
@@ -429,12 +430,13 @@ function LogoutCentered() {
   };
 
   return (
-    <div className="mt-16 min-h-[40vh] flex items-center justify-center">
+    <div className="mt-16 min-h-[35vh] grid place-items-center">
       <button
         type="button"
         onClick={handleLogout}
         disabled={loading}
-        className="text-black dark:text-black text-lg md:text-xl font-medium"
+        // Pas de classe 'btn' pour éviter un style blanc : on force noir.
+        className="px-0 py-0 bg-transparent border-0 shadow-none text-slate-900 dark:text-slate-900 text-lg md:text-xl font-semibold"
         aria-label="Se déconnecter"
       >
         {loading ? "Déconnexion…" : "Se déconnecter"}
@@ -547,5 +549,3 @@ export default function Page() {
     </div>
   );
 }
-
-
