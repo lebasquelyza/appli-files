@@ -29,32 +29,47 @@ function useAudioChime() {
     } catch {}
   }, [ensureAudioCtx]);
 
-  const chime = useCallback(async () => {
+  // Tick discret pour 3-2-1
+  const tick = useCallback(async () => {
     try {
       const ctx = await ensureAudioCtx();
-      const makeNote = (freq: number, start: number, dur = 0.16) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = "triangle";
-        osc.frequency.value = freq;
-        osc.connect(gain); gain.connect(ctx.destination);
-        gain.gain.setValueAtTime(0.0001, start);
-        gain.gain.linearRampToValueAtTime(0.85, start + 0.012);
-        gain.gain.exponentialRampToValueAtTime(0.001, start + dur);
-        osc.start(start); osc.stop(start + dur + 0.05);
-      };
-      const now = ctx.currentTime;
-      makeNote(1318.51, now + 0.00);
-      makeNote(1760.0,  now + 0.18);
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = 880;     // petit bip
+      gain.gain.value = 0.25;        // volume discret
+      osc.connect(gain); gain.connect(ctx.destination);
+      const t = ctx.currentTime;
+      osc.start(t);
+      osc.stop(t + 0.07);
     } catch {}
   }, [ensureAudioCtx]);
 
-  return { unlock, chime };
+  // Bip de transition / fin (plus fort)
+  const chimeStrong = useCallback(async () => {
+    try {
+      const ctx = await ensureAudioCtx();
+      const make = (freq: number, start: number, dur = 0.18, amp = 1.0) => {
+        const o = ctx.createOscillator(); const g = ctx.createGain();
+        o.type = "triangle"; o.frequency.value = freq;
+        o.connect(g); g.connect(ctx.destination);
+        g.gain.setValueAtTime(0.0001, start);
+        g.gain.linearRampToValueAtTime(amp, start + 0.015);
+        g.gain.exponentialRampToValueAtTime(0.001, start + dur);
+        o.start(start); o.stop(start + dur + 0.05);
+      };
+      const now = ctx.currentTime;
+      make(1318.51, now + 0.00, 0.18, 1.0);
+      make(1760.0,  now + 0.20, 0.20, 1.0);
+    } catch {}
+  }, [ensureAudioCtx]);
+
+  return { unlock, tick, chimeStrong };
 }
 
 /* ---------------- Tabata Timer (compact) ---------------- */
 function TabataTimerCompact() {
-  const { unlock, chime } = useAudioChime();
+  const { unlock, tick, chimeStrong } = useAudioChime();
 
   const [rounds, setRounds] = useState(8);
   const [workSec, setWorkSec] = useState(20);
@@ -66,7 +81,7 @@ function TabataTimerCompact() {
   const [running, setRunning] = useState(false);
 
   const totalSec = useMemo(
-    () => rounds * (workSec + restSec) - restSec,
+    () => rounds * (workSec + restSec) - restSec, // pas de repos après le dernier round
     [rounds, workSec, restSec]
   );
 
@@ -97,20 +112,36 @@ function TabataTimerCompact() {
     setRemaining(workSec);
   };
 
+  // Tick 1s + bips 3-2-1 + bip fort à la fin de phase
   useEffect(() => {
     if (!running) return;
     const t = setInterval(() => {
       setRemaining((r) => {
-        if (r > 1) return r - 1;
-        void chime(); // bip à la transition
+        const next = r - 1;
+
+        // 3-2-1 avant la fin
+        if (next === 3 || next === 2 || next === 1) {
+          void tick();
+        }
+
+        if (r > 1) return next;
+
+        // r <= 1  → fin de phase
+        void chimeStrong();
+
         if (phase === "work") {
           if (currRound === rounds) {
-            setPhase("done"); setRunning(false); return 0;
+            setPhase("done");
+            setRunning(false);
+            return 0;
           } else {
-            setPhase("rest"); return restSec || 0;
+            setPhase("rest");
+            return restSec || 0;
           }
         } else if (phase === "rest") {
-          setPhase("work"); setCurrRound((n) => n + 1); return workSec;
+          setPhase("work");
+          setCurrRound((n) => n + 1);
+          return workSec;
         }
         return 0;
       });
@@ -172,10 +203,12 @@ function TabataTimerCompact() {
           </div>
         </div>
 
+        {/* Barre de progression */}
         <div style={{ height: 8, background: "#f3f4f6", borderRadius: 999, marginTop: 8, overflow: "hidden" }}>
           <div style={{ width: `${pct}%`, height: "100%", background: "#16a34a" }} />
         </div>
 
+        {/* Actions */}
         <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
           {phase === "idle" || phase === "done" ? (
             <button className="btn btn-dash" style={{ fontSize: 13 }} onClick={start}>Démarrer</button>
@@ -197,8 +230,8 @@ function TabataTimerCompact() {
 export default function MusicPage() {
   const { data: session, status } = useSession();
 
-  // Centrage horizontal : largeur max + marges auto
-  const PAGE_MAX_WIDTH = 740;
+  // Centrage horizontal
+  const PAGE_MAX_WIDTH = 740;   // ajuste si besoin
   const SIDE_PADDING = 16;
 
   // Réduction du bloc Spotify
@@ -280,7 +313,7 @@ export default function MusicPage() {
                 fontSize: 12,
                 padding: "6px 10px",
                 background: "#ffffff",
-                color: "#111827",
+                color: "#111827", // texte noir
                 border: "1px solid #d1d5db",
                 borderRadius: 999,
                 fontWeight: 600,
@@ -294,7 +327,6 @@ export default function MusicPage() {
             </button>
           </div>
 
-          {/* (Exemples supprimés ici) */}
           <div id="tabata-root" style={{ marginTop: 8 }}>
             <TabataTimerCompact />
           </div>
