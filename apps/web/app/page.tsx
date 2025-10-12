@@ -118,10 +118,15 @@ export default function HomePage() {
           </ul>
         </section>
 
-        {/* ⬇️ Boutons PLUS BAS et PLUS À DROITE (seule partie modifiée) */}
-        <section className="w-full min-h-[70vh] grid">
-          {/* aligné à droite et vers le bas du bloc */}
-          <div className="justify-self-end self-end mr-2 sm:mr-0 mb-12 flex flex-col sm:flex-row items-center gap-3">
+        {/* ⬇️ Spacer blanc invisible + boutons centrés */}
+        <section className="w-full grid grid-rows-[1fr_auto]">
+          {/* Bloc blanc invisible qui pousse vers le bas */}
+          <div
+            aria-hidden="true"
+            className="bg-white invisible h-[45vh] sm:h-[55vh]"
+          />
+          {/* Boutons (design vert inchangé), centrés horizontalement */}
+          <div className="justify-self-center flex flex-col sm:flex-row items-center gap-3 mb-10">
             <button
               type="button"
               onClick={() => setShowLogin((v) => !v)}
