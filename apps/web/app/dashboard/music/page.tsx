@@ -197,6 +197,10 @@ function TabataTimerCompact() {
 export default function MusicPage() {
   const { data: session, status } = useSession();
 
+  // Centrage horizontal : largeur max + marges auto
+  const PAGE_MAX_WIDTH = 740;
+  const SIDE_PADDING = 16;
+
   // Réduction du bloc Spotify
   const PLAYER_SCALE = 0.84;
   const invPlayer = 1 / PLAYER_SCALE;
@@ -207,7 +211,8 @@ export default function MusicPage() {
 
   if (status === "loading") {
     return (
-      <div className="container" style={{ paddingTop: 18, paddingBottom: 22 }}>
+      <div className="container"
+           style={{ paddingTop: 18, paddingBottom: 22, paddingLeft: SIDE_PADDING, paddingRight: SIDE_PADDING, maxWidth: PAGE_MAX_WIDTH, margin: "0 auto" }}>
         <div className="page-header" style={{ marginBottom: 6 }}>
           <div>
             <h1 className="h1" style={{ fontSize: 20, color: "#111827" }}>Musique</h1>
@@ -224,7 +229,8 @@ export default function MusicPage() {
 
   if (!session) {
     return (
-      <div className="container" style={{ paddingTop: 18, paddingBottom: 22 }}>
+      <div className="container"
+           style={{ paddingTop: 18, paddingBottom: 22, paddingLeft: SIDE_PADDING, paddingRight: SIDE_PADDING, maxWidth: PAGE_MAX_WIDTH, margin: "0 auto" }}>
         <div className="page-header" style={{ marginBottom: 6 }}>
           <div>
             <h1 className="h1" style={{ fontSize: 20, color: "#111827" }}>Musique</h1>
@@ -244,7 +250,8 @@ export default function MusicPage() {
   }
 
   return (
-    <div className="container" style={{ paddingTop: 18, paddingBottom: 22 }}>
+    <div className="container"
+         style={{ paddingTop: 18, paddingBottom: 22, paddingLeft: SIDE_PADDING, paddingRight: SIDE_PADDING, maxWidth: PAGE_MAX_WIDTH, margin: "0 auto" }}>
       <div className="page-header" style={{ marginBottom: 6 }}>
         <div>
           <h1 className="h1" style={{ fontSize: 20, color: "#111827" }}>Musique</h1>
@@ -265,7 +272,7 @@ export default function MusicPage() {
           <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
             <h3 style={{ marginTop: 0, fontSize: 16, color: "#111827", fontWeight: 800 }}>Timer</h3>
 
-            {/* BOUTON TABATA — texte NOIR */}
+            {/* Bouton Tabata — texte noir */}
             <button
               type="button"
               className="btn"
@@ -273,12 +280,11 @@ export default function MusicPage() {
                 fontSize: 12,
                 padding: "6px 10px",
                 background: "#ffffff",
-                color: "#111827",        // <-- texte noir
+                color: "#111827",
                 border: "1px solid #d1d5db",
                 borderRadius: 999,
                 fontWeight: 600,
               }}
-              // (facultatif) preset rapide :
               onClick={() => {
                 const el = document.getElementById("tabata-root");
                 if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -288,10 +294,7 @@ export default function MusicPage() {
             </button>
           </div>
 
-          <div className="text-sm" style={{ color: "#6b7280", fontSize: 13, marginTop: 2 }}>
-            Exemples : <strong>8× 20s/10s</strong> • <strong>10× 45s/15s</strong> • <strong>6× 30s/30s</strong>
-          </div>
-
+          {/* (Exemples supprimés ici) */}
           <div id="tabata-root" style={{ marginTop: 8 }}>
             <TabataTimerCompact />
           </div>
