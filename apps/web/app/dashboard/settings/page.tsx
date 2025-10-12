@@ -412,8 +412,8 @@ function DeleteAccountCard() {
   );
 }
 
-/* ======================= Bouton déconnexion en bas ======================= */
-function LogoutFooter() {
+/* ======================= Déconnexion centrée (sous Cookies & Mentions) ======================= */
+function LogoutCentered() {
   const [loading, setLoading] = useState(false);
   const handleLogout = async () => {
     const supabase = getSupabase();
@@ -427,13 +427,14 @@ function LogoutFooter() {
       setLoading(false);
     }
   };
+
   return (
-    <div className="mt-12 pt-6 border-t dark:border-slate-800 flex items-center justify-center">
+    <div className="mt-16 min-h-[40vh] flex items-center justify-center">
       <button
         type="button"
         onClick={handleLogout}
         disabled={loading}
-        className="text-sm underline opacity-80 hover:opacity-100"
+        className="text-black dark:text-black text-lg md:text-xl font-medium"
         aria-label="Se déconnecter"
       >
         {loading ? "Déconnexion…" : "Se déconnecter"}
@@ -540,8 +541,8 @@ export default function Page() {
           <LegalModal />
         </Section>
 
-        {/* ===== Déconnexion en bas de page ===== */}
-        <LogoutFooter />
+        {/* ===== Déconnexion centrée, en dessous (pas collée) ===== */}
+        <LogoutCentered />
       </div>
     </div>
   );
