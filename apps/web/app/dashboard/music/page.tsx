@@ -5,9 +5,8 @@ import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const SpotifyPlayer = dynamic(() => import("@/components/SpotifyPlayer"), { ssr: false });
-const SimpleTimer = dynamic(() => import("@/components/Timer"), { ssr: false });
 
-/* ---------------- Audio utils (reprend ta logique) ---------------- */
+/* ---------------- Audio utils ---------------- */
 function useAudioChime() {
   const audioCtxRef = useRef<AudioContext | null>(null);
   const unlockedRef = useRef(false);
@@ -50,10 +49,10 @@ function useAudioChime() {
     } catch {}
   }, [ensureAudioCtx]);
 
-  return { unlock, chime, unlockedRef };
+  return { unlock, chime };
 }
 
-/* ---------------- Tabata Timer (nouveau) ---------------- */
+/* ---------------- Tabata Timer (compact) ---------------- */
 function TabataTimerCompact() {
   const { unlock, chime } = useAudioChime();
 
@@ -66,8 +65,11 @@ function TabataTimerCompact() {
   const [remaining, setRemaining] = useState(workSec);
   const [running, setRunning] = useState(false);
 
-  // progress total pour barre
-  const totalSec = useMemo(() => rounds * (workSec + restSec) - restSec, [rounds, workSec, restSec]); // pas de repos après le dernier work
+  const totalSec = useMemo(
+    () => rounds * (workSec + restSec) - restSec,
+    [rounds, workSec, restSec]
+  );
+
   const elapsedSec = useMemo(() => {
     if (phase === "idle") return 0;
     let elapsed = 0;
@@ -79,7 +81,6 @@ function TabataTimerCompact() {
     return Math.max(0, Math.min(elapsed, totalSec));
   }, [phase, currRound, remaining, workSec, restSec, totalSec]);
 
-  // Lancer Tabata
   const start = () => {
     if (rounds < 1 || workSec < 1) return;
     setCurrRound(1);
@@ -87,7 +88,6 @@ function TabataTimerCompact() {
     setRemaining(workSec);
     setRunning(true);
   };
-
   const pause = () => setRunning(false);
   const resume = () => setRunning(true);
   const reset = () => {
@@ -97,28 +97,20 @@ function TabataTimerCompact() {
     setRemaining(workSec);
   };
 
-  // Tick
   useEffect(() => {
     if (!running) return;
     const t = setInterval(() => {
       setRemaining((r) => {
         if (r > 1) return r - 1;
-        // Transition
         void chime(); // bip à la transition
         if (phase === "work") {
           if (currRound === rounds) {
-            // terminé
-            setPhase("done");
-            setRunning(false);
-            return 0;
+            setPhase("done"); setRunning(false); return 0;
           } else {
-            setPhase("rest");
-            return restSec || 0;
+            setPhase("rest"); return restSec || 0;
           }
         } else if (phase === "rest") {
-          setPhase("work");
-          setCurrRound((n) => n + 1);
-          return workSec;
+          setPhase("work"); setCurrRound((n) => n + 1); return workSec;
         }
         return 0;
       });
@@ -128,7 +120,6 @@ function TabataTimerCompact() {
   }, [running, phase, currRound, rounds, workSec, restSec]);
 
   useEffect(() => {
-    // si on change la config à l'arrêt, recalcule remaining
     if (!running && (phase === "idle" || phase === "done")) setRemaining(workSec);
   }, [workSec, running, phase]);
 
@@ -136,7 +127,6 @@ function TabataTimerCompact() {
 
   return (
     <div
-      className="tabata-card"
       onPointerDown={unlock}
       onKeyDown={unlock as any}
       style={{ display: "grid", gap: 8 }}
@@ -165,30 +155,27 @@ function TabataTimerCompact() {
 
       {/* Presets rapides */}
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-        <button className="btn" style={{ fontSize: 12 }} onClick={() => { setRounds(8); setWorkSec(20); setRestSec(10);} }>Tabata 20/10</button>
+        <button className="btn" style={{ fontSize: 12 }} onClick={() => { setRounds(8); setWorkSec(20); setRestSec(10);} }>Tabata 8× 20/10</button>
         <button className="btn" style={{ fontSize: 12 }} onClick={() => { setRounds(10); setWorkSec(45); setRestSec(15);} }>10× 45/15</button>
         <button className="btn" style={{ fontSize: 12 }} onClick={() => { setRounds(6); setWorkSec(30); setRestSec(30);} }>6× 30/30</button>
       </div>
 
-      {/* Affichage compteur compact */}
-      <div
-        className="panel"
-        style={{ border: "1px solid #e5e7eb", background: "#fff", borderRadius: 12, padding: 10 }}
-      >
+      {/* Affichage compteur */}
+      <div className="panel" style={{ border: "1px solid #e5e7eb", background: "#fff", borderRadius: 12, padding: 10 }}>
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
           <div style={{ fontWeight: 700, fontSize: 14, color: "#111827" }}>
             {phase === "work" ? "Travail" : phase === "rest" ? "Repos" : phase === "done" ? "Terminé" : "Prêt"}
             {phase !== "idle" && phase !== "done" ? ` — Round ${currRound}/${rounds}` : ""}
           </div>
-          <div style={{ fontFamily: "tabular-nums", fontWeight: 800, fontSize: 22 }}>{String(Math.floor(remaining/60)).padStart(2,"0")}:{String(remaining%60).padStart(2,"0")}</div>
+          <div style={{ fontFamily: "tabular-nums", fontWeight: 800, fontSize: 22 }}>
+            {String(Math.floor(remaining/60)).padStart(2,"0")}:{String(remaining%60).padStart(2,"0")}
+          </div>
         </div>
 
-        {/* Barre de progression */}
         <div style={{ height: 8, background: "#f3f4f6", borderRadius: 999, marginTop: 8, overflow: "hidden" }}>
           <div style={{ width: `${pct}%`, height: "100%", background: "#16a34a" }} />
         </div>
 
-        {/* Actions */}
         <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
           {phase === "idle" || phase === "done" ? (
             <button className="btn btn-dash" style={{ fontSize: 13 }} onClick={start}>Démarrer</button>
@@ -210,17 +197,10 @@ function TabataTimerCompact() {
 export default function MusicPage() {
   const { data: session, status } = useSession();
 
-  // Taux de réduction — augmente ou diminue si besoin
-  const TIMER_SCALE = 0.78;   // <— plus petit qu’avant
+  // Réduction du bloc Spotify
   const PLAYER_SCALE = 0.84;
-
-  const invTimer = 1 / TIMER_SCALE;
   const invPlayer = 1 / PLAYER_SCALE;
 
-  // Onglet: "simple" (ton Timer) ou "tabata"
-  const [tab, setTab] = useState<"simple"|"tabata">("tabata");
-
-  /* ---------- Auth ---------- */
   useEffect(() => {
     if (status === "unauthenticated") signIn("spotify", { callbackUrl: "/dashboard/music" });
   }, [status]);
@@ -269,7 +249,7 @@ export default function MusicPage() {
         <div>
           <h1 className="h1" style={{ fontSize: 20, color: "#111827" }}>Musique</h1>
           <p className="lead" style={{ fontSize: 12, marginTop: 2 }}>
-            Minuteur + Tabata + lecteur Spotify.
+            Minuteur Tabata + lecteur Spotify.
           </p>
         </div>
         <div>
@@ -280,53 +260,44 @@ export default function MusicPage() {
       </div>
 
       <div className="grid gap-3 lg:grid-cols-2">
-        {/* Carte Timer (onglets) */}
+        {/* —— Carte Timer */}
         <article className="card" style={{ padding: 10 }}>
           <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
-            <h3 style={{ marginTop: 0, fontSize: 14, color: "#111827" }}>Timer</h3>
-            <div style={{ display: "inline-flex", gap: 4, background: "#f3f4f6", borderRadius: 999, padding: 3 }}>
-              <button
-                className="btn"
-                onClick={() => setTab("simple")}
-                style={{ fontSize: 12, padding: "4px 8px", background: tab === "simple" ? "#ffffff" : "transparent", border: tab === "simple" ? "1px solid #d1d5db" : "1px solid transparent" }}
-              >
-                Simple
-              </button>
-              <button
-                className="btn"
-                onClick={() => setTab("tabata")}
-                style={{ fontSize: 12, padding: "4px 8px", background: tab === "tabata" ? "#ffffff" : "transparent", border: tab === "tabata" ? "1px solid #d1d5db" : "1px solid transparent" }}
-              >
-                Tabata
-              </button>
-            </div>
+            <h3 style={{ marginTop: 0, fontSize: 16, color: "#111827", fontWeight: 800 }}>Timer</h3>
+
+            {/* BOUTON TABATA — texte NOIR */}
+            <button
+              type="button"
+              className="btn"
+              style={{
+                fontSize: 12,
+                padding: "6px 10px",
+                background: "#ffffff",
+                color: "#111827",        // <-- texte noir
+                border: "1px solid #d1d5db",
+                borderRadius: 999,
+                fontWeight: 600,
+              }}
+              // (facultatif) preset rapide :
+              onClick={() => {
+                const el = document.getElementById("tabata-root");
+                if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+              }}
+            >
+              Tabata
+            </button>
           </div>
 
           <div className="text-sm" style={{ color: "#6b7280", fontSize: 13, marginTop: 2 }}>
-            {tab === "simple" ? "La sonnerie se déclenche à 0." : "Configure tes rounds travail/repos et lance le cycle."}
+            Exemples : <strong>8× 20s/10s</strong> • <strong>10× 45s/15s</strong> • <strong>6× 30s/30s</strong>
           </div>
 
-          {tab === "simple" ? (
-            // ---- Réduction forcée du Timer existant
-            <div
-              style={{
-                marginTop: 8,
-                fontSize: "90%",                // si le composant utilise rem/em
-                transform: `scale(${TIMER_SCALE})`,
-                transformOrigin: "top left",
-                width: `${(invTimer * 100).toFixed(3)}%`,
-              }}
-            >
-              <SimpleTimer />
-            </div>
-          ) : (
-            <div style={{ marginTop: 8 }}>
-              <TabataTimerCompact />
-            </div>
-          )}
+          <div id="tabata-root" style={{ marginTop: 8 }}>
+            <TabataTimerCompact />
+          </div>
         </article>
 
-        {/* Carte Spotify */}
+        {/* —— Carte Spotify */}
         <article className="card" style={{ padding: 10 }}>
           <h3 style={{ marginTop: 0, fontSize: 14, color: "#111827" }}>Lecteur Spotify</h3>
           <div className="text-sm" style={{ color: "#6b7280", fontSize: 13, marginTop: 2 }}>
@@ -348,4 +319,3 @@ export default function MusicPage() {
     </div>
   );
 }
-
