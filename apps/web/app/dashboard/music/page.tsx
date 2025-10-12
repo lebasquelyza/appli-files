@@ -3,14 +3,12 @@
 import { useSession, signIn, signOut } from "next-auth/react";
 import dynamic from "next/dynamic";
 import { useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
 
-// Chargement client-only
+// Client-only
 const SpotifyPlayer = dynamic(() => import("@/components/SpotifyPlayer"), { ssr: false });
 const Timer = dynamic(() => import("@/components/Timer"), { ssr: false });
 
 export default function MusicPage() {
-  const router = useRouter();
   const { data: session, status } = useSession();
 
   const timerHostRef = useRef<HTMLDivElement | null>(null);
@@ -20,13 +18,14 @@ export default function MusicPage() {
   const countingDownRef = useRef(false);
   const hasBeepedRef = useRef(false);
 
-  // ✅ Protection d'accès — redirige vers login si pas connecté
+  /* ---------- Auth gate ---------- */
   useEffect(() => {
     if (status === "unauthenticated") {
       signIn("spotify", { callbackUrl: "/dashboard/music" });
     }
   }, [status]);
 
+  /* ---------- Audio utils ---------- */
   const ensureAudioCtx = async () => {
     const Ctx = (window.AudioContext || (window as any).webkitAudioContext);
     if (!audioCtxRef.current) audioCtxRef.current = new Ctx();
@@ -80,6 +79,7 @@ export default function MusicPage() {
     return null;
   };
 
+  /* ---------- Déverrouillage audio au premier input ---------- */
   useEffect(() => {
     const host = timerHostRef.current;
     if (!host) return;
@@ -96,17 +96,20 @@ export default function MusicPage() {
     };
   }, []);
 
+  /* ---------- Observe Timer pour bip à 0 ---------- */
   useEffect(() => {
     const host = timerHostRef.current;
     if (!host) return;
     lastSecRef.current = null;
     countingDownRef.current = false;
     hasBeepedRef.current = false;
+
     const onTick = () => {
       const txt = host.innerText || "";
       const curr = parseSeconds(txt);
       if (curr == null) return;
       const last = lastSecRef.current;
+
       if (last != null && curr < last && curr > 0) {
         countingDownRef.current = true;
         hasBeepedRef.current = false;
@@ -119,6 +122,7 @@ export default function MusicPage() {
       if (curr > 0 && hasBeepedRef.current) countingDownRef.current = false;
       lastSecRef.current = curr;
     };
+
     const obs = new MutationObserver(onTick);
     obs.observe(host, { subtree: true, childList: true, characterData: true });
     const poll = setInterval(onTick, 250);
@@ -128,33 +132,94 @@ export default function MusicPage() {
     };
   }, []);
 
+  /* ---------- États de page au même style que /calories ---------- */
   if (status === "loading") {
-    return <main className="p-6">Chargement…</main>;
+    return (
+      <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
+        <div className="page-header" style={{ marginBottom: 8 }}>
+          <div>
+            <h1 className="h1" style={{ fontSize: 22, color: "#111827" }}>Musique</h1>
+            <p className="lead" style={{ fontSize: 13, marginTop: 4 }}>Chargement…</p>
+          </div>
+        </div>
+        <div className="grid gap-6 lg:grid-cols-2">
+          <article className="card"><div style={{ height: 140, background: "#f3f4f6" }} /></article>
+          <article className="card"><div style={{ height: 140, background: "#f3f4f6" }} /></article>
+        </div>
+      </div>
+    );
   }
 
-  // ✅ On n'affiche la page que si connecté
   if (!session) {
-    return <main className="p-6">Redirection vers Spotify…</main>;
+    return (
+      <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
+        <div className="page-header" style={{ marginBottom: 8 }}>
+          <div>
+            <h1 className="h1" style={{ fontSize: 22, color: "#111827" }}>Musique</h1>
+            <p className="lead" style={{ fontSize: 13, marginTop: 4 }}>Connexion à Spotify requise.</p>
+          </div>
+        </div>
+        <div className="card" style={{ border: "1px solid #d1d5db", background: "#ffffff" }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ fontSize: 14, color: "#374151" }}>Redirection vers Spotify…</div>
+            <button className="btn btn-dash" onClick={() => signIn("spotify", { callbackUrl: "/dashboard/music" })} style={{ fontSize: 14 }}>
+              Se connecter
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
+  /* ---------- Page ---------- */
   return (
-    <main className="max-w-3xl mx-auto p-6 space-y-8">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Musique</h1>
-        <button
-          onClick={() => signOut({ callbackUrl: "/dashboard/music" })}
-          className="btn-dash"
-          title="Se déconnecter"
-        >
-          ⏻ Se déconnecter
-        </button>
+    <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
+      <div className="page-header" style={{ marginBottom: 8 }}>
+        <div>
+          <h1 className="h1" style={{ fontSize: 22, color: "#111827" }}>Musique</h1>
+          <p className="lead" style={{ fontSize: 13, marginTop: 4 }}>
+            Minuteur + lecteur Spotify, avec sonnerie à la fin.
+          </p>
+        </div>
+        <div>
+          <button
+            onClick={() => signOut({ callbackUrl: "/dashboard/music" })}
+            className="btn btn-dash"
+            title="Se déconnecter"
+            style={{ fontSize: 14 }}
+          >
+            ⏻ Se déconnecter
+          </button>
+        </div>
       </div>
 
-      <div ref={timerHostRef}>
-        <Timer />
-      </div>
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Timer */}
+        <article className="card">
+          <h3 style={{ marginTop: 0, fontSize: 16, color: "#111827" }}>Timer</h3>
+          <div className="text-sm" style={{ color: "#6b7280", fontSize: 14, marginTop: 2 }}>
+            La sonnerie se déclenche quand le compteur atteint 0.
+          </div>
+          <div
+            ref={timerHostRef}
+            tabIndex={0}
+            style={{ marginTop: 12, outline: "none" }}
+          >
+            <Timer />
+          </div>
+        </article>
 
-      <SpotifyPlayer />
-    </main>
+        {/* Spotify Player */}
+        <article className="card">
+          <h3 style={{ marginTop: 0, fontSize: 16, color: "#111827" }}>Lecteur Spotify</h3>
+          <div className="text-sm" style={{ color: "#6b7280", fontSize: 14, marginTop: 2 }}>
+            Contrôle du lecteur connecté à ton compte.
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <SpotifyPlayer />
+          </div>
+        </article>
+      </div>
+    </div>
   );
 }
