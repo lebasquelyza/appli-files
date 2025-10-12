@@ -17,6 +17,12 @@ export default function MusicPage() {
   const countingDownRef = useRef(false);
   const hasBeepedRef = useRef(false);
 
+  // ——— SCALE pour compacter les blocs internes sans toucher aux composants
+  const TIMER_SCALE = 0.86;     // ajuste 0.80–0.92 si tu veux
+  const PLAYER_SCALE = 0.92;
+  const invTimer = 1 / TIMER_SCALE;
+  const invPlayer = 1 / PLAYER_SCALE;
+
   useEffect(() => {
     if (status === "unauthenticated") {
       signIn("spotify", { callbackUrl: "/dashboard/music" });
@@ -126,7 +132,7 @@ export default function MusicPage() {
   /* ---------- États compacts ---------- */
   if (status === "loading") {
     return (
-      <div className="container" style={{ paddingTop: 20, paddingBottom: 24 }}>
+      <div className="container" style={{ paddingTop: 18, paddingBottom: 22 }}>
         <div className="page-header" style={{ marginBottom: 6 }}>
           <div>
             <h1 className="h1" style={{ fontSize: 20, color: "#111827" }}>Musique</h1>
@@ -134,8 +140,8 @@ export default function MusicPage() {
           </div>
         </div>
         <div className="grid gap-3 lg:grid-cols-2">
-          <article className="card"><div style={{ height: 110, background: "#f3f4f6" }} /></article>
-          <article className="card"><div style={{ height: 110, background: "#f3f4f6" }} /></article>
+          <article className="card" style={{ padding: 10 }}><div style={{ height: 110, background: "#f3f4f6" }} /></article>
+          <article className="card" style={{ padding: 10 }}><div style={{ height: 110, background: "#f3f4f6" }} /></article>
         </div>
       </div>
     );
@@ -143,7 +149,7 @@ export default function MusicPage() {
 
   if (!session) {
     return (
-      <div className="container" style={{ paddingTop: 20, paddingBottom: 24 }}>
+      <div className="container" style={{ paddingTop: 18, paddingBottom: 22 }}>
         <div className="page-header" style={{ marginBottom: 6 }}>
           <div>
             <h1 className="h1" style={{ fontSize: 20, color: "#111827" }}>Musique</h1>
@@ -164,7 +170,7 @@ export default function MusicPage() {
 
   /* ---------- Page compacte ---------- */
   return (
-    <div className="container" style={{ paddingTop: 20, paddingBottom: 24 }}>
+    <div className="container" style={{ paddingTop: 18, paddingBottom: 22 }}>
       <div className="page-header" style={{ marginBottom: 6 }}>
         <div>
           <h1 className="h1" style={{ fontSize: 20, color: "#111827" }}>Musique</h1>
@@ -191,12 +197,19 @@ export default function MusicPage() {
           <div className="text-sm" style={{ color: "#6b7280", fontSize: 13, marginTop: 2 }}>
             La sonnerie se déclenche à 0.
           </div>
+
+          {/* WRAPPER qui compacte visuellement le Timer */}
           <div
-            ref={timerHostRef}
-            tabIndex={0}
-            style={{ marginTop: 8, outline: "none" }}
+            style={{
+              marginTop: 8,
+              transform: `scale(${TIMER_SCALE})`,
+              transformOrigin: "top left",
+              width: `${(invTimer * 100).toFixed(3)}%`, // compense la réduction pour garder la largeur visuelle
+            }}
           >
-            <Timer />
+            <div ref={timerHostRef} tabIndex={0} style={{ outline: "none" }}>
+              <Timer />
+            </div>
           </div>
         </article>
 
@@ -206,7 +219,16 @@ export default function MusicPage() {
           <div className="text-sm" style={{ color: "#6b7280", fontSize: 13, marginTop: 2 }}>
             Contrôle du lecteur connecté à ton compte.
           </div>
-          <div style={{ marginTop: 8 }}>
+
+          {/* WRAPPER qui compacte visuellement le player */}
+          <div
+            style={{
+              marginTop: 8,
+              transform: `scale(${PLAYER_SCALE})`,
+              transformOrigin: "top left",
+              width: `${(invPlayer * 100).toFixed(3)}%`,
+            }}
+          >
             <SpotifyPlayer />
           </div>
         </article>
@@ -214,4 +236,3 @@ export default function MusicPage() {
     </div>
   );
 }
-
