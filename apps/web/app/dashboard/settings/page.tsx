@@ -15,13 +15,11 @@ function useSettingsFontSize() {
 }
 
 /* ======================= Helpers thème ======================= */
-/** Applique la classe `dark` + l’attribut `data-theme` sur <html> */
 function applyThemeToRoot(isDark: boolean) {
   const root = document.documentElement;
   root.classList.toggle("dark", isDark);
   root.setAttribute("data-theme", isDark ? "dark" : "light");
 }
-/** Retourne true si le système est en dark */
 function getSystemPrefersDark() {
   return window.matchMedia?.("(prefers-color-scheme: dark)")?.matches ?? false;
 }
@@ -149,38 +147,38 @@ function TimeDropdown({
 
   return (
     <div className="relative inline-block" ref={wrap}>
-    <button
-      type="button"
-      className={`${btnGhost} inline-flex items-center`}
-      onClick={() => setOpen((o) => !o)}
-      style={{ fontSize: "var(--settings-fs)" }}
-    >
-      <span className="font-medium">Heure</span>
-    </button>
-
-    {open && (
-      <div
-        role="dialog"
-        aria-label="Sélection de l'heure"
-        className="absolute right-0 z-50 mt-2 w-56 rounded-2xl border bg-white p-3 shadow-lg dark:bg-slate-900 dark:border-slate-700"
+      <button
+        type="button"
+        className={`${btnGhost} inline-flex items-center`}
+        onClick={() => setOpen((o) => !o)}
         style={{ fontSize: "var(--settings-fs)" }}
       >
-        <input
-          type="time"
-          value={temp}
-          onChange={(e) => setTemp(e.target.value)}
-          step={300}
-          className="w-full rounded-[10px] border px-3 py-2 dark:bg-slate-900 dark:border-slate-700"
+        <span className="font-medium">Heure</span>
+      </button>
+
+      {open && (
+        <div
+          role="dialog"
+          aria-label="Sélection de l'heure"
+          className="absolute right-0 z-50 mt-2 w-56 rounded-2xl border bg-white p-3 shadow-lg dark:bg-slate-900 dark:border-slate-700"
           style={{ fontSize: "var(--settings-fs)" }}
-        />
-        <div className="mt-3 flex items-center justify-end pt-2 border-t dark:border-slate-700">
-          <button type="button" className={`${btnGhost} px-3 py-1`} onClick={apply}>
-            OK
-          </button>
+        >
+          <input
+            type="time"
+            value={temp}
+            onChange={(e) => setTemp(e.target.value)}
+            step={300}
+            className="w-full rounded-[10px] border px-3 py-2 dark:bg-slate-900 dark:border-slate-700"
+            style={{ fontSize: "var(--settings-fs)" }}
+          />
+          <div className="mt-3 flex items-center justify-end pt-2 border-t dark:border-slate-700">
+            <button type="button" className={`${btnGhost} px-3 py-1`} onClick={apply}>
+              OK
+            </button>
+          </div>
         </div>
-      </div>
-    )}
-  </div>
+      )}
+    </div>
   );
 }
 
@@ -228,7 +226,6 @@ function LegalModal() {
   const [open, setOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement | null>(null);
 
-  // ESC pour fermer
   useEffect(() => {
     const onEsc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
     document.addEventListener("keydown", onEsc);
@@ -243,13 +240,7 @@ function LegalModal() {
 
       {open && (
         <>
-          {/* Backdrop */}
-          <div
-            className="fixed inset-0 z-[100] bg-black/40"
-            onClick={() => setOpen(false)}
-            aria-hidden
-          />
-          {/* Modale */}
+          <div className="fixed inset-0 z-[100] bg-black/40" onClick={() => setOpen(false)} aria-hidden />
           <div className="fixed inset-0 z-[101] flex sm:items-center items-end justify-center sm:p-4 p-0">
             <div
               ref={panelRef}
@@ -261,11 +252,7 @@ function LegalModal() {
                 overflow-y-auto overscroll-contain
                 dark:bg-slate-900 dark:border-slate-700
               "
-              style={{
-                fontSize: "var(--settings-fs)",
-                WebkitOverflowScrolling: "touch",
-                touchAction: "pan-y",
-              }}
+              style={{ fontSize: "var(--settings-fs)", WebkitOverflowScrolling: "touch", touchAction: "pan-y" }}
               role="dialog"
               aria-modal="true"
               aria-label="Mentions légales et politique de cookies"
@@ -280,8 +267,7 @@ function LegalModal() {
               <div className="mt-3 space-y-4 leading-relaxed">
                 <p className="opacity-80">
                   Ici vos mentions légales (éditeur du site, hébergeur, propriété intellectuelle,
-                  données personnelles, cookies, contact, etc.). Remplacez ce texte par votre contenu
-                  lorsque vos informations seront prêtes.
+                  données personnelles, cookies, contact, etc.). Remplacez ce texte par votre contenu.
                 </p>
 
                 <h4 className="font-semibold">Cookies</h4>
@@ -312,7 +298,6 @@ function DeleteAccountCard() {
   const [confirm, setConfirm] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Motif (facultatif)
   const REASONS = [
     { value: "no_longer_needed", label: "Je n’en ai plus besoin" },
     { value: "missing_features", label: "Il manque des fonctionnalités" },
@@ -368,7 +353,6 @@ function DeleteAccountCard() {
     <div className="card space-y-4">
       <h3 className="font-semibold text-red-600 dark:text-red-400">Supprimer mon compte</h3>
 
-      {/* Motif facultatif */}
       <div className="space-y-2">
         <label className="font-medium">Pourquoi partez-vous ? (facultatif)</label>
         <div className="grid sm:grid-cols-2 gap-2">
@@ -428,16 +412,14 @@ function DeleteAccountCard() {
   );
 }
 
-/* ======================= Composant Déconnexion ======================= */
-function LogoutCard() {
+/* ======================= Bouton déconnexion en bas ======================= */
+function LogoutFooter() {
   const [loading, setLoading] = useState(false);
-
   const handleLogout = async () => {
     const supabase = getSupabase();
     setLoading(true);
     try {
       await supabase.auth.signOut();
-      // Redirection après déconnexion (ajuste la route si besoin)
       window.location.href = "/";
     } catch (e: any) {
       alert(e?.message || "Déconnexion impossible");
@@ -445,21 +427,17 @@ function LogoutCard() {
       setLoading(false);
     }
   };
-
   return (
-    <div className="card space-y-3">
-      <h3 className="font-semibold">Se déconnecter</h3>
-      <p className="opacity-80">Ferme votre session sur cet appareil.</p>
-      <div className="flex items-center justify-end">
-        <button
-          type="button"
-          onClick={handleLogout}
-          className={`btn ${loading ? "opacity-60 cursor-not-allowed" : ""}`}
-          disabled={loading}
-        >
-          {loading ? "Déconnexion…" : "Déconnexion"}
-        </button>
-      </div>
+    <div className="mt-12 pt-6 border-t dark:border-slate-800 flex items-center justify-center">
+      <button
+        type="button"
+        onClick={handleLogout}
+        disabled={loading}
+        className="text-sm underline opacity-80 hover:opacity-100"
+        aria-label="Se déconnecter"
+      >
+        {loading ? "Déconnexion…" : "Se déconnecter"}
+      </button>
     </div>
   );
 }
@@ -471,8 +449,6 @@ export default function Page() {
   const [prefs, setPrefs] = useState<Prefs>(DEFAULT_PREFS);
   const [loaded, setLoaded] = useState(false);
 
-  // 1) Lecture initiale + application immédiate du thème AVANT paint
-  //    RÈGLE : si AUCUNE préférence en storage -> défaut CLAIR (même si système sombre)
   useLayoutEffect(() => {
     let initial: Prefs = DEFAULT_PREFS;
     let hadStored = false;
@@ -487,35 +463,28 @@ export default function Page() {
 
     const isDark = hadStored
       ? (initial.theme === "dark" || (initial.theme === "system" && getSystemPrefersDark()))
-      : false; // aucune préférence -> clair
+      : false;
     applyThemeToRoot(isDark);
 
     setLoaded(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 2) Persistance + (ré)application du thème à chaque changement
   useEffect(() => {
     if (!loaded) return;
     try {
       localStorage.setItem(LS_KEY, JSON.stringify(prefs));
     } catch {}
     const isDark =
-      prefs.theme === "dark" ||
-      (prefs.theme === "system" && getSystemPrefersDark());
+      prefs.theme === "dark" || (prefs.theme === "system" && getSystemPrefersDark());
     applyThemeToRoot(isDark);
   }, [prefs, loaded]);
 
-  // 3) Écoute les changements système quand le mode = "system"
   useEffect(() => {
     if (!loaded) return;
     const mql = window.matchMedia?.("(prefers-color-scheme: dark)");
     if (!mql) return;
-
     const onChange = () => {
-      if (prefs.theme === "system") {
-        applyThemeToRoot(mql.matches);
-      }
+      if (prefs.theme === "system") applyThemeToRoot(mql.matches);
     };
     mql.addEventListener?.("change", onChange);
     return () => mql.removeEventListener?.("change", onChange);
@@ -524,7 +493,6 @@ export default function Page() {
   return (
     <div className="container" style={{ paddingTop: 24, paddingBottom: 24 }}>
       <div className="mb-2">
-        {/* H1 harmonisé (couleur via var pour dark mode) */}
         <h1
           className="h1"
           style={{ fontSize: "clamp(20px, 2.2vw, 24px)", lineHeight: 1.15, color: "var(--text)" }}
@@ -556,9 +524,6 @@ export default function Page() {
 
             {/* Supprimer mon compte */}
             <DeleteAccountCard />
-
-            {/* 🔐 Déconnexion */}
-            <LogoutCard />
           </div>
         </Section>
 
@@ -574,6 +539,9 @@ export default function Page() {
           </p>
           <LegalModal />
         </Section>
+
+        {/* ===== Déconnexion en bas de page ===== */}
+        <LogoutFooter />
       </div>
     </div>
   );
