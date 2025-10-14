@@ -237,56 +237,6 @@ function norm(s: string) {
     .replace(/[’']/g, "'");
 }
 
-/* ======== Lecture des réponses par e-mail (avec/sans en-têtes) ======== */
-const NO_HEADER_COLS = { nom: 0, prenom: 1, age: 2, email: 10 }; // A,B,C,K
-
-async function getAnswersForEmail(email: string, sheetId: string, range: string): Promise<Answers | null> {
-  const data = await fetchValues(sheetId, range);
-  const values: string[][] = data.values || [];
-  if (values.length === 0) return null;
-
-  const firstRowNorm = values[0].map(norm);
-  const headerCandidates = ["adresse mail", "email", "e-mail", "mail"];
-  const hasHeader = firstRowNorm.some(h => headerCandidates.includes(h));
-
-  let headers: string[] = [];
-  let idxEmail = -1;
-
-  if (hasHeader) {
-    headers = firstRowNorm;
-    idxEmail = headers.findIndex(h => headerCandidates.includes(h));
-  } else {
-    const width = Math.max(values[0]?.length || 0, NO_HEADER_COLS.email + 1);
-    headers = Array.from({ length: width }, (_, i) => `col${i}`);
-    headers[NO_HEADER_COLS.nom]   = "nom";
-    headers[NO_HEADER_COLS.prenom]= "prenom";
-    headers[NO_HEADER_COLS.age]   = "age";
-    headers[NO_HEADER_COLS.email] = "email";
-    idxEmail = NO_HEADER_COLS.email;
-  }
-
-  if (idxEmail === -1) return null;
-
-  for (let i = hasHeader ? 1 : 0; i < values.length; i++) {
-    const row = values[i] || [];
-    const cell = (row[idxEmail] || "").trim().toLowerCase();
-    if (!cell) continue;
-    if (cell === email.trim().toLowerCase()) {
-      const rec: Answers = {};
-      for (let j = 0; j < row.length; j++) {
-        const key = headers[j] || `col${j}`;
-        rec[key] = (row[j] ?? "").trim();
-      }
-      rec["nom"]    = rec["nom"]    || rec[`col${NO_HEADER_COLS.nom}`]    || "";
-      rec["prenom"] = rec["prenom"] || rec[`col${NO_HEADER_COLS.prenom}`] || "";
-      rec["age"]    = rec["age"]    || rec[`col${NO_HEADER_COLS.age}`]    || "";
-      rec["email"]  = rec["email"]  || rec[`col${NO_HEADER_COLS.email}`]  || "";
-      return rec;
-    }
-  }
-  return null;
-}
-
 /* ===================== Aide: détection redirect Next ===================== */
 function isNextRedirect(e: any) {
   try {
@@ -295,103 +245,39 @@ function isNextRedirect(e: any) {
   } catch { return false; }
 }
 
-function generateSessionsFromAnswers(ans: Answers): AiSession[] {
-  const get = (k: string) => ans[norm(k)] || ans[k] || "";
-
-  const prenom = get("prénom") || get("prenom");
-  const age = Number((get("age") || "").replace(",", "."));
-  const poids = Number((get("poids") || "").replace(",", "."));
-  const taille = Number((get("taille") || "").replace(",", "."));
-  const niveau = (get("niveau") || "débutant").toLowerCase();
-  const objectif = (get("objectif") || "").toLowerCase();
-  const dispo = (get("disponibilité") || get("disponibilite") || "").toLowerCase();
-  const lieu = (get("a quel endroit v tu faire ta seance ?") || "").toLowerCase();
-  const materiel = (get("as tu du matériel a ta disposition") || get("as tu du materiel a ta disposition") || "").toLowerCase();
-
-  let freq = 3;
-  const digits = dispo.match(/\d+/g);
-  if (digits?.length) freq = Math.max(1, Math.min(6, parseInt(digits[0], 10)));
-  else if (/(lun|mar|mer|jeu|ven|sam|dim)/.test(dispo)) {
-    freq = Math.max(1, Math.min(6, dispo.split(/[ ,;\/-]+/).filter(Boolean).length));
-  }
-
-  const baseMin =
-    niveau.includes("debut") || niveau.includes("début") ? 25 :
-    niveau.includes("inter") ? 35 : 45;
-
-  let intensity: "faible" | "modérée" | "élevée" =
-    (niveau.includes("debut") || niveau.includes("début")) ? "faible" :
-    (niveau.includes("inter")) ? "modérée" : "élevée";
-
-  if (isFinite(age) && age >= 55) intensity = intensity === "élevée" ? "modérée" : "faible";
-
-  const noEquip = /(aucun|non|sans)/.test(materiel) || materiel === "";
-  const atGym = /(salle|gym|fitness)/.test(lieu);
-
-  const muscuPossible = !noEquip || atGym;
-  let pool: WorkoutType[] = ["cardio", "hiit", "mobilité"];
-  if (muscuPossible) pool = ["muscu", "cardio", "hiit"];
-
-  if (objectif.includes("perte") || objectif.includes("mince") || objectif.includes("seche")) {
-    pool = muscuPossible ? ["hiit", "cardio", "muscu"] : ["hiit", "cardio", "mobilité"];
-  } else if (objectif.includes("prise") || objectif.includes("muscle") || objectif.includes("force")) {
-    pool = muscuPossible ? ["muscu", "muscu", "cardio"] : ["hiit", "cardio", "mobilité"];
-  } else if (objectif.includes("endurance") || objectif.includes("cardio")) {
-    pool = ["cardio", "hiit", "mobilité"];
-  }
-
-  const noteParts: string[] = [];
-  if (prenom) noteParts.push(`Pour ${prenom}`);
-  if (isFinite(poids) && isFinite(taille) && taille > 0) {
-    const imc = Math.round((poids / Math.pow(taille/100, 2)) * 10) / 10;
-    if (isFinite(imc)) noteParts.push(`IMC: ${imc}`);
-  }
-  if (noEquip) noteParts.push("Sans matériel");
-  if (atGym) noteParts.push("Salle");
-
-  const today = new Date();
-  const nb = Math.max(1, Math.min(6, freq));
-  const sessions: AiSession[] = [];
-  for (let i = 0; i < nb; i++) {
-    const date = new Date(today);
-    date.setDate(today.getDate() + i * Math.ceil(7 / nb));
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, "0");
-    const d = String(date.getDate()).padStart(2, "0");
-    const type = pool[i % pool.length];
-
-    sessions.push({
-      id: `ai-${y}${m}${d}-${i}`,
-      title: `${objectif.includes("perte") ? "Brûle-graisse" : objectif.includes("prise") || objectif.includes("force") ? "Force/Muscu" : objectif.includes("endurance") || objectif.includes("cardio") ? "Endurance" : "Full body"} — Séance ${i + 1}`,
-      type,
-      date: `${y}-${m}-${d}`,
-      plannedMin: baseMin,
-      intensity,
-      note: noteParts.join(" · ") || undefined,
-      recommendedBy: "AI",
-    });
-  }
-  return sessions;
+/* ===================== “Style coach” helper ===================== */
+function coachText(s: AiSession) {
+  const min = s.plannedMin ? `${s.plannedMin} min` : "25–45 min";
+  const intens = s.intensity ? s.intensity : "modérée";
+  const intro =
+    s.type === "muscu" ? "Objectif : force et qualité d’exécution."
+  : s.type === "cardio" ? "Objectif : endurance aérobie et contrôle du souffle."
+  : s.type === "hiit" ? "Objectif : pics d’intensité courts, récupération active."
+  : "Objectif : mobilité et contrôle postural.";
+  const tips =
+    s.type === "muscu" ? "Garde 2 reps en réserve sur les dernières séries."
+  : s.type === "cardio" ? "Respiration nasale si possible, finis en respiration contrôlée."
+  : s.type === "hiit" ? "Reste explosif, qualité > quantité. Coupe si la technique se dégrade."
+  : "Mouvement lent, fluide, sans douleur — amplitude progressive.";
+  return `🧭 ${intro}\n⏱️ Durée: ${min} · Intensité: ${intens}\n💡 Conseils: ${tips}${s.note ? `\n📝 Note: ${s.note}` : ""}`;
 }
 
 /* ===================== Actions serveur ===================== */
 async function buildProgrammeAction() {
   "use server";
 
-  // 0) Détecter l'email via NextAuth/cookie (et mémoriser si trouvé)
   let email = await getSignedInEmail();
   if (email) {
     cookies().set("app_email", email, { path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365, httpOnly: false });
   }
 
-  // 1) Tente l’API Files Coaching (indépendamment de l’email)
   const uid = cookies().get("fc_uid")?.value || "me";
   const endpoints = [
     `${API_BASE}/api/programme/build`,
     `${API_BASE}/api/program/build`,
     `${API_BASE}/api/sessions/build`,
   ];
-    for (const url of endpoints) {
+  for (const url of endpoints) {
     try {
       const res = await fetch(`${url}?user=${encodeURIComponent(uid)}`, {
         method: "POST",
@@ -411,7 +297,6 @@ async function buildProgrammeAction() {
     }
   }
 
-  // 2) Fallback Google Sheets — nécessite l'e-mail détecté
   if (!email) {
     redirect("/dashboard/profile?error=programme:noemail");
   }
@@ -424,7 +309,6 @@ async function buildProgrammeAction() {
 
     const aiSessions = generateSessionsFromAnswers(answers!);
 
-    // pousser en local dans app_sessions
     const jar = cookies();
     const store = parseStore(jar.get("app_sessions")?.value);
     const now = new Date().toISOString();
@@ -488,6 +372,45 @@ async function addSessionAction(formData: FormData) {
   });
 
   redirect("/dashboard/profile?success=1");
+}
+
+/** 💾 Enregistrer une séance AI (sans la démarrer) — évite les doublons par id */
+async function saveSingleAiSessionAction(formData: FormData) {
+  "use server";
+  const id = (formData.get("id") || "").toString();
+  const title = (formData.get("title") || "").toString().trim();
+  const type = (formData.get("type") || "muscu").toString() as WorkoutType;
+  const date = (formData.get("date") || toYMD()).toString();
+  const plannedMinStr = (formData.get("plannedMin") || "").toString().replace(",", ".");
+  const note = (formData.get("note") || "").toString();
+
+  if (!title) redirect("/dashboard/profile?error=titre");
+
+  const jar = cookies();
+  const store = parseStore(jar.get("app_sessions")?.value);
+  const exists = store.sessions.some(s => s.id === id);
+  if (exists) {
+    redirect("/dashboard/profile?success=programme:dejainclus");
+  }
+
+  const now = new Date().toISOString();
+  const w: Workout = {
+    id: id || uid(),
+    title,
+    type: (["muscu", "cardio", "hiit", "mobilité"].includes(type) ? type : "muscu") as WorkoutType,
+    status: "active",
+    date,
+    plannedMin: plannedMinStr ? Number(plannedMinStr) : undefined,
+    note: note || undefined,
+    createdAt: now,
+  };
+
+  const next: Store = { sessions: [w, ...store.sessions].slice(0, 300) };
+  jar.set("app_sessions", JSON.stringify(next), {
+    path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365, httpOnly: false,
+  });
+
+  redirect("/dashboard/profile?success=programme:seance:enregistree");
 }
 
 async function completeSessionAction(formData: FormData) {
@@ -602,7 +525,12 @@ export default async function Page({
       <div className="space-y-3">
         {!!searchParams?.success && (
           <div className="card" style={{ border: "1px solid rgba(16,185,129,.35)", background: "rgba(16,185,129,.08)", fontWeight: 600 }}>
-            ✓ {searchParams.success === "programme" ? "Programme généré." : "Séance ajoutée."}
+            {
+              searchParams.success === "programme" ? "✓ Programme généré."
+              : searchParams.success === "programme:dejainclus" ? "ℹ️ Cette séance existe déjà dans vos séances."
+              : searchParams.success === "programme:seance:enregistree" ? "✓ Séance enregistrée dans vos séances."
+              : "✓ Séance ajoutée."
+            }
           </div>
         )}
         {!!searchParams?.done && (
@@ -659,14 +587,17 @@ export default async function Page({
         </div>
       </section>
 
-      {/* Mon programme (personnalisé par l’IA) — conservé */}
+      {/* Séances proposées par votre coach (AI) — clic pour détail + sauvegarde par séance */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
-          <h2 style={{ marginBottom: 6 }}>Mon programme (personnalisé par l’IA)</h2>
+          <h2 style={{ marginBottom: 6 }}>Séances proposées par votre coach</h2>
+          <p className="text-sm" style={{ color: "#6b7280" }}>
+            Générées à partir de vos réponses. Cliquez pour voir le brief détaillé puis enregistrez les séances qui vous conviennent.
+          </p>
           <div className="flex flex-col sm:flex-row gap-2 mt-3">
             <form action={buildProgrammeAction}>
               <button className="btn btn-dash" type="submit" style={{ width: "100%" }}>
-                Créer mon programme
+                Mettre à jour les propositions
               </button>
             </form>
           </div>
@@ -677,44 +608,66 @@ export default async function Page({
             <div className="flex items-center gap-3">
               <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted">🤖</span>
               <span>
-                Pas encore de séances générées.{" "}
+                Pas encore de séances proposées.{" "}
                 <a className="link" href={questionnaireUrl}>Répondez au questionnaire</a>
-                , puis appuyez sur « Créer mon programme ».
+                , puis appuyez sur « Mettre à jour les propositions ».
               </span>
             </div>
           </div>
         ) : (
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {aiSessions.map((s) => (
-              <article key={s.id} className="card" style={{ transition: "box-shadow .2s" }}>
-                <div className="flex items-start justify-between gap-3">
-                  <strong style={{ fontSize: 16 }}>{s.title}</strong>
-                  <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>
-                    {s.type}
-                  </span>
-                </div>
-                <div className="text-sm" style={{ color: "#6b7280", marginTop: 8 }}>
-                  Prévu le <b style={{ color: "inherit" }}>{fmtDateYMD(s.date)}</b>
-                  {s.plannedMin ? ` · ${s.plannedMin} min` : ""}
-                  {s.intensity ? ` · intensité ${s.intensity}` : ""}
-                  {s.note ? (<><br />Note : <i>{s.note}</i></>) : null}
-                </div>
-                <form action={addSessionAction} style={{ display: "flex", gap: 8, marginTop: 12 }}>
-                  <input type="hidden" name="title" value={s.title} />
-                  <input type="hidden" name="type" value={s.type} />
-                  <input type="hidden" name="date" value={s.date} />
-                  {s.plannedMin ? <input type="hidden" name="plannedMin" value={String(s.plannedMin)} /> : null}
-                  {s.note ? <input type="hidden" name="note" value={s.note} /> : null}
-                  <input type="hidden" name="startNow" value="1" />
-                  <button className="btn btn-dash" type="submit">Démarrer cette séance</button>
-                </form>
-              </article>
+          <ul className="card divide-y">
+            {aiSessions.slice(0, 12).map((s) => (
+              <li key={s.id} className="py-3">
+                <details>
+                  <summary className="flex items-center justify-between cursor-pointer">
+                    <div className="min-w-0">
+                      <div className="font-medium truncate" style={{ fontSize: 16 }}>{s.title}</div>
+                      <div className="text-sm" style={{ color: "#6b7280" }}>
+                        Prévu le <b style={{ color: "inherit" }}>{fmtDateYMD(s.date)}</b>
+                        {s.plannedMin ? ` · ${s.plannedMin} min` : ""}
+                        {s.intensity ? ` · intensité ${s.intensity}` : ""}
+                      </div>
+                    </div>
+                    <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>
+                      {s.type}
+                    </span>
+                  </summary>
+
+                  <div className="mt-3 text-sm leading-6" style={{ whiteSpace: "pre-wrap" }}>
+                    {coachText(s)}
+                  </div>
+
+                  <div className="flex gap-8 mt-3">
+                    <form action={saveSingleAiSessionAction}>
+                      <input type="hidden" name="id" value={s.id} />
+                      <input type="hidden" name="title" value={s.title} />
+                      <input type="hidden" name="type" value={s.type} />
+                      <input type="hidden" name="date" value={s.date} />
+                      {s.plannedMin ? <input type="hidden" name="plannedMin" value={String(s.plannedMin)} /> : null}
+                      {s.note ? <input type="hidden" name="note" value={s.note} /> : null}
+                      <button className="btn" type="submit" style={{ background: "#111827", color: "white" }}>
+                        Enregistrer cette séance
+                      </button>
+                    </form>
+
+                    <form action={addSessionAction}>
+                      <input type="hidden" name="title" value={s.title} />
+                      <input type="hidden" name="type" value={s.type} />
+                      <input type="hidden" name="date" value={s.date} />
+                      {s.plannedMin ? <input type="hidden" name="plannedMin" value={String(s.plannedMin)} /> : null}
+                      {s.note ? <input type="hidden" name="note" value={s.note} /> : null}
+                      <input type="hidden" name="startNow" value="1" />
+                      <button className="btn btn-dash" type="submit">Démarrer maintenant</button>
+                    </form>
+                  </div>
+                </details>
+              </li>
             ))}
-          </div>
+          </ul>
         )}
       </section>
 
-      {/* Mes séances — remplace “Mon programme” qui prenait la place des actives/à venir */}
+      {/* Mes séances — clic pour voir le détail enregistré */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h2>Mes séances</h2>
@@ -733,25 +686,36 @@ export default async function Page({
         ) : (
           <ul className="card divide-y">
             {active.slice(0, 12).map((s) => (
-              <li key={s.id} className="py-3 flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="font-medium truncate" style={{ fontSize: 16 }}>{s.title}</div>
-                  <div className="text-sm" style={{ color: "#6b7280" }}>
-                    Prévu le <b style={{ color: "inherit" }}>{fmtDateYMD(s.date)}</b>
-                    {s.plannedMin ? ` · ${s.plannedMin} min` : ""}
-                    {s.note ? ` · ${s.note}` : ""}
+              <li key={s.id} className="py-3">
+                <details>
+                  <summary className="flex items-center justify-between cursor-pointer">
+                    <div className="min-w-0">
+                      <div className="font-medium truncate" style={{ fontSize: 16 }}>{s.title}</div>
+                      <div className="text-sm" style={{ color: "#6b7280" }}>
+                        Prévu le <b style={{ color: "inherit" }}>{fmtDateYMD(s.date)}</b>
+                        {s.plannedMin ? ` · ${s.plannedMin} min` : ""}
+                        {s.note ? ` · ${s.note}` : ""}
+                      </div>
+                    </div>
+                    <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>
+                      {s.type}
+                    </span>
+                  </summary>
+
+                  <div className="mt-3 text-sm leading-6">
+                    <div>Créée le : <b>{fmtDateISO(s.createdAt)}</b></div>
+                    {s.startedAt ? <div>Démarrée : <b>{fmtDateISO(s.startedAt)}</b></div> : null}
+                    {s.plannedMin ? <div>Durée prévue : <b>{s.plannedMin} min</b></div> : null}
+                    {s.note ? <div>Note : <i>{s.note}</i></div> : null}
                   </div>
-                </div>
-                <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>
-                  {s.type}
-                </span>
+                </details>
               </li>
             ))}
           </ul>
         )}
       </section>
 
-      {/* Mes séances passées (compact) */}
+      {/* Mes séances passées */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h2>Mes séances passées</h2>
@@ -770,27 +734,42 @@ export default async function Page({
             {past.slice(0, 12).map((s) => {
               const mins = minutesBetween(s.startedAt, s.endedAt);
               return (
-                <li key={s.id} className="py-3 flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="font-medium truncate" style={{ fontSize: 16 }}>{s.title}</div>
-                    <div className="text-sm" style={{ color: "#6b7280" }}>
-                      {fmtDateISO(s.endedAt)}
-                      {mins ? ` · ${mins} min` : ""}
-                      {s.plannedMin ? ` (prévu ${s.plannedMin} min)` : ""}
+                <li key={s.id} className="py-3">
+                  <details>
+                    <summary className="flex items-center justify-between cursor-pointer">
+                      <div className="min-w-0">
+                        <div className="font-medium truncate" style={{ fontSize: 16 }}>{s.title}</div>
+                        <div className="text-sm" style={{ color: "#6b7280" }}>
+                          {fmtDateISO(s.endedAt)}
+                          {mins ? ` · ${mins} min` : ""}
+                          {s.plannedMin ? ` (prévu ${s.plannedMin} min)` : ""}
+                        </div>
+                      </div>
+                      <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>
+                        {s.type}
+                      </span>
+                    </summary>
+
+                    <div className="mt-3 text-sm leading-6">
+                      {s.startedAt ? <div>Démarrée : <b>{fmtDateISO(s.startedAt)}</b></div> : null}
+                      {s.note ? <div>Note : <i>{s.note}</i></div> : null}
                     </div>
-                  </div>
-                  <form action={deleteSessionAction} className="shrink-0">
-                    <input type="hidden" name="id" value={s.id} />
-                    <button
-                      className="btn"
-                      type="submit"
-                      style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
-                      aria-label={`Supprimer ${s.title}`}
-                      title="Supprimer"
-                    >
-                      Supprimer
-                    </button>
-                  </form>
+
+                    <div className="mt-3">
+                      <form action={deleteSessionAction}>
+                        <input type="hidden" name="id" value={s.id} />
+                        <button
+                          className="btn"
+                          type="submit"
+                          style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
+                          aria-label={`Supprimer ${s.title}`}
+                          title="Supprimer"
+                        >
+                          Supprimer
+                        </button>
+                      </form>
+                    </div>
+                  </details>
                 </li>
               );
             })}
@@ -799,4 +778,133 @@ export default async function Page({
       </section>
     </div>
   );
+}
+
+/* ======== Génération depuis Google Sheets (inchangée) ======== */
+type Answers = Record<string, string>;
+const NO_HEADER_COLS = { nom: 0, prenom: 1, age: 2, email: 10 }; // A,B,C,K
+async function getAnswersForEmail(email: string, sheetId: string, range: string): Promise<Answers | null> {
+  const data = await fetchValues(sheetId, range);
+  const values: string[][] = data.values || [];
+  if (values.length === 0) return null;
+
+  const firstRowNorm = values[0].map(norm);
+  const headerCandidates = ["adresse mail", "email", "e-mail", "mail"];
+  const hasHeader = firstRowNorm.some(h => headerCandidates.includes(h));
+
+  let headers: string[] = [];
+  let idxEmail = -1;
+
+  if (hasHeader) {
+    headers = firstRowNorm;
+    idxEmail = headers.findIndex(h => headerCandidates.includes(h));
+  } else {
+    const width = Math.max(values[0]?.length || 0, NO_HEADER_COLS.email + 1);
+    headers = Array.from({ length: width }, (_, i) => `col${i}`);
+    headers[NO_HEADER_COLS.nom]   = "nom";
+    headers[NO_HEADER_COLS.prenom]= "prenom";
+    headers[NO_HEADER_COLS.age]   = "age";
+    headers[NO_HEADER_COLS.email] = "email";
+    idxEmail = NO_HEADER_COLS.email;
+  }
+
+  if (idxEmail === -1) return null;
+
+  for (let i = hasHeader ? 1 : 0; i < values.length; i++) {
+    const row = values[i] || [];
+    const cell = (row[idxEmail] || "").trim().toLowerCase();
+    if (!cell) continue;
+    if (cell === email.trim().toLowerCase()) {
+      const rec: Answers = {};
+      for (let j = 0; j < row.length; j++) {
+        const key = headers[j] || `col${j}`;
+        rec[key] = (row[j] ?? "").trim();
+      }
+      rec["nom"]    = rec["nom"]    || rec[`col${NO_HEADER_COLS.nom}`]    || "";
+      rec["prenom"] = rec["prenom"] || rec[`col${NO_HEADER_COLS.prenom}`] || "";
+      rec["age"]    = rec["age"]    || rec[`col${NO_HEADER_COLS.age}`]    || "";
+      rec["email"]  = rec["email"]  || rec[`col${NO_HEADER_COLS.email}`]  || "";
+      return rec;
+    }
+  }
+  return null;
+}
+
+function generateSessionsFromAnswers(ans: Answers): AiSession[] {
+  const get = (k: string) => ans[norm(k)] || ans[k] || "";
+
+  const prenom = get("prénom") || get("prenom");
+  const age = Number((get("age") || "").replace(",", "."));
+  const poids = Number((get("poids") || "").replace(",", "."));
+  const taille = Number((get("taille") || "").replace(",", "."));
+  const niveau = (get("niveau") || "débutant").toLowerCase();
+  const objectif = (get("objectif") || "").toLowerCase();
+  const dispo = (get("disponibilité") || get("disponibilite") || "").toLowerCase();
+  const lieu = (get("a quel endroit v tu faire ta seance ?") || "").toLowerCase();
+  const materiel = (get("as tu du matériel a ta disposition") || get("as tu du materiel a ta disposition") || "").toLowerCase();
+
+  let freq = 3;
+  const digits = dispo.match(/\d+/g);
+  if (digits?.length) freq = Math.max(1, Math.min(6, parseInt(digits[0], 10)));
+  else if (/(lun|mar|mer|jeu|ven|sam|dim)/.test(dispo)) {
+    freq = Math.max(1, Math.min(6, dispo.split(/[ ,;\/-]+/).filter(Boolean).length));
+  }
+
+  const baseMin =
+    niveau.includes("debut") || niveau.includes("début") ? 25 :
+    niveau.includes("inter") ? 35 : 45;
+
+  let intensity: "faible" | "modérée" | "élevée" =
+    (niveau.includes("debut") || niveau.includes("début")) ? "faible" :
+    (niveau.includes("inter")) ? "modérée" : "élevée";
+
+  if (isFinite(age) && age >= 55) intensity = intensity === "élevée" ? "modérée" : "faible";
+
+  const noEquip = /(aucun|non|sans)/.test(materiel) || materiel === "";
+  const atGym = /(salle|gym|fitness)/.test(lieu);
+
+  const muscuPossible = !noEquip || atGym;
+  let pool: WorkoutType[] = ["cardio", "hiit", "mobilité"];
+  if (muscuPossible) pool = ["muscu", "cardio", "hiit"];
+
+  if (objectif.includes("perte") || objectif.includes("mince") || objectif.includes("seche")) {
+    pool = muscuPossible ? ["hiit", "cardio", "muscu"] : ["hiit", "cardio", "mobilité"];
+  } else if (objectif.includes("prise") || objectif.includes("muscle") || objectif.includes("force")) {
+    pool = muscuPossible ? ["muscu", "muscu", "cardio"] : ["hiit", "cardio", "mobilité"];
+  } else if (objectif.includes("endurance") || objectif.includes("cardio")) {
+    pool = ["cardio", "hiit", "mobilité"];
+  }
+
+  const noteParts: string[] = [];
+  if (prenom) noteParts.push(`Pour ${prenom}`);
+  if (isFinite(poids) && isFinite(taille) && taille > 0) {
+    const imc = Math.round((poids / Math.pow(taille/100, 2)) * 10) / 10;
+    if (isFinite(imc)) noteParts.push(`IMC: ${imc}`);
+  }
+  if (noEquip) noteParts.push("Sans matériel");
+  if (atGym) noteParts.push("Salle");
+
+  const today = new Date();
+  const nb = Math.max(1, Math.min(6, freq));
+  const sessions: AiSession[] = [];
+  for (let i = 0; i < nb; i++) {
+    const date = new Date(today);
+    date.setDate(today.getDate() + i * Math.ceil(7 / nb));
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    const type = pool[i % pool.length];
+
+    sessions.push({
+      id: `ai-${y}${m}${d}-${i}`,
+      title: `${objectif.includes("perte") ? "Brûle-graisse" : objectif.includes("prise") || objectif.includes("force") ? "Force/Muscu" : objectif.includes("endurance") || objectif.includes("cardio") ? "Endurance" : "Full body"} — Séance ${i + 1}`,
+      type,
+      date: `${y}-${m}-${d}`,
+      plannedMin: baseMin,
+      intensity,
+      note: noteParts.join(" · ") || undefined,
+      recommendedBy: "AI",
+    });
+  }
+  return sessions;
 }
