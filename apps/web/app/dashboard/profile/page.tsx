@@ -40,47 +40,25 @@ type AiProgramme = { sessions: AiSession[] };
 const API_BASE = process.env.FILES_COACHING_API_BASE || "https://files-coaching.com";
 const API_KEY  = process.env.FILES_COACHING_API_KEY || "";
 
-// Google Sheets (fallback)
 const SHEET_ID      = process.env.SHEET_ID      || "1HYLsmWXJ3NIRbxH0jOiXeBPiIwrL4d2sW6JKo7ZblYTMYu4RusIji627";
-const SHEET_RANGE   = process.env.SHEET_RANGE   || "Reponses!A1:K1000"; // ← ajuste NomOnglet si besoin
+const SHEET_RANGE   = process.env.SHEET_RANGE   || "Reponses!A1:K1000";
 const SHEET_API_KEY = process.env.SHEET_API_KEY || "";
 
-// Questionnaire (texte cliquable)
 const QUESTIONNAIRE_BASE = process.env.FILES_COACHING_QUESTIONNAIRE_BASE || "https://questionnaire.files-coaching.com";
 
 /* ===================== Détection email (auth) ===================== */
-/** Récupère l'email du user connecté: NextAuth → Supabase → cookie. */
+/** Récupère l'email du user connecté: NextAuth → cookie. (Supabase retiré) */
 async function getSignedInEmail(): Promise<string> {
   // NextAuth (si présent)
   try {
-    // @ts-ignore (import optionnel)
+    // import optionnel: si next-auth n'est pas installé, on catch l'erreur
+    // @ts-ignore
     const { getServerSession } = await import("next-auth");
-    // @ts-ignore (adapte si ton chemin diffère)
+    // @ts-ignore  adapte ce chemin si ton projet diffère
     const { authOptions } = await import("@/lib/auth");
     const session = await getServerSession(authOptions as any);
     const email = (session as any)?.user?.email as string | undefined;
     if (email) return email;
-  } catch {}
-
-  // Supabase (si présent)
-  try {
-    // @ts-ignore (import optionnel)
-    const { createServerClient } = await import("@supabase/auth-helpers-nextjs");
-    const cookieStore = cookies();
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    if (supabaseUrl && supabaseAnon) {
-      const supabase = createServerClient(supabaseUrl, supabaseAnon, {
-        cookies: {
-          get(name: string) { return cookieStore.get(name)?.value; },
-          set() {},
-          remove() {},
-        },
-      });
-      const { data } = await supabase.auth.getUser();
-      const email = (data as any)?.user?.email as string | undefined;
-      if (email) return email;
-    }
   } catch {}
 
   // Cookie existant (fallback)
@@ -240,7 +218,6 @@ function generateSessionsFromAnswers(ans: Answers): AiSession[] {
   const lieu = get("a quel endroit v tu faire ta seance ?").toLowerCase();
   const materiel = get("as tu du matériel a ta disposition").toLowerCase() || get("as tu du materiel a ta disposition").toLowerCase();
 
-  // fréquence / nb de séances
   let freq = 3;
   const digits = dispo.match(/\d+/g);
   if (digits?.length) freq = Math.max(1, Math.min(6, parseInt(digits[0], 10)));
@@ -311,14 +288,13 @@ function generateSessionsFromAnswers(ans: Answers): AiSession[] {
 async function buildProgrammeAction() {
   "use server";
 
-  // 0) Détecter automatiquement l'email du user connecté
+  // 0) Détecter automatiquement l'email via NextAuth/cookie
   let email = await getSignedInEmail();
   if (email) {
-    // on mémorise en cookie pour les prochains clics
     cookies().set("app_email", email, { path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365, httpOnly: false });
   }
 
-  // 1) Tente l’API Files Coaching (indépendamment de l’email)
+  // 1) Tente l’API Files Coaching
   const uid = cookies().get("fc_uid")?.value || "me";
   const endpoints = [
     `${API_BASE}/api/programme/build`,
@@ -345,7 +321,6 @@ async function buildProgrammeAction() {
 
   // 2) Fallback Google Sheets → nécessite l'email détecté
   if (!email) {
-    // pas d'email détecté par auth → on arrête proprement (mais sans re-demander côté UI)
     redirect("/dashboard/profile?error=programme:noemail");
   }
 
@@ -467,6 +442,14 @@ export default async function Page({
 }: {
   searchParams?: { success?: string; error?: string; done?: string; deleted?: string };
 }) {
+  // On pose/rafraîchit le cookie email si NextAuth le fournit
+  const detectedEmail = await getSignedInEmail();
+  if (detectedEmail) {
+    cookies().set("app_email", detectedEmail, {
+      path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365, httpOnly: false,
+    });
+  }
+
   const store = parseStore(cookies().get("app_sessions")?.value);
 
   const active = store.sessions
@@ -479,47 +462,25 @@ export default async function Page({
 
   const defaultDate = toYMD();
 
-  // Affichage informatif si ton API renvoie déjà un programme
   const programme = await fetchAiProgramme();
   const aiSessions = programme?.sessions ?? [];
 
-  // Lien questionnaire pré-rempli avec email détecté (si dispo)
-  const detectedEmail = await getSignedInEmail();
-  if (detectedEmail) {
-    cookies().set("app_email", detectedEmail, { path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365, httpOnly: false });
-  }
-  const questionnaireUrl = detectedEmail
+  const questionnaireUrl = (detectedEmail
     ? `${QUESTIONNAIRE_BASE}?email=${encodeURIComponent(detectedEmail)}`
-    : QUESTIONNAIRE_BASE;
+    : QUESTIONNAIRE_BASE);
 
   return (
-    <div
-      className="container"
-      style={{
-        paddingTop: 24,
-        paddingBottom: 32,
-        fontSize: "var(--settings-fs, 12px)",
-      }}
-    >
+    <div className="container" style={{ paddingTop: 24, paddingBottom: 32, fontSize: "var(--settings-fs, 12px)" }}>
       {/* Header */}
       <div className="page-header">
         <div>
-          <h1 className="h1" style={{ fontSize: 22 }}>
-            Mon profil
-          </h1>
+          <h1 className="h1" style={{ fontSize: 22 }}>Mon profil</h1>
           <p className="lead">Gérez vos séances et gardez un historique clair de votre entraînement.</p>
         </div>
         <a
           href="/dashboard"
           className="btn"
-          style={{
-            background: "#ffffff",
-            color: "#111827",
-            border: "1px solid #d1d5db",
-            fontWeight: 500,
-            padding: "6px 10px",
-            lineHeight: 1.2,
-          }}
+          style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500, padding: "6px 10px", lineHeight: 1.2 }}
         >
           ← Retour
         </a>
@@ -554,20 +515,12 @@ export default async function Page({
         <div className="section-head" style={{ marginBottom: 8 }}>
           <h2>Ajouter une séance</h2>
         </div>
-
         <div className="card">
           <form action={addSessionAction} className="grid gap-6 lg:grid-cols-3">
             <div className="lg:col-span-2">
               <label className="label">Titre</label>
-              <input
-                className="input"
-                type="text"
-                name="title"
-                placeholder="ex: Full body, Cardio 20', HIIT Tabata…"
-                required
-              />
+              <input className="input" type="text" name="title" placeholder="ex: Full body, Cardio 20', HIIT Tabata…" required />
             </div>
-
             <div>
               <label className="label">Type</label>
               <select className="input" name="type" defaultValue="muscu" required>
@@ -577,22 +530,18 @@ export default async function Page({
                 <option value="mobilité">Mobilité</option>
               </select>
             </div>
-
             <div>
               <label className="label">Date prévue</label>
               <input className="input" type="date" name="date" defaultValue={defaultDate} required />
             </div>
-
             <div>
               <label className="label">Durée prévue (min) — optionnel</label>
               <input className="input" type="number" inputMode="numeric" name="plannedMin" placeholder="ex: 30" />
             </div>
-
             <div className="lg:col-span-2">
               <label className="label">Note — optionnel</label>
               <input className="input" type="text" name="note" placeholder="ex: accent sur jambes / intervalles 30-30" />
             </div>
-
             <input type="hidden" name="startNow" value="1" />
             <div className="lg:col-span-3" style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
               <button className="btn btn-dash" type="submit">Démarrer maintenant</button>
@@ -605,8 +554,6 @@ export default async function Page({
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
           <h2 style={{ marginBottom: 6 }}>Mon programme (personnalisé par l’IA)</h2>
-
-          {/* Un seul CTA */}
           <div className="flex flex-col sm:flex-row gap-2 mt-3">
             <form action={buildProgrammeAction}>
               <button className="btn btn-dash" type="submit" style={{ width: "100%" }}>
@@ -637,14 +584,12 @@ export default async function Page({
                     {s.type}
                   </span>
                 </div>
-
                 <div className="text-sm" style={{ color: "#6b7280", marginTop: 8 }}>
                   Prévu le <b style={{ color: "inherit" }}>{fmtDateYMD(s.date)}</b>
                   {s.plannedMin ? ` · ${s.plannedMin} min` : ""}
                   {s.intensity ? ` · intensité ${s.intensity}` : ""}
                   {s.note ? (<><br />Note : <i>{s.note}</i></>) : null}
                 </div>
-
                 <form action={addSessionAction} style={{ display: "flex", gap: 8, marginTop: 12 }}>
                   <input type="hidden" name="title" value={s.title} />
                   <input type="hidden" name="type" value={s.type} />
@@ -666,7 +611,6 @@ export default async function Page({
           <h2>Mes séances passées</h2>
           {past.length > 12 && <span className="text-xs" style={{ color: "#6b7280" }}>Affichage des 12 dernières</span>}
         </div>
-
         {past.length === 0 ? (
           <div className="card text-sm" style={{ color: "#6b7280" }}>
             <div className="flex items-center gap-3">
@@ -695,11 +639,7 @@ export default async function Page({
                   <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
                     <form action={deleteSessionAction}>
                       <input type="hidden" name="id" value={s.id} />
-                      <button
-                        className="btn"
-                        type="submit"
-                        style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
-                      >
+                      <button className="btn" type="submit" style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}>
                         Supprimer
                       </button>
                     </form>
