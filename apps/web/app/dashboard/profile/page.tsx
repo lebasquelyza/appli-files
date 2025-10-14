@@ -29,7 +29,7 @@ type Workout = {
   endedAt?: string;    // ISO quand terminée
   note?: string;
   createdAt: string;   // ISO
-  exercises?: NormalizedExercise[]; // ⬅️ NEW: persister le détail d’exercices
+  exercises?: NormalizedExercise[]; // détails persistés si dispo
 };
 
 type Store = { sessions: Workout[] };
@@ -38,7 +38,7 @@ type AiSession = {
   id: string;
   title: string;
   type: WorkoutType;
-  date: string;
+  date: string;          // YYYY-MM-DD
   plannedMin?: number;
   note?: string;
   intensity?: "faible" | "modérée" | "élevée";
@@ -59,15 +59,15 @@ const SHEET_ID      = process.env.SHEET_ID      || "1XH-BOUj4tXAVy49ONBIdLiWM97h
 const SHEET_RANGE   = process.env.SHEET_RANGE   || "Réponses!A1:K";
 const SHEET_GID     = process.env.SHEET_GID     || "1160551014";
 
-// Questionnaire
+// Questionnaire (pour le lien dans l’état vide)
 const QUESTIONNAIRE_BASE = process.env.FILES_COACHING_QUESTIONNAIRE_BASE || "https://questionnaire.files-coaching.com";
 
 /* ===================== Détection e-mail (auth) ===================== */
 async function getSignedInEmail(): Promise<string> {
   try {
-    // @ts-ignore
+    // @ts-ignore import optionnel
     const { getServerSession } = await import("next-auth");
-    // @ts-ignore
+    // @ts-ignore adapte ce chemin si besoin
     const { authOptions } = await import("@/lib/auth");
     const session = await getServerSession(authOptions as any);
     const email = (session as any)?.user?.email as string | undefined;
@@ -100,6 +100,8 @@ async function fetchAiProgramme(userId?: string): Promise<AiProgramme | null> {
 
       const data = (await res.json()) as any;
       const raw = Array.isArray(data?.sessions) ? data.sessions : Array.isArray(data) ? data : [];
+      if (!raw.length) continue;
+
       const sessions: AiSession[] = raw.map((r: any, i: number) => ({
         id: String(r.id ?? `ai-${i}`),
         title: String(r.title ?? r.name ?? "Séance personnalisée"),
@@ -124,6 +126,15 @@ async function fetchAiProgramme(userId?: string): Promise<AiProgramme | null> {
       if (isNextRedirect(e)) throw e;
     }
   }
+
+  // Pas de données API : on affiche (sans persister) un fallback local basé sur la dernière réponse
+  try {
+    const email = (await getSignedInEmail()) || cookies().get("app_email")?.value || "";
+    if (email) {
+      const ans = await getAnswersForEmail(email, SHEET_ID, SHEET_RANGE);
+      if (ans) return { sessions: generateSessionsFromAnswers(ans) };
+    }
+  } catch {}
   return null;
 }
 
@@ -248,9 +259,11 @@ async function fetchValues(sheetId: string, range: string) {
 type Answers = Record<string, string>;
 function norm(s: string) {
   return s
-    .trim().toLowerCase().replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ")
     .replace(/[éèêë]/g, "e").replace(/[àâä]/g, "a")
-    .replace(/[îï]/g, "i").replace(/[ôö]/g, "o").replace(/[ùûü]/g, "u")
+    .replace/[îï]/g, "i").replace(/[ôö]/g, "o").replace(/[ùûü]/g, "u")
     .replace(/[’']/g, "'");
 }
 
@@ -364,29 +377,43 @@ function getExercises(s: AiSession): NormalizedExercise[] {
 }
 
 /* ===================== Actions serveur ===================== */
+/** 
+ * Construit/actualise le programme IA côté API
+ * -> envoie l'uid + email + DERNière réponse de questionnaire dans le body.
+ * -> ne PERSISTE rien côté cookies (on laisse l'utilisateur enregistrer manuellement).
+ */
 async function buildProgrammeAction() {
   "use server";
+  const jar = cookies();
   let email = await getSignedInEmail();
+  if (!email) email = jar.get("app_email")?.value || "";
   if (email) {
-    cookies().set("app_email", email, { path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365, httpOnly: false });
+    jar.set("app_email", email, { path: "/", sameSite: "lax", maxAge: 60*60*24*365, httpOnly: false });
   }
 
-  const uid = cookies().get("fc_uid")?.value || "me";
+  // Récupère la DERNIÈRE réponse de questionnaire
+  let answers: Answers | null = null;
+  try { if (email) answers = await getAnswersForEmail(email, SHEET_ID, SHEET_RANGE); } catch {}
+
+  const uid = jar.get("fc_uid")?.value || "me";
+  const payload = { user: uid, source: "app-profile", email, answers };
+
   const endpoints = [
     `${API_BASE}/api/programme/build`,
     `${API_BASE}/api/program/build`,
     `${API_BASE}/api/sessions/build`,
   ];
+
   for (const url of endpoints) {
     try {
-      const res = await fetch(`${url}?user=${encodeURIComponent(uid)}`, {
+      const res = await fetch(url, {
         method: "POST",
         headers: {
           Accept: "application/json",
           "Content-Type": "application/json",
           ...(API_KEY ? { Authorization: `Bearer ${API_KEY}` } : {}),
         },
-        body: JSON.stringify({ user: uid, source: "app-profile" }),
+        body: JSON.stringify(payload),
         cache: "no-store",
       });
       if (res.ok) redirect("/dashboard/profile?success=programme");
@@ -395,46 +422,8 @@ async function buildProgrammeAction() {
     }
   }
 
-  if (!email) redirect("/dashboard/profile?error=programme:noemail");
-
-  try {
-    const answers = await getAnswersForEmail(email, SHEET_ID, SHEET_RANGE);
-    if (!answers) redirect("/dashboard/profile?error=programme:nomatch");
-
-    const aiSessions = generateSessionsFromAnswers(answers!);
-
-    const jar = cookies();
-    const store = parseStore(jar.get("app_sessions")?.value);
-    const now = new Date().toISOString();
-
-    const existingKeys = new Set(store.sessions.map(s => `${s.title}|${s.date}|${s.type}`));
-
-    const mapped: Workout[] = aiSessions
-      .map((s): Workout => ({
-        id: s.id,
-        title: s.title,
-        type: s.type,
-        status: "active",
-        date: s.date,
-        plannedMin: s.plannedMin,
-        note: s.note,
-        createdAt: now,
-      }))
-      .filter(w => !existingKeys.has(`${w.title}|${w.date}|${w.type}`));
-
-    const nextAll = [...mapped, ...store.sessions];
-    const next: Store = { sessions: uniqueBy(nextAll, s => `${s.title}|${s.date}|${s.type}`).slice(0, 300) };
-
-    jar.set("app_sessions", JSON.stringify(next), {
-      path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365, httpOnly: false,
-    });
-
-    redirect("/dashboard/profile?success=programme");
-  } catch (e: any) {
-    if (isNextRedirect(e)) throw e;
-    const encoded = encodeURIComponent(String(e?.message || "unknown"));
-    redirect(`/dashboard/profile?error=programme:sheetfetch:${encoded}`);
-  }
+  // Si pas d’API OK → on ne persiste rien, on affiche juste une alerte douce
+  redirect("/dashboard/profile?error=Aucune donnée reçue de l’IA. Les propositions locales sont affichées sans enregistrement.");
 }
 
 async function addSessionAction(formData: FormData) {
@@ -463,13 +452,15 @@ async function addSessionAction(formData: FormData) {
   };
 
   const next: Store = { sessions: [w, ...store.sessions].slice(0, 300) };
+
   cookies().set("app_sessions", JSON.stringify(next), {
     path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365, httpOnly: false,
   });
+
   redirect("/dashboard/profile?success=1");
 }
 
-/* ⚠️ Update: persister les exercices + enregistrer en “done” */
+/** Enregistre une proposition (IA ou fallback) directement en « Séances enregistrées » avec les exercices. */
 async function saveSingleAiSessionAction(formData: FormData) {
   "use server";
   const id = (formData.get("id") || "").toString();
@@ -485,6 +476,7 @@ async function saveSingleAiSessionAction(formData: FormData) {
   const jar = cookies();
   const store = parseStore(jar.get("app_sessions")?.value);
 
+  // Evite doublon exact pour l'historique (status done)
   const key = `${title}|${date}|${type}`;
   const exists = store.sessions.some(s => `${s.title}|${s.date}|${s.type}` === key && s.status === "done");
   if (exists) redirect("/dashboard/profile?success=programme:dejainclus");
@@ -497,7 +489,7 @@ async function saveSingleAiSessionAction(formData: FormData) {
     id: id || uid(),
     title,
     type: (["muscu", "cardio", "hiit", "mobilité"].includes(type) ? type : "muscu") as WorkoutType,
-    status: "done",                // ⬅️ enregistré dans “Séances enregistrées”
+    status: "done",
     date,
     plannedMin: plannedMinStr ? Number(plannedMinStr) : undefined,
     note: note || undefined,
@@ -552,7 +544,7 @@ async function deleteSessionAction(formData: FormData) {
 }
 
 /* ======== Lecture des réponses par e-mail (DERNIÈRE ligne) ======== */
-const NO_HEADER_COLS = { nom: 0, prenom: 1, age: 2, email: 10 };
+const NO_HEADER_COLS = { nom: 0, prenom: 1, age: 2, email: 10 }; // A,B,C,K
 async function getAnswersForEmail(email: string, sheetId: string, range: string): Promise<Answers | null> {
   const data = await fetchValues(sheetId, range);
   const values: string[][] = data.values || [];
@@ -580,6 +572,7 @@ async function getAnswersForEmail(email: string, sheetId: string, range: string)
 
   if (idxEmail === -1) return null;
 
+  // Parcours bottom-up => dernière soumission pour cet email
   const start = hasHeader ? 1 : 0;
   for (let i = values.length - 1; i >= start; i--) {
     const row = values[i] || [];
@@ -741,6 +734,7 @@ export default async function Page({
       const ageStr = get("age");
       const num = Number((ageStr || "").toString().replace(",", "."));
       clientAge = isFinite(num) && num > 0 ? Math.floor(num) : undefined;
+
       const emailSheet = get("email") || get("adresse mail") || get("e-mail") || get("mail");
       if (!clientEmailDisplay && emailSheet) clientEmailDisplay = emailSheet;
     } catch {}
@@ -767,11 +761,9 @@ export default async function Page({
   const showRanOutActive = clampedActive.emptyReason === "ranout" && !visibleActive.length;
 
   const rawError = searchParams?.error || "";
-  let displayedError = rawError;
-  if (rawError.startsWith("programme:sheetfetch:")) {
-    const full = rawError.split(":").slice(2).join(":");
-    try { displayedError = decodeURIComponent(full); } catch { displayedError = full; }
-  }
+  const displayedError = rawError.startsWith("programme:sheetfetch:")
+    ? (() => { try { return decodeURIComponent(rawError.split(":").slice(2).join(":")); } catch { return rawError; } })()
+    : rawError;
 
   // Helper liens
   function urlWith(p: Record<string, string | number | undefined>) {
@@ -803,8 +795,8 @@ export default async function Page({
         {!!searchParams?.success && (
           <div className="card" style={{ border: "1px solid rgba(16,185,129,.35)", background: "rgba(16,185,129,.08)", fontWeight: 600 }}>
             {
-              searchParams.success === "programme" ? "✓ Programme généré."
-              : searchParams.success === "programme:dejainclus" ? "ℹ️ Cette séance existe déjà."
+              searchParams.success === "programme" ? "✓ Programme IA mis à jour."
+              : searchParams.success === "programme:dejainclus" ? "ℹ️ Déjà enregistrée."
               : searchParams.success === "programme:seance:enregistree" ? "✓ Séance enregistrée dans « Séances enregistrées »."
               : "✓ Séance ajoutée."
             }
@@ -822,21 +814,23 @@ export default async function Page({
         )}
         {!!searchParams?.error && (
           <div className="card" style={{ border: "1px solid rgba(239,68,68,.35)", background: "rgba(239,68,68,.08)", fontWeight: 600, whiteSpace: "pre-wrap" }}>
-            ⚠️ Erreur : {displayedError}
+            ⚠️ {displayedError}
           </div>
         )}
       </div>
 
-      {/* Mes infos (dernière réponse) */}
+      {/* Mes infos (dernière réponse questionnaire) */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
           <h2>Mes infos</h2>
         </div>
+
         <div className="card">
           <div className="text-sm" style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
             <span><b>Prénom :</b> {clientPrenom || <i className="text-gray-400">Non renseigné</i>}</span>
             <span><b>Age :</b> {typeof clientAge === "number" ? `${clientAge} ans` : <i className="text-gray-400">Non renseigné</i>}</span>
           </div>
+
           <div className="text-sm" style={{ marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={clientEmailDisplay || "Non renseigné"}>
             <b>Mail :</b>{" "}
             {clientEmailDisplay ? <a href={`mailto:${clientEmailDisplay}`} className="underline">{clientEmailDisplay}</a> : <span className="text-gray-400">Non renseigné</span>}
@@ -864,7 +858,10 @@ export default async function Page({
           <div className="card text-sm" style={{ color: "#6b7280" }}>
             <div className="flex items-center gap-3">
               <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted">🤖</span>
-              <span>Pas encore de séances proposées. <a className="link" href={questionnaireUrl}>Répondez au questionnaire</a>, puis appuyez sur « Mettre à jour les propositions ».</span>
+              <span>
+                Pas encore de séances proposées.{" "}
+                <a className="link" href={questionnaireUrl}>Répondez au questionnaire</a>, puis appuyez sur « Mettre à jour les propositions ».
+              </span>
             </div>
           </div>
         ) : (
@@ -875,7 +872,7 @@ export default async function Page({
               </div>
             )}
 
-            <ul className="card divide-y">
+            <ul className="card divide-y list-none pl-0">
               {visibleAi.map((s) => {
                 const exercises = getExercises(s);
                 return (
@@ -890,10 +887,14 @@ export default async function Page({
                             {s.intensity ? ` · intensité ${s.intensity}` : ""}
                           </div>
                         </div>
-                        <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>{s.type}</span>
+                        <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>
+                          {s.type}
+                        </span>
                       </summary>
 
-                      <div className="mt-3 text-sm leading-6" style={{ whiteSpace: "pre-wrap" }}>{coachText(s)}</div>
+                      <div className="mt-3 text-sm leading-6" style={{ whiteSpace: "pre-wrap" }}>
+                        {coachText(s)}
+                      </div>
 
                       <div className="mt-3">
                         <div className="text-sm font-medium mb-2">📝 Détail des exercices</div>
@@ -920,7 +921,6 @@ export default async function Page({
                           <input type="hidden" name="date" value={s.date} />
                           {s.plannedMin ? <input type="hidden" name="plannedMin" value={String(s.plannedMin)} /> : null}
                           {s.note ? <input type="hidden" name="note" value={s.note} /> : null}
-                          {/* ⬇️ on persiste les exercices */}
                           <input type="hidden" name="exercises" value={JSON.stringify(exercises)} />
                           <button className="btn" type="submit" style={{ background: "#111827", color: "white" }}>
                             Enregistrer dans mes séances enregistrées
@@ -952,7 +952,7 @@ export default async function Page({
         )}
       </section>
 
-      {/* Mes séances (actives) — sans le bloc “Créée le …” */}
+      {/* Mes séances (actives) — sans bloc méta, pas de puces */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h2>Mes séances</h2>
@@ -974,7 +974,7 @@ export default async function Page({
               </div>
             )}
 
-            <ul className="card divide-y">
+            <ul className="card divide-y list-none pl-0">
               {visibleActive.map((s) => (
                 <li key={s.id} className="py-3">
                   <details>
@@ -984,14 +984,15 @@ export default async function Page({
                         <div className="text-sm" style={{ color: "#6b7280" }}>
                           Prévu le <b style={{ color: "inherit" }}>{fmtDateYMD(s.date)}</b>
                           {s.plannedMin ? ` · ${s.plannedMin} min` : ""}
-                          {s.note ? ` · ${s.note}` : ""}
                         </div>
                       </div>
-                      <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>{s.type}</span>
+                      <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>
+                        {s.type}
+                      </span>
                     </summary>
 
-                    {/* ⬇️ Afficher le détail d'exercices s'il existe */}
-                    {Array.isArray(s.exercises) && s.exercises.length > 0 ? (
+                    {/* Afficher le détail seulement s'il existe */}
+                    {Array.isArray(s.exercises) && s.exercises.length > 0 && (
                       <div className="mt-3">
                         <div className="text-sm font-medium mb-2">📝 Détail des exercices</div>
                         <ul className="list-disc pl-5 text-sm space-y-1">
@@ -1006,10 +1007,6 @@ export default async function Page({
                             </li>
                           ))}
                         </ul>
-                      </div>
-                    ) : (
-                      <div className="mt-3 text-sm" style={{ color: "#6b7280" }}>
-                        Aucun détail d’exercices enregistré pour cette séance.
                       </div>
                     )}
                   </details>
@@ -1040,7 +1037,7 @@ export default async function Page({
             </div>
           </div>
         ) : (
-          <ul className="card divide-y">
+          <ul className="card divide-y list-none pl-0">
             {past.slice(0, 12).map((s) => {
               const mins = minutesBetween(s.startedAt, s.endedAt);
               return (
@@ -1055,11 +1052,12 @@ export default async function Page({
                           {s.plannedMin ? ` (prévu ${s.plannedMin} min)` : ""}
                         </div>
                       </div>
-                      <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>{s.type}</span>
+                      <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>
+                        {s.type}
+                      </span>
                     </summary>
 
-                    {/* Détail d’exercices si dispos */}
-                    {Array.isArray(s.exercises) && s.exercises.length > 0 ? (
+                    {Array.isArray(s.exercises) && s.exercises.length > 0 && (
                       <div className="mt-3">
                         <div className="text-sm font-medium mb-2">📝 Détail des exercices</div>
                         <ul className="list-disc pl-5 text-sm space-y-1">
@@ -1075,12 +1073,14 @@ export default async function Page({
                           ))}
                         </ul>
                       </div>
-                    ) : null}
+                    )}
 
                     <div className="mt-3">
                       <form action={deleteSessionAction} method="post">
                         <input type="hidden" name="id" value={s.id} />
-                        <button className="btn" type="submit" style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }} title="Supprimer">Supprimer</button>
+                        <button className="btn" type="submit" style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }} title="Supprimer">
+                          Supprimer
+                        </button>
                       </form>
                     </div>
                   </details>
