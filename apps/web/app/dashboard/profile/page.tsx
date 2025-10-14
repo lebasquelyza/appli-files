@@ -9,6 +9,15 @@ export const revalidate = 0;
 type WorkoutType = "muscu" | "cardio" | "hiit" | "mobilité";
 type WorkoutStatus = "active" | "done";
 
+type NormalizedExercise = {
+  name: string;
+  sets?: number;
+  reps?: string | number;
+  rest?: string;
+  durationSec?: number;
+  notes?: string;
+};
+
 type Workout = {
   id: string;
   title: string;
@@ -20,6 +29,7 @@ type Workout = {
   endedAt?: string;    // ISO quand terminée
   note?: string;
   createdAt: string;   // ISO
+  exercises?: NormalizedExercise[]; // ⬅️ NEW: persister le détail d’exercices
 };
 
 type Store = { sessions: Workout[] };
@@ -28,7 +38,7 @@ type AiSession = {
   id: string;
   title: string;
   type: WorkoutType;
-  date: string;          // YYYY-MM-DD
+  date: string;
   plannedMin?: number;
   note?: string;
   intensity?: "faible" | "modérée" | "élevée";
@@ -49,15 +59,15 @@ const SHEET_ID      = process.env.SHEET_ID      || "1XH-BOUj4tXAVy49ONBIdLiWM97h
 const SHEET_RANGE   = process.env.SHEET_RANGE   || "Réponses!A1:K";
 const SHEET_GID     = process.env.SHEET_GID     || "1160551014";
 
-// Questionnaire (pour le lien dans l’état vide)
+// Questionnaire
 const QUESTIONNAIRE_BASE = process.env.FILES_COACHING_QUESTIONNAIRE_BASE || "https://questionnaire.files-coaching.com";
 
 /* ===================== Détection e-mail (auth) ===================== */
 async function getSignedInEmail(): Promise<string> {
   try {
-    // @ts-ignore import optionnel
+    // @ts-ignore
     const { getServerSession } = await import("next-auth");
-    // @ts-ignore adapte ce chemin si besoin (ex: "@/lib/auth")
+    // @ts-ignore
     const { authOptions } = await import("@/lib/auth");
     const session = await getServerSession(authOptions as any);
     const email = (session as any)?.user?.email as string | undefined;
@@ -181,7 +191,7 @@ function clampOffset(total: number, take: number, offset: number) {
 }
 
 /* ======== Google Sheets (PUBLIC via lien) ======== */
-async function fetchValues(sheetId: string, range: string, _apiKey?: string) {
+async function fetchValues(sheetId: string, range: string) {
   const sheetName = (range.split("!")[0] || "").replace(/^'+|'+$/g, "");
   if (!sheetId) throw new Error("SHEETS_CONFIG_MISSING");
 
@@ -202,7 +212,6 @@ async function fetchValues(sheetId: string, range: string, _apiKey?: string) {
     const res = await fetch(url, { cache: "no-store" });
     lastStatus = res.status;
     lastCT = res.headers.get("content-type") || "";
-
     const text = await res.text().catch(() => "");
     lastBody = text;
 
@@ -232,29 +241,14 @@ async function fetchValues(sheetId: string, range: string, _apiKey?: string) {
       return { values: rows };
     }
   }
-
-  let hint = "";
-  if (lastCT.includes("text/html") || (lastBody && lastBody.trim().startsWith("<"))) {
-    hint = "Google renvoie du HTML (pas CSV) → accès non public ou mauvais ID/onglet.";
-  } else if (lastStatus === 404) {
-    hint = "404: Sheet ou onglet introuvable.";
-  } else if (lastStatus === 403) {
-    hint = "403: Le fichier n'est pas accessible publiquement.";
-  } else {
-    hint = "Échec de lecture CSV.";
-  }
-
-  const bodyPreview = (lastBody || "").slice(0, 160).replace(/\s+/g, " ");
-  throw new Error(`SHEETS_${lastStatus}:${hint} [url=${lastUrl}] [ct=${lastCT}] [body~=${bodyPreview}]`);
+  throw new Error("SHEETS_FETCH_FAILED");
 }
 
 /* ======== Normalisation (questionnaire) ======== */
 type Answers = Record<string, string>;
 function norm(s: string) {
   return s
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, " ")
+    .trim().toLowerCase().replace(/\s+/g, " ")
     .replace(/[éèêë]/g, "e").replace(/[àâä]/g, "a")
     .replace(/[îï]/g, "i").replace(/[ôö]/g, "o").replace(/[ùûü]/g, "u")
     .replace(/[’']/g, "'");
@@ -284,8 +278,6 @@ function coachText(s: AiSession) {
   : "Mouvement lent, fluide, sans douleur — amplitude progressive.";
   return `🧭 ${intro}\n⏱️ Durée: ${min} · Intensité: ${intens}\n💡 Conseils: ${tips}${s.note ? `\n📝 Note: ${s.note}` : ""}`;
 }
-
-type NormalizedExercise = { name: string; sets?: number; reps?: string | number; rest?: string; durationSec?: number; notes?: string };
 
 function normalizeMaybeArray(v: any): any[] {
   if (!v) return [];
@@ -374,7 +366,6 @@ function getExercises(s: AiSession): NormalizedExercise[] {
 /* ===================== Actions serveur ===================== */
 async function buildProgrammeAction() {
   "use server";
-
   let email = await getSignedInEmail();
   if (email) {
     cookies().set("app_email", email, { path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365, httpOnly: false });
@@ -398,15 +389,12 @@ async function buildProgrammeAction() {
         body: JSON.stringify({ user: uid, source: "app-profile" }),
         cache: "no-store",
       });
-      if (res.ok) {
-        redirect("/dashboard/profile?success=programme");
-      }
+      if (res.ok) redirect("/dashboard/profile?success=programme");
     } catch (e: any) {
       if (isNextRedirect(e)) throw e;
     }
   }
 
-  // Fallback Sheets → génération locale si pas d'API
   if (!email) redirect("/dashboard/profile?error=programme:noemail");
 
   try {
@@ -426,20 +414,16 @@ async function buildProgrammeAction() {
         id: s.id,
         title: s.title,
         type: s.type,
-        status: "active" as WorkoutStatus,
+        status: "active",
         date: s.date,
         plannedMin: s.plannedMin,
         note: s.note,
         createdAt: now,
-        startedAt: undefined,
-        endedAt: undefined,
       }))
       .filter(w => !existingKeys.has(`${w.title}|${w.date}|${w.type}`));
 
     const nextAll = [...mapped, ...store.sessions];
-    const next: Store = {
-      sessions: uniqueBy(nextAll, s => `${s.title}|${s.date}|${s.type}`).slice(0, 300),
-    };
+    const next: Store = { sessions: uniqueBy(nextAll, s => `${s.title}|${s.date}|${s.type}`).slice(0, 300) };
 
     jar.set("app_sessions", JSON.stringify(next), {
       path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365, httpOnly: false,
@@ -448,8 +432,7 @@ async function buildProgrammeAction() {
     redirect("/dashboard/profile?success=programme");
   } catch (e: any) {
     if (isNextRedirect(e)) throw e;
-    const msg = String(e?.message || "unknown");
-    const encoded = encodeURIComponent(msg);
+    const encoded = encodeURIComponent(String(e?.message || "unknown"));
     redirect(`/dashboard/profile?error=programme:sheetfetch:${encoded}`);
   }
 }
@@ -471,7 +454,7 @@ async function addSessionAction(formData: FormData) {
     id: uid(),
     title,
     type: (["muscu", "cardio", "hiit", "mobilité"].includes(type) ? type : "muscu") as WorkoutType,
-    status: "active" as WorkoutStatus,
+    status: "active",
     date,
     plannedMin: plannedMinStr ? Number(plannedMinStr) : undefined,
     startedAt: startNow ? new Date().toISOString() : undefined,
@@ -480,14 +463,13 @@ async function addSessionAction(formData: FormData) {
   };
 
   const next: Store = { sessions: [w, ...store.sessions].slice(0, 300) };
-
   cookies().set("app_sessions", JSON.stringify(next), {
     path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365, httpOnly: false,
   });
-
   redirect("/dashboard/profile?success=1");
 }
 
+/* ⚠️ Update: persister les exercices + enregistrer en “done” */
 async function saveSingleAiSessionAction(formData: FormData) {
   "use server";
   const id = (formData.get("id") || "").toString();
@@ -496,27 +478,33 @@ async function saveSingleAiSessionAction(formData: FormData) {
   const date = (formData.get("date") || toYMD()).toString();
   const plannedMinStr = (formData.get("plannedMin") || "").toString().replace(",", ".");
   const note = (formData.get("note") || "").toString();
+  const exercisesJson = (formData.get("exercises") || "").toString();
 
   if (!title) redirect("/dashboard/profile?error=titre");
 
   const jar = cookies();
   const store = parseStore(jar.get("app_sessions")?.value);
 
-  // anti-doublon + tolérance (clé logique)
   const key = `${title}|${date}|${type}`;
-  const exists = store.sessions.some(s => `${s.title}|${s.date}|${s.type}` === key);
+  const exists = store.sessions.some(s => `${s.title}|${s.date}|${s.type}` === key && s.status === "done");
   if (exists) redirect("/dashboard/profile?success=programme:dejainclus");
 
   const now = new Date().toISOString();
+  let exercises: NormalizedExercise[] | undefined = undefined;
+  try { exercises = exercisesJson ? JSON.parse(exercisesJson) : undefined; } catch {}
+
   const w: Workout = {
     id: id || uid(),
     title,
     type: (["muscu", "cardio", "hiit", "mobilité"].includes(type) ? type : "muscu") as WorkoutType,
-    status: "active" as WorkoutStatus,
+    status: "done",                // ⬅️ enregistré dans “Séances enregistrées”
     date,
     plannedMin: plannedMinStr ? Number(plannedMinStr) : undefined,
     note: note || undefined,
     createdAt: now,
+    startedAt: now,
+    endedAt: now,
+    exercises,
   };
 
   const next: Store = { sessions: [w, ...store.sessions].slice(0, 300) };
@@ -563,9 +551,8 @@ async function deleteSessionAction(formData: FormData) {
   redirect("/dashboard/profile?deleted=1");
 }
 
-/* ======== Lecture des réponses par e-mail ======== */
-/* ⬇️ IMPORTANT : on retourne la DERNIÈRE réponse (scan bottom-up) */
-const NO_HEADER_COLS = { nom: 0, prenom: 1, age: 2, email: 10 }; // A,B,C,K
+/* ======== Lecture des réponses par e-mail (DERNIÈRE ligne) ======== */
+const NO_HEADER_COLS = { nom: 0, prenom: 1, age: 2, email: 10 };
 async function getAnswersForEmail(email: string, sheetId: string, range: string): Promise<Answers | null> {
   const data = await fetchValues(sheetId, range);
   const values: string[][] = data.values || [];
@@ -593,7 +580,6 @@ async function getAnswersForEmail(email: string, sheetId: string, range: string)
 
   if (idxEmail === -1) return null;
 
-  // 🔁 Parcours de bas en haut pour prendre la DERNIÈRE soumission de cet e-mail
   const start = hasHeader ? 1 : 0;
   for (let i = values.length - 1; i >= start; i--) {
     const row = values[i] || [];
@@ -724,16 +710,16 @@ export default async function Page({
     .filter(s => s.status === "active")
     .sort((a, b) => (b.startedAt || b.createdAt || "").localeCompare(a.startedAt || a.createdAt || ""));
 
-  // Passées (historique)
+  // Enregistrées (done)
   const past = store.sessions
     .filter(s => s.status === "done")
     .sort((a, b) => (b.endedAt || "").localeCompare(a.endedAt || ""));
 
-  // Propositions Coach Files
+  // Propositions IA
   const programme = await fetchAiProgramme();
   const aiSessions = programme?.sessions ?? [];
 
-  // Infos client + questionnaire (DERNIER questionnaire)
+  // Infos client (dernière réponse)
   const detectedEmail = await getSignedInEmail();
   const emailFromCookie = cookies().get("app_email")?.value || "";
   const emailForLink = detectedEmail || emailFromCookie;
@@ -755,7 +741,6 @@ export default async function Page({
       const ageStr = get("age");
       const num = Number((ageStr || "").toString().replace(",", "."));
       clientAge = isFinite(num) && num > 0 ? Math.floor(num) : undefined;
-
       const emailSheet = get("email") || get("adresse mail") || get("e-mail") || get("mail");
       if (!clientEmailDisplay && emailSheet) clientEmailDisplay = emailSheet;
     } catch {}
@@ -766,14 +751,14 @@ export default async function Page({
   const take = Math.max(1, Math.min(12, Number(searchParams?.take ?? defaultTake) || defaultTake));
   const reqOffset = Math.max(0, Number(searchParams?.offset ?? 0) || 0);
 
-  // Propositions coach paginées (avec clamp + message si dépassement)
+  // Propositions IA paginées
   const totalAi = aiSessions.length;
   const clampedAi = clampOffset(totalAi, take, reqOffset);
   const visibleAi = aiSessions.slice(clampedAi.offset, clampedAi.offset + take);
   const hasMoreAi = clampedAi.offset + take < totalAi;
   const showRanOutAi = clampedAi.emptyReason === "ranout" && !visibleAi.length;
 
-  // "Mes séances" — dédup + pagination clamp
+  // Mes séances — dédup + pagination
   const activeUniq = uniqueBy(activeAll, s => `${s.title}|${s.date}|${s.type}`);
   const totalActive = activeUniq.length;
   const clampedActive = clampOffset(totalActive, take, reqOffset);
@@ -801,21 +786,14 @@ export default async function Page({
   }
 
   return (
-    <div
-      className="container"
-      style={{ paddingTop: 24, paddingBottom: 32, fontSize: "var(--settings-fs, 12px)" }}
-    >
+    <div className="container" style={{ paddingTop: 24, paddingBottom: 32, fontSize: "var(--settings-fs, 12px)" }}>
       {/* Header */}
       <div className="page-header">
         <div>
           <h1 className="h1" style={{ fontSize: 22 }}>Mon profil</h1>
           <p className="lead">Gérez vos séances et gardez un historique clair de votre entraînement.</p>
         </div>
-        <a
-          href="/dashboard"
-          className="btn"
-          style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500, padding: "6px 10px", lineHeight: 1.2 }}
-        >
+        <a href="/dashboard" className="btn" style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500, padding: "6px 10px", lineHeight: 1.2 }}>
           ← Retour
         </a>
       </div>
@@ -826,8 +804,8 @@ export default async function Page({
           <div className="card" style={{ border: "1px solid rgba(16,185,129,.35)", background: "rgba(16,185,129,.08)", fontWeight: 600 }}>
             {
               searchParams.success === "programme" ? "✓ Programme généré."
-              : searchParams.success === "programme:dejainclus" ? "ℹ️ Cette séance existe déjà dans vos séances."
-              : searchParams.success === "programme:seance:enregistree" ? "✓ Séance enregistrée dans vos séances."
+              : searchParams.success === "programme:dejainclus" ? "ℹ️ Cette séance existe déjà."
+              : searchParams.success === "programme:seance:enregistree" ? "✓ Séance enregistrée dans « Séances enregistrées »."
               : "✓ Séance ajoutée."
             }
           </div>
@@ -849,37 +827,19 @@ export default async function Page({
         )}
       </div>
 
-      {/* Mes infos (dernière réponse questionnaire) */}
+      {/* Mes infos (dernière réponse) */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
           <h2>Mes infos</h2>
         </div>
-
         <div className="card">
           <div className="text-sm" style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-            <span>
-              <b>Prénom :</b>{" "}
-              {clientPrenom || <i className="text-gray-400">Non renseigné</i>}
-            </span>
-            <span>
-              <b>Age :</b>{" "}
-              {typeof clientAge === "number" ? `${clientAge} ans` : <i className="text-gray-400">Non renseigné</i>}
-            </span>
+            <span><b>Prénom :</b> {clientPrenom || <i className="text-gray-400">Non renseigné</i>}</span>
+            <span><b>Age :</b> {typeof clientAge === "number" ? `${clientAge} ans` : <i className="text-gray-400">Non renseigné</i>}</span>
           </div>
-
-          <div
-            className="text-sm"
-            style={{ marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
-            title={clientEmailDisplay || "Non renseigné"}
-          >
+          <div className="text-sm" style={{ marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={clientEmailDisplay || "Non renseigné"}>
             <b>Mail :</b>{" "}
-            {clientEmailDisplay ? (
-              <a href={`mailto:${clientEmailDisplay}`} className="underline">
-                {clientEmailDisplay}
-              </a>
-            ) : (
-              <span className="text-gray-400">Non renseigné</span>
-            )}
+            {clientEmailDisplay ? <a href={`mailto:${clientEmailDisplay}`} className="underline">{clientEmailDisplay}</a> : <span className="text-gray-400">Non renseigné</span>}
           </div>
         </div>
       </section>
@@ -889,7 +849,7 @@ export default async function Page({
         <div className="section-head" style={{ marginBottom: 8 }}>
           <h2 style={{ marginBottom: 6 }}>Séances proposées par l’IA Coach Files</h2>
           <p className="text-sm" style={{ color: "#6b7280" }}>
-            <b>Générées à partir de vos réponses au questionnaire.</b> Cliquez pour voir le programme détaillé par séance, créé par l’intelligence artificielle.
+            <b>Générées à partir de vos réponses au questionnaire.</b>
           </p>
           <div className="flex flex-col sm:flex-row gap-2 mt-3">
             <form action={buildProgrammeAction} method="post">
@@ -904,11 +864,7 @@ export default async function Page({
           <div className="card text-sm" style={{ color: "#6b7280" }}>
             <div className="flex items-center gap-3">
               <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted">🤖</span>
-              <span>
-                Pas encore de séances proposées.{" "}
-                <a className="link" href={questionnaireUrl}>Répondez au questionnaire</a>
-                , puis appuyez sur « Mettre à jour les propositions ».
-              </span>
+              <span>Pas encore de séances proposées. <a className="link" href={questionnaireUrl}>Répondez au questionnaire</a>, puis appuyez sur « Mettre à jour les propositions ».</span>
             </div>
           </div>
         ) : (
@@ -934,14 +890,10 @@ export default async function Page({
                             {s.intensity ? ` · intensité ${s.intensity}` : ""}
                           </div>
                         </div>
-                        <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>
-                          {s.type}
-                        </span>
+                        <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>{s.type}</span>
                       </summary>
 
-                      <div className="mt-3 text-sm leading-6" style={{ whiteSpace: "pre-wrap" }}>
-                        {coachText(s)}
-                      </div>
+                      <div className="mt-3 text-sm leading-6" style={{ whiteSpace: "pre-wrap" }}>{coachText(s)}</div>
 
                       <div className="mt-3">
                         <div className="text-sm font-medium mb-2">📝 Détail des exercices</div>
@@ -959,7 +911,8 @@ export default async function Page({
                         </ul>
                       </div>
 
-                      <div className="flex gap-8 mt-3">
+                      <div className="flex flex-wrap gap-8 mt-3">
+                        {/* Enregistre directement dans « Séances enregistrées » */}
                         <form action={saveSingleAiSessionAction} method="post">
                           <input type="hidden" name="id" value={s.id} />
                           <input type="hidden" name="title" value={s.title} />
@@ -967,11 +920,14 @@ export default async function Page({
                           <input type="hidden" name="date" value={s.date} />
                           {s.plannedMin ? <input type="hidden" name="plannedMin" value={String(s.plannedMin)} /> : null}
                           {s.note ? <input type="hidden" name="note" value={s.note} /> : null}
+                          {/* ⬇️ on persiste les exercices */}
+                          <input type="hidden" name="exercises" value={JSON.stringify(exercises)} />
                           <button className="btn" type="submit" style={{ background: "#111827", color: "white" }}>
-                            Enregistrer cette séance
+                            Enregistrer dans mes séances enregistrées
                           </button>
                         </form>
 
+                        {/* Option : ajouter aux séances actives et démarrer */}
                         <form action={addSessionAction} method="post">
                           <input type="hidden" name="title" value={s.title} />
                           <input type="hidden" name="type" value={s.type} />
@@ -989,34 +945,18 @@ export default async function Page({
             </ul>
 
             <div className="flex justify-between mt-3">
-              <a
-                href={urlWith({ take, offset: Math.max(0, clampedAi.offset - take) })}
-                className={`btn ${clampedAi.offset <= 0 ? "pointer-events-none opacity-50" : ""}`}
-                aria-disabled={clampedAi.offset <= 0}
-              >
-                ← Voir précédent
-              </a>
-              <a
-                href={urlWith({ take, offset: clampedAi.offset + take })}
-                className={`btn ${!hasMoreAi ? "pointer-events-none opacity-50" : ""}`}
-                aria-disabled={!hasMoreAi}
-              >
-                Voir plus →
-              </a>
+              <a href={urlWith({ take, offset: Math.max(0, clampedAi.offset - take) })} className={`btn ${clampedAi.offset <= 0 ? "pointer-events-none opacity-50" : ""}`} aria-disabled={clampedAi.offset <= 0}>← Voir précédent</a>
+              <a href={urlWith({ take, offset: clampedAi.offset + take })} className={`btn ${!hasMoreAi ? "pointer-events-none opacity-50" : ""}`} aria-disabled={!hasMoreAi}>Voir plus →</a>
             </div>
           </>
         )}
       </section>
 
-      {/* Mes séances (actives) */}
+      {/* Mes séances (actives) — sans le bloc “Créée le …” */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h2>Mes séances</h2>
-          {totalActive > take && (
-            <span className="text-xs" style={{ color: "#6b7280" }}>
-              Affichage de {Math.min(totalActive, clampedActive.offset + take)} / {totalActive}
-            </span>
-          )}
+          {totalActive > take && <span className="text-xs" style={{ color: "#6b7280" }}>Affichage de {Math.min(totalActive, clampedActive.offset + take)} / {totalActive}</span>}
         </div>
 
         {visibleActive.length === 0 ? (
@@ -1047,43 +987,45 @@ export default async function Page({
                           {s.note ? ` · ${s.note}` : ""}
                         </div>
                       </div>
-                      <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>
-                        {s.type}
-                      </span>
+                      <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>{s.type}</span>
                     </summary>
 
-                    <div className="mt-3 text-sm leading-6">
-                      <div>Créée le : <b>{fmtDateISO(s.createdAt)}</b></div>
-                      {s.startedAt ? <div>Démarrée : <b>{fmtDateISO(s.startedAt)}</b></div> : null}
-                      {s.plannedMin ? <div>Durée prévue : <b>{s.plannedMin} min</b></div> : null}
-                      {s.note ? <div>Note : <i>{s.note}</i></div> : null}
-                    </div>
+                    {/* ⬇️ Afficher le détail d'exercices s'il existe */}
+                    {Array.isArray(s.exercises) && s.exercises.length > 0 ? (
+                      <div className="mt-3">
+                        <div className="text-sm font-medium mb-2">📝 Détail des exercices</div>
+                        <ul className="list-disc pl-5 text-sm space-y-1">
+                          {s.exercises.map((ex, i) => (
+                            <li key={`${s.id}-ex-${i}`}>
+                              <b>{ex.name}</b>
+                              {typeof ex.sets === "number" ? ` — ${ex.sets} séries` : ""}
+                              {ex.reps ? ` · ${ex.reps}` : ""}
+                              {ex.durationSec ? ` · ${ex.durationSec}s` : ""}
+                              {ex.rest ? ` · repos ${ex.rest}` : ""}
+                              {ex.notes ? ` · ${ex.notes}` : ""}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : (
+                      <div className="mt-3 text-sm" style={{ color: "#6b7280" }}>
+                        Aucun détail d’exercices enregistré pour cette séance.
+                      </div>
+                    )}
                   </details>
                 </li>
               ))}
             </ul>
 
             <div className="flex justify-between mt-3">
-              <a
-                href={urlWith({ take, offset: Math.max(0, clampedActive.offset - take) })}
-                className={`btn ${clampedActive.offset <= 0 ? "pointer-events-none opacity-50" : ""}`}
-                aria-disabled={clampedActive.offset <= 0}
-              >
-                ← Voir précédent
-              </a>
-              <a
-                href={urlWith({ take, offset: clampedActive.offset + take })}
-                className={`btn ${!hasMoreActive ? "pointer-events-none opacity-50" : ""}`}
-                aria-disabled={!hasMoreActive}
-              >
-                Voir plus →
-              </a>
+              <a href={urlWith({ take, offset: Math.max(0, clampedActive.offset - take) })} className={`btn ${clampedActive.offset <= 0 ? "pointer-events-none opacity-50" : ""}`} aria-disabled={clampedActive.offset <= 0}>← Voir précédent</a>
+              <a href={urlWith({ take, offset: clampedActive.offset + take })} className={`btn ${!hasMoreActive ? "pointer-events-none opacity-50" : ""}`} aria-disabled={!hasMoreActive}>Voir plus →</a>
             </div>
           </>
         )}
       </section>
 
-      {/* Séances enregistrées (ex-passées) */}
+      {/* Séances enregistrées */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h2>Séances enregistrées</h2>
@@ -1113,28 +1055,32 @@ export default async function Page({
                           {s.plannedMin ? ` (prévu ${s.plannedMin} min)` : ""}
                         </div>
                       </div>
-                      <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>
-                        {s.type}
-                      </span>
+                      <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>{s.type}</span>
                     </summary>
 
-                    <div className="mt-3 text-sm leading-6">
-                      {s.startedAt ? <div>Démarrée : <b>{fmtDateISO(s.startedAt)}</b></div> : null}
-                      {s.note ? <div>Note : <i>{s.note}</i></div> : null}
-                    </div>
+                    {/* Détail d’exercices si dispos */}
+                    {Array.isArray(s.exercises) && s.exercises.length > 0 ? (
+                      <div className="mt-3">
+                        <div className="text-sm font-medium mb-2">📝 Détail des exercices</div>
+                        <ul className="list-disc pl-5 text-sm space-y-1">
+                          {s.exercises.map((ex, i) => (
+                            <li key={`${s.id}-ex-${i}`}>
+                              <b>{ex.name}</b>
+                              {typeof ex.sets === "number" ? ` — ${ex.sets} séries` : ""}
+                              {ex.reps ? ` · ${ex.reps}` : ""}
+                              {ex.durationSec ? ` · ${ex.durationSec}s` : ""}
+                              {ex.rest ? ` · repos ${ex.rest}` : ""}
+                              {ex.notes ? ` · ${ex.notes}` : ""}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
 
                     <div className="mt-3">
                       <form action={deleteSessionAction} method="post">
                         <input type="hidden" name="id" value={s.id} />
-                        <button
-                          className="btn"
-                          type="submit"
-                          style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
-                          aria-label={`Supprimer ${s.title}`}
-                          title="Supprimer"
-                        >
-                          Supprimer
-                        </button>
+                        <button className="btn" type="submit" style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }} title="Supprimer">Supprimer</button>
                       </form>
                     </div>
                   </details>
