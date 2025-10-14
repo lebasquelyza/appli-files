@@ -37,16 +37,19 @@ type AiSession = {
 type AiProgramme = { sessions: AiSession[] };
 
 /* ===================== Config ===================== */
-// API principale
+// API principale Files Coaching
 const API_BASE = process.env.FILES_COACHING_API_BASE || "https://files-coaching.com";
 const API_KEY  = process.env.FILES_COACHING_API_KEY || "";
 
-// Fallback Google Sheets (lecture des réponses)
+// Google Sheets (fallback)
 const SHEET_ID      = process.env.SHEET_ID      || "1HYLsmWXJ3NIRbxH0jOiXeBPiIwrL4d2sW6JKo7ZblYTMYu4RusIji627";
-const SHEET_RANGE   = process.env.SHEET_RANGE   || "Reponses!A1:Z1000"; // adapte si onglet différent
-const SHEET_API_KEY = process.env.SHEET_API_KEY || "";                  // requis si la feuille n'est pas publique
+const SHEET_RANGE   = process.env.SHEET_RANGE   || "Reponses!A1:K1000"; // ⟵ adapte le nom de l’onglet si besoin
+const SHEET_API_KEY = process.env.SHEET_API_KEY || "";
 
-/* ============ Fetch du programme IA depuis votre API ============ */
+// Questionnaire (pour le lien dans l’état vide)
+const QUESTIONNAIRE_BASE = process.env.FILES_COACHING_QUESTIONNAIRE_BASE || "https://questionnaire.files-coaching.com";
+
+/* ============ Fetch du programme IA depuis votre API (affichage) ============ */
 async function fetchAiProgramme(userId?: string): Promise<AiProgramme | null> {
   const uidFromCookie = cookies().get("fc_uid")?.value;
   const uid = userId || uidFromCookie || "me";
@@ -87,7 +90,7 @@ async function fetchAiProgramme(userId?: string): Promise<AiProgramme | null> {
       }));
       return { sessions };
     } catch {
-      // essaie l’endpoint suivant
+      // essaie endpoint suivant
     }
   }
   return null;
@@ -143,36 +146,46 @@ function typeBadgeClass(t: WorkoutType) {
 }
 
 /* ======== Google Sheets fallback (lecture & génération locale) ======== */
-function normalizeKey(s: string) {
-  return s.trim().toLowerCase()
-    .replace(/\s+/g, " ")
-    .replace(/[éèêë]/g, "e").replace(/[àâä]/g, "a")
-    .replace(/[îï]/g, "i").replace(/[ôö]/g, "o").replace(/[ùûü]/g, "u")
-    .replace(/[’']/g, "'").replace(/\?/g, "?");
-}
 async function fetchValues(sheetId: string, range: string, apiKey?: string) {
   const base = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(range)}`;
   const url = apiKey ? `${base}?key=${apiKey}` : base;
+
   const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) return null;
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    // remonte un statut explicite
+    throw new Error(`SHEETS_${res.status}${txt ? ":" + txt.slice(0, 60) : ""}`);
+  }
   return res.json();
 }
-type Answers = Record<string, string>;
-async function getAnswersForEmail(email: string): Promise<Answers | null> {
-  if (!email) return null;
-  const data = await fetchValues(SHEET_ID, SHEET_RANGE, SHEET_API_KEY || undefined);
-  if (!data) return null;
 
+type Answers = Record<string, string>;
+function norm(s: string) {
+  return s
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .replace(/[éèêë]/g, "e").replace(/[àâä]/g, "a")
+    .replace(/[îï]/g, "i").replace(/[ôö]/g, "o").replace(/[ùûü]/g, "u")
+    .replace(/[’']/g, "'");
+}
+
+async function getAnswersForEmail(email: string, sheetId: string, range: string, apiKey?: string): Promise<Answers | null> {
+  const data = await fetchValues(sheetId, range, apiKey);
   const values: string[][] = data.values || [];
   if (values.length < 2) return null;
 
-  const headers = values[0].map(normalizeKey);
-  const idxEmail = headers.findIndex(h => h === normalizeKey("adresse mail") || h === "email" || h === "e-mail");
+  const headers = values[0].map(norm);
+  const idxEmail =
+    headers.findIndex(h => h === "adresse mail" || h === "email" || h === "e-mail");
+
   if (idxEmail === -1) return null;
 
   for (let i = 1; i < values.length; i++) {
     const row = values[i];
-    if ((row[idxEmail] || "").trim().toLowerCase() === email.trim().toLowerCase()) {
+    if (!row) continue;
+    const cell = (row[idxEmail] || "").trim().toLowerCase();
+    if (cell && cell === email.trim().toLowerCase()) {
       const rec: Answers = {};
       headers.forEach((h, j) => { rec[h] = (row[j] ?? "").trim(); });
       return rec;
@@ -182,17 +195,17 @@ async function getAnswersForEmail(email: string): Promise<Answers | null> {
 }
 
 function generateSessionsFromAnswers(ans: Answers): AiSession[] {
-  const get = (k: string) => ans[normalizeKey(k)] || "";
+  const get = (k: string) => ans[norm(k)] || "";
 
-  const prenom = get("prénom");
+  const prenom = get("prénom") || get("prenom");
   const age = Number((get("age") || "").replace(",", "."));
   const poids = Number((get("poids") || "").replace(",", "."));
   const taille = Number((get("taille") || "").replace(",", "."));
   const niveau = get("niveau").toLowerCase() || "débutant";
   const objectif = get("objectif").toLowerCase();
-  const dispo = get("disponibilité").toLowerCase();
+  const dispo = get("disponibilité").toLowerCase() || get("disponibilite").toLowerCase();
   const lieu = get("a quel endroit v tu faire ta seance ?").toLowerCase();
-  const materiel = get("as tu du matériel a ta disposition").toLowerCase();
+  const materiel = get("as tu du matériel a ta disposition").toLowerCase() || get("as tu du materiel a ta disposition").toLowerCase();
 
   // fréquence
   let freq = 3;
@@ -239,7 +252,7 @@ function generateSessionsFromAnswers(ans: Answers): AiSession[] {
   if (noEquip) noteParts.push("Sans matériel");
   if (atGym) noteParts.push("Salle");
 
-  // calendrier
+  // calendrier simple
   const today = new Date();
   const nb = Math.max(1, Math.min(6, freq));
   const sessions: AiSession[] = [];
@@ -269,7 +282,7 @@ function generateSessionsFromAnswers(ans: Answers): AiSession[] {
 async function buildProgrammeAction() {
   "use server";
 
-  // 1) tentatives API côté files-coaching.com
+  // 1) Tente l’API Files Coaching
   const uid = cookies().get("fc_uid")?.value || "me";
   const endpoints = [
     `${API_BASE}/api/programme/build`,
@@ -289,7 +302,6 @@ async function buildProgrammeAction() {
         cache: "no-store",
       });
       if (res.ok) {
-        // succès API → on sort directement
         redirect("/dashboard/profile?success=programme");
       }
     } catch {
@@ -297,43 +309,52 @@ async function buildProgrammeAction() {
     }
   }
 
-  // 2) Fallback : génération locale depuis Google Sheets
+  // 2) Fallback Google Sheets (génération locale)
   const email = cookies().get("app_email")?.value || "";
   if (!email) {
-    redirect("/dashboard/profile?error=programme"); // pas d’email → impossible d’associer les réponses
+    redirect("/dashboard/profile?error=programme:noemail");
   }
 
-  const answers = await getAnswersForEmail(email);
-  if (!answers) {
-    redirect("/dashboard/profile?error=programme"); // aucune réponse trouvée pour cet email
+  try {
+    const answers = await getAnswersForEmail(email, SHEET_ID, SHEET_RANGE, SHEET_API_KEY || undefined);
+    if (!answers) {
+      redirect("/dashboard/profile?error=programme:nomatch");
+    }
+
+    const aiSessions = generateSessionsFromAnswers(answers!);
+
+    // pousser en local dans app_sessions
+    const jar = cookies();
+    const store = parseStore(jar.get("app_sessions")?.value);
+    const now = new Date().toISOString();
+
+    const mapped: Workout[] = aiSessions.map(s => ({
+      id: s.id,
+      title: s.title,
+      type: s.type,
+      status: "active",
+      date: s.date,
+      plannedMin: s.plannedMin,
+      note: s.note,
+      createdAt: now,
+      startedAt: undefined,
+      endedAt: undefined,
+    }));
+
+    const next: Store = { sessions: [...mapped, ...store.sessions].slice(0, 300) };
+    jar.set("app_sessions", JSON.stringify(next), {
+      path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365, httpOnly: false,
+    });
+
+    redirect("/dashboard/profile?success=programme");
+  } catch (e: any) {
+    const msg = String(e?.message || "");
+    if (msg.startsWith("SHEETS_")) {
+      const code = msg.split(":")[0].split("_")[1] || "err";
+      redirect(`/dashboard/profile?error=programme:sheetfetch:${code}`);
+    }
+    redirect("/dashboard/profile?error=programme:sheetfetch");
   }
-
-  const aiSessions = generateSessionsFromAnswers(answers!);
-
-  // on pousse les séances générées en local dans app_sessions
-  const jar = cookies();
-  const store = parseStore(jar.get("app_sessions")?.value);
-  const now = new Date().toISOString();
-
-  const mapped: Workout[] = aiSessions.map(s => ({
-    id: s.id,
-    title: s.title,
-    type: s.type,
-    status: "active",
-    date: s.date,
-    plannedMin: s.plannedMin,
-    note: s.note,
-    createdAt: now,
-    startedAt: undefined,
-    endedAt: undefined,
-  }));
-
-  const next: Store = { sessions: [...mapped, ...store.sessions].slice(0, 300) };
-  jar.set("app_sessions", JSON.stringify(next), {
-    path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365, httpOnly: false,
-  });
-
-  redirect("/dashboard/profile?success=programme"); // succès fallback
 }
 
 async function addSessionAction(formData: FormData) {
@@ -424,14 +445,13 @@ export default async function Page({
 
   const defaultDate = toYMD();
 
-  // Récupération du programme IA (si votre API en renvoie) – affichage informatif
+  // Récupération du programme IA (si votre API renvoie des séances) – affichage informatif
   const programme = await fetchAiProgramme();
   const aiSessions = programme?.sessions ?? [];
 
-  // URL questionnaire cliquable (avec email si dispo)
-  const QUESTIONNAIRE_BASE = process.env.FILES_COACHING_QUESTIONNAIRE_BASE || "https://questionnaire.files-coaching.com";
-  const email = cookies().get("app_email")?.value || "";
-  const questionnaireUrl = email ? `${QUESTIONNAIRE_BASE}?email=${encodeURIComponent(email)}` : QUESTIONNAIRE_BASE;
+  // URL questionnaire (avec email si dispo)
+  const emailCookie = cookies().get("app_email")?.value || "";
+  const questionnaireUrl = emailCookie ? `${QUESTIONNAIRE_BASE}?email=${encodeURIComponent(emailCookie)}` : QUESTIONNAIRE_BASE;
 
   return (
     <div
@@ -490,6 +510,30 @@ export default async function Page({
         )}
       </div>
 
+      {/* Mini-capture de l'email si manquant (pour le fallback Sheets) */}
+      {!emailCookie && (
+        <div className="card" style={{ marginTop: 12 }}>
+          <form
+            action={async (fd: FormData) => {
+              "use server";
+              const email = (fd.get("email") || "").toString().trim();
+              if (email) {
+                cookies().set("app_email", email, { path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365, httpOnly: false });
+                redirect("/dashboard/profile");
+              } else {
+                redirect("/dashboard/profile?error=noemail");
+              }
+            }}
+            className="flex flex-col sm:flex-row gap-2"
+          >
+            <input className="input" type="email" name="email" placeholder="Votre email (pour lier vos réponses Google Sheet)" required />
+            <button className="btn" type="submit" style={{ background: "#fff", border: "1px solid #d1d5db" }}>
+              Enregistrer l’email
+            </button>
+          </form>
+        </div>
+      )}
+
       {/* Ajouter une séance (manuel) */}
       <div className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
@@ -547,7 +591,7 @@ export default async function Page({
         <div className="section-head" style={{ marginBottom: 8 }}>
           <h2 style={{ marginBottom: 6 }}>Mon programme (personnalisé par l’IA)</h2>
 
-        {/* Un seul CTA (responsive) */}
+          {/* Un seul CTA (responsive) */}
           <div className="flex flex-col sm:flex-row gap-2 mt-3">
             <form action={buildProgrammeAction}>
               <button className="btn btn-dash" type="submit" style={{ width: "100%" }}>
@@ -655,3 +699,4 @@ export default async function Page({
     </div>
   );
 }
+
