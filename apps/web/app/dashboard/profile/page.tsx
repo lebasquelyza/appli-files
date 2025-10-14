@@ -388,12 +388,14 @@ async function buildProgrammeAction() {
 
     redirect("/dashboard/profile?success=programme");
   } catch (e: any) {
-    const msg = String(e?.message || "");
+    // >>> Afficher l'erreur complète (message détaillé) dans l'UI
+    const msg = String(e?.message || "unknown");
+    const encoded = encodeURIComponent(msg);
     if (msg.startsWith("SHEETS_")) {
-      const code = msg.split(":")[0].split("_")[1] || "err";
-      redirect(`/dashboard/profile?error=programme:sheetfetch:${code}`);
+      // Avant: on ne renvoyait que le code (ex: 404). Maintenant on renvoie le message entier.
+      redirect(`/dashboard/profile?error=programme:sheetfetch:${encoded}`);
     }
-    redirect("/dashboard/profile?error=programme:sheetfetch");
+    redirect(`/dashboard/profile?error=programme:sheetfetch:${encoded}`);
   }
 }
 
@@ -511,6 +513,20 @@ export default async function Page({
     } catch {}
   }
 
+  // Préparer message d'erreur lisible si on a "programme:sheetfetch:<message encodé>"
+  const rawError = searchParams?.error || "";
+  let displayedError = rawError;
+  if (rawError.startsWith("programme:sheetfetch:")) {
+    // tout ce qui suit le deuxième ":" correspond au message complet encodé
+    const parts = rawError.split(":");
+    const full = parts.slice(2).join(":"); // garde le message complet
+    try {
+      displayedError = decodeURIComponent(full);
+    } catch {
+      displayedError = full; // au cas où
+    }
+  }
+
   return (
     <div
       className="container"
@@ -562,8 +578,9 @@ export default async function Page({
           </div>
         )}
         {!!searchParams?.error && (
-          <div className="card" style={{ border: "1px solid rgba(239,68,68,.35)", background: "rgba(239,68,68,.08)", fontWeight: 600 }}>
-            ⚠️ Erreur : {searchParams.error}
+          <div className="card" style={{ border: "1px solid rgba(239,68,68,.35)", background: "rgba(239,68,68,.08)", fontWeight: 600, whiteSpace: "pre-wrap" }}>
+            {/* Affiche le message complet décodé si dispo */}
+            ⚠️ Erreur : {displayedError}
           </div>
         )}
       </div>
@@ -601,7 +618,7 @@ export default async function Page({
         <div className="section-head" style={{ marginBottom: 8 }}>
           <h2 style={{ marginBottom: 6 }}>Mon programme (personnalisé par l’IA)</h2>
 
-          {/* Un seul CTA */}
+        {/* Un seul CTA */}
           <div className="flex flex-col sm:flex-row gap-2 mt-3">
             <form action={buildProgrammeAction}>
               <button className="btn btn-dash" type="submit" style={{ width: "100%" }}>
