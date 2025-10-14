@@ -226,6 +226,7 @@ async function fetchValues(sheetId: string, range: string, _apiKey?: string) {
   throw new Error(`SHEETS_${lastStatus}:${hint} [url=${lastUrl}] [ct=${lastCT}] [body~=${bodyPreview}]`);
 }
 
+/* ======== Normalisation (questionnaire) ======== */
 type Answers = Record<string, string>;
 function norm(s: string) {
   return s
@@ -781,7 +782,6 @@ export default async function Page({
 }
 
 /* ======== Génération depuis Google Sheets (inchangée) ======== */
-type Answers = Record<string, string>;
 const NO_HEADER_COLS = { nom: 0, prenom: 1, age: 2, email: 10 }; // A,B,C,K
 async function getAnswersForEmail(email: string, sheetId: string, range: string): Promise<Answers | null> {
   const data = await fetchValues(sheetId, range);
