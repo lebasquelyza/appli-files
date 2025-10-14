@@ -159,7 +159,6 @@ function typeBadgeClass(t: WorkoutType) {
 }
 
 /* ======== Google Sheets (PUBLIC via lien) ======== */
-/** Lit l’onglet via plusieurs endpoints CSV (export/gviz/pub) + détecte HTML. */
 async function fetchValues(sheetId: string, range: string, _apiKey?: string) {
   const sheetName = (range.split("!")[0] || "").replace(/^'+|'+$/g, "");
   if (!sheetId) throw new Error("SHEETS_CONFIG_MISSING");
@@ -189,7 +188,6 @@ async function fetchValues(sheetId: string, range: string, _apiKey?: string) {
       const looksHtml = text.trim().startsWith("<") || lastCT.includes("text/html");
       if (looksHtml) continue;
 
-      // Parse CSV robuste
       const rows: string[][] = [];
       const lines = text.split(/\r?\n/).filter(l => l.trim() !== "");
       for (const line of lines) {
@@ -240,8 +238,7 @@ function norm(s: string) {
 }
 
 /* ======== Lecture des réponses par e-mail (avec/sans en-têtes) ======== */
-/* Indices pour le mode "sans en-têtes" (A=0, B=1, C=2, ..., K=10) */
-const NO_HEADER_COLS = { nom: 0, prenom: 1, age: 2, email: 10 };
+const NO_HEADER_COLS = { nom: 0, prenom: 1, age: 2, email: 10 }; // A,B,C,K
 
 async function getAnswersForEmail(email: string, sheetId: string, range: string): Promise<Answers | null> {
   const data = await fetchValues(sheetId, range);
@@ -252,21 +249,19 @@ async function getAnswersForEmail(email: string, sheetId: string, range: string)
   const headerCandidates = ["adresse mail", "email", "e-mail", "mail"];
   const hasHeader = firstRowNorm.some(h => headerCandidates.includes(h));
 
-  let startRow = 0;
   let headers: string[] = [];
   let idxEmail = -1;
 
   if (hasHeader) {
     headers = firstRowNorm;
     idxEmail = headers.findIndex(h => headerCandidates.includes(h));
-    startRow = 1; // data commence en ligne 2
   } else {
     const width = Math.max(values[0]?.length || 0, NO_HEADER_COLS.email + 1);
     headers = Array.from({ length: width }, (_, i) => `col${i}`);
-    headers[NO_HEADER_COLS.nom]    = "nom";
-    headers[NO_HEADER_COLS.prenom] = "prenom";
-    headers[NO_HEADER_COLS.age]    = "age";
-    headers[NO_HEADER_COLS.email]  = "email";
+    headers[NO_HEADER_COLS.nom]   = "nom";
+    headers[NO_HEADER_COLS.prenom]= "prenom";
+    headers[NO_HEADER_COLS.age]   = "age";
+    headers[NO_HEADER_COLS.email] = "email";
     idxEmail = NO_HEADER_COLS.email;
   }
 
@@ -282,10 +277,10 @@ async function getAnswersForEmail(email: string, sheetId: string, range: string)
         const key = headers[j] || `col${j}`;
         rec[key] = (row[j] ?? "").trim();
       }
-      rec["nom"]    = rec["nom"]    || rec["name"] || rec["last name"] || rec[`col${NO_HEADER_COLS.nom}`]    || "";
-      rec["prenom"] = rec["prenom"] || rec["prénom"] || rec["first name"] || rec[`col${NO_HEADER_COLS.prenom}`] || "";
+      rec["nom"]    = rec["nom"]    || rec[`col${NO_HEADER_COLS.nom}`]    || "";
+      rec["prenom"] = rec["prenom"] || rec[`col${NO_HEADER_COLS.prenom}`] || "";
       rec["age"]    = rec["age"]    || rec[`col${NO_HEADER_COLS.age}`]    || "";
-      rec["email"]  = rec["email"]  || rec["adresse mail"] || rec["e-mail"] || rec[`col${NO_HEADER_COLS.email}`]  || "";
+      rec["email"]  = rec["email"]  || rec[`col${NO_HEADER_COLS.email}`]  || "";
       return rec;
     }
   }
@@ -454,7 +449,7 @@ async function buildProgrammeAction() {
 
     redirect("/dashboard/profile?success=programme");
   } catch (e: any) {
-    if (isNextRedirect(e)) throw e; // ne pas intercepter les redirects
+    if (isNextRedirect(e)) throw e;
     const msg = String(e?.message || "unknown");
     const encoded = encodeURIComponent(msg);
     redirect(`/dashboard/profile?error=programme:sheetfetch:${encoded}`);
@@ -547,11 +542,9 @@ export default async function Page({
     .filter(s => s.status === "done")
     .sort((a, b) => (b.endedAt || "").localeCompare(a.endedAt || ""));
 
-  // Affichage informatif si votre API renvoie déjà un programme
   const programme = await fetchAiProgramme();
   const aiSessions = programme?.sessions ?? [];
 
-  // On NE set PAS de cookie ici (évite l’erreur serveur). On lit juste pour préremplir le lien.
   const detectedEmail = await getSignedInEmail();
   const emailFromCookie = cookies().get("app_email")?.value || "";
   const emailForLink = detectedEmail || emailFromCookie;
@@ -560,7 +553,7 @@ export default async function Page({
     ? `${QUESTIONNAIRE_BASE}?email=${encodeURIComponent(emailForLink)}`
     : QUESTIONNAIRE_BASE;
 
-  // --- Mes infos (Prénom : … ,,,,  Age : … ,,,,  + ligne Mail) ---
+  // Mes infos (Prénom + Age + Mail)
   const clientEmailForInfos = emailForLink || "";
   let clientPrenom = "", clientAge: number | undefined, clientEmailDisplay = clientEmailForInfos;
 
@@ -578,7 +571,6 @@ export default async function Page({
     } catch {}
   }
 
-  // Préparer message d'erreur lisible si on a "programme:sheetfetch:<message encodé>"
   const rawError = searchParams?.error || "";
   let displayedError = rawError;
   if (rawError.startsWith("programme:sheetfetch:")) {
@@ -637,45 +629,31 @@ export default async function Page({
         </div>
 
         <div className="card">
-          {/* Ligne 1 : Prénom + Age avec les virgules demandées */}
-          <div
-            className="text-sm"
-            style={{
-              display: "flex",
-              gap: 16,
-              flexWrap: "wrap",
-            }}
-          >
+          {/* Ligne 1 : Prénom + Age */}
+          <div className="text-sm" style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
             <span>
               <b>Prénom :</b>{" "}
-              {clientPrenom || <i className="text-gray-400">Non renseigné</i>}{" "}
-              ,,,,
+              {clientPrenom || <i className="text-gray-400">Non renseigné</i>}
             </span>
             <span>
               <b>Age :</b>{" "}
-              {typeof clientAge === "number" ? `${clientAge} ans` : <i className="text-gray-400">Non renseigné</i>}{" "}
-              ,,,, 
+              {typeof clientAge === "number" ? `${clientAge} ans` : <i className="text-gray-400">Non renseigné</i>}
             </span>
           </div>
 
           {/* Ligne 2 : Mail (sur une seule ligne) */}
           <div
             className="text-sm"
-            style={{
-              marginTop: 6,
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
+            style={{ marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
             title={clientEmailDisplay || "Non renseigné"}
           >
             <b>Mail :</b>{" "}
             {clientEmailDisplay ? (
               <a href={`mailto:${clientEmailDisplay}`} className="underline">
-                ,,,, {clientEmailDisplay} ,,,,
+                {clientEmailDisplay}
               </a>
             ) : (
-              <span className="text-gray-400">,,,, Non renseigné ,,,,</span>
+              <span className="text-gray-400">Non renseigné</span>
             )}
           </div>
         </div>
@@ -736,7 +714,7 @@ export default async function Page({
         )}
       </section>
 
-      {/* NOUVEAU : Mes séances actives / à venir (ce que “Créer mon programme” a ajouté) */}
+      {/* Mes séances (actives / à venir) */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
           <h2>Mes séances (actives / à venir)</h2>
