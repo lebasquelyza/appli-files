@@ -714,42 +714,48 @@ export default async function Page({
         )}
       </section>
 
-      {/* Mes séances (actives / à venir) */}
+      {/* Mon programme (remplace "Mes séances (actives / à venir)") */}
       <section className="section" style={{ marginTop: 12 }}>
-        <div className="section-head" style={{ marginBottom: 8 }}>
-          <h2>Mes séances (actives / à venir)</h2>
-          {active.length > 12 && <span className="text-xs" style={{ color: "#6b7280" }}>Affichage des 12 dernières</span>}
+        <div className="section-head" style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <h2>Mon programme</h2>
+          {aiSessions.length > 12 && (
+            <span className="text-xs" style={{ color: "#6b7280" }}>Affichage des 12 prochaines</span>
+          )}
         </div>
 
-        {active.length === 0 ? (
+        {aiSessions.length === 0 ? (
           <div className="card text-sm" style={{ color: "#6b7280" }}>
             <div className="flex items-center gap-3">
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted">📅</span>
-              <span>Aucune séance active pour l’instant.</span>
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted">🤖</span>
+              <span>
+                Pas encore de séances générées.{" "}
+                <a className="link" href={questionnaireUrl}>Répondez au questionnaire</a>
+                , puis appuyez sur « Créer mon programme ».
+              </span>
             </div>
           </div>
         ) : (
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {active.slice(0, 12).map((s) => (
-              <article key={s.id} className="card" style={{ transition: "box-shadow .2s" }}>
-                <div className="flex items-start justify-between gap-3">
-                  <strong style={{ fontSize: 16 }}>{s.title}</strong>
-                  <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>
-                    {s.type}
-                  </span>
+          <ul className="card divide-y">
+            {aiSessions.slice(0, 12).map((s) => (
+              <li key={s.id} className="py-3 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="font-medium truncate" style={{ fontSize: 16 }}>{s.title}</div>
+                  <div className="text-sm" style={{ color: "#6b7280" }}>
+                    Prévu le <b style={{ color: "inherit" }}>{fmtDateYMD(s.date)}</b>
+                    {s.plannedMin ? ` · ${s.plannedMin} min` : ""}
+                    {s.intensity ? ` · intensité ${s.intensity}` : ""}
+                  </div>
                 </div>
-                <div className="text-sm" style={{ color: "#6b7280", marginTop: 8 }}>
-                  Prévu le <b style={{ color: "inherit" }}>{fmtDateYMD(s.date)}</b>
-                  {s.plannedMin ? ` · ${s.plannedMin} min` : ""}
-                  {s.note ? (<><br />Note : <i>{s.note}</i></>) : null}
-                </div>
-              </article>
+                <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>
+                  {s.type}
+                </span>
+              </li>
             ))}
-          </div>
+          </ul>
         )}
       </section>
 
-      {/* Mes séances passées */}
+      {/* Mes séances passées (compact) */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h2>Mes séances passées</h2>
@@ -764,39 +770,35 @@ export default async function Page({
             </div>
           </div>
         ) : (
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          <ul className="card divide-y">
             {past.slice(0, 12).map((s) => {
               const mins = minutesBetween(s.startedAt, s.endedAt);
               return (
-                <article key={s.id} className="card" style={{ transition: "box-shadow .2s" }}>
-                  <div className="flex items-start justify-between gap-3">
-                    <strong style={{ fontSize: 16 }}>{s.title}</strong>
-                    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>
-                      {s.type}
-                    </span>
+                <li key={s.id} className="py-3 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-medium truncate" style={{ fontSize: 16 }}>{s.title}</div>
+                    <div className="text-sm" style={{ color: "#6b7280" }}>
+                      {fmtDateISO(s.endedAt)}
+                      {mins ? ` · ${mins} min` : ""}
+                      {s.plannedMin ? ` (prévu ${s.plannedMin} min)` : ""}
+                    </div>
                   </div>
-                  <div className="text-sm" style={{ color: "#6b7280", marginTop: 8 }}>
-                    Le <b style={{ color: "inherit" }}>{fmtDateISO(s.endedAt)}</b>
-                    {mins ? ` · ${mins} min` : ""}
-                    {s.plannedMin ? ` (prévu ${s.plannedMin} min)` : ""}
-                    {s.note ? (<><br />Note : <i>{s.note}</i></>) : null}
-                  </div>
-                  <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-                    <form action={deleteSessionAction}>
-                      <input type="hidden" name="id" value={s.id} />
-                      <button
-                        className="btn"
-                        type="submit"
-                        style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
-                      >
-                        Supprimer
-                      </button>
-                    </form>
-                  </div>
-                </article>
+                  <form action={deleteSessionAction} className="shrink-0">
+                    <input type="hidden" name="id" value={s.id} />
+                    <button
+                      className="btn"
+                      type="submit"
+                      style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
+                      aria-label={`Supprimer ${s.title}`}
+                      title="Supprimer"
+                    >
+                      Supprimer
+                    </button>
+                  </form>
+                </li>
               );
             })}
-          </div>
+          </ul>
         )}
       </section>
     </div>
