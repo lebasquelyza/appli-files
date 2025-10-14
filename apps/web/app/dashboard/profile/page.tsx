@@ -33,6 +33,10 @@ type AiSession = {
   note?: string;
   intensity?: "faible" | "modérée" | "élevée";
   recommendedBy?: string;
+  // Possibles payloads API
+  exercises?: any[];
+  blocks?: any[];
+  plan?: any;
 };
 type AiProgramme = { sessions: AiSession[] };
 
@@ -62,7 +66,7 @@ async function getSignedInEmail(): Promise<string> {
   return cookies().get("app_email")?.value || "";
 }
 
-/* ============ Fetch du programme IA (affichage depuis votre API) ============ */
+/* ============ Fetch du programme IA (affichage depuis Files Coaching API) ============ */
 async function fetchAiProgramme(userId?: string): Promise<AiProgramme | null> {
   const uidFromCookie = cookies().get("fc_uid")?.value;
   const uid = userId || uidFromCookie || "me";
@@ -99,7 +103,10 @@ async function fetchAiProgramme(userId?: string): Promise<AiProgramme | null> {
             : undefined,
         note: typeof r.note === "string" ? r.note : typeof r.notes === "string" ? r.notes : undefined,
         intensity: r.intensity as any,
-        recommendedBy: r.recommendedBy ?? r.model ?? "AI",
+        recommendedBy: r.recommendedBy ?? r.model ?? "Coach Files",
+        exercises: Array.isArray(r.exercises) ? r.exercises : undefined,
+        blocks: Array.isArray(r.blocks) ? r.blocks : undefined,
+        plan: r.plan,
       }));
       return { sessions };
     } catch (e: any) {
@@ -246,7 +253,7 @@ function isNextRedirect(e: any) {
   } catch { return false; }
 }
 
-/* ===================== “Style coach” helper ===================== */
+/* ===================== Coach text & exercices ===================== */
 function coachText(s: AiSession) {
   const min = s.plannedMin ? `${s.plannedMin} min` : "25–45 min";
   const intens = s.intensity ? s.intensity : "modérée";
@@ -256,11 +263,77 @@ function coachText(s: AiSession) {
   : s.type === "hiit" ? "Objectif : pics d’intensité courts, récupération active."
   : "Objectif : mobilité et contrôle postural.";
   const tips =
-    s.type === "muscu" ? "Garde 2 reps en réserve sur les dernières séries."
+    s.type === "muscu" ? "Garde ~2 reps en réserve sur les dernières séries."
   : s.type === "cardio" ? "Respiration nasale si possible, finis en respiration contrôlée."
-  : s.type === "hiit" ? "Reste explosif, qualité > quantité. Coupe si la technique se dégrade."
+  : s.type === "hiit" ? "Qualité > quantité. Coupe si la technique se dégrade."
   : "Mouvement lent, fluide, sans douleur — amplitude progressive.";
   return `🧭 ${intro}\n⏱️ Durée: ${min} · Intensité: ${intens}\n💡 Conseils: ${tips}${s.note ? `\n📝 Note: ${s.note}` : ""}`;
+}
+
+type NormalizedExercise = { name: string; sets?: number; reps?: string | number; rest?: string; durationSec?: number; notes?: string };
+function fromApiExercises(s: AiSession): NormalizedExercise[] | null {
+  // Essaye plusieurs schémas courants
+  const raw = s.exercises || s.blocks || s.plan?.exercises || s.plan?.blocks;
+  if (!Array.isArray(raw)) return null;
+
+  const out: NormalizedExercise[] = [];
+  for (const it of raw) {
+    const name = it.name || it.title || it.exercise || it.mov || it.movename;
+    if (!name) continue;
+    const sets = it.sets ?? it.series ?? it.nbSets ?? it.rounds;
+    const reps = it.reps ?? it.rep ?? it.nbReps ?? it.time ?? it.duration ?? it.seconds;
+    const rest = it.rest ?? it.rest_sec ?? it.recup ?? it.pause;
+    const notes = it.notes ?? it.note ?? it.tip;
+    out.push({
+      name: String(name),
+      sets: typeof sets === "number" ? sets : undefined,
+      reps: typeof reps === "number" ? reps : typeof reps === "string" ? reps : undefined,
+      rest: typeof rest === "number" ? `${rest}s` : rest,
+      durationSec: typeof it.duration === "number" ? it.duration : typeof it.seconds === "number" ? it.seconds : undefined,
+      notes: typeof notes === "string" ? notes : undefined,
+    });
+  }
+  return out.length ? out : null;
+}
+
+function fallbackExercises(s: AiSession): NormalizedExercise[] {
+  const inten = s.intensity || "modérée";
+  const sets = inten === "élevée" ? 4 : inten === "modérée" ? 3 : 2;
+
+  if (s.type === "muscu") {
+    return [
+      { name: "Squat goblet", sets, reps: "8–12", rest: "60–90s" },
+      { name: "Pompes", sets, reps: "8–12", rest: "60–90s" },
+      { name: "Rowing haltère", sets, reps: "10–12", rest: "60–90s" },
+      { name: "Fentes marchées", sets, reps: "10 pas/jambe", rest: "60–90s" },
+      { name: "Gainage planche", sets: sets - 1, reps: "30–45s", rest: "45–60s" },
+    ];
+  }
+  if (s.type === "cardio") {
+    return [
+      { name: "Échauffement facile", sets: 1, reps: "8–10 min", rest: "—" },
+      { name: "Zone 2 soutenue", sets: 1, reps: `${s.plannedMin ? Math.max(12, s.plannedMin - 15) : 25} min`, rest: "—" },
+      { name: "Retour au calme + mobilité", sets: 1, reps: "5–10 min", rest: "—" },
+    ];
+  }
+  if (s.type === "hiit") {
+    return [
+      { name: "Circuit HIIT (on/off)", sets: 6, reps: "30s/30s", rest: "90s entre sets" },
+      { name: "Circuit HIIT (on/off)", sets: 6, reps: "30s/30s", rest: "90s entre sets" },
+      { name: "Retour au calme", sets: 1, reps: "5–8 min", rest: "—" },
+    ];
+  }
+  // mobilité
+  return [
+    { name: "Ouverture hanches (90/90)", sets, reps: "8–10/side", rest: "30–45s" },
+    { name: "T-spine rotations", sets, reps: "8–10/side", rest: "30–45s" },
+    { name: "Down-Dog → Cobra", sets, reps: "6–8", rest: "30–45s" },
+    { name: "Respiration diaphragmatique", sets: 1, reps: "3–4 min", rest: "—" },
+  ];
+}
+
+function getExercises(s: AiSession): NormalizedExercise[] {
+  return fromApiExercises(s) ?? fallbackExercises(s);
 }
 
 /* ===================== Actions serveur ===================== */
@@ -298,6 +371,7 @@ async function buildProgrammeAction() {
     }
   }
 
+  // Fallback Sheets pour générer localement si pas d'API
   if (!email) {
     redirect("/dashboard/profile?error=programme:noemail");
   }
@@ -450,11 +524,156 @@ async function deleteSessionAction(formData: FormData) {
   redirect("/dashboard/profile?deleted=1");
 }
 
+/* ======== Lecture des réponses par e-mail (avec/sans en-têtes) ======== */
+const NO_HEADER_COLS = { nom: 0, prenom: 1, age: 2, email: 10 }; // A,B,C,K
+async function getAnswersForEmail(email: string, sheetId: string, range: string): Promise<Answers | null> {
+  const data = await fetchValues(sheetId, range);
+  const values: string[][] = data.values || [];
+  if (values.length === 0) return null;
+
+  const firstRowNorm = values[0].map(norm);
+  const headerCandidates = ["adresse mail", "email", "e-mail", "mail"];
+  const hasHeader = firstRowNorm.some(h => headerCandidates.includes(h));
+
+  let headers: string[] = [];
+  let idxEmail = -1;
+
+  if (hasHeader) {
+    headers = firstRowNorm;
+    idxEmail = headers.findIndex(h => headerCandidates.includes(h));
+  } else {
+    const width = Math.max(values[0]?.length || 0, NO_HEADER_COLS.email + 1);
+    headers = Array.from({ length: width }, (_, i) => `col${i}`);
+    headers[NO_HEADER_COLS.nom]   = "nom";
+    headers[NO_HEADER_COLS.prenom]= "prenom";
+    headers[NO_HEADER_COLS.age]   = "age";
+    headers[NO_HEADER_COLS.email] = "email";
+    idxEmail = NO_HEADER_COLS.email;
+  }
+
+  if (idxEmail === -1) return null;
+
+  for (let i = hasHeader ? 1 : 0; i < values.length; i++) {
+    const row = values[i] || [];
+    const cell = (row[idxEmail] || "").trim().toLowerCase();
+    if (!cell) continue;
+    if (cell === email.trim().toLowerCase()) {
+      const rec: Answers = {};
+      for (let j = 0; j < row.length; j++) {
+        const key = headers[j] || `col${j}`;
+        rec[key] = (row[j] ?? "").trim();
+      }
+      rec["nom"]    = rec["nom"]    || rec[`col${NO_HEADER_COLS.nom}`]    || "";
+      rec["prenom"] = rec["prenom"] || rec[`col${NO_HEADER_COLS.prenom}`] || "";
+      rec["age"]    = rec["age"]    || rec[`col${NO_HEADER_COLS.age}`]    || "";
+      rec["email"]  = rec["email"]  || rec[`col${NO_HEADER_COLS.email}`]  || "";
+      return rec;
+    }
+  }
+  return null;
+}
+
+/* ======== Inférence disponibilité (combien de séances à proposer) ======== */
+function inferAvailability(ans: Answers | null): number {
+  if (!ans) return 3;
+  const dispoRaw = (ans[norm("disponibilité")] || ans[norm("disponibilite")] || ans["disponibilité"] || ans["disponibilite"] || "").toLowerCase();
+  const digits = dispoRaw.match(/\d+/g);
+  if (digits?.length) {
+    const n = parseInt(digits[0], 10);
+    if (Number.isFinite(n)) return Math.max(1, Math.min(6, n));
+  }
+  if (/(lun|mar|mer|jeu|ven|sam|dim)/.test(dispoRaw)) {
+    const n = dispoRaw.split(/[ ,;\/-]+/).filter(Boolean).length;
+    return Math.max(1, Math.min(6, n));
+  }
+  return 3;
+}
+
+/* ======== Génération depuis Google Sheets (fallback local) ======== */
+function generateSessionsFromAnswers(ans: Answers): AiSession[] {
+  const get = (k: string) => ans[norm(k)] || ans[k] || "";
+
+  const prenom = get("prénom") || get("prenom");
+  const age = Number((get("age") || "").replace(",", "."));
+  const poids = Number((get("poids") || "").replace(",", "."));
+  const taille = Number((get("taille") || "").replace(",", "."));
+  const niveau = (get("niveau") || "débutant").toLowerCase();
+  const objectif = (get("objectif") || "").toLowerCase();
+  const dispo = (get("disponibilité") || get("disponibilite") || "").toLowerCase();
+  const lieu = (get("a quel endroit v tu faire ta seance ?") || "").toLowerCase();
+  const materiel = (get("as tu du matériel a ta disposition") || get("as tu du materiel a ta disposition") || "").toLowerCase();
+
+  let freq = 3;
+  const digits = dispo.match(/\d+/g);
+  if (digits?.length) freq = Math.max(1, Math.min(6, parseInt(digits[0], 10)));
+  else if (/(lun|mar|mer|jeu|ven|sam|dim)/.test(dispo)) {
+    freq = Math.max(1, Math.min(6, dispo.split(/[ ,;\/-]+/).filter(Boolean).length));
+  }
+
+  const baseMin =
+    niveau.includes("debut") || niveau.includes("début") ? 25 :
+    niveau.includes("inter") ? 35 : 45;
+
+  let intensity: "faible" | "modérée" | "élevée" =
+    (niveau.includes("debut") || niveau.includes("début")) ? "faible" :
+    (niveau.includes("inter")) ? "modérée" : "élevée";
+
+  if (isFinite(age) && age >= 55) intensity = intensity === "élevée" ? "modérée" : "faible";
+
+  const noEquip = /(aucun|non|sans)/.test(materiel) || materiel === "";
+  const atGym = /(salle|gym|fitness)/.test(lieu);
+
+  const muscuPossible = !noEquip || atGym;
+  let pool: WorkoutType[] = ["cardio", "hiit", "mobilité"];
+  if (muscuPossible) pool = ["muscu", "cardio", "hiit"];
+
+  if (objectif.includes("perte") || objectif.includes("mince") || objectif.includes("seche")) {
+    pool = muscuPossible ? ["hiit", "cardio", "muscu"] : ["hiit", "cardio", "mobilité"];
+  } else if (objectif.includes("prise") || objectif.includes("muscle") || objectif.includes("force")) {
+    pool = muscuPossible ? ["muscu", "muscu", "cardio"] : ["hiit", "cardio", "mobilité"];
+  } else if (objectif.includes("endurance") || objectif.includes("cardio")) {
+    pool = ["cardio", "hiit", "mobilité"];
+  }
+
+  const noteParts: string[] = [];
+  if (prenom) noteParts.push(`Pour ${prenom}`);
+  if (isFinite(poids) && isFinite(taille) && taille > 0) {
+    const imc = Math.round((poids / Math.pow(taille/100, 2)) * 10) / 10;
+    if (isFinite(imc)) noteParts.push(`IMC: ${imc}`);
+  }
+  if (noEquip) noteParts.push("Sans matériel");
+  if (atGym) noteParts.push("Salle");
+
+  const today = new Date();
+  const nb = Math.max(1, Math.min(6, freq));
+  const sessions: AiSession[] = [];
+  for (let i = 0; i < nb; i++) {
+    const date = new Date(today);
+    date.setDate(today.getDate() + i * Math.ceil(7 / nb));
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    const type = pool[i % pool.length];
+
+    sessions.push({
+      id: `ai-${y}${m}${d}-${i}`,
+      title: `${objectif.includes("perte") ? "Brûle-graisse" : objectif.includes("prise") || objectif.includes("force") ? "Force/Muscu" : objectif.includes("endurance") || objectif.includes("cardio") ? "Endurance" : "Full body"} — Séance ${i + 1}`,
+      type,
+      date: `${y}-${m}-${d}`,
+      plannedMin: baseMin,
+      intensity,
+      note: noteParts.join(" · ") || undefined,
+      recommendedBy: "Coach Files",
+    });
+  }
+  return sessions;
+}
+
 /* ===================== Page ===================== */
 export default async function Page({
   searchParams,
 }: {
-  searchParams?: { success?: string; error?: string; done?: string; deleted?: string };
+  searchParams?: { success?: string; error?: string; done?: string; deleted?: string; take?: string; offset?: string };
 }) {
   const store = parseStore(cookies().get("app_sessions")?.value);
 
@@ -477,13 +696,15 @@ export default async function Page({
     ? `${QUESTIONNAIRE_BASE}?email=${encodeURIComponent(emailForLink)}`
     : QUESTIONNAIRE_BASE;
 
-  // Mes infos (Prénom + Age + Mail)
+  // Mes infos (Prénom + Age + Mail) + réponses complètes pour disponibilité
   const clientEmailForInfos = emailForLink || "";
   let clientPrenom = "", clientAge: number | undefined, clientEmailDisplay = clientEmailForInfos;
+  let clientAnswers: Answers | null = null;
 
   if (clientEmailForInfos) {
     try {
       const ans = await getAnswersForEmail(clientEmailForInfos, SHEET_ID, SHEET_RANGE);
+      clientAnswers = ans;
       const get = (k: string) => (ans ? ans[norm(k)] || ans[k] || "" : "");
       clientPrenom = get("prénom") || get("prenom") || "";
       const ageStr = get("age");
@@ -495,11 +716,33 @@ export default async function Page({
     } catch {}
   }
 
+  // Combien de séances proposer (par défaut 3)
+  const defaultTake = inferAvailability(clientAnswers);
+  const take = Math.max(1, Math.min(12, Number(searchParams?.take ?? defaultTake) || defaultTake));
+  const offset = Math.max(0, Number(searchParams?.offset ?? 0) || 0);
+
+  // Découpage des propositions AI selon take/offset
+  const totalAi = aiSessions.length;
+  const visibleAi = aiSessions.slice(offset, offset + take);
+  const hasMoreAi = offset + take < totalAi;
+
   const rawError = searchParams?.error || "";
   let displayedError = rawError;
   if (rawError.startsWith("programme:sheetfetch:")) {
     const full = rawError.split(":").slice(2).join(":");
     try { displayedError = decodeURIComponent(full); } catch { displayedError = full; }
+  }
+
+  // Helpers liens "voir plus" / "voir précédent"
+  function urlWith(p: Record<string, string | number | undefined>) {
+    const sp = new URLSearchParams();
+    if (searchParams?.success) sp.set("success", searchParams.success);
+    if (searchParams?.error) sp.set("error", searchParams.error);
+    if (searchParams?.done) sp.set("done", searchParams.done);
+    if (searchParams?.deleted) sp.set("deleted", searchParams.deleted);
+    sp.set("take", String(p.take ?? take));
+    sp.set("offset", String(p.offset ?? offset));
+    return `/dashboard/profile?${sp.toString()}`;
   }
 
   return (
@@ -588,10 +831,10 @@ export default async function Page({
         </div>
       </section>
 
-      {/* Séances proposées par votre coach (AI) — clic pour détail + sauvegarde par séance */}
+      {/* Séances proposées par votre coach Files — limitées selon disponibilité + “voir plus” */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
-          <h2 style={{ marginBottom: 6 }}>Séances proposées par votre coach</h2>
+          <h2 style={{ marginBottom: 6 }}>Séances proposées par votre coach Files</h2>
           <p className="text-sm" style={{ color: "#6b7280" }}>
             Générées à partir de vos réponses. Cliquez pour voir le brief détaillé puis enregistrez les séances qui vous conviennent.
           </p>
@@ -616,59 +859,97 @@ export default async function Page({
             </div>
           </div>
         ) : (
-          <ul className="card divide-y">
-            {aiSessions.slice(0, 12).map((s) => (
-              <li key={s.id} className="py-3">
-                <details>
-                  <summary className="flex items-center justify-between cursor-pointer">
-                    <div className="min-w-0">
-                      <div className="font-medium truncate" style={{ fontSize: 16 }}>{s.title}</div>
-                      <div className="text-sm" style={{ color: "#6b7280" }}>
-                        Prévu le <b style={{ color: "inherit" }}>{fmtDateYMD(s.date)}</b>
-                        {s.plannedMin ? ` · ${s.plannedMin} min` : ""}
-                        {s.intensity ? ` · intensité ${s.intensity}` : ""}
+          <>
+            <ul className="card divide-y">
+              {visibleAi.map((s) => {
+                const exercises = getExercises(s);
+                return (
+                  <li key={s.id} className="py-3">
+                    <details>
+                      <summary className="flex items-center justify-between cursor-pointer">
+                        <div className="min-w-0">
+                          <div className="font-medium truncate" style={{ fontSize: 16 }}>{s.title}</div>
+                          <div className="text-sm" style={{ color: "#6b7280" }}>
+                            Prévu le <b style={{ color: "inherit" }}>{fmtDateYMD(s.date)}</b>
+                            {s.plannedMin ? ` · ${s.plannedMin} min` : ""}
+                            {s.intensity ? ` · intensité ${s.intensity}` : ""}
+                          </div>
+                        </div>
+                        <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>
+                          {s.type}
+                        </span>
+                      </summary>
+
+                      <div className="mt-3 text-sm leading-6" style={{ whiteSpace: "pre-wrap" }}>
+                        {coachText(s)}
                       </div>
-                    </div>
-                    <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>
-                      {s.type}
-                    </span>
-                  </summary>
 
-                  <div className="mt-3 text-sm leading-6" style={{ whiteSpace: "pre-wrap" }}>
-                    {coachText(s)}
-                  </div>
+                      <div className="mt-3">
+                        <div className="text-sm font-medium mb-2">📝 Détail des exercices</div>
+                        <ul className="list-disc pl-5 text-sm space-y-1">
+                          {exercises.map((ex, i) => (
+                            <li key={`${s.id}-ex-${i}`}>
+                              <b>{ex.name}</b>
+                              {typeof ex.sets === "number" ? ` — ${ex.sets} séries` : ""}
+                              {ex.reps ? ` · ${ex.reps}` : ""}
+                              {ex.durationSec ? ` · ${ex.durationSec}s` : ""}
+                              {ex.rest ? ` · repos ${ex.rest}` : ""}
+                              {ex.notes ? ` · ${ex.notes}` : ""}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
 
-                  <div className="flex gap-8 mt-3">
-                    <form action={saveSingleAiSessionAction}>
-                      <input type="hidden" name="id" value={s.id} />
-                      <input type="hidden" name="title" value={s.title} />
-                      <input type="hidden" name="type" value={s.type} />
-                      <input type="hidden" name="date" value={s.date} />
-                      {s.plannedMin ? <input type="hidden" name="plannedMin" value={String(s.plannedMin)} /> : null}
-                      {s.note ? <input type="hidden" name="note" value={s.note} /> : null}
-                      <button className="btn" type="submit" style={{ background: "#111827", color: "white" }}>
-                        Enregistrer cette séance
-                      </button>
-                    </form>
+                      <div className="flex gap-8 mt-3">
+                        <form action={saveSingleAiSessionAction}>
+                          <input type="hidden" name="id" value={s.id} />
+                          <input type="hidden" name="title" value={s.title} />
+                          <input type="hidden" name="type" value={s.type} />
+                          <input type="hidden" name="date" value={s.date} />
+                          {s.plannedMin ? <input type="hidden" name="plannedMin" value={String(s.plannedMin)} /> : null}
+                          {s.note ? <input type="hidden" name="note" value={s.note} /> : null}
+                          <button className="btn" type="submit" style={{ background: "#111827", color: "white" }}>
+                            Enregistrer cette séance
+                          </button>
+                        </form>
 
-                    <form action={addSessionAction}>
-                      <input type="hidden" name="title" value={s.title} />
-                      <input type="hidden" name="type" value={s.type} />
-                      <input type="hidden" name="date" value={s.date} />
-                      {s.plannedMin ? <input type="hidden" name="plannedMin" value={String(s.plannedMin)} /> : null}
-                      {s.note ? <input type="hidden" name="note" value={s.note} /> : null}
-                      <input type="hidden" name="startNow" value="1" />
-                      <button className="btn btn-dash" type="submit">Démarrer maintenant</button>
-                    </form>
-                  </div>
-                </details>
-              </li>
-            ))}
-          </ul>
+                        <form action={addSessionAction}>
+                          <input type="hidden" name="title" value={s.title} />
+                          <input type="hidden" name="type" value={s.type} />
+                          <input type="hidden" name="date" value={s.date} />
+                          {s.plannedMin ? <input type="hidden" name="plannedMin" value={String(s.plannedMin)} /> : null}
+                          {s.note ? <input type="hidden" name="note" value={s.note} /> : null}
+                          <input type="hidden" name="startNow" value="1" />
+                          <button className="btn btn-dash" type="submit">Démarrer maintenant</button>
+                        </form>
+                      </div>
+                    </details>
+                  </li>
+                );
+              })}
+            </ul>
+
+            <div className="flex justify-between mt-3">
+              <a
+                href={urlWith({ take, offset: Math.max(0, offset - take) })}
+                className={`btn ${offset <= 0 ? "pointer-events-none opacity-50" : ""}`}
+                aria-disabled={offset <= 0}
+              >
+                ← Voir précédent
+              </a>
+              <a
+                href={urlWith({ take, offset: offset + take })}
+                className={`btn ${!hasMoreAi ? "pointer-events-none opacity-50" : ""}`}
+                aria-disabled={!hasMoreAi}
+              >
+                Voir plus →
+              </a>
+            </div>
+          </>
         )}
       </section>
 
-      {/* Mes séances — clic pour voir le détail enregistré */}
+      {/* Mes séances (enregistrées) — détail cliquable */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h2>Mes séances</h2>
@@ -779,132 +1060,4 @@ export default async function Page({
       </section>
     </div>
   );
-}
-
-/* ======== Génération depuis Google Sheets (inchangée) ======== */
-const NO_HEADER_COLS = { nom: 0, prenom: 1, age: 2, email: 10 }; // A,B,C,K
-async function getAnswersForEmail(email: string, sheetId: string, range: string): Promise<Answers | null> {
-  const data = await fetchValues(sheetId, range);
-  const values: string[][] = data.values || [];
-  if (values.length === 0) return null;
-
-  const firstRowNorm = values[0].map(norm);
-  const headerCandidates = ["adresse mail", "email", "e-mail", "mail"];
-  const hasHeader = firstRowNorm.some(h => headerCandidates.includes(h));
-
-  let headers: string[] = [];
-  let idxEmail = -1;
-
-  if (hasHeader) {
-    headers = firstRowNorm;
-    idxEmail = headers.findIndex(h => headerCandidates.includes(h));
-  } else {
-    const width = Math.max(values[0]?.length || 0, NO_HEADER_COLS.email + 1);
-    headers = Array.from({ length: width }, (_, i) => `col${i}`);
-    headers[NO_HEADER_COLS.nom]   = "nom";
-    headers[NO_HEADER_COLS.prenom]= "prenom";
-    headers[NO_HEADER_COLS.age]   = "age";
-    headers[NO_HEADER_COLS.email] = "email";
-    idxEmail = NO_HEADER_COLS.email;
-  }
-
-  if (idxEmail === -1) return null;
-
-  for (let i = hasHeader ? 1 : 0; i < values.length; i++) {
-    const row = values[i] || [];
-    const cell = (row[idxEmail] || "").trim().toLowerCase();
-    if (!cell) continue;
-    if (cell === email.trim().toLowerCase()) {
-      const rec: Answers = {};
-      for (let j = 0; j < row.length; j++) {
-        const key = headers[j] || `col${j}`;
-        rec[key] = (row[j] ?? "").trim();
-      }
-      rec["nom"]    = rec["nom"]    || rec[`col${NO_HEADER_COLS.nom}`]    || "";
-      rec["prenom"] = rec["prenom"] || rec[`col${NO_HEADER_COLS.prenom}`] || "";
-      rec["age"]    = rec["age"]    || rec[`col${NO_HEADER_COLS.age}`]    || "";
-      rec["email"]  = rec["email"]  || rec[`col${NO_HEADER_COLS.email}`]  || "";
-      return rec;
-    }
-  }
-  return null;
-}
-
-function generateSessionsFromAnswers(ans: Answers): AiSession[] {
-  const get = (k: string) => ans[norm(k)] || ans[k] || "";
-
-  const prenom = get("prénom") || get("prenom");
-  const age = Number((get("age") || "").replace(",", "."));
-  const poids = Number((get("poids") || "").replace(",", "."));
-  const taille = Number((get("taille") || "").replace(",", "."));
-  const niveau = (get("niveau") || "débutant").toLowerCase();
-  const objectif = (get("objectif") || "").toLowerCase();
-  const dispo = (get("disponibilité") || get("disponibilite") || "").toLowerCase();
-  const lieu = (get("a quel endroit v tu faire ta seance ?") || "").toLowerCase();
-  const materiel = (get("as tu du matériel a ta disposition") || get("as tu du materiel a ta disposition") || "").toLowerCase();
-
-  let freq = 3;
-  const digits = dispo.match(/\d+/g);
-  if (digits?.length) freq = Math.max(1, Math.min(6, parseInt(digits[0], 10)));
-  else if (/(lun|mar|mer|jeu|ven|sam|dim)/.test(dispo)) {
-    freq = Math.max(1, Math.min(6, dispo.split(/[ ,;\/-]+/).filter(Boolean).length));
-  }
-
-  const baseMin =
-    niveau.includes("debut") || niveau.includes("début") ? 25 :
-    niveau.includes("inter") ? 35 : 45;
-
-  let intensity: "faible" | "modérée" | "élevée" =
-    (niveau.includes("debut") || niveau.includes("début")) ? "faible" :
-    (niveau.includes("inter")) ? "modérée" : "élevée";
-
-  if (isFinite(age) && age >= 55) intensity = intensity === "élevée" ? "modérée" : "faible";
-
-  const noEquip = /(aucun|non|sans)/.test(materiel) || materiel === "";
-  const atGym = /(salle|gym|fitness)/.test(lieu);
-
-  const muscuPossible = !noEquip || atGym;
-  let pool: WorkoutType[] = ["cardio", "hiit", "mobilité"];
-  if (muscuPossible) pool = ["muscu", "cardio", "hiit"];
-
-  if (objectif.includes("perte") || objectif.includes("mince") || objectif.includes("seche")) {
-    pool = muscuPossible ? ["hiit", "cardio", "muscu"] : ["hiit", "cardio", "mobilité"];
-  } else if (objectif.includes("prise") || objectif.includes("muscle") || objectif.includes("force")) {
-    pool = muscuPossible ? ["muscu", "muscu", "cardio"] : ["hiit", "cardio", "mobilité"];
-  } else if (objectif.includes("endurance") || objectif.includes("cardio")) {
-    pool = ["cardio", "hiit", "mobilité"];
-  }
-
-  const noteParts: string[] = [];
-  if (prenom) noteParts.push(`Pour ${prenom}`);
-  if (isFinite(poids) && isFinite(taille) && taille > 0) {
-    const imc = Math.round((poids / Math.pow(taille/100, 2)) * 10) / 10;
-    if (isFinite(imc)) noteParts.push(`IMC: ${imc}`);
-  }
-  if (noEquip) noteParts.push("Sans matériel");
-  if (atGym) noteParts.push("Salle");
-
-  const today = new Date();
-  const nb = Math.max(1, Math.min(6, freq));
-  const sessions: AiSession[] = [];
-  for (let i = 0; i < nb; i++) {
-    const date = new Date(today);
-    date.setDate(today.getDate() + i * Math.ceil(7 / nb));
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, "0");
-    const d = String(date.getDate()).padStart(2, "0");
-    const type = pool[i % pool.length];
-
-    sessions.push({
-      id: `ai-${y}${m}${d}-${i}`,
-      title: `${objectif.includes("perte") ? "Brûle-graisse" : objectif.includes("prise") || objectif.includes("force") ? "Force/Muscu" : objectif.includes("endurance") || objectif.includes("cardio") ? "Endurance" : "Full body"} — Séance ${i + 1}`,
-      type,
-      date: `${y}-${m}-${d}`,
-      plannedMin: baseMin,
-      intensity,
-      note: noteParts.join(" · ") || undefined,
-      recommendedBy: "AI",
-    });
-  }
-  return sessions;
 }
