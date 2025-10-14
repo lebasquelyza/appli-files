@@ -16,6 +16,16 @@ type NormalizedExercise = {
   rest?: string;
   durationSec?: number;
   notes?: string;
+
+  // champs avancés
+  tempo?: string;          // ex: "3-1-1"
+  rir?: number;            // reps in reserve
+  load?: string;           // ex: "20kg", "RPE 8", "75% 1RM"
+  equipment?: string;      // ex: "haltères, banc"
+  target?: string;         // ex: "pectoraux, triceps"
+  alt?: string;            // alternative si pas de matériel
+  videoUrl?: string;       // lien demo
+  block?: "echauffement" | "principal" | "fin" | "accessoires";
 };
 
 type Workout = {
@@ -306,6 +316,7 @@ function normalizeMaybeArray(v: any): any[] {
   return [];
 }
 
+/* ======== Mapping IA → exercices détaillés ======== */
 function fromApiExercises(s: AiSession): NormalizedExercise[] | null {
   const candidates: any[] = [
     s.exercises,
@@ -325,10 +336,33 @@ function fromApiExercises(s: AiSession): NormalizedExercise[] | null {
   for (const it of candidates) {
     const name = it?.name || it?.title || it?.exercise || it?.mov || it?.move || it?.movename;
     if (!name) continue;
+
     const sets = it?.sets ?? it?.series ?? it?.nbSets ?? it?.rounds;
     const reps = it?.reps ?? it?.rep ?? it?.nbReps ?? it?.time ?? it?.duration ?? it?.seconds;
-    const rest = it?.rest ?? it?.rest_sec ?? it?.recup ?? it?.pause;
-    const notes = it?.notes ?? it?.note ?? it?.tip ?? it?.tips;
+    const rest = it?.rest ?? it?.rest_sec ?? it?.recup ?? it?.pause ?? it?.recovery;
+    const notes = it?.notes ?? it?.note ?? it?.tip ?? it?.tips ?? it?.cues;
+
+    // champs avancés
+    const tempo = it?.tempo ?? it?.cadence;
+    const rir = typeof it?.rir === "number" ? it.rir
+              : typeof it?.RIR === "number" ? it.RIR
+              : undefined;
+    const loadVal = it?.load ?? it?.charge ?? it?.weight ?? it?.kg ?? it?.rpe ?? it?.RPE ?? it?.percent1RM;
+    const load =
+      typeof loadVal === "number" ? `${loadVal}kg` :
+      typeof loadVal === "string" ? loadVal :
+      undefined;
+    const equipment = it?.equipment ?? it?.materiel ?? it?.matériel;
+    const target = it?.target ?? it?.muscles ?? it?.zone ?? it?.focus;
+    const alt = it?.alternative ?? it?.alt;
+    const videoUrl = it?.videoUrl ?? it?.video ?? it?.url ?? it?.link;
+    const blockRaw = (it?.block ?? it?.section ?? it?.phase ?? "").toString().toLowerCase();
+    const block: NormalizedExercise["block"] =
+      /ech|warm/.test(blockRaw) ? "echauffement" :
+      /cool|fin|retour/.test(blockRaw) ? "fin" :
+      /acc|accessoire/.test(blockRaw) ? "accessoires" :
+      blockRaw ? "principal" : undefined;
+
     out.push({
       name: String(name),
       sets: typeof sets === "number" ? sets : undefined,
@@ -336,43 +370,53 @@ function fromApiExercises(s: AiSession): NormalizedExercise[] | null {
       rest: typeof rest === "number" ? `${rest}s` : rest,
       durationSec: typeof it?.duration === "number" ? it.duration : typeof it?.seconds === "number" ? it.seconds : undefined,
       notes: typeof notes === "string" ? notes : undefined,
+      tempo: typeof tempo === "string" ? tempo : undefined,
+      rir,
+      load,
+      equipment: typeof equipment === "string" ? equipment : undefined,
+      target: typeof target === "string" ? target : Array.isArray(target) ? target.join(", ") : undefined,
+      alt: typeof alt === "string" ? alt : undefined,
+      videoUrl: typeof videoUrl === "string" ? videoUrl : undefined,
+      block,
     });
   }
+
   return out.length ? out : null;
 }
 
+/* ======== Fallback local si pas d'IA ======== */
 function fallbackExercises(s: AiSession): NormalizedExercise[] {
   const inten = s.intensity || "modérée";
   const sets = inten === "élevée" ? 4 : inten === "modérée" ? 3 : 2;
 
   if (s.type === "muscu") {
     return [
-      { name: "Squat goblet", sets, reps: "8–12", rest: "60–90s" },
-      { name: "Pompes", sets, reps: "8–12", rest: "60–90s" },
-      { name: "Rowing haltère", sets, reps: "10–12", rest: "60–90s" },
-      { name: "Fentes marchées", sets, reps: "10 pas/jambe", rest: "60–90s" },
-      { name: "Gainage planche", sets: sets - 1, reps: "30–45s", rest: "45–60s" },
+      { name: "Squat goblet", sets, reps: "8–12", rest: "60–90s", tempo: "3-1-1", rir: 2, target: "quadriceps, fessiers" },
+      { name: "Pompes", sets, reps: "8–12", rest: "60–90s", tempo: "2-1-2", rir: 2, target: "pectoraux, triceps" },
+      { name: "Rowing haltère", sets, reps: "10–12", rest: "60–90s", tempo: "2-1-2", rir: 2, target: "dos, biceps" },
+      { name: "Fentes marchées", sets, reps: "10 pas/jambe", rest: "60–90s", target: "fessiers, quadriceps" },
+      { name: "Gainage planche", sets: sets - 1, reps: "30–45s", rest: "45–60s", target: "core" },
     ];
   }
   if (s.type === "cardio") {
     return [
-      { name: "Échauffement facile", sets: 1, reps: "8–10 min", rest: "—" },
-      { name: "Zone 2 soutenue", sets: 1, reps: `${s.plannedMin ? Math.max(12, s.plannedMin - 15) : 25} min`, rest: "—" },
-      { name: "Retour au calme + mobilité", sets: 1, reps: "5–10 min", rest: "—" },
+      { name: "Échauffement facile", sets: 1, reps: "8–10 min", rest: "—", block: "echauffement" },
+      { name: "Zone 2 soutenue", sets: 1, reps: `${s.plannedMin ? Math.max(12, s.plannedMin - 15) : 25} min`, rest: "—", block: "principal" },
+      { name: "Retour au calme + mobilité", sets: 1, reps: "5–10 min", rest: "—", block: "fin" },
     ];
   }
   if (s.type === "hiit") {
     return [
-      { name: "Circuit HIIT (on/off)", sets: 6, reps: "30s/30s", rest: "90s entre sets" },
-      { name: "Circuit HIIT (on/off)", sets: 6, reps: "30s/30s", rest: "90s entre sets" },
-      { name: "Retour au calme", sets: 1, reps: "5–8 min", rest: "—" },
+      { name: "Circuit HIIT (on/off)", sets: 6, reps: "30s/30s", rest: "90s entre sets", block: "principal" },
+      { name: "Circuit HIIT (on/off)", sets: 6, reps: "30s/30s", rest: "90s entre sets", block: "principal" },
+      { name: "Retour au calme", sets: 1, reps: "5–8 min", rest: "—", block: "fin" },
     ];
   }
   return [
-    { name: "Ouverture hanches (90/90)", sets, reps: "8–10/side", rest: "30–45s" },
-    { name: "T-spine rotations", sets, reps: "8–10/side", rest: "30–45s" },
-    { name: "Down-Dog → Cobra", sets, reps: "6–8", rest: "30–45s" },
-    { name: "Respiration diaphragmatique", sets: 1, reps: "3–4 min", rest: "—" },
+    { name: "Ouverture hanches (90/90)", sets, reps: "8–10/side", rest: "30–45s", block: "echauffement" },
+    { name: "T-spine rotations", sets, reps: "8–10/side", rest: "30–45s", block: "echauffement" },
+    { name: "Down-Dog → Cobra", sets, reps: "6–8", rest: "30–45s", block: "principal" },
+    { name: "Respiration diaphragmatique", sets: 1, reps: "3–4 min", rest: "—", block: "fin" },
   ];
 }
 function getExercises(s: AiSession): NormalizedExercise[] {
@@ -382,7 +426,7 @@ function getExercises(s: AiSession): NormalizedExercise[] {
 /* ===================== Actions serveur ===================== */
 /** 
  * Construit/actualise le programme IA côté API
- * -> envoie l'uid + email + DERNière réponse de questionnaire dans le body.
+ * -> envoie l'uid + email + DERNière réponse de questionnaire + aiBrief (schéma et exigences).
  * -> ne PERSISTE rien côté cookies (on laisse l'utilisateur enregistrer manuellement).
  */
 async function buildProgrammeAction() {
@@ -399,7 +443,58 @@ async function buildProgrammeAction() {
   try { if (email) answers = await getAnswersForEmail(email, SHEET_ID, SHEET_RANGE); } catch {}
 
   const uid = jar.get("fc_uid")?.value || "me";
-  const payload = { user: uid, source: "app-profile", email, answers };
+
+  // Brief IA pour forcer un programme ultra-détaillé
+  const aiBrief = {
+    language: "fr",
+    detailLevel: "full",
+    require: [
+      "échauffement structuré (5–10 min)",
+      "bloc principal par exercices avec séries, répétitions OU durée, tempo, repos",
+      "charge cible (kg, %, ou RPE), ou RIR",
+      "matériel requis et alternative sans matériel si possible",
+      "groupes musculaires ciblés",
+      "lien vidéo de démonstration si disponible",
+      "retour au calme / mobilité (5–10 min)",
+    ],
+    style: {
+      tempoFormat: "ex: 3-1-1",
+      loadFormat: "ex: 20kg ou RPE 8 ou 75%1RM",
+      repsFormat: "ex: 8–12 ou 30s/30s",
+      restFormat: "ex: 60–90s",
+    },
+    outputSchemaHint: {
+      sessions: [
+        {
+          id: "string",
+          title: "string",
+          type: "muscu|cardio|hiit|mobilité",
+          date: "YYYY-MM-DD",
+          plannedMin: "number",
+          intensity: "faible|modérée|élevée",
+          exercises: [
+            {
+              name: "string",
+              sets: "number",
+              reps: "string|number",
+              rest: "string",
+              tempo: "string",
+              rir: "number",
+              load: "string",
+              equipment: "string",
+              target: "string|string[]",
+              alt: "string",
+              videoUrl: "string",
+              block: "echauffement|principal|fin|accessoires",
+              notes: "string"
+            }
+          ]
+        }
+      ]
+    }
+  };
+
+  const payload = { user: uid, source: "app-profile", email, answers, aiBrief };
 
   const endpoints = [
     `${API_BASE}/api/programme/build`,
@@ -780,6 +875,54 @@ export default async function Page({
     return `/dashboard/profile?${sp.toString()}`;
   }
 
+  // util: tri par bloc pour l’affichage
+  const blockOrder = { echauffement: 0, principal: 1, accessoires: 2, fin: 3 } as const;
+  const sortByBlock = (arr: NormalizedExercise[]) =>
+    arr.slice().sort((a, b) => {
+      const A = a.block ? blockOrder[a.block] ?? 99 : 50;
+      const B = b.block ? blockOrder[b.block] ?? 99 : 50;
+      return A - B;
+    });
+
+  // rendu d’une liste d’exercices détaillés
+  function ExercisesDetail({ sid, exercises }: { sid: string; exercises: NormalizedExercise[] }) {
+    const exs = sortByBlock(exercises);
+    return (
+      <>
+        <div className="text-sm font-medium mb-2">📝 Détail des exercices</div>
+        <div className="text-xs text-gray-500 mb-2">Cliquez sur un exercice pour voir les consignes.</div>
+        <ul className="text-sm space-y-2">
+          {exs.map((ex, i) => (
+            <li key={`${sid}-ex-${i}`} className="border rounded-md p-2">
+              <details>
+                <summary className="flex flex-wrap items-center gap-2 cursor-pointer">
+                  <b className="truncate">{ex.name}</b>
+                  <span className="opacity-70">
+                    {typeof ex.sets === "number" ? `${ex.sets}×` : ""}{ex.reps ? `${ex.reps}` : ex.durationSec ? `${ex.durationSec}s` : ""}
+                  </span>
+                  {ex.rest ? <span className="opacity-60">· repos {ex.rest}</span> : null}
+                  {ex.load ? <span className="opacity-60">· charge {ex.load}</span> : null}
+                  {ex.tempo ? <span className="opacity-60">· tempo {ex.tempo}</span> : null}
+                  {typeof ex.rir === "number" ? <span className="opacity-60">· RIR {ex.rir}</span> : null}
+                  {ex.block ? <span className="opacity-60">· {ex.block}</span> : null}
+                </summary>
+                <div className="mt-2 text-[13px] leading-5 space-y-1">
+                  {ex.target ? <div><b>Cible :</b> {ex.target}</div> : null}
+                  {ex.equipment ? <div><b>Matériel :</b> {ex.equipment}</div> : null}
+                  {ex.alt ? <div><b>Alternative :</b> {ex.alt}</div> : null}
+                  {ex.notes ? <div><b>Consignes :</b> {ex.notes}</div> : null}
+                  {ex.videoUrl ? (
+                    <div><a className="underline" href={ex.videoUrl} target="_blank" rel="noreferrer">Vidéo de démonstration</a></div>
+                  ) : null}
+                </div>
+              </details>
+            </li>
+          ))}
+        </ul>
+      </>
+    );
+  }
+
   return (
     <div className="container" style={{ paddingTop: 24, paddingBottom: 32, fontSize: "var(--settings-fs, 12px)" }}>
       {/* Header */}
@@ -886,7 +1029,7 @@ export default async function Page({
                           <div className="text-sm" style={{ color: "#6b7280" }}>
                             Prévu le <b style={{ color: "inherit" }}>{fmtDateYMD(s.date)}</b>
                             {s.plannedMin ? ` · ${s.plannedMin} min` : ""}
-                            {s.intensity ? ` · intensité ${s.intensity}` : ""}
+                            {s.intensity ? ` · intensité {s.intensity}` : ""}
                           </div>
                         </div>
                         <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>
@@ -898,21 +1041,11 @@ export default async function Page({
                         {coachText(s)}
                       </div>
 
-                      <div className="mt-3">
-                        <div className="text-sm font-medium mb-2">📝 Détail des exercices</div>
-                        <ul className="list-disc pl-5 text-sm space-y-1">
-                          {exercises.map((ex, i) => (
-                            <li key={`${s.id}-ex-${i}`}>
-                              <b>{ex.name}</b>
-                              {typeof ex.sets === "number" ? ` — ${ex.sets} séries` : ""}
-                              {ex.reps ? ` · ${ex.reps}` : ""}
-                              {ex.durationSec ? ` · ${ex.durationSec}s` : ""}
-                              {ex.rest ? ` · repos ${ex.rest}` : ""}
-                              {ex.notes ? ` · ${ex.notes}` : ""}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
+                      {exercises.length > 0 && (
+                        <div className="mt-3">
+                          <ExercisesDetail sid={s.id} exercises={exercises} />
+                        </div>
+                      )}
 
                       <div className="flex flex-wrap gap-8 mt-3">
                         {/* Enregistre directement dans « Séances enregistrées » */}
@@ -996,19 +1129,7 @@ export default async function Page({
                     {/* Afficher le détail seulement s'il existe */}
                     {Array.isArray(s.exercises) && s.exercises.length > 0 && (
                       <div className="mt-3">
-                        <div className="text-sm font-medium mb-2">📝 Détail des exercices</div>
-                        <ul className="list-disc pl-5 text-sm space-y-1">
-                          {s.exercises.map((ex, i) => (
-                            <li key={`${s.id}-ex-${i}`}>
-                              <b>{ex.name}</b>
-                              {typeof ex.sets === "number" ? ` — ${ex.sets} séries` : ""}
-                              {ex.reps ? ` · ${ex.reps}` : ""}
-                              {ex.durationSec ? ` · ${ex.durationSec}s` : ""}
-                              {ex.rest ? ` · repos ${ex.rest}` : ""}
-                              {ex.notes ? ` · ${ex.notes}` : ""}
-                            </li>
-                          ))}
-                        </ul>
+                        <ExercisesDetail sid={s.id} exercises={s.exercises} />
                       </div>
                     )}
                   </details>
@@ -1061,19 +1182,7 @@ export default async function Page({
 
                     {Array.isArray(s.exercises) && s.exercises.length > 0 && (
                       <div className="mt-3">
-                        <div className="text-sm font-medium mb-2">📝 Détail des exercices</div>
-                        <ul className="list-disc pl-5 text-sm space-y-1">
-                          {s.exercises.map((ex, i) => (
-                            <li key={`${s.id}-ex-${i}`}>
-                              <b>{ex.name}</b>
-                              {typeof ex.sets === "number" ? ` — ${ex.sets} séries` : ""}
-                              {ex.reps ? ` · ${ex.reps}` : ""}
-                              {ex.durationSec ? ` · ${ex.durationSec}s` : ""}
-                              {ex.rest ? ` · repos ${ex.rest}` : ""}
-                              {ex.notes ? ` · ${ex.notes}` : ""}
-                            </li>
-                          ))}
-                        </ul>
+                        <ExercisesDetail sid={s.id} exercises={s.exercises} />
                       </div>
                     )}
 
