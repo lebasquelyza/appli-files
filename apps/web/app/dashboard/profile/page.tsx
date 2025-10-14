@@ -262,8 +262,11 @@ function norm(s: string) {
     .trim()
     .toLowerCase()
     .replace(/\s+/g, " ")
-    .replace(/[éèêë]/g, "e").replace(/[àâä]/g, "a")
-    .replace/[îï]/g, "i").replace(/[ôö]/g, "o").replace(/[ùûü]/g, "u")
+    .replace(/[éèêë]/g, "e")
+    .replace(/[àâä]/g, "a")
+    .replace(/[îï]/g, "i")
+    .replace(/[ôö]/g, "o")
+    .replace(/[ùûü]/g, "u")
     .replace(/[’']/g, "'");
 }
 
@@ -597,7 +600,7 @@ async function getAnswersForEmail(email: string, sheetId: string, range: string)
 /* ======== Dispo → combien de séances proposer/paginer ======== */
 function inferAvailability(ans: Answers | null): number {
   if (!ans) return 3;
-  const dispoRaw = (ans[norm("disponibilité")] || ans[norm("disponibilite")] || ans["disponibilité"] || ans["disponibilite"] || "").toLowerCase();
+  const dispoRaw = (ans[norm("disponibilité")] || ans[norm("disponibilite")] || (ans as any)["disponibilité"] || (ans as any)["disponibilite"] || "").toLowerCase();
   const digits = dispoRaw.match(/\d+/g);
   if (digits?.length) {
     const n = parseInt(digits[0], 10);
@@ -783,7 +786,6 @@ export default async function Page({
       <div className="page-header">
         <div>
           <h1 className="h1" style={{ fontSize: 22 }}>Mon profil</h1>
-          <p className="lead">Gérez vos séances et gardez un historique clair de votre entraînement.</p>
         </div>
         <a href="/dashboard" className="btn" style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500, padding: "6px 10px", lineHeight: 1.2 }}>
           ← Retour
