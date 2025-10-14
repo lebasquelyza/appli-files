@@ -301,17 +301,17 @@ export default async function Page({
         </div>
       </div>
 
-      {/* Mes séances en cours */}
+      {/* Mon programme (remplace \"Mes séances en cours\") */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
-          <h2>Mes séances en cours</h2>
+          <h2>Mon programme</h2>
         </div>
 
         {active.length === 0 ? (
           <div className="card text-sm" style={{ color: "#6b7280" }}>
             <div className="flex items-center gap-3">
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted">💤</span>
-              <span>Aucune séance en cours.</span>
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted">🗓️</span>
+              <span>Aucun entraînement planifié en cours de programme.</span>
             </div>
           </div>
         ) : (
@@ -420,3 +420,4 @@ export default async function Page({
     </div>
   );
 }
+
