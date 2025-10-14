@@ -24,7 +24,9 @@
     "@react-three/drei": "9.105.6",
     "web-push": "^3.6.7",
     "lucide-react": "^0.452.0",
-    "stripe": "^16.0.0"
+    "stripe": "^16.0.0",
+    "openai": "^4.58.0",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/node": "^24.3.1",
@@ -33,9 +35,4 @@
     "@types/web-push": "^3.6.4"
   }
 }
-"dependencies": {
-  "openai": "^4.58.0",
-  "zod": "^3.23.8"
-}
-
 
