@@ -227,14 +227,10 @@ async function fetchValues(sheetId: string, range: string) {
     tries.push(`https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`);
   }
 
-  let lastStatus = 0, lastBody = "", lastUrl = "", lastCT = "";
   for (const url of tries) {
-    lastUrl = url;
     const res = await fetch(url, { cache: "no-store" });
-    lastStatus = res.status;
-    lastCT = res.headers.get("content-type") || "";
+    const lastCT = res.headers.get("content-type") || "";
     const text = await res.text().catch(() => "");
-    lastBody = text;
 
     if (res.ok) {
       const looksHtml = text.trim().startsWith("<") || lastCT.includes("text/html");
@@ -424,11 +420,6 @@ function getExercises(s: AiSession): NormalizedExercise[] {
 }
 
 /* ===================== Actions serveur ===================== */
-/** 
- * Construit/actualise le programme IA côté API
- * -> envoie l'uid + email + DERNière réponse de questionnaire + aiBrief (schéma et exigences).
- * -> ne PERSISTE rien côté cookies (on laisse l'utilisateur enregistrer manuellement).
- */
 async function buildProgrammeAction() {
   "use server";
   const jar = cookies();
@@ -520,7 +511,6 @@ async function buildProgrammeAction() {
     }
   }
 
-  // Si pas d’API OK → on ne persiste rien, on affiche juste une alerte douce
   redirect("/dashboard/profile?error=Aucune donnée reçue de l’IA. Les propositions locales sont affichées sans enregistrement.");
 }
 
@@ -558,7 +548,6 @@ async function addSessionAction(formData: FormData) {
   redirect("/dashboard/profile?success=1");
 }
 
-/** Enregistre une proposition (IA ou fallback) directement en « Séances enregistrées » avec les exercices. */
 async function saveSingleAiSessionAction(formData: FormData) {
   "use server";
   const id = (formData.get("id") || "").toString();
@@ -574,7 +563,6 @@ async function saveSingleAiSessionAction(formData: FormData) {
   const jar = cookies();
   const store = parseStore(jar.get("app_sessions")?.value);
 
-  // Evite doublon exact pour l'historique (status done)
   const key = `${title}|${date}|${type}`;
   const exists = store.sessions.some(s => `${s.title}|${s.date}|${s.type}` === key && s.status === "done");
   if (exists) redirect("/dashboard/profile?success=programme:dejainclus");
@@ -815,12 +803,8 @@ export default async function Page({
   const emailFromCookie = cookies().get("app_email")?.value || "";
   const emailForLink = detectedEmail || emailFromCookie;
 
-  const questionnaireUrl = emailForLink
-    ? `${QUESTIONNAIRE_BASE}?email=${encodeURIComponent(emailForLink)}`
-    : QUESTIONNAIRE_BASE;
-
   const clientEmailForInfos = emailForLink || "";
-  let clientPrenom = "", clientAge: number | undefined, clientEmailDisplay = clientEmailForInfos;
+  let clientPrenom = "", clientNom = "", clientAge: number | undefined, clientEmailDisplay = clientEmailForInfos;
   let clientAnswers: Answers | null = null;
 
   if (clientEmailForInfos) {
@@ -829,6 +813,7 @@ export default async function Page({
       clientAnswers = ans;
       const get = (k: string) => (ans ? ans[norm(k)] || ans[k] || "" : "");
       clientPrenom = get("prénom") || get("prenom") || "";
+      clientNom = get("nom") || "";
       const ageStr = get("age");
       const num = Number((ageStr || "").toString().replace(",", "."));
       clientAge = isFinite(num) && num > 0 ? Math.floor(num) : undefined;
@@ -837,6 +822,17 @@ export default async function Page({
       if (!clientEmailDisplay && emailSheet) clientEmailDisplay = emailSheet;
     } catch {}
   }
+
+  // URL questionnaire préremplie (email + prénom + nom)
+  const questionnaireUrl = (() => {
+    const qp = new URLSearchParams();
+    if (clientEmailDisplay) qp.set("email", clientEmailDisplay);
+    if (clientPrenom) qp.set("prenom", clientPrenom);
+    if (clientNom) qp.set("nom", clientNom);
+    const base = QUESTIONNAIRE_BASE.replace(/\/?$/, "");
+    const qs = qp.toString();
+    return qs ? `${base}?${qs}` : base;
+  })();
 
   // Dispo + pagination
   const defaultTake = inferAvailability(clientAnswers);
@@ -973,6 +969,7 @@ export default async function Page({
         <div className="card">
           <div className="text-sm" style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
             <span><b>Prénom :</b> {clientPrenom || <i className="text-gray-400">Non renseigné</i>}</span>
+            <span><b>Nom :</b> {clientNom || <i className="text-gray-400">Non renseigné</i>}</span>
             <span><b>Age :</b> {typeof clientAge === "number" ? `${clientAge} ans` : <i className="text-gray-400">Non renseigné</i>}</span>
           </div>
 
@@ -983,19 +980,36 @@ export default async function Page({
         </div>
       </section>
 
-      {/* Séances proposées par l’IA Coach Files */}
+      {/* Séances proposées par Files */}
       <section className="section" style={{ marginTop: 12 }}>
-        <div className="section-head" style={{ marginBottom: 8 }}>
-          <h2 style={{ marginBottom: 6 }}>Séances proposées par l’IA Coach Files</h2>
-          <p className="text-sm" style={{ color: "#6b7280" }}>
-            <b>Générées à partir de vos réponses au questionnaire.</b>
-          </p>
-          <div className="flex flex-col sm:flex-row gap-2 mt-3">
-            <form action={buildProgrammeAction} method="post">
-              <button className="btn btn-dash" type="submit" style={{ width: "100%" }}>
-                Mettre à jour les propositions
-              </button>
-            </form>
+        <div
+          className="section-head"
+          style={{
+            marginBottom: 8,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            writingMode: "horizontal-tb",
+            textOrientation: "mixed"
+          }}
+        >
+          <div style={{ writingMode: "horizontal-tb", textOrientation: "mixed" }}>
+            <h2 style={{ marginBottom: 6 }}>Séances proposées par Files</h2>
+            <p className="text-sm" style={{ color: "#6b7280", writingMode: "horizontal-tb", textOrientation: "mixed" }}>
+              <b>Générées à partir de vos réponses au questionnaire.</b>
+            </p>
+          </div>
+
+          {/* Bouton : "Je mets à jour" → envoie vers le questionnaire prérempli */}
+          <div className="flex flex-col sm:flex-row gap-2 mt-0">
+            <a
+              href={questionnaireUrl}
+              className="btn btn-dash"
+              style={{ width: "100%", textAlign: "center" }}
+            >
+              Je mets à jour
+            </a>
           </div>
         </div>
 
@@ -1005,7 +1019,7 @@ export default async function Page({
               <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted">🤖</span>
               <span>
                 Pas encore de séances proposées.{" "}
-                <a className="link" href={questionnaireUrl}>Répondez au questionnaire</a>, puis appuyez sur « Mettre à jour les propositions ».
+                <a className="link" href={questionnaireUrl}>Répondez au questionnaire</a>, puis revenez ici.
               </span>
             </div>
           </div>
@@ -1029,7 +1043,7 @@ export default async function Page({
                           <div className="text-sm" style={{ color: "#6b7280" }}>
                             Prévu le <b style={{ color: "inherit" }}>{fmtDateYMD(s.date)}</b>
                             {s.plannedMin ? ` · ${s.plannedMin} min` : ""}
-                            {s.intensity ? ` · intensité {s.intensity}` : ""}
+                            {s.intensity ? ` · intensité ${s.intensity}` : ""}
                           </div>
                         </div>
                         <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>
@@ -1087,7 +1101,7 @@ export default async function Page({
         )}
       </section>
 
-      {/* Mes séances (actives) — sans bloc méta, pas de puces */}
+      {/* Mes séances (actives) */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h2>Mes séances</h2>
@@ -1126,7 +1140,6 @@ export default async function Page({
                       </span>
                     </summary>
 
-                    {/* Afficher le détail seulement s'il existe */}
                     {Array.isArray(s.exercises) && s.exercises.length > 0 && (
                       <div className="mt-3">
                         <ExercisesDetail sid={s.id} exercises={s.exercises} />
