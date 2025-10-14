@@ -63,6 +63,24 @@ async function getSignedInEmail(): Promise<string> {
 }
 
 /* ============ Fetch du programme IA (affichage depuis votre API) ============ */
+function normalizeToSessions(data: any): any[] {
+  if (!data) return [];
+  // cas classiques
+  if (Array.isArray(data?.sessions)) return data.sessions;
+  if (Array.isArray(data)) return data;
+
+  // variantes fréquentes côté API
+  if (Array.isArray(data?.program?.sessions)) return data.program.sessions;
+  if (Array.isArray(data?.programme?.sessions)) return data.programme.sessions;
+  if (Array.isArray(data?.plan?.sessions)) return data.plan.sessions;
+
+  // parfois { items: [...] } ou { data: [...] }
+  if (Array.isArray(data?.items)) return data.items;
+  if (Array.isArray(data?.data)) return data.data;
+
+  return [];
+}
+
 async function fetchAiProgramme(userId?: string): Promise<AiProgramme | null> {
   const uidFromCookie = cookies().get("fc_uid")?.value;
   const uid = userId || uidFromCookie || "me";
@@ -85,21 +103,22 @@ async function fetchAiProgramme(userId?: string): Promise<AiProgramme | null> {
       if (!res.ok) continue;
 
       const data = (await res.json()) as any;
-      const raw = Array.isArray(data?.sessions) ? data.sessions : Array.isArray(data) ? data : [];
+      const raw = normalizeToSessions(data);
+
       const sessions: AiSession[] = raw.map((r: any, i: number) => ({
-        id: String(r.id ?? `ai-${i}`),
-        title: String(r.title ?? r.name ?? "Séance personnalisée"),
-        type: (r.type ?? r.category ?? "muscu") as WorkoutType,
-        date: String(r.date ?? r.day ?? r.when ?? new Date().toISOString().slice(0, 10)),
+        id: String(r?.id ?? r?._id ?? `ai-${i}`),
+        title: String(r?.title ?? r?.name ?? "Séance personnalisée"),
+        type: (r?.type ?? r?.category ?? "muscu") as WorkoutType,
+        date: String(r?.date ?? r?.day ?? r?.when ?? new Date().toISOString().slice(0, 10)),
         plannedMin:
-          typeof r.plannedMin === "number"
+          typeof r?.plannedMin === "number"
             ? r.plannedMin
-            : typeof r.duration === "number"
+            : typeof r?.duration === "number"
             ? r.duration
             : undefined,
-        note: typeof r.note === "string" ? r.note : typeof r.notes === "string" ? r.notes : undefined,
-        intensity: r.intensity as any,
-        recommendedBy: r.recommendedBy ?? r.model ?? "AI",
+        note: typeof r?.note === "string" ? r.note : typeof r?.notes === "string" ? r.notes : undefined,
+        intensity: (r?.intensity as any) ?? undefined,
+        recommendedBy: r?.recommendedBy ?? r?.model ?? "AI",
       }));
       return { sessions };
     } catch (e: any) {
@@ -456,6 +475,50 @@ async function buildProgrammeAction() {
   }
 }
 
+/** 💾 Enregistrer toutes les séances du programme Files dans les séances de l’utilisateur (sans les démarrer) */
+async function saveProgrammeAction() {
+  "use server";
+
+  // 1) Récupérer le programme depuis l’API Files
+  const programme = await fetchAiProgramme();
+  const aiSessions = programme?.sessions ?? [];
+  if (aiSessions.length === 0) {
+    redirect("/dashboard/profile?error=programme:vide");
+  }
+
+  // 2) Charger l’existant & merger sans doublons (par id)
+  const jar = cookies();
+  const store = parseStore(jar.get("app_sessions")?.value);
+  const existingIds = new Set(store.sessions.map(s => s.id));
+  const now = new Date().toISOString();
+
+  const mapped: Workout[] = aiSessions
+    .filter(s => !existingIds.has(s.id))
+    .map(s => ({
+      id: s.id,
+      title: s.title,
+      type: s.type,
+      status: "active",
+      date: s.date,
+      plannedMin: s.plannedMin,
+      note: s.note,
+      createdAt: now,
+      startedAt: undefined,
+      endedAt: undefined,
+    }));
+
+  if (mapped.length === 0) {
+    redirect("/dashboard/profile?success=programme:dejainclus"); // rien à ajouter
+  }
+
+  const next: Store = { sessions: [...mapped, ...store.sessions].slice(0, 300) };
+  jar.set("app_sessions", JSON.stringify(next), {
+    path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365, httpOnly: false,
+  });
+
+  redirect("/dashboard/profile?success=programme:enregistre");
+}
+
 async function addSessionAction(formData: FormData) {
   "use server";
   const title = (formData.get("title") || "").toString().trim();
@@ -602,7 +665,13 @@ export default async function Page({
       <div className="space-y-3">
         {!!searchParams?.success && (
           <div className="card" style={{ border: "1px solid rgba(16,185,129,.35)", background: "rgba(16,185,129,.08)", fontWeight: 600 }}>
-            ✓ {searchParams.success === "programme" ? "Programme généré." : "Séance ajoutée."}
+            {searchParams.success === "programme"
+              ? "✓ Programme généré."
+              : searchParams.success === "programme:enregistre"
+              ? "✓ Programme enregistré dans vos séances."
+              : searchParams.success === "programme:dejainclus"
+              ? "ℹ️ Les séances du programme sont déjà dans vos séances."
+              : "✓ Séance ajoutée."}
           </div>
         )}
         {!!searchParams?.done && (
@@ -659,16 +728,23 @@ export default async function Page({
         </div>
       </section>
 
-      {/* Mon programme (IA) */}
+      {/* Mon programme (IA) + actions */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
           <h2 style={{ marginBottom: 6 }}>Mon programme (personnalisé par l’IA)</h2>
           <div className="flex flex-col sm:flex-row gap-2 mt-3">
             <form action={buildProgrammeAction}>
               <button className="btn btn-dash" type="submit" style={{ width: "100%" }}>
-                Créer mon programme
+                Créer / Mettre à jour mon programme
               </button>
             </form>
+            {aiSessions.length > 0 && (
+              <form action={saveProgrammeAction}>
+                <button className="btn" type="submit" style={{ width: "100%", background: "#111827", color: "white" }}>
+                  Enregistrer mon programme dans mes séances
+                </button>
+              </form>
+            )}
           </div>
         </div>
 
@@ -679,7 +755,7 @@ export default async function Page({
               <span>
                 Pas encore de séances générées.{" "}
                 <a className="link" href={questionnaireUrl}>Répondez au questionnaire</a>
-                , puis appuyez sur « Créer mon programme ».
+                , puis appuyez sur « Créer / Mettre à jour mon programme ».
               </span>
             </div>
           </div>
@@ -730,28 +806,37 @@ export default async function Page({
               <span>
                 Pas encore de séances générées.{" "}
                 <a className="link" href={questionnaireUrl}>Répondez au questionnaire</a>
-                , puis appuyez sur « Créer mon programme ».
+                , puis créez votre programme.
               </span>
             </div>
           </div>
         ) : (
-          <ul className="card divide-y">
-            {aiSessions.slice(0, 12).map((s) => (
-              <li key={s.id} className="py-3 flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="font-medium truncate" style={{ fontSize: 16 }}>{s.title}</div>
-                  <div className="text-sm" style={{ color: "#6b7280" }}>
-                    Prévu le <b style={{ color: "inherit" }}>{fmtDateYMD(s.date)}</b>
-                    {s.plannedMin ? ` · ${s.plannedMin} min` : ""}
-                    {s.intensity ? ` · intensité ${s.intensity}` : ""}
+          <>
+            <ul className="card divide-y">
+              {aiSessions.slice(0, 12).map((s) => (
+                <li key={s.id} className="py-3 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-medium truncate" style={{ fontSize: 16 }}>{s.title}</div>
+                    <div className="text-sm" style={{ color: "#6b7280" }}>
+                      Prévu le <b style={{ color: "inherit" }}>{fmtDateYMD(s.date)}</b>
+                      {s.plannedMin ? ` · ${s.plannedMin} min` : ""}
+                      {s.intensity ? ` · intensité ${s.intensity}` : ""}
+                    </div>
                   </div>
-                </div>
-                <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>
-                  {s.type}
-                </span>
-              </li>
-            ))}
-          </ul>
+                  <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>
+                    {s.type}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <div className="flex justify-end mt-3">
+              <form action={saveProgrammeAction}>
+                <button className="btn" type="submit" style={{ background: "#111827", color: "white" }}>
+                  Enregistrer mon programme dans mes séances
+                </button>
+              </form>
+            </div>
+          </>
         )}
       </section>
 
@@ -774,7 +859,7 @@ export default async function Page({
             {past.slice(0, 12).map((s) => {
               const mins = minutesBetween(s.startedAt, s.endedAt);
               return (
-                <li key={s.id} className="py-3 flex items-center justify-between gap-3">
+                <li key={s.id} className="py-3 flex items-center justify-content-between gap-3">
                   <div className="min-w-0">
                     <div className="font-medium truncate" style={{ fontSize: 16 }}>{s.title}</div>
                     <div className="text-sm" style={{ color: "#6b7280" }}>
