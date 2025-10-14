@@ -137,7 +137,7 @@ function fmtDateYMD(ymd?: string) {
   if (!ymd) return "—";
   try {
     const [y, m, d] = ymd.split("-").map(Number);
-    const dt = a new Date(y, (m || 1) - 1, d || 1);
+    const dt = new Date(y, (m || 1) - 1, d || 1);
     return dt.toLocaleDateString("fr-FR", { year:"numeric", month:"long", day:"numeric" });
   } catch {}
   return ymd;
@@ -378,18 +378,20 @@ function generateSessionsFromAnswers(ans: Answers): AiSession[] {
 async function buildProgrammeAction() {
   "use server";
 
+  // 0) Détecter l'email via NextAuth/cookie (et mémoriser si trouvé)
   let email = await getSignedInEmail();
   if (email) {
     cookies().set("app_email", email, { path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365, httpOnly: false });
   }
 
+  // 1) Tente l’API Files Coaching (indépendamment de l’email)
   const uid = cookies().get("fc_uid")?.value || "me";
   const endpoints = [
     `${API_BASE}/api/programme/build`,
     `${API_BASE}/api/program/build`,
     `${API_BASE}/api/sessions/build`,
   ];
-  for (const url of endpoints) {
+    for (const url of endpoints) {
     try {
       const res = await fetch(`${url}?user=${encodeURIComponent(uid)}`, {
         method: "POST",
@@ -409,6 +411,7 @@ async function buildProgrammeAction() {
     }
   }
 
+  // 2) Fallback Google Sheets — nécessite l'e-mail détecté
   if (!email) {
     redirect("/dashboard/profile?error=programme:noemail");
   }
@@ -421,6 +424,7 @@ async function buildProgrammeAction() {
 
     const aiSessions = generateSessionsFromAnswers(answers!);
 
+    // pousser en local dans app_sessions
     const jar = cookies();
     const store = parseStore(jar.get("app_sessions")?.value);
     const now = new Date().toISOString();
