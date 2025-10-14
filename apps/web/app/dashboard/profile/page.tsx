@@ -43,7 +43,7 @@ const API_KEY  = process.env.FILES_COACHING_API_KEY || "";
 // Google Sheets (public via lien)
 const SHEET_ID      = process.env.SHEET_ID      || "1XH-BOUj4tXAVy49ONBIdLiWM97hQ-Fg8h5-OTRGvHC4";
 const SHEET_RANGE   = process.env.SHEET_RANGE   || "Réponses!A1:K";
-const SHEET_GID     = process.env.SHEET_GID     || "1160551014"; // adapte si besoin
+const SHEET_GID     = process.env.SHEET_GID     || "1160551014";
 
 // Questionnaire (pour le lien dans l’état vide)
 const QUESTIONNAIRE_BASE = process.env.FILES_COACHING_QUESTIONNAIRE_BASE || "https://questionnaire.files-coaching.com";
@@ -166,29 +166,13 @@ async function fetchValues(sheetId: string, range: string, _apiKey?: string) {
 
   const tries: string[] = [];
 
-  // 1) export CSV direct (fiable si “Anyone with link – Viewer”)
   if (SHEET_GID) {
-    tries.push(
-      `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&id=${sheetId}&gid=${encodeURIComponent(SHEET_GID)}`
-    );
+    tries.push(`https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&id=${sheetId}&gid=${encodeURIComponent(SHEET_GID)}`);
+    tries.push(`https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&gid=${encodeURIComponent(SHEET_GID)}`);
+    tries.push(`https://docs.google.com/spreadsheets/d/${sheetId}/pub?output=csv&gid=${encodeURIComponent(SHEET_GID)}`);
   }
-  // 2) gviz CSV par gid
-  if (SHEET_GID) {
-    tries.push(
-      `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&gid=${encodeURIComponent(SHEET_GID)}`
-    );
-  }
-  // 3) publish-to-web (si activé : Fichier > Publier sur le web)
-  if (SHEET_GID) {
-    tries.push(
-      `https://docs.google.com/spreadsheets/d/${sheetId}/pub?output=csv&gid=${encodeURIComponent(SHEET_GID)}`
-    );
-  }
-  // 4) gviz par nom d’onglet (fallback)
   if (sheetName) {
-    tries.push(
-      `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`
-    );
+    tries.push(`https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`);
   }
 
   let lastStatus = 0, lastBody = "", lastUrl = "", lastCT = "";
@@ -203,10 +187,7 @@ async function fetchValues(sheetId: string, range: string, _apiKey?: string) {
 
     if (res.ok) {
       const looksHtml = text.trim().startsWith("<") || lastCT.includes("text/html");
-      if (looksHtml) {
-        // Google renvoie du HTML → souvent accès non public ou mauvais URL.
-        continue;
-      }
+      if (looksHtml) continue;
 
       // Parse CSV robuste
       const rows: string[][] = [];
@@ -232,7 +213,6 @@ async function fetchValues(sheetId: string, range: string, _apiKey?: string) {
     }
   }
 
-  // Construire un hint utile
   let hint = "";
   if (lastCT.includes("text/html") || (lastBody && lastBody.trim().startsWith("<"))) {
     hint = "Google renvoie du HTML (pas CSV) → accès non public ou mauvais ID/onglet.";
@@ -268,7 +248,6 @@ async function getAnswersForEmail(email: string, sheetId: string, range: string)
   const values: string[][] = data.values || [];
   if (values.length === 0) return null;
 
-  // Détection d’en-têtes
   const firstRowNorm = values[0].map(norm);
   const headerCandidates = ["adresse mail", "email", "e-mail", "mail"];
   const hasHeader = firstRowNorm.some(h => headerCandidates.includes(h));
@@ -282,31 +261,27 @@ async function getAnswersForEmail(email: string, sheetId: string, range: string)
     idxEmail = headers.findIndex(h => headerCandidates.includes(h));
     startRow = 1; // data commence en ligne 2
   } else {
-    // Pas d’en-têtes → on fabrique des clés virtuelles + alias
     const width = Math.max(values[0]?.length || 0, NO_HEADER_COLS.email + 1);
     headers = Array.from({ length: width }, (_, i) => `col${i}`);
-    headers[NO_HEADER_COLS.nom]   = "nom";
-    headers[NO_HEADER_COLS.prenom]= "prenom";
-    headers[NO_HEADER_COLS.age]   = "age";
-    headers[NO_HEADER_COLS.email] = "email";
+    headers[NO_HEADER_COLS.nom]    = "nom";
+    headers[NO_HEADER_COLS.prenom] = "prenom";
+    headers[NO_HEADER_COLS.age]    = "age";
+    headers[NO_HEADER_COLS.email]  = "email";
     idxEmail = NO_HEADER_COLS.email;
-    startRow = 0; // data commence en ligne 1
   }
 
   if (idxEmail === -1) return null;
 
-  for (let i = startRow; i < values.length; i++) {
+  for (let i = hasHeader ? 1 : 0; i < values.length; i++) {
     const row = values[i] || [];
     const cell = (row[idxEmail] || "").trim().toLowerCase();
     if (!cell) continue;
     if (cell === email.trim().toLowerCase()) {
-      // Mappe la ligne → objet { header -> valeur }
       const rec: Answers = {};
       for (let j = 0; j < row.length; j++) {
         const key = headers[j] || `col${j}`;
         rec[key] = (row[j] ?? "").trim();
       }
-      // Normalisation pour compatibilité (avec/sans accents)
       rec["nom"]    = rec["nom"]    || rec["name"] || rec["last name"] || rec[`col${NO_HEADER_COLS.nom}`]    || "";
       rec["prenom"] = rec["prenom"] || rec["prénom"] || rec["first name"] || rec[`col${NO_HEADER_COLS.prenom}`] || "";
       rec["age"]    = rec["age"]    || rec[`col${NO_HEADER_COLS.age}`]    || "";
@@ -585,7 +560,7 @@ export default async function Page({
     ? `${QUESTIONNAIRE_BASE}?email=${encodeURIComponent(emailForLink)}`
     : QUESTIONNAIRE_BASE;
 
-  // --- Mes infos (Prénom + Âge depuis C + E-Mail) ---
+  // --- Mes infos (Prénom : … ,,,,  Age : … ,,,,  + ligne Mail) ---
   const clientEmailForInfos = emailForLink || "";
   let clientPrenom = "", clientAge: number | undefined, clientEmailDisplay = clientEmailForInfos;
 
@@ -594,13 +569,10 @@ export default async function Page({
       const ans = await getAnswersForEmail(clientEmailForInfos, SHEET_ID, SHEET_RANGE);
       const get = (k: string) => (ans ? ans[norm(k)] || ans[k] || "" : "");
       clientPrenom = get("prénom") || get("prenom") || "";
-
-      // âge via C si pas d’en-têtes (déjà mappé en rec["age"])
       const ageStr = get("age");
       const num = Number((ageStr || "").toString().replace(",", "."));
       clientAge = isFinite(num) && num > 0 ? Math.floor(num) : undefined;
 
-      // email depuis le sheet si dispo
       const emailSheet = get("email") || get("adresse mail") || get("e-mail") || get("mail");
       if (!clientEmailDisplay && emailSheet) clientEmailDisplay = emailSheet;
     } catch {}
@@ -617,31 +589,18 @@ export default async function Page({
   return (
     <div
       className="container"
-      style={{
-        paddingTop: 24,
-        paddingBottom: 32,
-        fontSize: "var(--settings-fs, 12px)",
-      }}
+      style={{ paddingTop: 24, paddingBottom: 32, fontSize: "var(--settings-fs, 12px)" }}
     >
       {/* Header */}
       <div className="page-header">
         <div>
-          <h1 className="h1" style={{ fontSize: 22 }}>
-            Mon profil
-          </h1>
+          <h1 className="h1" style={{ fontSize: 22 }}>Mon profil</h1>
           <p className="lead">Gérez vos séances et gardez un historique clair de votre entraînement.</p>
         </div>
         <a
           href="/dashboard"
           className="btn"
-          style={{
-            background: "#ffffff",
-            color: "#111827",
-            border: "1px solid #d1d5db",
-            fontWeight: 500,
-            padding: "6px 10px",
-            lineHeight: 1.2,
-          }}
+          style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500, padding: "6px 10px", lineHeight: 1.2 }}
         >
           ← Retour
         </a>
@@ -671,36 +630,53 @@ export default async function Page({
         )}
       </div>
 
-      {/* Mes infos (Prénom + Âge + E-Mail :) */}
+      {/* Mes infos */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
           <h2>Mes infos</h2>
         </div>
 
         <div className="card">
-          <div className="grid gap-3" style={{ gridTemplateColumns: "140px 1fr" }}>
-            <div className="contents">
-              <span className="text-gray-500">Prénom</span>
-              <span className="font-medium break-words">
-                {clientPrenom || <i className="text-gray-400">Non renseigné</i>}
-              </span>
-            </div>
-            <div className="contents">
-              <span className="text-gray-500">Âge</span>
-              <span className="font-medium break-words">
-                {typeof clientAge === "number" ? `${clientAge} ans` : <i className="text-gray-400">Non renseigné</i>}
-              </span>
-            </div>
-            <div className="contents">
-              <span className="text-gray-500">E-Mail :</span>
-              {clientEmailDisplay ? (
-                <a href={`mailto:${clientEmailDisplay}`} className="font-medium underline break-words">
-                  {clientEmailDisplay}
-                </a>
-              ) : (
-                <span className="font-medium"><i className="text-gray-400">Non renseigné</i></span>
-              )}
-            </div>
+          {/* Ligne 1 : Prénom + Age avec les virgules demandées */}
+          <div
+            className="text-sm"
+            style={{
+              display: "flex",
+              gap: 16,
+              flexWrap: "wrap",
+            }}
+          >
+            <span>
+              <b>Prénom :</b>{" "}
+              {clientPrenom || <i className="text-gray-400">Non renseigné</i>}{" "}
+              ,,,,
+            </span>
+            <span>
+              <b>Age :</b>{" "}
+              {typeof clientAge === "number" ? `${clientAge} ans` : <i className="text-gray-400">Non renseigné</i>}{" "}
+              ,,,, 
+            </span>
+          </div>
+
+          {/* Ligne 2 : Mail (sur une seule ligne) */}
+          <div
+            className="text-sm"
+            style={{
+              marginTop: 6,
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+            title={clientEmailDisplay || "Non renseigné"}
+          >
+            <b>Mail :</b>{" "}
+            {clientEmailDisplay ? (
+              <a href={`mailto:${clientEmailDisplay}`} className="underline">
+                ,,,, {clientEmailDisplay} ,,,,
+              </a>
+            ) : (
+              <span className="text-gray-400">,,,, Non renseigné ,,,,</span>
+            )}
           </div>
         </div>
       </section>
@@ -709,8 +685,6 @@ export default async function Page({
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
           <h2 style={{ marginBottom: 6 }}>Mon programme (personnalisé par l’IA)</h2>
-
-        {/* Un seul CTA */}
           <div className="flex flex-col sm:flex-row gap-2 mt-3">
             <form action={buildProgrammeAction}>
               <button className="btn btn-dash" type="submit" style={{ width: "100%" }}>
@@ -741,15 +715,12 @@ export default async function Page({
                     {s.type}
                   </span>
                 </div>
-
                 <div className="text-sm" style={{ color: "#6b7280", marginTop: 8 }}>
                   Prévu le <b style={{ color: "inherit" }}>{fmtDateYMD(s.date)}</b>
                   {s.plannedMin ? ` · ${s.plannedMin} min` : ""}
                   {s.intensity ? ` · intensité ${s.intensity}` : ""}
                   {s.note ? (<><br />Note : <i>{s.note}</i></>) : null}
                 </div>
-
-                {/* Convertir en séance locale */}
                 <form action={addSessionAction} style={{ display: "flex", gap: 8, marginTop: 12 }}>
                   <input type="hidden" name="title" value={s.title} />
                   <input type="hidden" name="type" value={s.type} />
@@ -759,6 +730,41 @@ export default async function Page({
                   <input type="hidden" name="startNow" value="1" />
                   <button className="btn btn-dash" type="submit">Démarrer cette séance</button>
                 </form>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* NOUVEAU : Mes séances actives / à venir (ce que “Créer mon programme” a ajouté) */}
+      <section className="section" style={{ marginTop: 12 }}>
+        <div className="section-head" style={{ marginBottom: 8 }}>
+          <h2>Mes séances (actives / à venir)</h2>
+          {active.length > 12 && <span className="text-xs" style={{ color: "#6b7280" }}>Affichage des 12 dernières</span>}
+        </div>
+
+        {active.length === 0 ? (
+          <div className="card text-sm" style={{ color: "#6b7280" }}>
+            <div className="flex items-center gap-3">
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted">📅</span>
+              <span>Aucune séance active pour l’instant.</span>
+            </div>
+          </div>
+        ) : (
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {active.slice(0, 12).map((s) => (
+              <article key={s.id} className="card" style={{ transition: "box-shadow .2s" }}>
+                <div className="flex items-start justify-between gap-3">
+                  <strong style={{ fontSize: 16 }}>{s.title}</strong>
+                  <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>
+                    {s.type}
+                  </span>
+                </div>
+                <div className="text-sm" style={{ color: "#6b7280", marginTop: 8 }}>
+                  Prévu le <b style={{ color: "inherit" }}>{fmtDateYMD(s.date)}</b>
+                  {s.plannedMin ? ` · ${s.plannedMin} min` : ""}
+                  {s.note ? (<><br />Note : <i>{s.note}</i></>) : null}
+                </div>
               </article>
             ))}
           </div>
