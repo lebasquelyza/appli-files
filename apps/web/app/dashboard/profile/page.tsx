@@ -43,7 +43,8 @@ const API_KEY  = process.env.FILES_COACHING_API_KEY || "";
 // Google Sheets (public via lien)
 const SHEET_ID      = process.env.SHEET_ID      || "1HYLsmWXJ3NIRbxH0jOiXeBPiIwrL4d2sW6JKo7ZblYTMYu4RusIji627";
 const SHEET_RANGE   = process.env.SHEET_RANGE   || "reponses!A1:K1000";
-// Ne PAS définir SHEET_API_KEY dans ce mode
+// (optionnel) gid de l’onglet pour un accès CSV plus fiable
+const SHEET_GID     = process.env.SHEET_GID     || ""; // ex: "0" si 1er onglet
 
 // Questionnaire (pour le lien dans l’état vide)
 const QUESTIONNAIRE_BASE = process.env.FILES_COACHING_QUESTIONNAIRE_BASE || "https://questionnaire.files-coaching.com";
@@ -51,7 +52,6 @@ const QUESTIONNAIRE_BASE = process.env.FILES_COACHING_QUESTIONNAIRE_BASE || "htt
 /* ===================== Détection e-mail (auth) ===================== */
 /** Récupère l'email du user connecté: NextAuth → cookie. */
 async function getSignedInEmail(): Promise<string> {
-  // NextAuth (si présent)
   try {
     // @ts-ignore import optionnel
     const { getServerSession } = await import("next-auth");
@@ -62,7 +62,6 @@ async function getSignedInEmail(): Promise<string> {
     if (email) return email;
   } catch {}
 
-  // Cookie existant (fallback lecture seule)
   return cookies().get("app_email")?.value || "";
 }
 
@@ -161,45 +160,93 @@ function typeBadgeClass(t: WorkoutType) {
 }
 
 /* ======== Google Sheets (PUBLIC via lien) ======== */
-/** Lit l’onglet public via l’endpoint CSV gviz (pas besoin d’API key). */
+/** Lit l’onglet via plusieurs endpoints CSV (export/gviz/pub) + détecte HTML. */
 async function fetchValues(sheetId: string, range: string, _apiKey?: string) {
-  // Nom d'onglet avant le "!"
   const sheetName = (range.split("!")[0] || "").replace(/^'+|'+$/g, "");
-  if (!sheetName) throw new Error("SHEETS_RANGE_INVALID");
+  if (!sheetId) throw new Error("SHEETS_CONFIG_MISSING");
 
-  const gvizUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
-  const res = await fetch(gvizUrl, { cache: "no-store" });
-  if (!res.ok) {
-    const txt = await res.text().catch(() => "");
-    throw new Error(`SHEETS_${res.status}${txt ? ":" + txt.slice(0, 120) : ""}`);
+  const tries: string[] = [];
+
+  // 1) export CSV direct (fiable si “Anyone with link – Viewer”)
+  if (SHEET_GID) {
+    tries.push(
+      `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&id=${sheetId}&gid=${encodeURIComponent(SHEET_GID)}`
+    );
+  }
+  // 2) gviz CSV par gid
+  if (SHEET_GID) {
+    tries.push(
+      `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&gid=${encodeURIComponent(SHEET_GID)}`
+    );
+  }
+  // 3) publish-to-web (si activé : Fichier > Publier sur le web)
+  if (SHEET_GID) {
+    tries.push(
+      `https://docs.google.com/spreadsheets/d/${sheetId}/pub?output=csv&gid=${encodeURIComponent(SHEET_GID)}`
+    );
+  }
+  // 4) gviz par nom d’onglet (fallback)
+  if (sheetName) {
+    tries.push(
+      `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`
+    );
   }
 
-  const text = await res.text();
+  let lastStatus = 0, lastBody = "", lastUrl = "", lastCT = "";
+  for (const url of tries) {
+    lastUrl = url;
+    const res = await fetch(url, { cache: "no-store" });
+    lastStatus = res.status;
+    lastCT = res.headers.get("content-type") || "";
 
-  // Parser CSV robuste (gère les guillemets/échappements)
-  const rows: string[][] = [];
-  const lines = text.split(/\r?\n/).filter(l => l.trim() !== "");
-  for (const line of lines) {
-    const cells: string[] = [];
-    let cur = "";
-    let inQuotes = false;
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      if (ch === '"') {
-        if (inQuotes && line[i + 1] === '"') { cur += '"'; i++; } // échappement ""
-        else { inQuotes = !inQuotes; }
-      } else if (ch === "," && !inQuotes) {
-        cells.push(cur.trim());
-        cur = "";
-      } else {
-        cur += ch;
+    const text = await res.text().catch(() => "");
+    lastBody = text;
+
+    if (res.ok) {
+      const looksHtml = text.trim().startsWith("<") || lastCT.includes("text/html");
+      if (looksHtml) {
+        // Google renvoie du HTML → souvent accès non public ou mauvais URL.
+        continue;
       }
+
+      // Parse CSV robuste
+      const rows: string[][] = [];
+      const lines = text.split(/\r?\n/).filter(l => l.trim() !== "");
+      for (const line of lines) {
+        const cells: string[] = [];
+        let cur = "", inQuotes = false;
+        for (let i = 0; i < line.length; i++) {
+          const ch = line[i];
+          if (ch === '"') {
+            if (inQuotes && line[i + 1] === '"') { cur += '"'; i++; }
+            else { inQuotes = !inQuotes; }
+          } else if (ch === "," && !inQuotes) {
+            cells.push(cur.trim()); cur = "";
+          } else {
+            cur += ch;
+          }
+        }
+        cells.push(cur.trim());
+        rows.push(cells.map(c => c.replace(/^"|"$/g, "")));
+      }
+      return { values: rows };
     }
-    cells.push(cur.trim());
-    rows.push(cells.map(c => c.replace(/^"|"$/g, "")));
   }
 
-  return { values: rows };
+  // Construire un hint utile
+  let hint = "";
+  if (lastCT.includes("text/html") || (lastBody && lastBody.trim().startsWith("<"))) {
+    hint = "Google renvoie du HTML (pas CSV) → accès non public ou mauvais ID/onglet.";
+  } else if (lastStatus === 404) {
+    hint = "404: Sheet ou onglet introuvable.";
+  } else if (lastStatus === 403) {
+    hint = "403: Le fichier n'est pas accessible publiquement.";
+  } else {
+    hint = "Échec de lecture CSV.";
+  }
+
+  const bodyPreview = (lastBody || "").slice(0, 160).replace(/\s+/g, " ");
+  throw new Error(`SHEETS_${lastStatus}:${hint} [url=${lastUrl}] [ct=${lastCT}] [body~=${bodyPreview}]`);
 }
 
 type Answers = Record<string, string>;
@@ -248,7 +295,6 @@ function generateSessionsFromAnswers(ans: Answers): AiSession[] {
   const lieu = get("a quel endroit v tu faire ta seance ?").toLowerCase();
   const materiel = get("as tu du matériel a ta disposition").toLowerCase() || get("as tu du materiel a ta disposition").toLowerCase();
 
-  // fréquence de séances / semaine
   let freq = 3;
   const digits = dispo.match(/\d+/g);
   if (digits?.length) freq = Math.max(1, Math.min(6, parseInt(digits[0], 10)));
@@ -388,13 +434,9 @@ async function buildProgrammeAction() {
 
     redirect("/dashboard/profile?success=programme");
   } catch (e: any) {
-    // >>> Afficher l'erreur complète (message détaillé) dans l'UI
+    // Afficher le message complet dans l'UI
     const msg = String(e?.message || "unknown");
     const encoded = encodeURIComponent(msg);
-    if (msg.startsWith("SHEETS_")) {
-      // Avant: on ne renvoyait que le code (ex: 404). Maintenant on renvoie le message entier.
-      redirect(`/dashboard/profile?error=programme:sheetfetch:${encoded}`);
-    }
     redirect(`/dashboard/profile?error=programme:sheetfetch:${encoded}`);
   }
 }
@@ -485,8 +527,6 @@ export default async function Page({
     .filter(s => s.status === "done")
     .sort((a, b) => (b.endedAt || "").localeCompare(a.endedAt || ""));
 
-  const defaultDate = toYMD();
-
   // Affichage informatif si votre API renvoie déjà un programme
   const programme = await fetchAiProgramme();
   const aiSessions = programme?.sessions ?? [];
@@ -517,13 +557,11 @@ export default async function Page({
   const rawError = searchParams?.error || "";
   let displayedError = rawError;
   if (rawError.startsWith("programme:sheetfetch:")) {
-    // tout ce qui suit le deuxième ":" correspond au message complet encodé
-    const parts = rawError.split(":");
-    const full = parts.slice(2).join(":"); // garde le message complet
+    const full = rawError.split(":").slice(2).join(":");
     try {
       displayedError = decodeURIComponent(full);
     } catch {
-      displayedError = full; // au cas où
+      displayedError = full;
     }
   }
 
@@ -579,7 +617,6 @@ export default async function Page({
         )}
         {!!searchParams?.error && (
           <div className="card" style={{ border: "1px solid rgba(239,68,68,.35)", background: "rgba(239,68,68,.08)", fontWeight: 600, whiteSpace: "pre-wrap" }}>
-            {/* Affiche le message complet décodé si dispo */}
             ⚠️ Erreur : {displayedError}
           </div>
         )}
@@ -618,7 +655,7 @@ export default async function Page({
         <div className="section-head" style={{ marginBottom: 8 }}>
           <h2 style={{ marginBottom: 6 }}>Mon programme (personnalisé par l’IA)</h2>
 
-        {/* Un seul CTA */}
+          {/* Un seul CTA */}
           <div className="flex flex-col sm:flex-row gap-2 mt-3">
             <form action={buildProgrammeAction}>
               <button className="btn btn-dash" type="submit" style={{ width: "100%" }}>
@@ -726,4 +763,3 @@ export default async function Page({
     </div>
   );
 }
-
