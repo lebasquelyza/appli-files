@@ -960,25 +960,36 @@ export default async function Page({
         )}
       </div>
 
-      {/* Mes infos (dernière réponse questionnaire) */}
-      <section className="section" style={{ marginTop: 12 }}>
-        <div className="section-head" style={{ marginBottom: 8 }}>
-          <h2>Mes infos</h2>
-        </div>
+   {/* Mes infos (dernière réponse questionnaire) */}
+<section className="section" style={{ marginTop: 12 }}>
+  <div className="section-head" style={{ marginBottom: 8 }}>
+    <h2>Mes infos</h2>
+  </div>
 
-        <div className="card">
-          <div className="text-sm" style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-            <span><b>Prénom :</b> {clientPrenom || <i className="text-gray-400">Non renseigné</i>}</span>
-            <span><b>Nom :</b> {clientNom || <i className="text-gray-400">Non renseigné</i>}</span>
-            <span><b>Age :</b> {typeof clientAge === "number" ? `${clientAge} ans` : <i className="text-gray-400">Non renseigné</i>}</span>
-          </div>
+  <div className="card">
+    <div className="text-sm" style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+      <span><b>Prénom :</b> {clientPrenom || <i className="text-gray-400">Non renseigné</i>}</span>
+      {/* ⬇️ LIGNE NOM SUPPRIMÉE */}
+      <span><b>Age :</b> {typeof clientAge === "number" ? `${clientAge} ans` : <i className="text-gray-400">Non renseigné</i>}</span>
+    </div>
 
-          <div className="text-sm" style={{ marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={clientEmailDisplay || "Non renseigné"}>
-            <b>Mail :</b>{" "}
-            {clientEmailDisplay ? <a href={`mailto:${clientEmailDisplay}`} className="underline">{clientEmailDisplay}</a> : <span className="text-gray-400">Non renseigné</span>}
-          </div>
-        </div>
-      </section>
+    <div
+      className="text-sm"
+      style={{ marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
+      title={clientEmailDisplay || "Non renseigné"}
+    >
+      <b>Mail :</b>{" "}
+      {clientEmailDisplay ? (
+        <a href={`mailto:${clientEmailDisplay}`} className="underline">
+          {clientEmailDisplay}
+        </a>
+      ) : (
+        <span className="text-gray-400">Non renseigné</span>
+      )}
+    </div>
+  </div>
+</section>
+
 
       {/* Séances proposées par Files */}
       <section className="section" style={{ marginTop: 12 }}>
