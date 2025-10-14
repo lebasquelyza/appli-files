@@ -38,6 +38,7 @@ type AiProgramme = { sessions: AiSession[] };
 
 /* ===================== Config ===================== */
 const API_BASE = process.env.FILES_COACHING_API_BASE || "https://files-coaching.com";
+const QUESTIONNAIRE_BASE = process.env.FILES_COACHING_QUESTIONNAIRE_BASE || "https://questionnaire.files-coaching.com";
 const API_KEY  = process.env.FILES_COACHING_API_KEY || "";
 
 /* ============ Fetch du programme IA depuis votre API ============ */
@@ -256,9 +257,13 @@ export default async function Page({
 
   const defaultDate = toYMD();
 
-  // Récupération du programme IA pour affichage (si votre API en renvoie)
+  // Récupération du programme IA (si votre API en renvoie)
   const programme = await fetchAiProgramme();
   const aiSessions = programme?.sessions ?? [];
+
+  // URL questionnaire avec email pré-rempli si dispo
+  const email = cookies().get("app_email")?.value || "";
+  const questionnaireUrl = email ? `${QUESTIONNAIRE_BASE}?email=${encodeURIComponent(email)}` : QUESTIONNAIRE_BASE;
 
   return (
     <div
@@ -388,7 +393,13 @@ export default async function Page({
           <div className="card text-sm" style={{ color: "#6b7280" }}>
             <div className="flex items-center gap-3">
               <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted">🤖</span>
-              <span>Pas encore de séances générées. Répondez au questionnaire, puis appuyez sur « Créer mon programme ».</span>
+              <span>
+                Pas encore de séances générées.{" "}
+                <a className="link" href={questionnaireUrl}>
+                  Répondez au questionnaire
+                </a>
+                , puis appuyez sur « Créer mon programme ».
+              </span>
             </div>
           </div>
         ) : (
@@ -478,5 +489,3 @@ export default async function Page({
     </div>
   );
 }
-
-
