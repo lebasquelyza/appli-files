@@ -36,6 +36,7 @@ type AiSession = {
   exercises?: any[];
   blocks?: any[];
   plan?: any;
+  content?: any;
 };
 type AiProgramme = { sessions: AiSession[] };
 
@@ -65,7 +66,7 @@ async function getSignedInEmail(): Promise<string> {
   return cookies().get("app_email")?.value || "";
 }
 
-/* ============ Fetch du programme IA (depuis Files Coaching API) ============ */
+/* ============ Fetch du programme IA (Coach Files) ============ */
 async function fetchAiProgramme(userId?: string): Promise<AiProgramme | null> {
   const uidFromCookie = cookies().get("fc_uid")?.value;
   const uid = userId || uidFromCookie || "me";
@@ -106,6 +107,7 @@ async function fetchAiProgramme(userId?: string): Promise<AiProgramme | null> {
         exercises: Array.isArray(r.exercises) ? r.exercises : undefined,
         blocks: Array.isArray(r.blocks) ? r.blocks : undefined,
         plan: r.plan,
+        content: r.content,
       }));
       return { sessions };
     } catch (e: any) {
@@ -163,7 +165,6 @@ function typeBadgeClass(t: WorkoutType) {
     case "mobilité": return "bg-violet-50 text-violet-700 ring-1 ring-violet-200";
   }
 }
-/** Dédup générique */
 function uniqueBy<T>(arr: T[], key: (x: T) => string) {
   const seen = new Set<string>();
   const out: T[] = [];
@@ -172,6 +173,11 @@ function uniqueBy<T>(arr: T[], key: (x: T) => string) {
     if (!seen.has(k)) { seen.add(k); out.push(item); }
   }
   return out;
+}
+function clampOffset(total: number, take: number, offset: number) {
+  if (total <= 0) return { offset: 0, emptyReason: "none" as const };
+  if (offset >= total) return { offset: Math.max(0, Math.ceil(total / take) * take - take), emptyReason: "ranout" as const };
+  return { offset, emptyReason: "none" as const };
 }
 
 /* ======== Google Sheets (PUBLIC via lien) ======== */
@@ -280,24 +286,47 @@ function coachText(s: AiSession) {
 }
 
 type NormalizedExercise = { name: string; sets?: number; reps?: string | number; rest?: string; durationSec?: number; notes?: string };
+
+function normalizeMaybeArray(v: any): any[] {
+  if (!v) return [];
+  if (Array.isArray(v)) return v;
+  if (typeof v === "object") {
+    if (Array.isArray(v.items)) return v.items;
+    if (Array.isArray(v.exercises)) return v.exercises;
+    if (Array.isArray(v.blocks)) return v.blocks;
+  }
+  return [];
+}
+
 function fromApiExercises(s: AiSession): NormalizedExercise[] | null {
-  const raw = s.exercises || s.blocks || s.plan?.exercises || s.plan?.blocks;
-  if (!Array.isArray(raw)) return null;
+  const candidates: any[] = [
+    s.exercises,
+    s.blocks,
+    s.plan?.exercises,
+    s.plan?.blocks,
+    s.plan?.day?.exercises,
+    s.plan?.day?.blocks,
+    s.content?.items,
+    s.content?.exercises,
+    s.content?.blocks,
+  ].flatMap(normalizeMaybeArray);
+
+  if (!candidates.length) return null;
 
   const out: NormalizedExercise[] = [];
-  for (const it of raw) {
-    const name = it.name || it.title || it.exercise || it.mov || it.movename;
+  for (const it of candidates) {
+    const name = it?.name || it?.title || it?.exercise || it?.mov || it?.move || it?.movename;
     if (!name) continue;
-    const sets = it.sets ?? it.series ?? it.nbSets ?? it.rounds;
-    const reps = it.reps ?? it.rep ?? it.nbReps ?? it.time ?? it.duration ?? it.seconds;
-    const rest = it.rest ?? it.rest_sec ?? it.recup ?? it.pause;
-    const notes = it.notes ?? it.note ?? it.tip;
+    const sets = it?.sets ?? it?.series ?? it?.nbSets ?? it?.rounds;
+    const reps = it?.reps ?? it?.rep ?? it?.nbReps ?? it?.time ?? it?.duration ?? it?.seconds;
+    const rest = it?.rest ?? it?.rest_sec ?? it?.recup ?? it?.pause;
+    const notes = it?.notes ?? it?.note ?? it?.tip ?? it?.tips;
     out.push({
       name: String(name),
       sets: typeof sets === "number" ? sets : undefined,
       reps: typeof reps === "number" ? reps : typeof reps === "string" ? reps : undefined,
       rest: typeof rest === "number" ? `${rest}s` : rest,
-      durationSec: typeof it.duration === "number" ? it.duration : typeof it.seconds === "number" ? it.seconds : undefined,
+      durationSec: typeof it?.duration === "number" ? it.duration : typeof it?.seconds === "number" ? it.seconds : undefined,
       notes: typeof notes === "string" ? notes : undefined,
     });
   }
@@ -331,7 +360,6 @@ function fallbackExercises(s: AiSession): NormalizedExercise[] {
       { name: "Retour au calme", sets: 1, reps: "5–8 min", rest: "—" },
     ];
   }
-  // mobilité
   return [
     { name: "Ouverture hanches (90/90)", sets, reps: "8–10/side", rest: "30–45s" },
     { name: "T-spine rotations", sets, reps: "8–10/side", rest: "30–45s" },
@@ -378,7 +406,7 @@ async function buildProgrammeAction() {
     }
   }
 
-  // Fallback Sheets pour générer localement si pas d'API
+  // Fallback Sheets → génération locale si pas d'API
   if (!email) redirect("/dashboard/profile?error=programme:noemail");
 
   try {
@@ -391,7 +419,6 @@ async function buildProgrammeAction() {
     const store = parseStore(jar.get("app_sessions")?.value);
     const now = new Date().toISOString();
 
-    // anti-doublons par titre|date|type
     const existingKeys = new Set(store.sessions.map(s => `${s.title}|${s.date}|${s.type}`));
 
     const mapped: Workout[] = aiSessions
@@ -461,7 +488,6 @@ async function addSessionAction(formData: FormData) {
   redirect("/dashboard/profile?success=1");
 }
 
-/** 💾 Enregistrer une séance AI (sans la démarrer) — évite les doublons par id */
 async function saveSingleAiSessionAction(formData: FormData) {
   "use server";
   const id = (formData.get("id") || "").toString();
@@ -475,10 +501,11 @@ async function saveSingleAiSessionAction(formData: FormData) {
 
   const jar = cookies();
   const store = parseStore(jar.get("app_sessions")?.value);
-  const exists = store.sessions.some(s => s.id === id);
-  if (exists) {
-    redirect("/dashboard/profile?success=programme:dejainclus");
-  }
+
+  // anti-doublon + tolérance (clé logique)
+  const key = `${title}|${date}|${type}`;
+  const exists = store.sessions.some(s => `${s.title}|${s.date}|${s.type}` === key);
+  if (exists) redirect("/dashboard/profile?success=programme:dejainclus");
 
   const now = new Date().toISOString();
   const w: Workout = {
@@ -689,7 +716,7 @@ export default async function Page({
 }) {
   const store = parseStore(cookies().get("app_sessions")?.value);
 
-  // Prépare "Mes séances" (actives)
+  // "Mes séances" (actives)
   const activeAll = store.sessions
     .filter(s => s.status === "active")
     .sort((a, b) => (b.startedAt || b.createdAt || "").localeCompare(a.startedAt || a.createdAt || ""));
@@ -703,7 +730,7 @@ export default async function Page({
   const programme = await fetchAiProgramme();
   const aiSessions = programme?.sessions ?? [];
 
-  // Infos client (prénom/âge/mail + réponses pour calcul dispo)
+  // Infos client + questionnaire
   const detectedEmail = await getSignedInEmail();
   const emailFromCookie = cookies().get("app_email")?.value || "";
   const emailForLink = detectedEmail || emailFromCookie;
@@ -731,21 +758,25 @@ export default async function Page({
     } catch {}
   }
 
-  // Combien d’items visibles à la fois (dispo) + pagination via URL
+  // Dispo + pagination
   const defaultTake = inferAvailability(clientAnswers);
   const take = Math.max(1, Math.min(12, Number(searchParams?.take ?? defaultTake) || defaultTake));
-  const offset = Math.max(0, Number(searchParams?.offset ?? 0) || 0);
+  const reqOffset = Math.max(0, Number(searchParams?.offset ?? 0) || 0);
 
-  // Propositions coach paginées
+  // Propositions coach paginées (avec clamp + message si dépassement)
   const totalAi = aiSessions.length;
-  const visibleAi = aiSessions.slice(offset, offset + take);
-  const hasMoreAi = offset + take < totalAi;
+  const clampedAi = clampOffset(totalAi, take, reqOffset);
+  const visibleAi = aiSessions.slice(clampedAi.offset, clampedAi.offset + take);
+  const hasMoreAi = clampedAi.offset + take < totalAi;
+  const showRanOutAi = clampedAi.emptyReason === "ranout" && !visibleAi.length;
 
-  // "Mes séances" — dédup + pagination selon mêmes paramètres
+  // "Mes séances" — dédup + pagination clamp
   const activeUniq = uniqueBy(activeAll, s => `${s.title}|${s.date}|${s.type}`);
   const totalActive = activeUniq.length;
-  const visibleActive = activeUniq.slice(offset, offset + take);
-  const hasMoreActive = offset + take < totalActive;
+  const clampedActive = clampOffset(totalActive, take, reqOffset);
+  const visibleActive = activeUniq.slice(clampedActive.offset, clampedActive.offset + take);
+  const hasMoreActive = clampedActive.offset + take < totalActive;
+  const showRanOutActive = clampedActive.emptyReason === "ranout" && !visibleActive.length;
 
   const rawError = searchParams?.error || "";
   let displayedError = rawError;
@@ -754,7 +785,7 @@ export default async function Page({
     try { displayedError = decodeURIComponent(full); } catch { displayedError = full; }
   }
 
-  // Helper liens de pagination
+  // Helper liens
   function urlWith(p: Record<string, string | number | undefined>) {
     const sp = new URLSearchParams();
     if (searchParams?.success) sp.set("success", searchParams.success);
@@ -762,7 +793,7 @@ export default async function Page({
     if (searchParams?.done) sp.set("done", searchParams.done);
     if (searchParams?.deleted) sp.set("deleted", searchParams.deleted);
     sp.set("take", String(p.take ?? take));
-    sp.set("offset", String(p.offset ?? offset));
+    sp.set("offset", String(p.offset ?? reqOffset));
     return `/dashboard/profile?${sp.toString()}`;
   }
 
@@ -850,7 +881,7 @@ export default async function Page({
         </div>
       </section>
 
-      {/* Séances proposées par votre coach Files — limitées selon disponibilité + pagination */}
+      {/* Séances proposées par votre coach Files */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
           <h2 style={{ marginBottom: 6 }}>Séances proposées par votre coach Files</h2>
@@ -858,7 +889,7 @@ export default async function Page({
             Générées à partir de vos réponses. Cliquez pour voir le brief détaillé puis enregistrez les séances qui vous conviennent.
           </p>
           <div className="flex flex-col sm:flex-row gap-2 mt-3">
-            <form action={buildProgrammeAction}>
+            <form action={buildProgrammeAction} method="post">
               <button className="btn btn-dash" type="submit" style={{ width: "100%" }}>
                 Mettre à jour les propositions
               </button>
@@ -872,13 +903,19 @@ export default async function Page({
               <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted">🤖</span>
               <span>
                 Pas encore de séances proposées.{" "}
-                <a className="link" href={QUESTIONNAIRE_BASE}>Répondez au questionnaire</a>
+                <a className="link" href={questionnaireUrl}>Répondez au questionnaire</a>
                 , puis appuyez sur « Mettre à jour les propositions ».
               </span>
             </div>
           </div>
         ) : (
           <>
+            {showRanOutAi && (
+              <div className="card text-sm" style={{ color: "#6b7280", border: "1px dashed #d1d5db" }}>
+                Tu n’as pas plus de séances pour le moment.
+              </div>
+            )}
+
             <ul className="card divide-y">
               {visibleAi.map((s) => {
                 const exercises = getExercises(s);
@@ -920,7 +957,7 @@ export default async function Page({
                       </div>
 
                       <div className="flex gap-8 mt-3">
-                        <form action={saveSingleAiSessionAction}>
+                        <form action={saveSingleAiSessionAction} method="post">
                           <input type="hidden" name="id" value={s.id} />
                           <input type="hidden" name="title" value={s.title} />
                           <input type="hidden" name="type" value={s.type} />
@@ -932,7 +969,7 @@ export default async function Page({
                           </button>
                         </form>
 
-                        <form action={addSessionAction}>
+                        <form action={addSessionAction} method="post">
                           <input type="hidden" name="title" value={s.title} />
                           <input type="hidden" name="type" value={s.type} />
                           <input type="hidden" name="date" value={s.date} />
@@ -950,14 +987,14 @@ export default async function Page({
 
             <div className="flex justify-between mt-3">
               <a
-                href={urlWith({ take, offset: Math.max(0, offset - take) })}
-                className={`btn ${offset <= 0 ? "pointer-events-none opacity-50" : ""}`}
-                aria-disabled={offset <= 0}
+                href={urlWith({ take, offset: Math.max(0, clampedAi.offset - take) })}
+                className={`btn ${clampedAi.offset <= 0 ? "pointer-events-none opacity-50" : ""}`}
+                aria-disabled={clampedAi.offset <= 0}
               >
                 ← Voir précédent
               </a>
               <a
-                href={urlWith({ take, offset: offset + take })}
+                href={urlWith({ take, offset: clampedAi.offset + take })}
                 className={`btn ${!hasMoreAi ? "pointer-events-none opacity-50" : ""}`}
                 aria-disabled={!hasMoreAi}
               >
@@ -968,13 +1005,13 @@ export default async function Page({
         )}
       </section>
 
-      {/* Mes séances (enregistrées) — limitées par dispo + pagination + détail cliquable */}
+      {/* Mes séances (enregistrées) */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h2>Mes séances</h2>
           {totalActive > take && (
             <span className="text-xs" style={{ color: "#6b7280" }}>
-              Affichage de {Math.min(totalActive, offset + take)} / {totalActive}
+              Affichage de {Math.min(totalActive, clampedActive.offset + take)} / {totalActive}
             </span>
           )}
         </div>
@@ -988,6 +1025,12 @@ export default async function Page({
           </div>
         ) : (
           <>
+            {showRanOutActive && (
+              <div className="card text-sm" style={{ color: "#6b7280", border: "1px dashed #d1d5db" }}>
+                Tu n’as pas plus de séances pour le moment.
+              </div>
+            )}
+
             <ul className="card divide-y">
               {visibleActive.map((s) => (
                 <li key={s.id} className="py-3">
@@ -1019,14 +1062,14 @@ export default async function Page({
 
             <div className="flex justify-between mt-3">
               <a
-                href={urlWith({ take, offset: Math.max(0, offset - take) })}
-                className={`btn ${offset <= 0 ? "pointer-events-none opacity-50" : ""}`}
-                aria-disabled={offset <= 0}
+                href={urlWith({ take, offset: Math.max(0, clampedActive.offset - take) })}
+                className={`btn ${clampedActive.offset <= 0 ? "pointer-events-none opacity-50" : ""}`}
+                aria-disabled={clampedActive.offset <= 0}
               >
                 ← Voir précédent
               </a>
               <a
-                href={urlWith({ take, offset: offset + take })}
+                href={urlWith({ take, offset: clampedActive.offset + take })}
                 className={`btn ${!hasMoreActive ? "pointer-events-none opacity-50" : ""}`}
                 aria-disabled={!hasMoreActive}
               >
@@ -1078,7 +1121,7 @@ export default async function Page({
                     </div>
 
                     <div className="mt-3">
-                      <form action={deleteSessionAction}>
+                      <form action={deleteSessionAction} method="post">
                         <input type="hidden" name="id" value={s.id} />
                         <button
                           className="btn"
