@@ -564,6 +564,7 @@ async function deleteSessionAction(formData: FormData) {
 }
 
 /* ======== Lecture des réponses par e-mail ======== */
+/* ⬇️ IMPORTANT : on retourne la DERNIÈRE réponse (scan bottom-up) */
 const NO_HEADER_COLS = { nom: 0, prenom: 1, age: 2, email: 10 }; // A,B,C,K
 async function getAnswersForEmail(email: string, sheetId: string, range: string): Promise<Answers | null> {
   const data = await fetchValues(sheetId, range);
@@ -592,7 +593,9 @@ async function getAnswersForEmail(email: string, sheetId: string, range: string)
 
   if (idxEmail === -1) return null;
 
-  for (let i = hasHeader ? 1 : 0; i < values.length; i++) {
+  // 🔁 Parcours de bas en haut pour prendre la DERNIÈRE soumission de cet e-mail
+  const start = hasHeader ? 1 : 0;
+  for (let i = values.length - 1; i >= start; i--) {
     const row = values[i] || [];
     const cell = (row[idxEmail] || "").trim().toLowerCase();
     if (!cell) continue;
@@ -721,7 +724,7 @@ export default async function Page({
     .filter(s => s.status === "active")
     .sort((a, b) => (b.startedAt || b.createdAt || "").localeCompare(a.startedAt || a.createdAt || ""));
 
-  // Passées
+  // Passées (historique)
   const past = store.sessions
     .filter(s => s.status === "done")
     .sort((a, b) => (b.endedAt || "").localeCompare(a.endedAt || ""));
@@ -730,7 +733,7 @@ export default async function Page({
   const programme = await fetchAiProgramme();
   const aiSessions = programme?.sessions ?? [];
 
-  // Infos client + questionnaire
+  // Infos client + questionnaire (DERNIER questionnaire)
   const detectedEmail = await getSignedInEmail();
   const emailFromCookie = cookies().get("app_email")?.value || "";
   const emailForLink = detectedEmail || emailFromCookie;
@@ -846,7 +849,7 @@ export default async function Page({
         )}
       </div>
 
-      {/* Mes infos */}
+      {/* Mes infos (dernière réponse questionnaire) */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
           <h2>Mes infos</h2>
@@ -881,12 +884,12 @@ export default async function Page({
         </div>
       </section>
 
-      {/* Séances proposées par votre coach Files */}
+      {/* Séances proposées par l’IA Coach Files */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
-          <h2 style={{ marginBottom: 6 }}>Séances proposées par votre coach Files</h2>
+          <h2 style={{ marginBottom: 6 }}>Séances proposées par l’IA Coach Files</h2>
           <p className="text-sm" style={{ color: "#6b7280" }}>
-            Générées à partir de vos réponses. Cliquez pour voir le brief détaillé puis enregistrez les séances qui vous conviennent.
+            <b>Générées à partir de vos réponses au questionnaire.</b> Cliquez pour voir le programme détaillé par séance, créé par l’intelligence artificielle.
           </p>
           <div className="flex flex-col sm:flex-row gap-2 mt-3">
             <form action={buildProgrammeAction} method="post">
@@ -1005,7 +1008,7 @@ export default async function Page({
         )}
       </section>
 
-      {/* Mes séances (enregistrées) */}
+      {/* Mes séances (actives) */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h2>Mes séances</h2>
@@ -1080,10 +1083,10 @@ export default async function Page({
         )}
       </section>
 
-      {/* Mes séances passées */}
+      {/* Séances enregistrées (ex-passées) */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h2>Mes séances passées</h2>
+          <h2>Séances enregistrées</h2>
           {past.length > 12 && <span className="text-xs" style={{ color: "#6b7280" }}>Affichage des 12 dernières</span>}
         </div>
 
@@ -1091,7 +1094,7 @@ export default async function Page({
           <div className="card text-sm" style={{ color: "#6b7280" }}>
             <div className="flex items-center gap-3">
               <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted">🗓️</span>
-              <span>Aucune séance terminée pour l’instant.</span>
+              <span>Aucune séance enregistrée pour l’instant.</span>
             </div>
           </div>
         ) : (
