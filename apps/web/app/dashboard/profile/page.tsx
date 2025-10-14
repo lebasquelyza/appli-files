@@ -43,14 +43,12 @@ const API_KEY  = process.env.FILES_COACHING_API_KEY || "";
 // Google Sheets (public via lien)
 const SHEET_ID      = process.env.SHEET_ID      || "1XH-BOUj4tXAVy49ONBIdLiWM97hQ-Fg8h5-OTRGvHC4";
 const SHEET_RANGE   = process.env.SHEET_RANGE   || "Réponses!A1:K";
-// (optionnel) gid de l’onglet pour un accès CSV plus fiable
 const SHEET_GID     = process.env.SHEET_GID     || "1160551014"; // adapte si besoin
 
 // Questionnaire (pour le lien dans l’état vide)
 const QUESTIONNAIRE_BASE = process.env.FILES_COACHING_QUESTIONNAIRE_BASE || "https://questionnaire.files-coaching.com";
 
 /* ===================== Détection e-mail (auth) ===================== */
-/** Récupère l'email du user connecté: NextAuth → cookie. */
 async function getSignedInEmail(): Promise<string> {
   try {
     // @ts-ignore import optionnel
@@ -61,7 +59,6 @@ async function getSignedInEmail(): Promise<string> {
     const email = (session as any)?.user?.email as string | undefined;
     if (email) return email;
   } catch {}
-
   return cookies().get("app_email")?.value || "";
 }
 
@@ -105,7 +102,9 @@ async function fetchAiProgramme(userId?: string): Promise<AiProgramme | null> {
         recommendedBy: r.recommendedBy ?? r.model ?? "AI",
       }));
       return { sessions };
-    } catch {}
+    } catch (e: any) {
+      if (isNextRedirect(e)) throw e;
+    }
   }
   return null;
 }
@@ -261,12 +260,8 @@ function norm(s: string) {
 }
 
 /* ======== Lecture des réponses par e-mail (avec/sans en-têtes) ======== */
-// Indices pour le mode "sans en-têtes" (A=0, B=1, ..., K=10)
-const NO_HEADER_COLS = {
-  nom: 0,       // Colonne A
-  prenom: 1,    // Colonne B
-  email: 10,    // Colonne K
-};
+// A=0, B=1, ..., K=10
+const NO_HEADER_COLS = { nom: 0, prenom: 1, email: 10 };
 
 async function getAnswersForEmail(email: string, sheetId: string, range: string): Promise<Answers | null> {
   const data = await fetchValues(sheetId, range);
@@ -285,16 +280,14 @@ async function getAnswersForEmail(email: string, sheetId: string, range: string)
   if (hasHeader) {
     headers = firstRowNorm;
     idxEmail = headers.findIndex(h => headerCandidates.includes(h));
-    startRow = 1; // data commence en ligne 2
+    startRow = 1;
   } else {
-    // Pas d’en-têtes → on fabrique des clés virtuelles + alias
     const width = Math.max(values[0]?.length || 0, NO_HEADER_COLS.email + 1);
     headers = Array.from({ length: width }, (_, i) => `col${i}`);
     headers[NO_HEADER_COLS.nom] = "nom";
     headers[NO_HEADER_COLS.prenom] = "prenom";
     headers[NO_HEADER_COLS.email] = "email";
     idxEmail = NO_HEADER_COLS.email;
-    startRow = 0; // data commence en ligne 1
   }
 
   if (idxEmail === -1) return null;
@@ -304,13 +297,11 @@ async function getAnswersForEmail(email: string, sheetId: string, range: string)
     const cell = (row[idxEmail] || "").trim().toLowerCase();
     if (!cell) continue;
     if (cell === email.trim().toLowerCase()) {
-      // Mappe la ligne → objet { header -> valeur }
       const rec: Answers = {};
       for (let j = 0; j < row.length; j++) {
         const key = headers[j] || `col${j}`;
         rec[key] = (row[j] ?? "").trim();
       }
-      // Normalisation pour compatibilité (avec/sans accents)
       rec["nom"]    = rec["nom"]    || rec["name"] || rec["last name"] || rec[`col${NO_HEADER_COLS.nom}`]    || "";
       rec["prenom"] = rec["prenom"] || rec["prénom"] || rec["first name"] || rec[`col${NO_HEADER_COLS.prenom}`] || "";
       rec["email"]  = rec["email"]  || rec["adresse mail"] || rec["e-mail"] || rec[`col${NO_HEADER_COLS.email}`]  || "";
@@ -318,6 +309,14 @@ async function getAnswersForEmail(email: string, sheetId: string, range: string)
     }
   }
   return null;
+}
+
+/* ===================== Aide: détection redirect Next ===================== */
+function isNextRedirect(e: any) {
+  try {
+    const d = (e as any)?.digest;
+    return typeof d === "string" && d.startsWith("NEXT_REDIRECT");
+  } catch { return false; }
 }
 
 function generateSessionsFromAnswers(ans: Answers): AiSession[] {
@@ -348,7 +347,8 @@ function generateSessionsFromAnswers(ans: Answers): AiSession[] {
     (niveau.includes("debut") || niveau.includes("début")) ? "faible" :
     (niveau.includes("inter")) ? "modérée" : "élevée";
 
-  if (isFinite(age) && age >= 55) intensity = intensity === "élevée" ? "modérée" : "faible";
+  const isAge = isFinite(age) && age > 0;
+  if (isAge && age >= 55) intensity = intensity === "élevée" ? "modérée" : "faible";
 
   const noEquip = /(aucun|non|sans)/.test(materiel) || materiel === "";
   const atGym = /(salle|gym|fitness)/.test(lieu);
@@ -403,7 +403,7 @@ function generateSessionsFromAnswers(ans: Answers): AiSession[] {
 async function buildProgrammeAction() {
   "use server";
 
-  // 0) Détecter automatiquement l'email via NextAuth/cookie (et mémoriser si trouvé)
+  // 0) Détecter l'email via NextAuth/cookie (et mémoriser si trouvé)
   let email = await getSignedInEmail();
   if (email) {
     cookies().set("app_email", email, { path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365, httpOnly: false });
@@ -431,7 +431,9 @@ async function buildProgrammeAction() {
       if (res.ok) {
         redirect("/dashboard/profile?success=programme");
       }
-    } catch {}
+    } catch (e: any) {
+      if (isNextRedirect(e)) throw e;
+    }
   }
 
   // 2) Fallback Google Sheets — nécessite l'e-mail détecté
@@ -472,7 +474,7 @@ async function buildProgrammeAction() {
 
     redirect("/dashboard/profile?success=programme");
   } catch (e: any) {
-    // Afficher le message complet dans l'UI
+    if (isNextRedirect(e)) throw e; // ne pas intercepter les redirects
     const msg = String(e?.message || "unknown");
     const encoded = encodeURIComponent(msg);
     redirect(`/dashboard/profile?error=programme:sheetfetch:${encoded}`);
@@ -578,16 +580,22 @@ export default async function Page({
     ? `${QUESTIONNAIRE_BASE}?email=${encodeURIComponent(emailForLink)}`
     : QUESTIONNAIRE_BASE;
 
-  // --- Mes infos (nom, prénom, email) ---
+  // --- Mes infos (Prénom + Âge + E-mail) ---
   const clientEmailForInfos = emailForLink || "";
-  let clientNom = "", clientPrenom = "";
+  let clientPrenom = "", clientAge: number | undefined, clientEmailDisplay = clientEmailForInfos;
 
   if (clientEmailForInfos) {
     try {
       const ans = await getAnswersForEmail(clientEmailForInfos, SHEET_ID, SHEET_RANGE);
       const get = (k: string) => (ans ? ans[norm(k)] || ans[k] || "" : "");
-      clientNom = get("nom") || get("nom de famille") || "";
       clientPrenom = get("prénom") || get("prenom") || "";
+      const ageStr = get("age");
+      const num = Number((ageStr || "").toString().replace(",", "."));
+      clientAge = isFinite(num) && num > 0 ? Math.floor(num) : undefined;
+
+      // email depuis le sheet si dispo
+      const emailSheet = get("email") || get("adresse mail") || get("e-mail");
+      if (!clientEmailDisplay && emailSheet) clientEmailDisplay = emailSheet;
     } catch {}
   }
 
@@ -596,11 +604,7 @@ export default async function Page({
   let displayedError = rawError;
   if (rawError.startsWith("programme:sheetfetch:")) {
     const full = rawError.split(":").slice(2).join(":");
-    try {
-      displayedError = decodeURIComponent(full);
-    } catch {
-      displayedError = full;
-    }
+    try { displayedError = decodeURIComponent(full); } catch { displayedError = full; }
   }
 
   return (
@@ -660,7 +664,7 @@ export default async function Page({
         )}
       </div>
 
-      {/* Mes infos */}
+      {/* Mes infos (Prénom + Âge + E-mail) */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
           <h2>Mes infos</h2>
@@ -669,17 +673,23 @@ export default async function Page({
         <div className="card">
           <div className="grid gap-3" style={{ gridTemplateColumns: "140px 1fr" }}>
             <div className="contents">
-              <span className="text-gray-500">Nom</span>
-              <span className="font-medium break-words">{clientNom || <i className="text-gray-400">Non renseigné</i>}</span>
+              <span className="text-gray-500">Prénom</span>
+              <span className="font-medium break-words">
+                {clientPrenom || <i className="text-gray-400">Non renseigné</i>}
+              </span>
             </div>
             <div className="contents">
-              <span className="text-gray-500">Prénom</span>
-              <span className="font-medium break-words">{clientPrenom || <i className="text-gray-400">Non renseigné</i>}</span>
+              <span className="text-gray-500">Âge</span>
+              <span className="font-medium break-words">
+                {typeof clientAge === "number" ? `${clientAge} ans` : <i className="text-gray-400">Non renseigné</i>}
+              </span>
             </div>
             <div className="contents">
               <span className="text-gray-500">E-mail</span>
-              {emailForLink ? (
-                <a href={`mailto:${emailForLink}`} className="font-medium underline break-words">{emailForLink}</a>
+              {clientEmailDisplay ? (
+                <a href={`mailto:${clientEmailDisplay}`} className="font-medium underline break-words">
+                  {clientEmailDisplay}
+                </a>
               ) : (
                 <span className="font-medium"><i className="text-gray-400">Non renseigné</i></span>
               )}
