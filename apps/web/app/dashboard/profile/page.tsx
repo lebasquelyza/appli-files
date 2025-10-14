@@ -37,19 +37,57 @@ type AiSession = {
 type AiProgramme = { sessions: AiSession[] };
 
 /* ===================== Config ===================== */
-// API principale Files Coaching
 const API_BASE = process.env.FILES_COACHING_API_BASE || "https://files-coaching.com";
 const API_KEY  = process.env.FILES_COACHING_API_KEY || "";
 
 // Google Sheets (fallback)
 const SHEET_ID      = process.env.SHEET_ID      || "1HYLsmWXJ3NIRbxH0jOiXeBPiIwrL4d2sW6JKo7ZblYTMYu4RusIji627";
-const SHEET_RANGE   = process.env.SHEET_RANGE   || "Reponses!A1:K1000"; // ⟵ adapte le nom de l’onglet si besoin
+const SHEET_RANGE   = process.env.SHEET_RANGE   || "Reponses!A1:K1000"; // ← ajuste NomOnglet si besoin
 const SHEET_API_KEY = process.env.SHEET_API_KEY || "";
 
-// Questionnaire (pour le lien dans l’état vide)
+// Questionnaire (texte cliquable)
 const QUESTIONNAIRE_BASE = process.env.FILES_COACHING_QUESTIONNAIRE_BASE || "https://questionnaire.files-coaching.com";
 
-/* ============ Fetch du programme IA depuis votre API (affichage) ============ */
+/* ===================== Détection email (auth) ===================== */
+/** Récupère l'email du user connecté: NextAuth → Supabase → cookie. */
+async function getSignedInEmail(): Promise<string> {
+  // NextAuth (si présent)
+  try {
+    // @ts-ignore (import optionnel)
+    const { getServerSession } = await import("next-auth");
+    // @ts-ignore (adapte si ton chemin diffère)
+    const { authOptions } = await import("@/lib/auth");
+    const session = await getServerSession(authOptions as any);
+    const email = (session as any)?.user?.email as string | undefined;
+    if (email) return email;
+  } catch {}
+
+  // Supabase (si présent)
+  try {
+    // @ts-ignore (import optionnel)
+    const { createServerClient } = await import("@supabase/auth-helpers-nextjs");
+    const cookieStore = cookies();
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (supabaseUrl && supabaseAnon) {
+      const supabase = createServerClient(supabaseUrl, supabaseAnon, {
+        cookies: {
+          get(name: string) { return cookieStore.get(name)?.value; },
+          set() {},
+          remove() {},
+        },
+      });
+      const { data } = await supabase.auth.getUser();
+      const email = (data as any)?.user?.email as string | undefined;
+      if (email) return email;
+    }
+  } catch {}
+
+  // Cookie existant (fallback)
+  return cookies().get("app_email")?.value || "";
+}
+
+/* ============ Fetch du programme IA depuis ton API (affichage) ============ */
 async function fetchAiProgramme(userId?: string): Promise<AiProgramme | null> {
   const uidFromCookie = cookies().get("fc_uid")?.value;
   const uid = userId || uidFromCookie || "me";
@@ -89,9 +127,7 @@ async function fetchAiProgramme(userId?: string): Promise<AiProgramme | null> {
         recommendedBy: r.recommendedBy ?? r.model ?? "AI",
       }));
       return { sessions };
-    } catch {
-      // essaie endpoint suivant
-    }
+    } catch {}
   }
   return null;
 }
@@ -153,7 +189,6 @@ async function fetchValues(sheetId: string, range: string, apiKey?: string) {
   const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) {
     const txt = await res.text().catch(() => "");
-    // remonte un statut explicite
     throw new Error(`SHEETS_${res.status}${txt ? ":" + txt.slice(0, 60) : ""}`);
   }
   return res.json();
@@ -176,9 +211,7 @@ async function getAnswersForEmail(email: string, sheetId: string, range: string,
   if (values.length < 2) return null;
 
   const headers = values[0].map(norm);
-  const idxEmail =
-    headers.findIndex(h => h === "adresse mail" || h === "email" || h === "e-mail");
-
+  const idxEmail = headers.findIndex(h => h === "adresse mail" || h === "email" || h === "e-mail");
   if (idxEmail === -1) return null;
 
   for (let i = 1; i < values.length; i++) {
@@ -207,7 +240,7 @@ function generateSessionsFromAnswers(ans: Answers): AiSession[] {
   const lieu = get("a quel endroit v tu faire ta seance ?").toLowerCase();
   const materiel = get("as tu du matériel a ta disposition").toLowerCase() || get("as tu du materiel a ta disposition").toLowerCase();
 
-  // fréquence
+  // fréquence / nb de séances
   let freq = 3;
   const digits = dispo.match(/\d+/g);
   if (digits?.length) freq = Math.max(1, Math.min(6, parseInt(digits[0], 10)));
@@ -215,7 +248,6 @@ function generateSessionsFromAnswers(ans: Answers): AiSession[] {
     freq = Math.max(1, Math.min(6, dispo.split(/[ ,;\/-]+/).filter(Boolean).length));
   }
 
-  // durée & intensité
   const baseMin =
     niveau.includes("debut") || niveau.includes("début") ? 25 :
     niveau.includes("inter") ? 35 : 45;
@@ -226,11 +258,9 @@ function generateSessionsFromAnswers(ans: Answers): AiSession[] {
 
   if (isFinite(age) && age >= 55) intensity = intensity === "élevée" ? "modérée" : "faible";
 
-  // contraintes lieu/matériel
   const noEquip = /(aucun|non|sans)/.test(materiel) || materiel === "";
   const atGym = /(salle|gym|fitness)/.test(lieu);
 
-  // types selon objectif
   const muscuPossible = !noEquip || atGym;
   let pool: WorkoutType[] = ["cardio", "hiit", "mobilité"];
   if (muscuPossible) pool = ["muscu", "cardio", "hiit"];
@@ -252,7 +282,6 @@ function generateSessionsFromAnswers(ans: Answers): AiSession[] {
   if (noEquip) noteParts.push("Sans matériel");
   if (atGym) noteParts.push("Salle");
 
-  // calendrier simple
   const today = new Date();
   const nb = Math.max(1, Math.min(6, freq));
   const sessions: AiSession[] = [];
@@ -282,7 +311,14 @@ function generateSessionsFromAnswers(ans: Answers): AiSession[] {
 async function buildProgrammeAction() {
   "use server";
 
-  // 1) Tente l’API Files Coaching
+  // 0) Détecter automatiquement l'email du user connecté
+  let email = await getSignedInEmail();
+  if (email) {
+    // on mémorise en cookie pour les prochains clics
+    cookies().set("app_email", email, { path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365, httpOnly: false });
+  }
+
+  // 1) Tente l’API Files Coaching (indépendamment de l’email)
   const uid = cookies().get("fc_uid")?.value || "me";
   const endpoints = [
     `${API_BASE}/api/programme/build`,
@@ -304,14 +340,12 @@ async function buildProgrammeAction() {
       if (res.ok) {
         redirect("/dashboard/profile?success=programme");
       }
-    } catch {
-      // essaie suivant
-    }
+    } catch {}
   }
 
-  // 2) Fallback Google Sheets (génération locale)
-  const email = cookies().get("app_email")?.value || "";
+  // 2) Fallback Google Sheets → nécessite l'email détecté
   if (!email) {
+    // pas d'email détecté par auth → on arrête proprement (mais sans re-demander côté UI)
     redirect("/dashboard/profile?error=programme:noemail");
   }
 
@@ -445,13 +479,18 @@ export default async function Page({
 
   const defaultDate = toYMD();
 
-  // Récupération du programme IA (si votre API renvoie des séances) – affichage informatif
+  // Affichage informatif si ton API renvoie déjà un programme
   const programme = await fetchAiProgramme();
   const aiSessions = programme?.sessions ?? [];
 
-  // URL questionnaire (avec email si dispo)
-  const emailCookie = cookies().get("app_email")?.value || "";
-  const questionnaireUrl = emailCookie ? `${QUESTIONNAIRE_BASE}?email=${encodeURIComponent(emailCookie)}` : QUESTIONNAIRE_BASE;
+  // Lien questionnaire pré-rempli avec email détecté (si dispo)
+  const detectedEmail = await getSignedInEmail();
+  if (detectedEmail) {
+    cookies().set("app_email", detectedEmail, { path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365, httpOnly: false });
+  }
+  const questionnaireUrl = detectedEmail
+    ? `${QUESTIONNAIRE_BASE}?email=${encodeURIComponent(detectedEmail)}`
+    : QUESTIONNAIRE_BASE;
 
   return (
     <div
@@ -510,30 +549,6 @@ export default async function Page({
         )}
       </div>
 
-      {/* Mini-capture de l'email si manquant (pour le fallback Sheets) */}
-      {!emailCookie && (
-        <div className="card" style={{ marginTop: 12 }}>
-          <form
-            action={async (fd: FormData) => {
-              "use server";
-              const email = (fd.get("email") || "").toString().trim();
-              if (email) {
-                cookies().set("app_email", email, { path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365, httpOnly: false });
-                redirect("/dashboard/profile");
-              } else {
-                redirect("/dashboard/profile?error=noemail");
-              }
-            }}
-            className="flex flex-col sm:flex-row gap-2"
-          >
-            <input className="input" type="email" name="email" placeholder="Votre email (pour lier vos réponses Google Sheet)" required />
-            <button className="btn" type="submit" style={{ background: "#fff", border: "1px solid #d1d5db" }}>
-              Enregistrer l’email
-            </button>
-          </form>
-        </div>
-      )}
-
       {/* Ajouter une séance (manuel) */}
       <div className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
@@ -591,7 +606,7 @@ export default async function Page({
         <div className="section-head" style={{ marginBottom: 8 }}>
           <h2 style={{ marginBottom: 6 }}>Mon programme (personnalisé par l’IA)</h2>
 
-          {/* Un seul CTA (responsive) */}
+          {/* Un seul CTA */}
           <div className="flex flex-col sm:flex-row gap-2 mt-3">
             <form action={buildProgrammeAction}>
               <button className="btn btn-dash" type="submit" style={{ width: "100%" }}>
@@ -630,7 +645,6 @@ export default async function Page({
                   {s.note ? (<><br />Note : <i>{s.note}</i></>) : null}
                 </div>
 
-                {/* Option : convertir en séance locale */}
                 <form action={addSessionAction} style={{ display: "flex", gap: 8, marginTop: 12 }}>
                   <input type="hidden" name="title" value={s.title} />
                   <input type="hidden" name="type" value={s.type} />
@@ -699,4 +713,3 @@ export default async function Page({
     </div>
   );
 }
-
