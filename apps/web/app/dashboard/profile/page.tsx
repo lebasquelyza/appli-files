@@ -38,13 +38,11 @@ type AiSession = {
 
 type AiProgramme = { sessions: AiSession[] };
 
-/* ================= Bases & clés ================= */
 const API_BASE = process.env.FILES_COACHING_API_BASE || "https://files-coaching.com";
-const QUESTIONNAIRE_BASE = process.env.FILES_COACHING_QUESTIONNAIRE_BASE || "https://questionnaire.files-coaching.com";
-const API_KEY = process.env.FILES_COACHING_API_KEY || ""; // optionnel si votre API l’exige
+const API_KEY = process.env.FILES_COACHING_API_KEY || ""; // ⟵ à définir en env
 
-/* ============ Fetch des séances IA depuis votre API ============ */
 async function fetchAiProgramme(userId?: string): Promise<AiProgramme | null> {
+  // Cette fonction essaie quelques endpoints probables. Adaptez au contrat réel de votre API.
   const uidFromCookie = cookies().get("fc_uid")?.value;
   const uid = userId || uidFromCookie || "me";
 
@@ -58,38 +56,35 @@ async function fetchAiProgramme(userId?: string): Promise<AiProgramme | null> {
     try {
       const res = await fetch(url, {
         headers: {
-          Accept: "application/json",
+          "Accept": "application/json",
           ...(API_KEY ? { Authorization: `Bearer ${API_KEY}` } : {}),
         },
+        // Pas de cache pour rester frais quand l'IA régénère le plan
         cache: "no-store",
       });
       if (!res.ok) continue;
       const data = (await res.json()) as any;
+      // normalisation flexible
       const raw = Array.isArray(data?.sessions) ? data.sessions : Array.isArray(data) ? data : [];
       const sessions: AiSession[] = raw.map((r: any, i: number) => ({
         id: String(r.id ?? `ai-${i}`),
         title: String(r.title ?? r.name ?? "Séance personnalisée"),
         type: ((r.type ?? r.category ?? "muscu") as WorkoutType),
-        date: String(r.date ?? r.day ?? r.when ?? new Date().toISOString().slice(0, 10)),
-        plannedMin:
-          typeof r.plannedMin === "number"
-            ? r.plannedMin
-            : typeof r.duration === "number"
-            ? r.duration
-            : undefined,
-        note: typeof r.note === "string" ? r.note : typeof r.notes === "string" ? r.notes : undefined,
+        date: String(r.date ?? r.day ?? r.when ?? new Date().toISOString().slice(0,10)),
+        plannedMin: typeof r.plannedMin === "number" ? r.plannedMin : (typeof r.duration === "number" ? r.duration : undefined),
+        note: typeof r.note === "string" ? r.note : (typeof r.notes === "string" ? r.notes : undefined),
         intensity: r.intensity as any,
         recommendedBy: r.recommendedBy ?? r.model ?? "AI",
       }));
       return { sessions };
-    } catch {
+    } catch (e) {
       // essaie endpoint suivant
     }
   }
   return null;
 }
 
-/* ================= Utils ================= */
+// ===== Utils =====
 function parseStore(val?: string | null): Store {
   if (!val) return { sessions: [] };
   try {
@@ -145,6 +140,7 @@ function minutesBetween(a?: string, b?: string) {
   const mins = Math.round((B - A) / 60000);
   return mins >= 0 ? mins : undefined;
 }
+
 function typeBadgeClass(t: WorkoutType) {
   switch (t) {
     case "muscu":
@@ -158,18 +154,7 @@ function typeBadgeClass(t: WorkoutType) {
   }
 }
 
-/* ============== Actions serveur (nouveaux boutons) ============== */
-function getUserEmail() {
-  return cookies().get("app_email")?.value || "";
-}
-
-async function startQuestionnaireAction() {
-  "use server";
-  const email = getUserEmail();
-  const url = email ? `${QUESTIONNAIRE_BASE}?email=${encodeURIComponent(email)}` : QUESTIONNAIRE_BASE;
-  redirect(url);
-}
-
+/* ===== Server Actions (non exportées) ===== */
 async function buildProgrammeAction() {
   "use server";
   const uid = cookies().get("fc_uid")?.value || "me";
@@ -178,30 +163,23 @@ async function buildProgrammeAction() {
     `${API_BASE}/api/program/build`,
     `${API_BASE}/api/sessions/build`,
   ];
-
   for (const url of endpoints) {
     try {
       const res = await fetch(`${url}?user=${encodeURIComponent(uid)}`, {
         method: "POST",
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-          ...(API_KEY ? { Authorization: `Bearer ${API_KEY}` } : {}),
-        },
+        headers: { Accept: "application/json", "Content-Type": "application/json" },
         body: JSON.stringify({ user: uid, source: "app-profile" }),
         cache: "no-store",
       });
       if (res.ok) {
         redirect("/dashboard/profile?success=programme");
       }
-    } catch {
-      // continue
-    }
+    } catch {}
   }
   redirect("/dashboard/profile?error=programme");
 }
 
-/* ============== Actions serveur existantes ============== */
+/* ===== Server Actions (non exportées) ===== */
 async function addSessionAction(formData: FormData) {
   "use server";
   const title = (formData.get("title") || "").toString().trim();
@@ -213,7 +191,8 @@ async function addSessionAction(formData: FormData) {
 
   if (!title) redirect("/dashboard/profile?error=titre");
 
-  const store = parseStore(cookies().get("app_sessions")?.value);
+  const jar = cookies();
+  const store = parseStore(jar.get("app_sessions")?.value);
 
   const w: Workout = {
     id: uid(),
@@ -229,9 +208,8 @@ async function addSessionAction(formData: FormData) {
 
   const next: Store = { sessions: [w, ...store.sessions].slice(0, 300) };
 
-  cookies().set("app_sessions", JSON.stringify(next), {
-    path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365, httpOnly: false,
-  });
+  const jarOpts: any = { path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365, httpOnly: false };
+  cookies().set("app_sessions", JSON.stringify(next), jarOpts);
 
   redirect("/dashboard/profile?success=1");
 }
@@ -241,7 +219,8 @@ async function completeSessionAction(formData: FormData) {
   const id = (formData.get("id") || "").toString();
   if (!id) redirect("/dashboard/profile");
 
-  const store = parseStore(cookies().get("app_sessions")?.value);
+  const jar = cookies();
+  const store = parseStore(jar.get("app_sessions")?.value);
 
   const nowISO = new Date().toISOString();
   const sessions = store.sessions.map(s => {
@@ -250,9 +229,7 @@ async function completeSessionAction(formData: FormData) {
     return { ...s, status: "done" as WorkoutStatus, startedAt: started, endedAt: nowISO };
   });
 
-  cookies().set("app_sessions", JSON.stringify({ sessions }), {
-    path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365, httpOnly: false,
-  });
+  cookies().set("app_sessions", JSON.stringify({ sessions }), { path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365, httpOnly: false });
 
   redirect("/dashboard/profile?done=1");
 }
@@ -265,20 +242,19 @@ async function deleteSessionAction(formData: FormData) {
   const store = parseStore(cookies().get("app_sessions")?.value);
   const sessions = store.sessions.filter(s => s.id !== id);
 
-  cookies().set("app_sessions", JSON.stringify({ sessions }), {
-    path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365, httpOnly: false,
-  });
+  cookies().set("app_sessions", JSON.stringify({ sessions }), { path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365, httpOnly: false });
 
   redirect("/dashboard/profile?deleted=1");
 }
 
-/* ================= Page ================= */
+/* ===== Page ===== */
 export default async function Page({
   searchParams,
 }: {
   searchParams?: { success?: string; error?: string; done?: string; deleted?: string };
 }) {
-  const store = parseStore(cookies().get("app_sessions")?.value);
+  const jar = cookies();
+  const store = parseStore(jar.get("app_sessions")?.value);
 
   const active = store.sessions
     .filter(s => s.status === "active")
@@ -300,17 +276,21 @@ export default async function Page({
       style={{
         paddingTop: 24,
         paddingBottom: 32,
-        fontSize: "var(--settings-fs, 12px)",
+        fontSize: "var(--settings-fs, 12px)", // ⟵ même taille héritée que la 1ʳᵉ page
       }}
     >
       {/* Header */}
       <div className="page-header">
         <div>
-          <h1 className="h1" style={{ fontSize: 22 }}>
+          <h1
+            className="h1"
+            style={{ fontSize: 22 }} // ⟵ titre principal fixé à 22px
+          >
             Mon profil
           </h1>
           <p className="lead">Gérez vos séances et gardez un historique clair de votre entraînement.</p>
         </div>
+        {/* Bouton secondaire : noir sur blanc */}
         <a
           href="/dashboard"
           className="btn"
@@ -331,7 +311,7 @@ export default async function Page({
       <div className="space-y-3">
         {!!searchParams?.success && (
           <div className="card" style={{ border: "1px solid rgba(16,185,129,.35)", background: "rgba(16,185,129,.08)", fontWeight: 600 }}>
-            ✓ {searchParams.success === "programme" ? "Programme généré." : "Séance ajoutée."}
+            ✓ Séance ajoutée.
           </div>
         )}
         {!!searchParams?.done && (
@@ -397,6 +377,7 @@ export default async function Page({
 
             <input type="hidden" name="startNow" value="1" />
             <div className="lg:col-span-3" style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+              {/* Principal = vert */}
               <button className="btn btn-dash" type="submit">Démarrer maintenant</button>
             </div>
           </form>
@@ -406,24 +387,11 @@ export default async function Page({
       {/* Mon programme (IA) */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
-          <h2 style={{ marginBottom: 6 }}>Mon programme (personnalisé par l’IA)</h2>
-
+          <h2>Mon programme (personnalisé par l’IA)</h2>
           <div className="text-xs" style={{ color: "#6b7280" }}>
             {aiSessions.length > 0 ? `Provenance : ${API_BASE.replace(/^https?:\/\//,'')}` : ""}
           </div>
-
-          {/* Toolbar responsive */}
           <div className="flex flex-col sm:flex-row gap-2 mt-3">
-            <form action={startQuestionnaireAction}>
-              <button
-                className="btn"
-                type="submit"
-                style={{ width: "100%", background: "#fff", border: "1px solid #d1d5db" }}
-              >
-                Remplir le questionnaire
-              </button>
-            </form>
-
             <form action={buildProgrammeAction}>
               <button className="btn btn-dash" type="submit" style={{ width: "100%" }}>
                 Créer mon programme
@@ -431,15 +399,13 @@ export default async function Page({
             </form>
           </div>
         </div>
+        </div>
 
         {aiSessions.length === 0 ? (
           <div className="card text-sm" style={{ color: "#6b7280" }}>
             <div className="flex items-center gap-3">
               <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted">🤖</span>
-              <span>
-                Pas encore de séances générées. Répondez au questionnaire pour créer votre programme personnalisé sur{" "}
-                <a className="link" href={QUESTIONNAIRE_BASE} target="_blank" rel="noreferrer">questionnaire.files-coaching.com</a>.
-              </span>
+              <span>Pas encore de séances générées. Répondez au questionnaire, puis appuyez sur « Créer mon programme ».</span>
             </div>
           </div>
         ) : (
@@ -523,6 +489,7 @@ export default async function Page({
                   <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
                     <form action={deleteSessionAction}>
                       <input type="hidden" name="id" value={s.id} />
+                      {/* Secondaire = NOIR SUR BLANC */}
                       <button
                         className="btn"
                         type="submit"
