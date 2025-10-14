@@ -81,7 +81,7 @@ async function fetchAiProgramme(userId?: string): Promise<AiProgramme | null> {
       }));
       return { sessions };
     } catch {
-      // on essaie l’endpoint suivant
+      // essaie l’endpoint suivant
     }
   }
   return null;
@@ -131,7 +131,7 @@ function typeBadgeClass(t: WorkoutType) {
   switch (t) {
     case "muscu": return "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200";
     case "cardio": return "bg-sky-50 text-sky-700 ring-1 ring-sky-200";
-    case "hiit": return "bg-amber-50 text-amber-700 ring-1 ring-amber-200";
+    case "hiit":  return "bg-amber-50 text-amber-700 ring-1 ring-amber-200";
     case "mobilité": return "bg-violet-50 text-violet-700 ring-1 ring-violet-200";
   }
 }
@@ -194,6 +194,7 @@ async function addSessionAction(formData: FormData) {
   };
 
   const next: Store = { sessions: [w, ...store.sessions].slice(0, 300) };
+
   cookies().set("app_sessions", JSON.stringify(next), {
     path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365, httpOnly: false,
   });
@@ -373,10 +374,6 @@ export default async function Page({
         <div className="section-head" style={{ marginBottom: 8 }}>
           <h2 style={{ marginBottom: 6 }}>Mon programme (personnalisé par l’IA)</h2>
 
-          <div className="text-xs" style={{ color: "#6b7280" }}>
-            {aiSessions.length > 0 ? `Provenance : ${API_BASE.replace(/^https?:\/\/,'')}` : ""}
-          </div>
-
           {/* Un seul CTA (responsive) */}
           <div className="flex flex-col sm:flex-row gap-2 mt-3">
             <form action={buildProgrammeAction}>
@@ -481,4 +478,5 @@ export default async function Page({
     </div>
   );
 }
+
 
