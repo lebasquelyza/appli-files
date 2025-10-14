@@ -1,6 +1,5 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import SessionsClient from "./_SessionsClient";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -189,7 +188,6 @@ async function fetchValues(sheetId: string, range: string, _apiKey?: string) {
       const looksHtml = text.trim().startsWith("<") || lastCT.includes("text/html");
       if (looksHtml) continue;
 
-      // Parse CSV robuste
       const rows: string[][] = [];
       const lines = text.split(/\r?\n/).filter(l => l.trim() !== "");
       for (const line of lines) {
@@ -451,7 +449,7 @@ async function buildProgrammeAction() {
 
     redirect("/dashboard/profile?success=programme");
   } catch (e: any) {
-    if (isNextRedirect(e)) throw e; // ne pas intercepter les redirects
+    if (isNextRedirect(e)) throw e;
     const msg = String(e?.message || "unknown");
     const encoded = encodeURIComponent(msg);
     redirect(`/dashboard/profile?error=programme:sheetfetch:${encoded}`);
@@ -528,7 +526,7 @@ async function deleteSessionAction(formData: FormData) {
   redirect("/dashboard/profile?deleted=1");
 }
 
-/* ===================== Page (Server) ===================== */
+/* ===================== Page ===================== */
 export default async function Page({
   searchParams,
 }: {
@@ -544,11 +542,9 @@ export default async function Page({
     .filter(s => s.status === "done")
     .sort((a, b) => (b.endedAt || "").localeCompare(a.endedAt || ""));
 
-  // Affichage informatif si votre API renvoie déjà un programme
   const programme = await fetchAiProgramme();
   const aiSessions = programme?.sessions ?? [];
 
-  // Email détecté (NextAuth/cookie) pour le lien questionnaire
   const detectedEmail = await getSignedInEmail();
   const emailFromCookie = cookies().get("app_email")?.value || "";
   const emailForLink = detectedEmail || emailFromCookie;
@@ -557,7 +553,7 @@ export default async function Page({
     ? `${QUESTIONNAIRE_BASE}?email=${encodeURIComponent(emailForLink)}`
     : QUESTIONNAIRE_BASE;
 
-  // Mes infos
+  // Mes infos (Prénom + Age + Mail)
   const clientEmailForInfos = emailForLink || "";
   let clientPrenom = "", clientAge: number | undefined, clientEmailDisplay = clientEmailForInfos;
 
@@ -575,7 +571,6 @@ export default async function Page({
     } catch {}
   }
 
-  // Erreur lisible
   const rawError = searchParams?.error || "";
   let displayedError = rawError;
   if (rawError.startsWith("programme:sheetfetch:")) {
@@ -719,8 +714,91 @@ export default async function Page({
         )}
       </section>
 
-      {/* Blocs repliables + pagination */}
-      <SessionsClient active={active} past={past} />
+      {/* Mes séances (actives / à venir) */}
+      <section className="section" style={{ marginTop: 12 }}>
+        <div className="section-head" style={{ marginBottom: 8 }}>
+          <h2>Mes séances (actives / à venir)</h2>
+          {active.length > 12 && <span className="text-xs" style={{ color: "#6b7280" }}>Affichage des 12 dernières</span>}
+        </div>
+
+        {active.length === 0 ? (
+          <div className="card text-sm" style={{ color: "#6b7280" }}>
+            <div className="flex items-center gap-3">
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted">📅</span>
+              <span>Aucune séance active pour l’instant.</span>
+            </div>
+          </div>
+        ) : (
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {active.slice(0, 12).map((s) => (
+              <article key={s.id} className="card" style={{ transition: "box-shadow .2s" }}>
+                <div className="flex items-start justify-between gap-3">
+                  <strong style={{ fontSize: 16 }}>{s.title}</strong>
+                  <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>
+                    {s.type}
+                  </span>
+                </div>
+                <div className="text-sm" style={{ color: "#6b7280", marginTop: 8 }}>
+                  Prévu le <b style={{ color: "inherit" }}>{fmtDateYMD(s.date)}</b>
+                  {s.plannedMin ? ` · ${s.plannedMin} min` : ""}
+                  {s.note ? (<><br />Note : <i>{s.note}</i></>) : null}
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Mes séances passées */}
+      <section className="section" style={{ marginTop: 12 }}>
+        <div className="section-head" style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <h2>Mes séances passées</h2>
+          {past.length > 12 && <span className="text-xs" style={{ color: "#6b7280" }}>Affichage des 12 dernières</span>}
+        </div>
+
+        {past.length === 0 ? (
+          <div className="card text-sm" style={{ color: "#6b7280" }}>
+            <div className="flex items-center gap-3">
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted">🗓️</span>
+              <span>Aucune séance terminée pour l’instant.</span>
+            </div>
+          </div>
+        ) : (
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {past.slice(0, 12).map((s) => {
+              const mins = minutesBetween(s.startedAt, s.endedAt);
+              return (
+                <article key={s.id} className="card" style={{ transition: "box-shadow .2s" }}>
+                  <div className="flex items-start justify-between gap-3">
+                    <strong style={{ fontSize: 16 }}>{s.title}</strong>
+                    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>
+                      {s.type}
+                    </span>
+                  </div>
+                  <div className="text-sm" style={{ color: "#6b7280", marginTop: 8 }}>
+                    Le <b style={{ color: "inherit" }}>{fmtDateISO(s.endedAt)}</b>
+                    {mins ? ` · ${mins} min` : ""}
+                    {s.plannedMin ? ` (prévu ${s.plannedMin} min)` : ""}
+                    {s.note ? (<><br />Note : <i>{s.note}</i></>) : null}
+                  </div>
+                  <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                    <form action={deleteSessionAction}>
+                      <input type="hidden" name="id" value={s.id} />
+                      <button
+                        className="btn"
+                        type="submit"
+                        style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
+                      >
+                        Supprimer
+                      </button>
+                    </form>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
     </div>
   );
 }
