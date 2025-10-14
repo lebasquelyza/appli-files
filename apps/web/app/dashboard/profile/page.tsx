@@ -498,6 +498,19 @@ export default async function Page({
     ? `${QUESTIONNAIRE_BASE}?email=${encodeURIComponent(emailForLink)}`
     : QUESTIONNAIRE_BASE;
 
+  // --- Mes infos (nom, prénom, email) ---
+  const clientEmailForInfos = emailForLink || "";
+  let clientNom = "", clientPrenom = "";
+
+  if (clientEmailForInfos) {
+    try {
+      const ans = await getAnswersForEmail(clientEmailForInfos, SHEET_ID, SHEET_RANGE);
+      const get = (k: string) => (ans ? ans[norm(k)] || "" : "");
+      clientNom = get("nom") || get("nom de famille") || "";
+      clientPrenom = get("prénom") || get("prenom") || "";
+    } catch {}
+  }
+
   return (
     <div
       className="container"
@@ -555,57 +568,33 @@ export default async function Page({
         )}
       </div>
 
-      {/* Ajouter une séance (manuel) */}
-      <div className="section" style={{ marginTop: 12 }}>
+      {/* Mes infos */}
+      <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
-          <h2>Ajouter une séance</h2>
+          <h2>Mes infos</h2>
         </div>
 
         <div className="card">
-          <form action={addSessionAction} className="grid gap-6 lg:grid-cols-3">
-            <div className="lg:col-span-2">
-              <label className="label">Titre</label>
-              <input
-                className="input"
-                type="text"
-                name="title"
-                placeholder="ex: Full body, Cardio 20', HIIT Tabata…"
-                required
-              />
+          <div className="grid gap-3" style={{ gridTemplateColumns: "140px 1fr" }}>
+            <div className="contents">
+              <span className="text-gray-500">Nom</span>
+              <span className="font-medium break-words">{clientNom || <i className="text-gray-400">Non renseigné</i>}</span>
             </div>
-
-            <div>
-              <label className="label">Type</label>
-              <select className="input" name="type" defaultValue="muscu" required>
-                <option value="muscu">Muscu</option>
-                <option value="cardio">Cardio</option>
-                <option value="hiit">HIIT</option>
-                <option value="mobilité">Mobilité</option>
-              </select>
+            <div className="contents">
+              <span className="text-gray-500">Prénom</span>
+              <span className="font-medium break-words">{clientPrenom || <i className="text-gray-400">Non renseigné</i>}</span>
             </div>
-
-            <div>
-              <label className="label">Date prévue</label>
-              <input className="input" type="date" name="date" defaultValue={defaultDate} required />
+            <div className="contents">
+              <span className="text-gray-500">E-mail</span>
+              {emailForLink ? (
+                <a href={`mailto:${emailForLink}`} className="font-medium underline break-words">{emailForLink}</a>
+              ) : (
+                <span className="font-medium"><i className="text-gray-400">Non renseigné</i></span>
+              )}
             </div>
-
-            <div>
-              <label className="label">Durée prévue (min) — optionnel</label>
-              <input className="input" type="number" inputMode="numeric" name="plannedMin" placeholder="ex: 30" />
-            </div>
-
-            <div className="lg:col-span-2">
-              <label className="label">Note — optionnel</label>
-              <input className="input" type="text" name="note" placeholder="ex: accent sur jambes / intervalles 30-30" />
-            </div>
-
-            <input type="hidden" name="startNow" value="1" />
-            <div className="lg:col-span-3" style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
-              <button className="btn btn-dash" type="submit">Démarrer maintenant</button>
-            </div>
-          </form>
+          </div>
         </div>
-      </div>
+      </section>
 
       {/* Mon programme (IA) */}
       <section className="section" style={{ marginTop: 12 }}>
@@ -720,3 +709,4 @@ export default async function Page({
     </div>
   );
 }
+
