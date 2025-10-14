@@ -37,9 +37,14 @@ type AiSession = {
 type AiProgramme = { sessions: AiSession[] };
 
 /* ===================== Config ===================== */
+// API principale
 const API_BASE = process.env.FILES_COACHING_API_BASE || "https://files-coaching.com";
-const QUESTIONNAIRE_BASE = process.env.FILES_COACHING_QUESTIONNAIRE_BASE || "https://questionnaire.files-coaching.com";
 const API_KEY  = process.env.FILES_COACHING_API_KEY || "";
+
+// Fallback Google Sheets (lecture des réponses)
+const SHEET_ID      = process.env.SHEET_ID      || "1HYLsmWXJ3NIRbxH0jOiXeBPiIwrL4d2sW6JKo7ZblYTMYu4RusIji627";
+const SHEET_RANGE   = process.env.SHEET_RANGE   || "Reponses!A1:Z1000"; // adapte si onglet différent
+const SHEET_API_KEY = process.env.SHEET_API_KEY || "";                  // requis si la feuille n'est pas publique
 
 /* ============ Fetch du programme IA depuis votre API ============ */
 async function fetchAiProgramme(userId?: string): Promise<AiProgramme | null> {
@@ -137,16 +142,140 @@ function typeBadgeClass(t: WorkoutType) {
   }
 }
 
+/* ======== Google Sheets fallback (lecture & génération locale) ======== */
+function normalizeKey(s: string) {
+  return s.trim().toLowerCase()
+    .replace(/\s+/g, " ")
+    .replace(/[éèêë]/g, "e").replace(/[àâä]/g, "a")
+    .replace(/[îï]/g, "i").replace(/[ôö]/g, "o").replace(/[ùûü]/g, "u")
+    .replace(/[’']/g, "'").replace(/\?/g, "?");
+}
+async function fetchValues(sheetId: string, range: string, apiKey?: string) {
+  const base = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(range)}`;
+  const url = apiKey ? `${base}?key=${apiKey}` : base;
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) return null;
+  return res.json();
+}
+type Answers = Record<string, string>;
+async function getAnswersForEmail(email: string): Promise<Answers | null> {
+  if (!email) return null;
+  const data = await fetchValues(SHEET_ID, SHEET_RANGE, SHEET_API_KEY || undefined);
+  if (!data) return null;
+
+  const values: string[][] = data.values || [];
+  if (values.length < 2) return null;
+
+  const headers = values[0].map(normalizeKey);
+  const idxEmail = headers.findIndex(h => h === normalizeKey("adresse mail") || h === "email" || h === "e-mail");
+  if (idxEmail === -1) return null;
+
+  for (let i = 1; i < values.length; i++) {
+    const row = values[i];
+    if ((row[idxEmail] || "").trim().toLowerCase() === email.trim().toLowerCase()) {
+      const rec: Answers = {};
+      headers.forEach((h, j) => { rec[h] = (row[j] ?? "").trim(); });
+      return rec;
+    }
+  }
+  return null;
+}
+
+function generateSessionsFromAnswers(ans: Answers): AiSession[] {
+  const get = (k: string) => ans[normalizeKey(k)] || "";
+
+  const prenom = get("prénom");
+  const age = Number((get("age") || "").replace(",", "."));
+  const poids = Number((get("poids") || "").replace(",", "."));
+  const taille = Number((get("taille") || "").replace(",", "."));
+  const niveau = get("niveau").toLowerCase() || "débutant";
+  const objectif = get("objectif").toLowerCase();
+  const dispo = get("disponibilité").toLowerCase();
+  const lieu = get("a quel endroit v tu faire ta seance ?").toLowerCase();
+  const materiel = get("as tu du matériel a ta disposition").toLowerCase();
+
+  // fréquence
+  let freq = 3;
+  const digits = dispo.match(/\d+/g);
+  if (digits?.length) freq = Math.max(1, Math.min(6, parseInt(digits[0], 10)));
+  else if (/(lun|mar|mer|jeu|ven|sam|dim)/.test(dispo)) {
+    freq = Math.max(1, Math.min(6, dispo.split(/[ ,;\/-]+/).filter(Boolean).length));
+  }
+
+  // durée & intensité
+  const baseMin =
+    niveau.includes("debut") || niveau.includes("début") ? 25 :
+    niveau.includes("inter") ? 35 : 45;
+
+  let intensity: "faible" | "modérée" | "élevée" =
+    (niveau.includes("debut") || niveau.includes("début")) ? "faible" :
+    (niveau.includes("inter")) ? "modérée" : "élevée";
+
+  if (isFinite(age) && age >= 55) intensity = intensity === "élevée" ? "modérée" : "faible";
+
+  // contraintes lieu/matériel
+  const noEquip = /(aucun|non|sans)/.test(materiel) || materiel === "";
+  const atGym = /(salle|gym|fitness)/.test(lieu);
+
+  // types selon objectif
+  const muscuPossible = !noEquip || atGym;
+  let pool: WorkoutType[] = ["cardio", "hiit", "mobilité"];
+  if (muscuPossible) pool = ["muscu", "cardio", "hiit"];
+
+  if (objectif.includes("perte") || objectif.includes("mince") || objectif.includes("seche")) {
+    pool = muscuPossible ? ["hiit", "cardio", "muscu"] : ["hiit", "cardio", "mobilité"];
+  } else if (objectif.includes("prise") || objectif.includes("muscle") || objectif.includes("force")) {
+    pool = muscuPossible ? ["muscu", "muscu", "cardio"] : ["hiit", "cardio", "mobilité"];
+  } else if (objectif.includes("endurance") || objectif.includes("cardio")) {
+    pool = ["cardio", "hiit", "mobilité"];
+  }
+
+  const noteParts: string[] = [];
+  if (prenom) noteParts.push(`Pour ${prenom}`);
+  if (isFinite(poids) && isFinite(taille) && taille > 0) {
+    const imc = Math.round((poids / Math.pow(taille/100, 2)) * 10) / 10;
+    if (isFinite(imc)) noteParts.push(`IMC: ${imc}`);
+  }
+  if (noEquip) noteParts.push("Sans matériel");
+  if (atGym) noteParts.push("Salle");
+
+  // calendrier
+  const today = new Date();
+  const nb = Math.max(1, Math.min(6, freq));
+  const sessions: AiSession[] = [];
+  for (let i = 0; i < nb; i++) {
+    const date = new Date(today);
+    date.setDate(today.getDate() + i * Math.ceil(7 / nb));
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    const type = pool[i % pool.length];
+
+    sessions.push({
+      id: `ai-${y}${m}${d}-${i}`,
+      title: `${objectif.includes("perte") ? "Brûle-graisse" : objectif.includes("prise") || objectif.includes("force") ? "Force/Muscu" : objectif.includes("endurance") || objectif.includes("cardio") ? "Endurance" : "Full body"} — Séance ${i + 1}`,
+      type,
+      date: `${y}-${m}-${d}`,
+      plannedMin: baseMin,
+      intensity,
+      note: noteParts.join(" · ") || undefined,
+      recommendedBy: "AI",
+    });
+  }
+  return sessions;
+}
+
 /* ===================== Actions serveur ===================== */
 async function buildProgrammeAction() {
   "use server";
+
+  // 1) tentatives API côté files-coaching.com
   const uid = cookies().get("fc_uid")?.value || "me";
   const endpoints = [
     `${API_BASE}/api/programme/build`,
     `${API_BASE}/api/program/build`,
     `${API_BASE}/api/sessions/build`,
   ];
-
   for (const url of endpoints) {
     try {
       const res = await fetch(`${url}?user=${encodeURIComponent(uid)}`, {
@@ -160,13 +289,51 @@ async function buildProgrammeAction() {
         cache: "no-store",
       });
       if (res.ok) {
+        // succès API → on sort directement
         redirect("/dashboard/profile?success=programme");
       }
     } catch {
-      // continue
+      // essaie suivant
     }
   }
-  redirect("/dashboard/profile?error=programme");
+
+  // 2) Fallback : génération locale depuis Google Sheets
+  const email = cookies().get("app_email")?.value || "";
+  if (!email) {
+    redirect("/dashboard/profile?error=programme"); // pas d’email → impossible d’associer les réponses
+  }
+
+  const answers = await getAnswersForEmail(email);
+  if (!answers) {
+    redirect("/dashboard/profile?error=programme"); // aucune réponse trouvée pour cet email
+  }
+
+  const aiSessions = generateSessionsFromAnswers(answers!);
+
+  // on pousse les séances générées en local dans app_sessions
+  const jar = cookies();
+  const store = parseStore(jar.get("app_sessions")?.value);
+  const now = new Date().toISOString();
+
+  const mapped: Workout[] = aiSessions.map(s => ({
+    id: s.id,
+    title: s.title,
+    type: s.type,
+    status: "active",
+    date: s.date,
+    plannedMin: s.plannedMin,
+    note: s.note,
+    createdAt: now,
+    startedAt: undefined,
+    endedAt: undefined,
+  }));
+
+  const next: Store = { sessions: [...mapped, ...store.sessions].slice(0, 300) };
+  jar.set("app_sessions", JSON.stringify(next), {
+    path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365, httpOnly: false,
+  });
+
+  redirect("/dashboard/profile?success=programme"); // succès fallback
 }
 
 async function addSessionAction(formData: FormData) {
@@ -257,11 +424,12 @@ export default async function Page({
 
   const defaultDate = toYMD();
 
-  // Récupération du programme IA (si votre API en renvoie)
+  // Récupération du programme IA (si votre API en renvoie) – affichage informatif
   const programme = await fetchAiProgramme();
   const aiSessions = programme?.sessions ?? [];
 
-  // URL questionnaire avec email pré-rempli si dispo
+  // URL questionnaire cliquable (avec email si dispo)
+  const QUESTIONNAIRE_BASE = process.env.FILES_COACHING_QUESTIONNAIRE_BASE || "https://questionnaire.files-coaching.com";
   const email = cookies().get("app_email")?.value || "";
   const questionnaireUrl = email ? `${QUESTIONNAIRE_BASE}?email=${encodeURIComponent(email)}` : QUESTIONNAIRE_BASE;
 
@@ -379,7 +547,7 @@ export default async function Page({
         <div className="section-head" style={{ marginBottom: 8 }}>
           <h2 style={{ marginBottom: 6 }}>Mon programme (personnalisé par l’IA)</h2>
 
-          {/* Un seul CTA (responsive) */}
+        {/* Un seul CTA (responsive) */}
           <div className="flex flex-col sm:flex-row gap-2 mt-3">
             <form action={buildProgrammeAction}>
               <button className="btn btn-dash" type="submit" style={{ width: "100%" }}>
@@ -395,9 +563,7 @@ export default async function Page({
               <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted">🤖</span>
               <span>
                 Pas encore de séances générées.{" "}
-                <a className="link" href={questionnaireUrl}>
-                  Répondez au questionnaire
-                </a>
+                <a className="link" href={questionnaireUrl}>Répondez au questionnaire</a>
                 , puis appuyez sur « Créer mon programme ».
               </span>
             </div>
