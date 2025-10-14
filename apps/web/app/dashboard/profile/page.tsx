@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import SessionsClient from "./_SessionsClient";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -358,7 +359,7 @@ function generateSessionsFromAnswers(ans: Answers): AiSession[] {
     date.setDate(today.getDate() + i * Math.ceil(7 / nb));
     const y = date.getFullYear();
     const m = String(date.getMonth() + 1).padStart(2, "0");
-    const d = String(date.getDate())?.padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
     const type = pool[i % pool.length];
 
     sessions.push({
@@ -718,195 +719,8 @@ export default async function Page({
         )}
       </section>
 
-      {/* NOUVEAU : Blocs repliables */}
-      <CollapsibleSessions
-        title="Mes séances"
-        buttonLabelClosed="Voir mes séances"
-        buttonLabelOpen="Masquer"
-        items={active}
-        type="active"
-      />
-
-      <CollapsibleSessions
-        title="Mes séances passées"
-        buttonLabelClosed="Voir mes séances passées"
-        buttonLabelOpen="Masquer"
-        items={past}
-        type="past"
-      />
+      {/* Blocs repliables + pagination */}
+      <SessionsClient active={active} past={past} />
     </div>
-  );
-}
-
-/* ===================== Client components ===================== */
-"use client";
-import { useMemo, useState } from "react";
-
-function CardSession({ s }: { s: Workout }) {
-  return (
-    <article className="card" style={{ transition: "box-shadow .2s" }}>
-      <div className="flex items-start justify-between gap-3">
-        <strong style={{ fontSize: 16 }}>{s.title}</strong>
-        <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>
-          {s.type}
-        </span>
-      </div>
-      <div className="text-sm" style={{ color: "#6b7280", marginTop: 8 }}>
-        {s.status === "done" ? (
-          <>
-            Le <b style={{ color: "inherit" }}>{fmtDateISO(s.endedAt)}</b>
-            {minutesBetween(s.startedAt, s.endedAt) ? ` · ${minutesBetween(s.startedAt, s.endedAt)} min` : ""}
-            {s.plannedMin ? ` (prévu ${s.plannedMin} min)` : ""}
-          </>
-        ) : (
-          <>
-            Prévu le <b style={{ color: "inherit" }}>{fmtDateYMD(s.date)}</b>
-            {s.plannedMin ? ` · ${s.plannedMin} min` : ""}
-          </>
-        )}
-        {s.note ? (<><br />Note : <i>{s.note}</i></>) : null}
-      </div>
-      {s.status === "done" ? (
-        <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-          <form action={deleteSessionAction as any}>
-            <input type="hidden" name="id" value={s.id} />
-            <button
-              className="btn"
-              type="submit"
-              style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
-            >
-              Supprimer
-            </button>
-          </form>
-        </div>
-      ) : null}
-    </article>
-  );
-}
-
-function PaginationControls({
-  page, pageSize, total, onPrev, onNext
-}: {
-  page: number; pageSize: number; total: number;
-  onPrev: () => void; onNext: () => void;
-}) {
-  const start = total === 0 ? 0 : page * pageSize + 1;
-  const end = Math.min(total, (page + 1) * pageSize);
-  return (
-    <div className="flex items-center justify-between mt-3">
-      <span className="text-xs" style={{ color: "#6b7280" }}>
-        {start}-{end} sur {total}
-      </span>
-      <div className="flex gap-2">
-        <button
-          className="btn"
-          onClick={onPrev}
-          disabled={page === 0}
-          style={{ background: "#fff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500, opacity: page === 0 ? .5 : 1 }}
-        >
-          ← Précédent
-        </button>
-        <button
-          className="btn btn-dash"
-          onClick={onNext}
-          disabled={(page + 1) * pageSize >= total}
-          style={{ opacity: (page + 1) * pageSize >= total ? .5 : 1 }}
-        >
-          Suivant →
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function PaginatedSessions({
-  items, type, pageSize = 6
-}: {
-  items: Workout[];
-  type: "active" | "past";
-  pageSize?: number;
-}) {
-  const [page, setPage] = useState(0);
-  const total = items.length;
-  const paged = useMemo(() => {
-    const start = page * pageSize;
-    const end = start + pageSize;
-    return items.slice(start, end);
-  }, [items, page, pageSize]);
-
-  // Reset page si la liste change (ex: après ajout)
-  useMemo(() => { setPage(0); /* eslint-disable-line */ }, [total]);
-
-  if (total === 0) {
-    return (
-      <div className="card text-sm" style={{ color: "#6b7280" }}>
-        <div className="flex items-center gap-3">
-          <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted">{type === "active" ? "📅" : "🗓️"}</span>
-          <span>
-            {type === "active" ? "Aucune séance active pour l’instant." : "Aucune séance terminée pour l’instant."}
-          </span>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <>
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {paged.map((s) => <CardSession key={s.id} s={s} />)}
-      </div>
-      <PaginationControls
-        page={page}
-        pageSize={pageSize}
-        total={total}
-        onPrev={() => setPage(p => Math.max(0, p - 1))}
-        onNext={() => setPage(p => ((p + 1) * pageSize >= total ? p : p + 1))}
-      />
-    </>
-  );
-}
-
-function CollapsibleSessions({
-  title, buttonLabelClosed, buttonLabelOpen, items, type
-}: {
-  title: string;
-  buttonLabelClosed: string;
-  buttonLabelOpen: string;
-  items: Workout[];
-  type: "active" | "past";
-}) {
-  const [open, setOpen] = useState(false);
-  const total = items.length;
-
-  return (
-    <section className="section" style={{ marginTop: 12 }}>
-      <div className="section-head" style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h2>{title}</h2>
-        <button
-          className="btn"
-          onClick={() => setOpen(o => !o)}
-          style={{ background: "#fff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500, padding: "4px 10px", lineHeight: 1 }}
-        >
-          {open ? buttonLabelOpen : buttonLabelClosed}
-          {total > 0 ? ` (${total})` : ""}
-        </button>
-      </div>
-
-      {open ? (
-        <PaginatedSessions items={items} type={type} />
-      ) : (
-        <div className="card text-sm" style={{ color: "#6b7280" }}>
-          <div className="flex items-center gap-3">
-            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted">{type === "active" ? "🏋️" : "✅"}</span>
-            <span>
-              {type === "active"
-                ? (total > 0 ? "Tu as des séances à venir. Clique pour les afficher." : "Aucune séance active pour l’instant.")
-                : (total > 0 ? "Tu as des séances terminées. Clique pour les afficher." : "Aucune séance terminée pour l’instant.")
-              }
-            </span>
-          </div>
-        </div>
-      )}
-    </section>
   );
 }
