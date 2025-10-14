@@ -163,7 +163,7 @@ function typeBadgeClass(t: WorkoutType) {
     case "mobilité": return "bg-violet-50 text-violet-700 ring-1 ring-violet-200";
   }
 }
-/** ✅ Dédup générique */
+/** Dédup générique */
 function uniqueBy<T>(arr: T[], key: (x: T) => string) {
   const seen = new Set<string>();
   const out: T[] = [];
@@ -391,15 +391,15 @@ async function buildProgrammeAction() {
     const store = parseStore(jar.get("app_sessions")?.value);
     const now = new Date().toISOString();
 
-    // 🔒 anti-doublons par titre|date|type
+    // anti-doublons par titre|date|type
     const existingKeys = new Set(store.sessions.map(s => `${s.title}|${s.date}|${s.type}`));
 
     const mapped: Workout[] = aiSessions
-      .map(s => ({
+      .map((s): Workout => ({
         id: s.id,
         title: s.title,
         type: s.type,
-        status: "active",
+        status: "active" as WorkoutStatus,
         date: s.date,
         plannedMin: s.plannedMin,
         note: s.note,
@@ -444,7 +444,7 @@ async function addSessionAction(formData: FormData) {
     id: uid(),
     title,
     type: (["muscu", "cardio", "hiit", "mobilité"].includes(type) ? type : "muscu") as WorkoutType,
-    status: "active",
+    status: "active" as WorkoutStatus,
     date,
     plannedMin: plannedMinStr ? Number(plannedMinStr) : undefined,
     startedAt: startNow ? new Date().toISOString() : undefined,
@@ -485,7 +485,7 @@ async function saveSingleAiSessionAction(formData: FormData) {
     id: id || uid(),
     title,
     type: (["muscu", "cardio", "hiit", "mobilité"].includes(type) ? type : "muscu") as WorkoutType,
-    status: "active",
+    status: "active" as WorkoutStatus,
     date,
     plannedMin: plannedMinStr ? Number(plannedMinStr) : undefined,
     note: note || undefined,
@@ -872,7 +872,7 @@ export default async function Page({
               <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted">🤖</span>
               <span>
                 Pas encore de séances proposées.{" "}
-                <a className="link" href={questionnaireUrl}>Répondez au questionnaire</a>
+                <a className="link" href={QUESTIONNAIRE_BASE}>Répondez au questionnaire</a>
                 , puis appuyez sur « Mettre à jour les propositions ».
               </span>
             </div>
