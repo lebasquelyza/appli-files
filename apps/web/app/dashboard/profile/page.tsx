@@ -41,10 +41,10 @@ const API_BASE = process.env.FILES_COACHING_API_BASE || "https://files-coaching.
 const API_KEY  = process.env.FILES_COACHING_API_KEY || "";
 
 // Google Sheets (public via lien)
-const SHEET_ID      = process.env.SHEET_ID      || "1HYLsmWXJ3NIRbxH0jOiXeBPiIwrL4d2sW6JKo7ZblYTMYu4RusIji627";
-const SHEET_RANGE   = process.env.SHEET_RANGE   || "reponses!A1:K1000";
+const SHEET_ID      = process.env.SHEET_ID      || "1XH-BOUj4tXAVy49ONBIdLiWM97hQ-Fg8h5-OTRGvHC4";
+const SHEET_RANGE   = process.env.SHEET_RANGE   || "Réponses!A1:K";
 // (optionnel) gid de l’onglet pour un accès CSV plus fiable
-const SHEET_GID     = process.env.SHEET_GID     || ""; // ex: "0" si 1er onglet
+const SHEET_GID     = process.env.SHEET_GID     || "1160551014"; // adapte si besoin
 
 // Questionnaire (pour le lien dans l’état vide)
 const QUESTIONNAIRE_BASE = process.env.FILES_COACHING_QUESTIONNAIRE_BASE || "https://questionnaire.files-coaching.com";
@@ -260,22 +260,60 @@ function norm(s: string) {
     .replace(/[’']/g, "'");
 }
 
+/* ======== Lecture des réponses par e-mail (avec/sans en-têtes) ======== */
+// Indices pour le mode "sans en-têtes" (A=0, B=1, ..., K=10)
+const NO_HEADER_COLS = {
+  nom: 0,       // Colonne A
+  prenom: 1,    // Colonne B
+  email: 10,    // Colonne K
+};
+
 async function getAnswersForEmail(email: string, sheetId: string, range: string): Promise<Answers | null> {
   const data = await fetchValues(sheetId, range);
   const values: string[][] = data.values || [];
-  if (values.length < 2) return null;
+  if (values.length === 0) return null;
 
-  const headers = values[0].map(norm);
-  const idxEmail = headers.findIndex(h => h === "adresse mail" || h === "email" || h === "e-mail");
+  // Détection d’en-têtes
+  const firstRowNorm = values[0].map(norm);
+  const headerCandidates = ["adresse mail", "email", "e-mail", "mail"];
+  const hasHeader = firstRowNorm.some(h => headerCandidates.includes(h));
+
+  let startRow = 0;
+  let headers: string[] = [];
+  let idxEmail = -1;
+
+  if (hasHeader) {
+    headers = firstRowNorm;
+    idxEmail = headers.findIndex(h => headerCandidates.includes(h));
+    startRow = 1; // data commence en ligne 2
+  } else {
+    // Pas d’en-têtes → on fabrique des clés virtuelles + alias
+    const width = Math.max(values[0]?.length || 0, NO_HEADER_COLS.email + 1);
+    headers = Array.from({ length: width }, (_, i) => `col${i}`);
+    headers[NO_HEADER_COLS.nom] = "nom";
+    headers[NO_HEADER_COLS.prenom] = "prenom";
+    headers[NO_HEADER_COLS.email] = "email";
+    idxEmail = NO_HEADER_COLS.email;
+    startRow = 0; // data commence en ligne 1
+  }
+
   if (idxEmail === -1) return null;
 
-  for (let i = 1; i < values.length; i++) {
-    const row = values[i];
-    if (!row) continue;
+  for (let i = startRow; i < values.length; i++) {
+    const row = values[i] || [];
     const cell = (row[idxEmail] || "").trim().toLowerCase();
-    if (cell && cell === email.trim().toLowerCase()) {
+    if (!cell) continue;
+    if (cell === email.trim().toLowerCase()) {
+      // Mappe la ligne → objet { header -> valeur }
       const rec: Answers = {};
-      headers.forEach((h, j) => { rec[h] = (row[j] ?? "").trim(); });
+      for (let j = 0; j < row.length; j++) {
+        const key = headers[j] || `col${j}`;
+        rec[key] = (row[j] ?? "").trim();
+      }
+      // Normalisation pour compatibilité (avec/sans accents)
+      rec["nom"]    = rec["nom"]    || rec["name"] || rec["last name"] || rec[`col${NO_HEADER_COLS.nom}`]    || "";
+      rec["prenom"] = rec["prenom"] || rec["prénom"] || rec["first name"] || rec[`col${NO_HEADER_COLS.prenom}`] || "";
+      rec["email"]  = rec["email"]  || rec["adresse mail"] || rec["e-mail"] || rec[`col${NO_HEADER_COLS.email}`]  || "";
       return rec;
     }
   }
@@ -283,17 +321,17 @@ async function getAnswersForEmail(email: string, sheetId: string, range: string)
 }
 
 function generateSessionsFromAnswers(ans: Answers): AiSession[] {
-  const get = (k: string) => ans[norm(k)] || "";
+  const get = (k: string) => ans[norm(k)] || ans[k] || "";
 
   const prenom = get("prénom") || get("prenom");
   const age = Number((get("age") || "").replace(",", "."));
   const poids = Number((get("poids") || "").replace(",", "."));
   const taille = Number((get("taille") || "").replace(",", "."));
-  const niveau = get("niveau").toLowerCase() || "débutant";
-  const objectif = get("objectif").toLowerCase();
-  const dispo = get("disponibilité").toLowerCase() || get("disponibilite").toLowerCase();
-  const lieu = get("a quel endroit v tu faire ta seance ?").toLowerCase();
-  const materiel = get("as tu du matériel a ta disposition").toLowerCase() || get("as tu du materiel a ta disposition").toLowerCase();
+  const niveau = (get("niveau") || "débutant").toLowerCase();
+  const objectif = (get("objectif") || "").toLowerCase();
+  const dispo = (get("disponibilité") || get("disponibilite") || "").toLowerCase();
+  const lieu = (get("a quel endroit v tu faire ta seance ?") || "").toLowerCase();
+  const materiel = (get("as tu du matériel a ta disposition") || get("as tu du materiel a ta disposition") || "").toLowerCase();
 
   let freq = 3;
   const digits = dispo.match(/\d+/g);
@@ -547,7 +585,7 @@ export default async function Page({
   if (clientEmailForInfos) {
     try {
       const ans = await getAnswersForEmail(clientEmailForInfos, SHEET_ID, SHEET_RANGE);
-      const get = (k: string) => (ans ? ans[norm(k)] || "" : "");
+      const get = (k: string) => (ans ? ans[norm(k)] || ans[k] || "" : "");
       clientNom = get("nom") || get("nom de famille") || "";
       clientPrenom = get("prénom") || get("prenom") || "";
     } catch {}
