@@ -33,7 +33,6 @@ type AiSession = {
   note?: string;
   intensity?: "faible" | "modérée" | "élevée";
   recommendedBy?: string;
-  // Possibles payloads API
   exercises?: any[];
   blocks?: any[];
   plan?: any;
@@ -66,7 +65,7 @@ async function getSignedInEmail(): Promise<string> {
   return cookies().get("app_email")?.value || "";
 }
 
-/* ============ Fetch du programme IA (affichage depuis Files Coaching API) ============ */
+/* ============ Fetch du programme IA (depuis Files Coaching API) ============ */
 async function fetchAiProgramme(userId?: string): Promise<AiProgramme | null> {
   const uidFromCookie = cookies().get("fc_uid")?.value;
   const uid = userId || uidFromCookie || "me";
@@ -163,6 +162,16 @@ function typeBadgeClass(t: WorkoutType) {
     case "hiit":  return "bg-amber-50 text-amber-700 ring-1 ring-amber-200";
     case "mobilité": return "bg-violet-50 text-violet-700 ring-1 ring-violet-200";
   }
+}
+/** ✅ Dédup générique */
+function uniqueBy<T>(arr: T[], key: (x: T) => string) {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const item of arr) {
+    const k = key(item);
+    if (!seen.has(k)) { seen.add(k); out.push(item); }
+  }
+  return out;
 }
 
 /* ======== Google Sheets (PUBLIC via lien) ======== */
@@ -272,7 +281,6 @@ function coachText(s: AiSession) {
 
 type NormalizedExercise = { name: string; sets?: number; reps?: string | number; rest?: string; durationSec?: number; notes?: string };
 function fromApiExercises(s: AiSession): NormalizedExercise[] | null {
-  // Essaye plusieurs schémas courants
   const raw = s.exercises || s.blocks || s.plan?.exercises || s.plan?.blocks;
   if (!Array.isArray(raw)) return null;
 
@@ -331,7 +339,6 @@ function fallbackExercises(s: AiSession): NormalizedExercise[] {
     { name: "Respiration diaphragmatique", sets: 1, reps: "3–4 min", rest: "—" },
   ];
 }
-
 function getExercises(s: AiSession): NormalizedExercise[] {
   return fromApiExercises(s) ?? fallbackExercises(s);
 }
@@ -372,15 +379,11 @@ async function buildProgrammeAction() {
   }
 
   // Fallback Sheets pour générer localement si pas d'API
-  if (!email) {
-    redirect("/dashboard/profile?error=programme:noemail");
-  }
+  if (!email) redirect("/dashboard/profile?error=programme:noemail");
 
   try {
     const answers = await getAnswersForEmail(email, SHEET_ID, SHEET_RANGE);
-    if (!answers) {
-      redirect("/dashboard/profile?error=programme:nomatch");
-    }
+    if (!answers) redirect("/dashboard/profile?error=programme:nomatch");
 
     const aiSessions = generateSessionsFromAnswers(answers!);
 
@@ -388,20 +391,29 @@ async function buildProgrammeAction() {
     const store = parseStore(jar.get("app_sessions")?.value);
     const now = new Date().toISOString();
 
-    const mapped: Workout[] = aiSessions.map(s => ({
-      id: s.id,
-      title: s.title,
-      type: s.type,
-      status: "active",
-      date: s.date,
-      plannedMin: s.plannedMin,
-      note: s.note,
-      createdAt: now,
-      startedAt: undefined,
-      endedAt: undefined,
-    }));
+    // 🔒 anti-doublons par titre|date|type
+    const existingKeys = new Set(store.sessions.map(s => `${s.title}|${s.date}|${s.type}`));
 
-    const next: Store = { sessions: [...mapped, ...store.sessions].slice(0, 300) };
+    const mapped: Workout[] = aiSessions
+      .map(s => ({
+        id: s.id,
+        title: s.title,
+        type: s.type,
+        status: "active",
+        date: s.date,
+        plannedMin: s.plannedMin,
+        note: s.note,
+        createdAt: now,
+        startedAt: undefined,
+        endedAt: undefined,
+      }))
+      .filter(w => !existingKeys.has(`${w.title}|${w.date}|${w.type}`));
+
+    const nextAll = [...mapped, ...store.sessions];
+    const next: Store = {
+      sessions: uniqueBy(nextAll, s => `${s.title}|${s.date}|${s.type}`).slice(0, 300),
+    };
+
     jar.set("app_sessions", JSON.stringify(next), {
       path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365, httpOnly: false,
     });
@@ -524,7 +536,7 @@ async function deleteSessionAction(formData: FormData) {
   redirect("/dashboard/profile?deleted=1");
 }
 
-/* ======== Lecture des réponses par e-mail (avec/sans en-têtes) ======== */
+/* ======== Lecture des réponses par e-mail ======== */
 const NO_HEADER_COLS = { nom: 0, prenom: 1, age: 2, email: 10 }; // A,B,C,K
 async function getAnswersForEmail(email: string, sheetId: string, range: string): Promise<Answers | null> {
   const data = await fetchValues(sheetId, range);
@@ -573,7 +585,7 @@ async function getAnswersForEmail(email: string, sheetId: string, range: string)
   return null;
 }
 
-/* ======== Inférence disponibilité (combien de séances à proposer) ======== */
+/* ======== Dispo → combien de séances proposer/paginer ======== */
 function inferAvailability(ans: Answers | null): number {
   if (!ans) return 3;
   const dispoRaw = (ans[norm("disponibilité")] || ans[norm("disponibilite")] || ans["disponibilité"] || ans["disponibilite"] || "").toLowerCase();
@@ -589,7 +601,7 @@ function inferAvailability(ans: Answers | null): number {
   return 3;
 }
 
-/* ======== Génération depuis Google Sheets (fallback local) ======== */
+/* ======== Génération fallback local (si pas d’API) ======== */
 function generateSessionsFromAnswers(ans: Answers): AiSession[] {
   const get = (k: string) => ans[norm(k)] || ans[k] || "";
 
@@ -677,17 +689,21 @@ export default async function Page({
 }) {
   const store = parseStore(cookies().get("app_sessions")?.value);
 
-  const active = store.sessions
+  // Prépare "Mes séances" (actives)
+  const activeAll = store.sessions
     .filter(s => s.status === "active")
     .sort((a, b) => (b.startedAt || b.createdAt || "").localeCompare(a.startedAt || a.createdAt || ""));
 
+  // Passées
   const past = store.sessions
     .filter(s => s.status === "done")
     .sort((a, b) => (b.endedAt || "").localeCompare(a.endedAt || ""));
 
+  // Propositions Coach Files
   const programme = await fetchAiProgramme();
   const aiSessions = programme?.sessions ?? [];
 
+  // Infos client (prénom/âge/mail + réponses pour calcul dispo)
   const detectedEmail = await getSignedInEmail();
   const emailFromCookie = cookies().get("app_email")?.value || "";
   const emailForLink = detectedEmail || emailFromCookie;
@@ -696,7 +712,6 @@ export default async function Page({
     ? `${QUESTIONNAIRE_BASE}?email=${encodeURIComponent(emailForLink)}`
     : QUESTIONNAIRE_BASE;
 
-  // Mes infos (Prénom + Age + Mail) + réponses complètes pour disponibilité
   const clientEmailForInfos = emailForLink || "";
   let clientPrenom = "", clientAge: number | undefined, clientEmailDisplay = clientEmailForInfos;
   let clientAnswers: Answers | null = null;
@@ -716,15 +731,21 @@ export default async function Page({
     } catch {}
   }
 
-  // Combien de séances proposer (par défaut 3)
+  // Combien d’items visibles à la fois (dispo) + pagination via URL
   const defaultTake = inferAvailability(clientAnswers);
   const take = Math.max(1, Math.min(12, Number(searchParams?.take ?? defaultTake) || defaultTake));
   const offset = Math.max(0, Number(searchParams?.offset ?? 0) || 0);
 
-  // Découpage des propositions AI selon take/offset
+  // Propositions coach paginées
   const totalAi = aiSessions.length;
   const visibleAi = aiSessions.slice(offset, offset + take);
   const hasMoreAi = offset + take < totalAi;
+
+  // "Mes séances" — dédup + pagination selon mêmes paramètres
+  const activeUniq = uniqueBy(activeAll, s => `${s.title}|${s.date}|${s.type}`);
+  const totalActive = activeUniq.length;
+  const visibleActive = activeUniq.slice(offset, offset + take);
+  const hasMoreActive = offset + take < totalActive;
 
   const rawError = searchParams?.error || "";
   let displayedError = rawError;
@@ -733,7 +754,7 @@ export default async function Page({
     try { displayedError = decodeURIComponent(full); } catch { displayedError = full; }
   }
 
-  // Helpers liens "voir plus" / "voir précédent"
+  // Helper liens de pagination
   function urlWith(p: Record<string, string | number | undefined>) {
     const sp = new URLSearchParams();
     if (searchParams?.success) sp.set("success", searchParams.success);
@@ -801,7 +822,6 @@ export default async function Page({
         </div>
 
         <div className="card">
-          {/* Ligne 1 : Prénom + Age */}
           <div className="text-sm" style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
             <span>
               <b>Prénom :</b>{" "}
@@ -813,7 +833,6 @@ export default async function Page({
             </span>
           </div>
 
-          {/* Ligne 2 : Mail (sur une seule ligne) */}
           <div
             className="text-sm"
             style={{ marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
@@ -831,7 +850,7 @@ export default async function Page({
         </div>
       </section>
 
-      {/* Séances proposées par votre coach Files — limitées selon disponibilité + “voir plus” */}
+      {/* Séances proposées par votre coach Files — limitées selon disponibilité + pagination */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
           <h2 style={{ marginBottom: 6 }}>Séances proposées par votre coach Files</h2>
@@ -949,16 +968,18 @@ export default async function Page({
         )}
       </section>
 
-      {/* Mes séances (enregistrées) — détail cliquable */}
+      {/* Mes séances (enregistrées) — limitées par dispo + pagination + détail cliquable */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h2>Mes séances</h2>
-          {active.length > 12 && (
-            <span className="text-xs" style={{ color: "#6b7280" }}>Affichage des 12 dernières</span>
+          {totalActive > take && (
+            <span className="text-xs" style={{ color: "#6b7280" }}>
+              Affichage de {Math.min(totalActive, offset + take)} / {totalActive}
+            </span>
           )}
         </div>
 
-        {active.length === 0 ? (
+        {visibleActive.length === 0 ? (
           <div className="card text-sm" style={{ color: "#6b7280" }}>
             <div className="flex items-center gap-3">
               <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted">📅</span>
@@ -966,34 +987,53 @@ export default async function Page({
             </div>
           </div>
         ) : (
-          <ul className="card divide-y">
-            {active.slice(0, 12).map((s) => (
-              <li key={s.id} className="py-3">
-                <details>
-                  <summary className="flex items-center justify-between cursor-pointer">
-                    <div className="min-w-0">
-                      <div className="font-medium truncate" style={{ fontSize: 16 }}>{s.title}</div>
-                      <div className="text-sm" style={{ color: "#6b7280" }}>
-                        Prévu le <b style={{ color: "inherit" }}>{fmtDateYMD(s.date)}</b>
-                        {s.plannedMin ? ` · ${s.plannedMin} min` : ""}
-                        {s.note ? ` · ${s.note}` : ""}
+          <>
+            <ul className="card divide-y">
+              {visibleActive.map((s) => (
+                <li key={s.id} className="py-3">
+                  <details>
+                    <summary className="flex items-center justify-between cursor-pointer">
+                      <div className="min-w-0">
+                        <div className="font-medium truncate" style={{ fontSize: 16 }}>{s.title}</div>
+                        <div className="text-sm" style={{ color: "#6b7280" }}>
+                          Prévu le <b style={{ color: "inherit" }}>{fmtDateYMD(s.date)}</b>
+                          {s.plannedMin ? ` · ${s.plannedMin} min` : ""}
+                          {s.note ? ` · ${s.note}` : ""}
+                        </div>
                       </div>
-                    </div>
-                    <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>
-                      {s.type}
-                    </span>
-                  </summary>
+                      <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>
+                        {s.type}
+                      </span>
+                    </summary>
 
-                  <div className="mt-3 text-sm leading-6">
-                    <div>Créée le : <b>{fmtDateISO(s.createdAt)}</b></div>
-                    {s.startedAt ? <div>Démarrée : <b>{fmtDateISO(s.startedAt)}</b></div> : null}
-                    {s.plannedMin ? <div>Durée prévue : <b>{s.plannedMin} min</b></div> : null}
-                    {s.note ? <div>Note : <i>{s.note}</i></div> : null}
-                  </div>
-                </details>
-              </li>
-            ))}
-          </ul>
+                    <div className="mt-3 text-sm leading-6">
+                      <div>Créée le : <b>{fmtDateISO(s.createdAt)}</b></div>
+                      {s.startedAt ? <div>Démarrée : <b>{fmtDateISO(s.startedAt)}</b></div> : null}
+                      {s.plannedMin ? <div>Durée prévue : <b>{s.plannedMin} min</b></div> : null}
+                      {s.note ? <div>Note : <i>{s.note}</i></div> : null}
+                    </div>
+                  </details>
+                </li>
+              ))}
+            </ul>
+
+            <div className="flex justify-between mt-3">
+              <a
+                href={urlWith({ take, offset: Math.max(0, offset - take) })}
+                className={`btn ${offset <= 0 ? "pointer-events-none opacity-50" : ""}`}
+                aria-disabled={offset <= 0}
+              >
+                ← Voir précédent
+              </a>
+              <a
+                href={urlWith({ take, offset: offset + take })}
+                className={`btn ${!hasMoreActive ? "pointer-events-none opacity-50" : ""}`}
+                aria-disabled={!hasMoreActive}
+              >
+                Voir plus →
+              </a>
+            </div>
+          </>
         )}
       </section>
 
