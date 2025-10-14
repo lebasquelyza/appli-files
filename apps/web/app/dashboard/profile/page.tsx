@@ -260,8 +260,8 @@ function norm(s: string) {
 }
 
 /* ======== Lecture des réponses par e-mail (avec/sans en-têtes) ======== */
-// A=0, B=1, ..., K=10
-const NO_HEADER_COLS = { nom: 0, prenom: 1, email: 10 };
+/* Indices pour le mode "sans en-têtes" (A=0, B=1, C=2, ..., K=10) */
+const NO_HEADER_COLS = { nom: 0, prenom: 1, age: 2, email: 10 };
 
 async function getAnswersForEmail(email: string, sheetId: string, range: string): Promise<Answers | null> {
   const data = await fetchValues(sheetId, range);
@@ -280,14 +280,17 @@ async function getAnswersForEmail(email: string, sheetId: string, range: string)
   if (hasHeader) {
     headers = firstRowNorm;
     idxEmail = headers.findIndex(h => headerCandidates.includes(h));
-    startRow = 1;
+    startRow = 1; // data commence en ligne 2
   } else {
+    // Pas d’en-têtes → on fabrique des clés virtuelles + alias
     const width = Math.max(values[0]?.length || 0, NO_HEADER_COLS.email + 1);
     headers = Array.from({ length: width }, (_, i) => `col${i}`);
-    headers[NO_HEADER_COLS.nom] = "nom";
-    headers[NO_HEADER_COLS.prenom] = "prenom";
+    headers[NO_HEADER_COLS.nom]   = "nom";
+    headers[NO_HEADER_COLS.prenom]= "prenom";
+    headers[NO_HEADER_COLS.age]   = "age";
     headers[NO_HEADER_COLS.email] = "email";
     idxEmail = NO_HEADER_COLS.email;
+    startRow = 0; // data commence en ligne 1
   }
 
   if (idxEmail === -1) return null;
@@ -297,13 +300,16 @@ async function getAnswersForEmail(email: string, sheetId: string, range: string)
     const cell = (row[idxEmail] || "").trim().toLowerCase();
     if (!cell) continue;
     if (cell === email.trim().toLowerCase()) {
+      // Mappe la ligne → objet { header -> valeur }
       const rec: Answers = {};
       for (let j = 0; j < row.length; j++) {
         const key = headers[j] || `col${j}`;
         rec[key] = (row[j] ?? "").trim();
       }
+      // Normalisation pour compatibilité (avec/sans accents)
       rec["nom"]    = rec["nom"]    || rec["name"] || rec["last name"] || rec[`col${NO_HEADER_COLS.nom}`]    || "";
       rec["prenom"] = rec["prenom"] || rec["prénom"] || rec["first name"] || rec[`col${NO_HEADER_COLS.prenom}`] || "";
+      rec["age"]    = rec["age"]    || rec[`col${NO_HEADER_COLS.age}`]    || "";
       rec["email"]  = rec["email"]  || rec["adresse mail"] || rec["e-mail"] || rec[`col${NO_HEADER_COLS.email}`]  || "";
       return rec;
     }
@@ -347,8 +353,7 @@ function generateSessionsFromAnswers(ans: Answers): AiSession[] {
     (niveau.includes("debut") || niveau.includes("début")) ? "faible" :
     (niveau.includes("inter")) ? "modérée" : "élevée";
 
-  const isAge = isFinite(age) && age > 0;
-  if (isAge && age >= 55) intensity = intensity === "élevée" ? "modérée" : "faible";
+  if (isFinite(age) && age >= 55) intensity = intensity === "élevée" ? "modérée" : "faible";
 
   const noEquip = /(aucun|non|sans)/.test(materiel) || materiel === "";
   const atGym = /(salle|gym|fitness)/.test(lieu);
@@ -580,7 +585,7 @@ export default async function Page({
     ? `${QUESTIONNAIRE_BASE}?email=${encodeURIComponent(emailForLink)}`
     : QUESTIONNAIRE_BASE;
 
-  // --- Mes infos (Prénom + Âge + E-mail) ---
+  // --- Mes infos (Prénom + Âge depuis C + E-Mail) ---
   const clientEmailForInfos = emailForLink || "";
   let clientPrenom = "", clientAge: number | undefined, clientEmailDisplay = clientEmailForInfos;
 
@@ -589,12 +594,14 @@ export default async function Page({
       const ans = await getAnswersForEmail(clientEmailForInfos, SHEET_ID, SHEET_RANGE);
       const get = (k: string) => (ans ? ans[norm(k)] || ans[k] || "" : "");
       clientPrenom = get("prénom") || get("prenom") || "";
+
+      // âge via C si pas d’en-têtes (déjà mappé en rec["age"])
       const ageStr = get("age");
       const num = Number((ageStr || "").toString().replace(",", "."));
       clientAge = isFinite(num) && num > 0 ? Math.floor(num) : undefined;
 
       // email depuis le sheet si dispo
-      const emailSheet = get("email") || get("adresse mail") || get("e-mail");
+      const emailSheet = get("email") || get("adresse mail") || get("e-mail") || get("mail");
       if (!clientEmailDisplay && emailSheet) clientEmailDisplay = emailSheet;
     } catch {}
   }
@@ -664,7 +671,7 @@ export default async function Page({
         )}
       </div>
 
-      {/* Mes infos (Prénom + Âge + E-mail) */}
+      {/* Mes infos (Prénom + Âge + E-Mail :) */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
           <h2>Mes infos</h2>
@@ -685,7 +692,7 @@ export default async function Page({
               </span>
             </div>
             <div className="contents">
-              <span className="text-gray-500">E-mail</span>
+              <span className="text-gray-500">E-Mail :</span>
               {clientEmailDisplay ? (
                 <a href={`mailto:${clientEmailDisplay}`} className="font-medium underline break-words">
                   {clientEmailDisplay}
@@ -703,7 +710,7 @@ export default async function Page({
         <div className="section-head" style={{ marginBottom: 8 }}>
           <h2 style={{ marginBottom: 6 }}>Mon programme (personnalisé par l’IA)</h2>
 
-          {/* Un seul CTA */}
+        {/* Un seul CTA */}
           <div className="flex flex-col sm:flex-row gap-2 mt-3">
             <form action={buildProgrammeAction}>
               <button className="btn btn-dash" type="submit" style={{ width: "100%" }}>
