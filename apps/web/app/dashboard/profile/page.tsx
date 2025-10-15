@@ -872,7 +872,7 @@ export default async function Page({
 /* ===================== Actions basiques ===================== */
 function uid() { return "id-" + Math.random().toString(36).slice(2, 10); }
 function toYMD(d = new Date()) { const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,"0"), da=String(d.getDate()).padStart(2,"0"); return `${y}-${m}-${da}`; }
-export async function addSessionAction(formData: FormData) {
+async function addSessionAction(formData: FormData) {
   "use server";
   const title = (formData.get("title") || "").toString().trim();
   const type = (formData.get("type") || "muscu").toString() as WorkoutType;
