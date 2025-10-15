@@ -1,77 +1,55 @@
-/* ============ Page Profil — Bloc 1: Imports, Types locaux, Config, Auth ============ */
+// apps/web/app/dashboard/profile/actions.ts
+"use server";
+
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
-/* >>> IA coach centralisée */
-import {
-  AiProgramme,
-  AiSession,
-  WorkoutType,
-  Answers,
-  norm,
-  generateProgrammeFromAnswers,
-} from "@/lib/coach/ai";
-
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
-
-/* ===================== Types locaux à la page ===================== */
-type WorkoutStatus = "active" | "done";
-
-type NormalizedExercise = {
-  name: string;
-  sets?: number;
-  reps?: string | number;
-  rest?: string;
-  durationSec?: number;
-  notes?: string;
-  tempo?: string;
-  rir?: number;
-  load?: string;
-  equipment?: string;
-  target?: string;
-  alt?: string;
-  videoUrl?: string;
-  block?: "echauffement" | "principal" | "fin" | "accessoires";
-};
+type WorkoutType = "muscu" | "cardio" | "hiit" | "mobilité";
 
 type Workout = {
   id: string;
   title: string;
   type: WorkoutType;
-  status: WorkoutStatus;
+  status: "active" | "done";
   date: string;
   plannedMin?: number;
   startedAt?: string;
   endedAt?: string;
   note?: string;
   createdAt: string;
-  exercises?: NormalizedExercise[];
 };
 
 type Store = { sessions: Workout[] };
 
-/* ===================== Config ===================== */
-const API_BASE = process.env.FILES_COACHING_API_BASE || "https://files-coaching.com";
-const API_KEY  = process.env.FILES_COACHING_API_KEY || "";
-const SHEET_ID    = process.env.SHEET_ID    || "1XH-BOUj4tXAVy49ONBIdLiWM97hQ-Fg8h5-OTRGvHC4";
-const SHEET_RANGE = process.env.SHEET_RANGE || "Réponses!A1:K";
-const SHEET_GID   = process.env.SHEET_GID   || "1160551014";
-const QUESTIONNAIRE_BASE = process.env.FILES_COACHING_QUESTIONNAIRE_BASE || "https://questionnaire.files-coaching.com";
+function parseStore(val?: string | null): Store {
+  if (!val) return { sessions: [] };
+  try { const o = JSON.parse(val!); if (Array.isArray(o?.sessions)) return { sessions: o.sessions as Workout[] }; } catch {}
+  return { sessions: [] };
+}
+function uid() { return "id-" + Math.random().toString(36).slice(2, 10); }
+function toYMD(d = new Date()) { const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,"0"), da=String(d.getDate()).padStart(2,"0"); return `${y}-${m}-${da}`; }
 
-/* ===================== Auth ===================== */
-async function getSignedInEmail(): Promise<string> {
-  try {
-    // @ts-ignore
-    const { getServerSession } = await import("next-auth");
-    // @ts-ignore
-    const { authOptions } = await import("@/lib/auth");
-    const session = await getServerSession(authOptions as any);
-    const email = (session as any)?.user?.email as string | undefined;
-    if (email) return email;
-  } catch {}
-  return cookies().get("app_email")?.value || "";
+export async function addSessionAction(formData: FormData) {
+  const title = (formData.get("title") || "").toString().trim();
+  const type = (formData.get("type") || "muscu").toString() as WorkoutType;
+  const date = (formData.get("date") || toYMD()).toString();
+  const plannedMinStr = (formData.get("plannedMin") || "").toString().replace(",", ".");
+  const note = (formData.get("note") || "").toString().slice(0, 240);
+  const startNow = (formData.get("startNow") || "").toString() === "1";
+
+  if (!title) redirect("/dashboard/profile?error=titre");
+  const store = parseStore(cookies().get("app_sessions")?.value);
+
+  const w: Workout = {
+    id: uid(), title, type, status: "active", date,
+    plannedMin: plannedMinStr ? Number(plannedMinStr) : undefined,
+    startedAt: startNow ? new Date().toISOString() : undefined,
+    note: note || undefined, createdAt: new Date().toISOString(),
+  };
+
+  const next: Store = { sessions: [w, ...store.sessions].slice(0, 300) };
+  cookies().set("app_sessions", JSON.stringify(next), { path: "/", sameSite: "lax", maxAge: 60*60*24*365, httpOnly: false });
+  redirect("/dashboard/profile?success=1");
 }
 /* ============ Page Profil — Bloc 2: Utils + Google Sheets helpers ============ */
 function parseStore(val?: string | null): Store {
