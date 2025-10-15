@@ -298,7 +298,9 @@ function coachText(s: AiSession) {
   : s.type === "cardio" ? "Respiration nasale si possible, finis en respiration contrôlée."
   : s.type === "hiit" ? "Qualité > quantité. Coupe si la technique se dégrade."
   : "Mouvement lent, fluide, sans douleur — amplitude progressive.";
-  return `🧭 ${intro}\n⏱️ Durée: ${min} · Intensité: ${intens}\n💡 Conseils: ${tips}${s.note ? `\n📝 Note: ${s.note}` : ""}`;
+  return `🧭 ${intro}
+⏱️ Durée: ${min} · Intensité: ${intens}
+💡 Conseils: ${tips}${s.note ? `\n📝 Note: ${s.note}` : ""}`;
 }
 
 function normalizeMaybeArray(v: any): any[] {
@@ -784,10 +786,7 @@ export default async function Page({
 }) {
   const store = parseStore(cookies().get("app_sessions")?.value);
 
-  // "Mes séances" (actives)
-  const activeAll = store.sessions
-    .filter(s => s.status === "active")
-    .sort((a, b) => (b.startedAt || b.createdAt || "").localeCompare(a.startedAt || a.createdAt || ""));
+  // (SUPPRIMÉ) "Mes séances (actives)" — on n’affiche plus ce bloc
 
   // Enregistrées (done)
   const past = store.sessions
@@ -834,7 +833,7 @@ export default async function Page({
     return qs ? `${base}?${qs}` : base;
   })();
 
-  // Dispo + pagination
+  // Dispo + pagination (uniquement pour les séances IA)
   const defaultTake = inferAvailability(clientAnswers);
   const take = Math.max(1, Math.min(12, Number(searchParams?.take ?? defaultTake) || defaultTake));
   const reqOffset = Math.max(0, Number(searchParams?.offset ?? 0) || 0);
@@ -846,20 +845,11 @@ export default async function Page({
   const hasMoreAi = clampedAi.offset + take < totalAi;
   const showRanOutAi = clampedAi.emptyReason === "ranout" && !visibleAi.length;
 
-  // Mes séances — dédup + pagination
-  const activeUniq = uniqueBy(activeAll, s => `${s.title}|${s.date}|${s.type}`);
-  const totalActive = activeUniq.length;
-  const clampedActive = clampOffset(totalActive, take, reqOffset);
-  const visibleActive = activeUniq.slice(clampedActive.offset, clampedActive.offset + take);
-  const hasMoreActive = clampedActive.offset + take < totalActive;
-  const showRanOutActive = clampedActive.emptyReason === "ranout" && !visibleActive.length;
-
   const rawError = searchParams?.error || "";
   const displayedError = rawError.startsWith("programme:sheetfetch:")
     ? (() => { try { return decodeURIComponent(rawError.split(":").slice(2).join(":")); } catch { return rawError; } })()
     : rawError;
 
-  // Helper liens
   function urlWith(p: Record<string, string | number | undefined>) {
     const sp = new URLSearchParams();
     if (searchParams?.success) sp.set("success", searchParams.success);
@@ -880,38 +870,33 @@ export default async function Page({
       return A - B;
     });
 
-  // rendu d’une liste d’exercices détaillés
-  function ExercisesDetail({ sid, exercises }: { sid: string; exercises: NormalizedExercise[] }) {
+  // rendu d’une liste d’exercices détaillés — TEXTE SIMPLE, TOUT VISIBLE
+  function ExercisesDetailPlain({ sid, exercises }: { sid: string; exercises: NormalizedExercise[] }) {
     const exs = sortByBlock(exercises);
     return (
       <>
         <div className="text-sm font-medium mb-2">📝 Détail des exercices</div>
-        <div className="text-xs text-gray-500 mb-2">Cliquez sur un exercice pour voir les consignes.</div>
-        <ul className="text-sm space-y-2">
+        <ul className="text-sm space-y-3">
           {exs.map((ex, i) => (
             <li key={`${sid}-ex-${i}`} className="border rounded-md p-2">
-              <details>
-                <summary className="flex flex-wrap items-center gap-2 cursor-pointer">
-                  <b className="truncate">{ex.name}</b>
-                  <span className="opacity-70">
-                    {typeof ex.sets === "number" ? `${ex.sets}×` : ""}{ex.reps ? `${ex.reps}` : ex.durationSec ? `${ex.durationSec}s` : ""}
-                  </span>
-                  {ex.rest ? <span className="opacity-60">· repos {ex.rest}</span> : null}
-                  {ex.load ? <span className="opacity-60">· charge {ex.load}</span> : null}
-                  {ex.tempo ? <span className="opacity-60">· tempo {ex.tempo}</span> : null}
-                  {typeof ex.rir === "number" ? <span className="opacity-60">· RIR {ex.rir}</span> : null}
-                  {ex.block ? <span className="opacity-60">· {ex.block}</span> : null}
-                </summary>
-                <div className="mt-2 text-[13px] leading-5 space-y-1">
-                  {ex.target ? <div><b>Cible :</b> {ex.target}</div> : null}
-                  {ex.equipment ? <div><b>Matériel :</b> {ex.equipment}</div> : null}
-                  {ex.alt ? <div><b>Alternative :</b> {ex.alt}</div> : null}
-                  {ex.notes ? <div><b>Consignes :</b> {ex.notes}</div> : null}
-                  {ex.videoUrl ? (
-                    <div><a className="underline" href={ex.videoUrl} target="_blank" rel="noreferrer">Vidéo de démonstration</a></div>
-                  ) : null}
+              <div className="font-semibold">{ex.name}</div>
+              <div className="text-[13px] leading-5 space-y-1">
+                <div>
+                  {typeof ex.sets === "number" ? `${ex.sets}×` : ""}{ex.reps ? `${ex.reps}` : ex.durationSec ? `${ex.durationSec}s` : ""}
+                  {ex.rest ? ` · repos ${ex.rest}` : ""}
+                  {ex.load ? ` · charge ${ex.load}` : ""}
+                  {ex.tempo ? ` · tempo ${ex.tempo}` : ""}
+                  {typeof ex.rir === "number" ? ` · RIR ${ex.rir}` : ""}
+                  {ex.block ? ` · ${ex.block}` : ""}
                 </div>
-              </details>
+                {ex.target ? <div><b>Cible :</b> {ex.target}</div> : null}
+                {ex.equipment ? <div><b>Matériel :</b> {ex.equipment}</div> : null}
+                {ex.alt ? <div><b>Alternative :</b> {ex.alt}</div> : null}
+                {ex.notes ? <div><b>Consignes :</b> {ex.notes}</div> : null}
+                {ex.videoUrl ? (
+                  <div><a className="underline" href={ex.videoUrl} target="_blank" rel="noreferrer">Vidéo de démonstration</a></div>
+                ) : null}
+              </div>
             </li>
           ))}
         </ul>
@@ -960,38 +945,37 @@ export default async function Page({
         )}
       </div>
 
-   {/* Mes infos (dernière réponse questionnaire) */}
-<section className="section" style={{ marginTop: 12 }}>
-  <div className="section-head" style={{ marginBottom: 8 }}>
-    <h2>Mes infos</h2>
-  </div>
+      {/* Mes infos (dernière réponse questionnaire) */}
+      <section className="section" style={{ marginTop: 12 }}>
+        <div className="section-head" style={{ marginBottom: 8 }}>
+          <h2>Mes infos</h2>
+        </div>
 
-  <div className="card">
-    <div className="text-sm" style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-      <span><b>Prénom :</b> {clientPrenom || <i className="text-gray-400">Non renseigné</i>}</span>
-      {/* ⬇️ LIGNE NOM SUPPRIMÉE */}
-      <span><b>Age :</b> {typeof clientAge === "number" ? `${clientAge} ans` : <i className="text-gray-400">Non renseigné</i>}</span>
-    </div>
+        <div className="card">
+          <div className="text-sm" style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+            <span><b>Prénom :</b> {clientPrenom || <i className="text-gray-400">Non renseigné</i>}</span>
+            {/* ⬇️ LIGNE NOM SUPPRIMÉE */}
+            <span><b>Age :</b> {typeof clientAge === "number" ? `${clientAge} ans` : <i className="text-gray-400">Non renseigné</i>}</span>
+          </div>
 
-    <div
-      className="text-sm"
-      style={{ marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
-      title={clientEmailDisplay || "Non renseigné"}
-    >
-      <b>Mail :</b>{" "}
-      {clientEmailDisplay ? (
-        <a href={`mailto:${clientEmailDisplay}`} className="underline">
-          {clientEmailDisplay}
-        </a>
-      ) : (
-        <span className="text-gray-400">Non renseigné</span>
-      )}
-    </div>
-  </div>
-</section>
+          <div
+            className="text-sm"
+            style={{ marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
+            title={clientEmailDisplay || "Non renseigné"}
+          >
+            <b>Mail :</b>{" "}
+            {clientEmailDisplay ? (
+              <a href={`mailto:${clientEmailDisplay}`} className="underline">
+                {clientEmailDisplay}
+              </a>
+            ) : (
+              <span className="text-gray-400">Non renseigné</span>
+            )}
+          </div>
+        </div>
+      </section>
 
-
-      {/* Séances proposées par Files */}
+      {/* Séances proposées par Files — tout en texte, visible sans JS */}
       <section className="section" style={{ marginTop: 12 }}>
         <div
           className="section-head"
@@ -1008,7 +992,7 @@ export default async function Page({
           <div style={{ writingMode: "horizontal-tb", textOrientation: "mixed" }}>
             <h2 style={{ marginBottom: 6 }}>Séances proposées par Files</h2>
             <p className="text-sm" style={{ color: "#6b7280", writingMode: "horizontal-tb", textOrientation: "mixed" }}>
-              <b>Générées à partir de vos réponses au questionnaire.</b>
+              <b>Programme généré automatiquement à partir de vos réponses (sans Javascript&nbsp;: contenu directement visible).</b>
             </p>
           </div>
 
@@ -1047,58 +1031,56 @@ export default async function Page({
                 const exercises = getExercises(s);
                 return (
                   <li key={s.id} className="py-3">
-                    <details>
-                      <summary className="flex items-center justify-between cursor-pointer">
-                        <div className="min-w-0">
-                          <div className="font-medium truncate" style={{ fontSize: 16 }}>{s.title}</div>
-                          <div className="text-sm" style={{ color: "#6b7280" }}>
-                            Prévu le <b style={{ color: "inherit" }}>{fmtDateYMD(s.date)}</b>
-                            {s.plannedMin ? ` · ${s.plannedMin} min` : ""}
-                            {s.intensity ? ` · intensité ${s.intensity}` : ""}
-                          </div>
+                    <div className="flex items-start justify-between">
+                      <div className="min-w-0">
+                        <div className="font-medium" style={{ fontSize: 16 }}>{s.title}</div>
+                        <div className="text-sm" style={{ color: "#6b7280" }}>
+                          Prévu le <b style={{ color: "inherit" }}>{fmtDateYMD(s.date)}</b>
+                          {s.plannedMin ? ` · ${s.plannedMin} min` : ""}
+                          {s.intensity ? ` · intensité ${s.intensity}` : ""}
                         </div>
-                        <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>
-                          {s.type}
-                        </span>
-                      </summary>
-
-                      <div className="mt-3 text-sm leading-6" style={{ whiteSpace: "pre-wrap" }}>
-                        {coachText(s)}
                       </div>
+                      <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>
+                        {s.type}
+                      </span>
+                    </div>
 
-                      {exercises.length > 0 && (
-                        <div className="mt-3">
-                          <ExercisesDetail sid={s.id} exercises={exercises} />
-                        </div>
-                      )}
+                    <div className="mt-3 text-sm leading-6" style={{ whiteSpace: "pre-wrap" }}>
+                      {coachText(s)}
+                    </div>
 
-                      <div className="flex flex-wrap gap-8 mt-3">
-                        {/* Enregistre directement dans « Séances enregistrées » */}
-                        <form action={saveSingleAiSessionAction} method="post">
-                          <input type="hidden" name="id" value={s.id} />
-                          <input type="hidden" name="title" value={s.title} />
-                          <input type="hidden" name="type" value={s.type} />
-                          <input type="hidden" name="date" value={s.date} />
-                          {s.plannedMin ? <input type="hidden" name="plannedMin" value={String(s.plannedMin)} /> : null}
-                          {s.note ? <input type="hidden" name="note" value={s.note} /> : null}
-                          <input type="hidden" name="exercises" value={JSON.stringify(exercises)} />
-                          <button className="btn" type="submit" style={{ background: "#111827", color: "white" }}>
-                            Enregistrer dans mes séances enregistrées
-                          </button>
-                        </form>
-
-                        {/* Option : ajouter aux séances actives et démarrer */}
-                        <form action={addSessionAction} method="post">
-                          <input type="hidden" name="title" value={s.title} />
-                          <input type="hidden" name="type" value={s.type} />
-                          <input type="hidden" name="date" value={s.date} />
-                          {s.plannedMin ? <input type="hidden" name="plannedMin" value={String(s.plannedMin)} /> : null}
-                          {s.note ? <input type="hidden" name="note" value={s.note} /> : null}
-                          <input type="hidden" name="startNow" value="1" />
-                          <button className="btn btn-dash" type="submit">Démarrer maintenant</button>
-                        </form>
+                    {exercises.length > 0 && (
+                      <div className="mt-3">
+                        <ExercisesDetailPlain sid={s.id} exercises={exercises} />
                       </div>
-                    </details>
+                    )}
+
+                    <div className="flex flex-wrap gap-8 mt-3">
+                      {/* Enregistre directement dans « Séances enregistrées » */}
+                      <form action={saveSingleAiSessionAction} method="post">
+                        <input type="hidden" name="id" value={s.id} />
+                        <input type="hidden" name="title" value={s.title} />
+                        <input type="hidden" name="type" value={s.type} />
+                        <input type="hidden" name="date" value={s.date} />
+                        {s.plannedMin ? <input type="hidden" name="plannedMin" value={String(s.plannedMin)} /> : null}
+                        {s.note ? <input type="hidden" name="note" value={s.note} /> : null}
+                        <input type="hidden" name="exercises" value={JSON.stringify(exercises)} />
+                        <button className="btn" type="submit" style={{ background: "#111827", color: "white" }}>
+                          Enregistrer dans mes séances enregistrées
+                        </button>
+                      </form>
+
+                      {/* Option : ajouter aux séances actives et démarrer */}
+                      <form action={addSessionAction} method="post">
+                        <input type="hidden" name="title" value={s.title} />
+                        <input type="hidden" name="type" value={s.type} />
+                        <input type="hidden" name="date" value={s.date} />
+                        {s.plannedMin ? <input type="hidden" name="plannedMin" value={String(s.plannedMin)} /> : null}
+                        {s.note ? <input type="hidden" name="note" value={s.note} /> : null}
+                        <input type="hidden" name="startNow" value="1" />
+                        <button className="btn btn-dash" type="submit">Démarrer maintenant</button>
+                      </form>
+                    </div>
                   </li>
                 );
               })}
@@ -1112,64 +1094,9 @@ export default async function Page({
         )}
       </section>
 
-      {/* Mes séances (actives) */}
-      <section className="section" style={{ marginTop: 12 }}>
-        <div className="section-head" style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h2>Mes séances</h2>
-          {totalActive > take && <span className="text-xs" style={{ color: "#6b7280" }}>Affichage de {Math.min(totalActive, clampedActive.offset + take)} / {totalActive}</span>}
-        </div>
+      {/* (SUPPRIMÉ) Bloc "Mes séances (actives)" — intégralement retiré */}
 
-        {visibleActive.length === 0 ? (
-          <div className="card text-sm" style={{ color: "#6b7280" }}>
-            <div className="flex items-center gap-3">
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted">📅</span>
-              <span>Aucune séance planifiée pour l’instant.</span>
-            </div>
-          </div>
-        ) : (
-          <>
-            {showRanOutActive && (
-              <div className="card text-sm" style={{ color: "#6b7280", border: "1px dashed #d1d5db" }}>
-                Tu n’as pas plus de séances pour le moment.
-              </div>
-            )}
-
-            <ul className="card divide-y list-none pl-0">
-              {visibleActive.map((s) => (
-                <li key={s.id} className="py-3">
-                  <details>
-                    <summary className="flex items-center justify-between cursor-pointer">
-                      <div className="min-w-0">
-                        <div className="font-medium truncate" style={{ fontSize: 16 }}>{s.title}</div>
-                        <div className="text-sm" style={{ color: "#6b7280" }}>
-                          Prévu le <b style={{ color: "inherit" }}>{fmtDateYMD(s.date)}</b>
-                          {s.plannedMin ? ` · ${s.plannedMin} min` : ""}
-                        </div>
-                      </div>
-                      <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>
-                        {s.type}
-                      </span>
-                    </summary>
-
-                    {Array.isArray(s.exercises) && s.exercises.length > 0 && (
-                      <div className="mt-3">
-                        <ExercisesDetail sid={s.id} exercises={s.exercises} />
-                      </div>
-                    )}
-                  </details>
-                </li>
-              ))}
-            </ul>
-
-            <div className="flex justify-between mt-3">
-              <a href={urlWith({ take, offset: Math.max(0, clampedActive.offset - take) })} className={`btn ${clampedActive.offset <= 0 ? "pointer-events-none opacity-50" : ""}`} aria-disabled={clampedActive.offset <= 0}>← Voir précédent</a>
-              <a href={urlWith({ take, offset: clampedActive.offset + take })} className={`btn ${!hasMoreActive ? "pointer-events-none opacity-50" : ""}`} aria-disabled={!hasMoreActive}>Voir plus →</a>
-            </div>
-          </>
-        )}
-      </section>
-
-      {/* Séances enregistrées */}
+      {/* Séances enregistrées — affichage en texte simple */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h2>Séances enregistrées</h2>
@@ -1189,36 +1116,34 @@ export default async function Page({
               const mins = minutesBetween(s.startedAt, s.endedAt);
               return (
                 <li key={s.id} className="py-3">
-                  <details>
-                    <summary className="flex items-center justify-between cursor-pointer">
-                      <div className="min-w-0">
-                        <div className="font-medium truncate" style={{ fontSize: 16 }}>{s.title}</div>
-                        <div className="text-sm" style={{ color: "#6b7280" }}>
-                          {fmtDateISO(s.endedAt)}
-                          {mins ? ` · ${mins} min` : ""}
-                          {s.plannedMin ? ` (prévu ${s.plannedMin} min)` : ""}
-                        </div>
+                  <div className="flex items-start justify-between">
+                    <div className="min-w-0">
+                      <div className="font-medium" style={{ fontSize: 16 }}>{s.title}</div>
+                      <div className="text-sm" style={{ color: "#6b7280" }}>
+                        {fmtDateISO(s.endedAt)}
+                        {mins ? ` · ${mins} min` : ""}
+                        {s.plannedMin ? ` (prévu ${s.plannedMin} min)` : ""}
                       </div>
-                      <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>
-                        {s.type}
-                      </span>
-                    </summary>
-
-                    {Array.isArray(s.exercises) && s.exercises.length > 0 && (
-                      <div className="mt-3">
-                        <ExercisesDetail sid={s.id} exercises={s.exercises} />
-                      </div>
-                    )}
-
-                    <div className="mt-3">
-                      <form action={deleteSessionAction} method="post">
-                        <input type="hidden" name="id" value={s.id} />
-                        <button className="btn" type="submit" style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }} title="Supprimer">
-                          Supprimer
-                        </button>
-                      </form>
                     </div>
-                  </details>
+                    <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>
+                      {s.type}
+                    </span>
+                  </div>
+
+                  {Array.isArray(s.exercises) && s.exercises.length > 0 && (
+                    <div className="mt-3">
+                      <ExercisesDetailPlain sid={s.id} exercises={s.exercises} />
+                    </div>
+                  )}
+
+                  <div className="mt-3">
+                    <form action={deleteSessionAction} method="post">
+                      <input type="hidden" name="id" value={s.id} />
+                      <button className="btn" type="submit" style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }} title="Supprimer">
+                        Supprimer
+                      </button>
+                    </form>
+                  </div>
                 </li>
               );
             })}
