@@ -492,8 +492,7 @@ export default async function Page({
           </div>
         </div>
       </section>
-
-      {/* Séances proposées — titres cliquables uniquement */}
+{/* Séances proposées — titres cliquables uniquement (sans pagination) */}
 <section className="section" style={{ marginTop: 12 }}>
   <div
     className="section-head"
@@ -508,7 +507,7 @@ export default async function Page({
     <a href={questionnaireUrl} className="btn btn-dash">Je mets à jour</a>
   </div>
 
-  {visibleAi.length === 0 ? (
+  {aiSessions.length === 0 ? (
     <div className="card text-sm" style={{ color: "#6b7280" }}>
       <div className="flex items-center gap-3">
         <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted">🤖</span>
@@ -518,108 +517,85 @@ export default async function Page({
       </div>
     </div>
   ) : (
-    <>
-      <ul className="space-y-2 list-none pl-0">
-        {visibleAi.map((s) => {
-          const qp = new URLSearchParams({
-            title: s.title,
-            date: s.date,
-            type: s.type,
-            plannedMin: s.plannedMin ? String(s.plannedMin) : "",
-          });
-          const href = `/dashboard/seance/${encodeURIComponent(s.id)}?${qp.toString()}`;
+    <ul className="space-y-2 list-none pl-0">
+      {aiSessions.map((s) => {
+        const qp = new URLSearchParams({
+          title: s.title,
+          date: s.date,
+          type: s.type,
+          plannedMin: s.plannedMin ? String(s.plannedMin) : "",
+        });
+        const href = `/dashboard/seance/${encodeURIComponent(s.id)}?${qp.toString()}`;
 
-          return (
-            <li key={s.id} className="card p-3">
-              <div className="flex items-center justify-between gap-3">
-                <a
-                  href={href}
-                  className="font-medium underline-offset-2 hover:underline truncate"
-                  style={{ fontSize: 16, display: "inline-block", maxWidth: "100%" }}
-                  title={s.title}
-                >
-                  {s.title}
-                </a>
-                <span
-                  className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}
-                >
-                  {s.type}
-                </span>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-
-      <div className="flex justify-between mt-3">
-        <a
-          href={urlWith(currentParams, { offset: Math.max(0, clampedAi.offset - take), take })}
-          className={`btn ${clampedAi.offset <= 0 ? "pointer-events-none opacity-50" : ""}`}
-          aria-disabled={clampedAi.offset <= 0}
-        >
-          ← Voir précédent
-        </a>
-        <a
-          href={urlWith(currentParams, { offset: clampedAi.offset + take, take })}
-          className={`btn ${!hasMoreAi ? "pointer-events-none opacity-50" : ""}`}
-          aria-disabled={!hasMoreAi}
-        >
-          Voir plus →
-        </a>
-      </div>
-    </>
+        return (
+          <li key={s.id} className="card p-3">
+            <div className="flex items-center justify-between gap-3">
+              <a
+                href={href}
+                className="font-medium underline-offset-2 hover:underline truncate"
+                style={{ fontSize: 16, display: "inline-block", maxWidth: "100%" }}
+                title={s.title}
+              >
+                {s.title}
+              </a>
+              <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>
+                {s.type}
+              </span>
+            </div>
+          </li>
+        );
+      })}
+    </ul>
   )}
 </section>
+{/* Séances enregistrées — compacte */}
+<section className="section" style={{ marginTop: 12 }}>
+  <div className="section-head" style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+    <h2>Séances enregistrées</h2>
+    {past.length > 12 && (
+      <span className="text-xs" style={{ color: "#6b7280" }}>
+        Affichage des 12 dernières
+      </span>
+    )}
+  </div>
 
-
-      {/* Séances enregistrées — compacte */}
-      <section className="section" style={{ marginTop: 12 }}>
-        <div className="section-head" style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h2>Séances enregistrées</h2>
-          {past.length > 12 && (
-            <span className="text-xs" style={{ color: "#6b7280" }}>
-              Affichage des 12 dernières
-            </span>
-          )}
-        </div>
-
-        {past.length === 0 ? (
-          <div className="card text-sm" style={{ color: "#6b7280" }}>
-            <div className="flex items-center gap-3">
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted">🗓️</span>
-              <span>Aucune séance enregistrée.</span>
-            </div>
-          </div>
-        ) : (
-          <ul className="card divide-y list-none pl-0">
-            {past.slice(0, 12).map((s) => {
-              const qp = new URLSearchParams({
-                title: s.title,
-                date: s.date,
-                type: s.type,
-                plannedMin: s.plannedMin ? String(s.plannedMin) : "",
-              });
-              const href = `/dashboard/seance/${encodeURIComponent(s.id)}?${qp.toString()}`;
-              return (
-                <li key={s.id} className="py-3">
-                  <div className="flex items-center justify-between">
-                    <div className="min-w-0">
-                      <a href={href} className="font-medium underline-offset-2 hover:underline" style={{ fontSize: 16 }}>
-                        {s.title}
-                      </a>
-                      <div className="text-sm" style={{ color: "#6b7280" }}>
-                        {fmtDateISO(s.endedAt)}
-                        {s.plannedMin ? ` (prévu ${s.plannedMin} min)` : ""}
-                      </div>
-                    </div>
-                    <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>{s.type}</span>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
+  {past.length === 0 ? (
+    <div className="card text-sm" style={{ color: "#6b7280" }}>
+      <div className="flex items-center gap-3">
+        <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted">🗓️</span>
+        <span>Aucune séance enregistrée.</span>
+      </div>
     </div>
-  );
+  ) : (
+    <ul className="card divide-y list-none pl-0">
+      {past.slice(0, 12).map((s) => {
+        const qp = new URLSearchParams({
+          title: s.title,
+          date: s.date,
+          type: s.type,
+          plannedMin: s.plannedMin ? String(s.plannedMin) : "",
+        });
+        const href = `/dashboard/seance/${encodeURIComponent(s.id)}?${qp.toString()}`;
+        return (
+          <li key={s.id} className="py-3">
+            <div className="flex items-center justify-between">
+              <div className="min-w-0">
+                <a href={href} className="font-medium underline-offset-2 hover:underline" style={{ fontSize: 16 }}>
+                  {s.title}
+                </a>
+                <div className="text-sm" style={{ color: "#6b7280" }}>
+                  {fmtDateISO(s.endedAt)}
+                  {s.plannedMin ? ` (prévu ${s.plannedMin} min)` : ""}
+                </div>
+              </div>
+              <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>{s.type}</span>
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+</section>
+
+</div> {/* ← ferme <div className="container"> */}
+); // fin du return
 }
