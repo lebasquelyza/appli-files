@@ -120,12 +120,12 @@ async function fetchAiProgramme(userId?: string): Promise<AiProgramme | null> {
     } catch {}
   }
 
-  // fallback local : si pas d’API disponible, on génère
+  // Fallback local (objectif + matériel)
   try {
     const email = (await getSignedInEmail()) || cookies().get("app_email")?.value || "";
     if (email) {
       const ans = await getAnswersForEmail(email, SHEET_ID, SHEET_RANGE);
-      if (ans) return { sessions: generateSessionsFromAnswers(ans) };
+      if (ans) return { sessions: generateGoalProgrammeFromAnswers(ans) };
     }
   } catch {}
   return null;
@@ -134,10 +134,7 @@ async function fetchAiProgramme(userId?: string): Promise<AiProgramme | null> {
 /* ===================== Utils ===================== */
 function parseStore(val?: string | null): Store {
   if (!val) return { sessions: [] };
-  try {
-    const o = JSON.parse(val);
-    if (Array.isArray(o?.sessions)) return { sessions: o.sessions as Workout[] };
-  } catch {}
+  try { const o = JSON.parse(val!); if (Array.isArray(o?.sessions)) return { sessions: o.sessions as Workout[] }; } catch {}
   return { sessions: [] };
 }
 function fmtDateISO(iso?: string) {
@@ -159,13 +156,6 @@ function fmtDateYMD(ymd?: string) {
   } catch {}
   return ymd;
 }
-function minutesBetween(a?: string, b?: string) {
-  if (!a || !b) return undefined;
-  const A = new Date(a).getTime(), B = new Date(b).getTime();
-  if (!isFinite(A) || !isFinite(B)) return undefined;
-  const mins = Math.round((B - A) / 60000);
-  return mins >= 0 ? mins : undefined;
-}
 function typeBadgeClass(t: WorkoutType) {
   switch (t) {
     case "muscu": return "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200";
@@ -178,11 +168,6 @@ function clampOffset(total: number, take: number, offset: number) {
   if (total <= 0) return { offset: 0, emptyReason: "none" as const };
   if (offset >= total) return { offset: Math.max(0, Math.ceil(total / take) * take - take), emptyReason: "ranout" as const };
   return { offset, emptyReason: "none" as const };
-}
-function uniqueBy<T>(arr: T[], key: (x: T) => string) {
-  const seen = new Set<string>(); const out: T[] = [];
-  for (const item of arr) { const k = key(item); if (!seen.has(k)) { seen.add(k); out.push(item); } }
-  return out;
 }
 
 /* ======== Google Sheets (PUBLIC via lien) ======== */
@@ -233,69 +218,133 @@ async function fetchValues(sheetId: string, range: string) {
   throw new Error("SHEETS_FETCH_FAILED");
 }
 
-/* ======== Normalisation & génération ======== */
+/* ======== Normalisation / Objectif + Matériel ======== */
 type Answers = Record<string, string>;
 function norm(s: string) {
-  return s.trim().toLowerCase().replace(/\s+/g, " ")
+  return s.trim().toLowerCase()
+    .replace(/\s+/g, " ")
     .replace(/[éèêë]/g, "e").replace(/[àâä]/g, "a").replace(/[îï]/g, "i")
     .replace(/[ôö]/g, "o").replace(/[ùûü]/g, "u").replace(/[’']/g, "'");
 }
-function inferAvailability(ans: Answers | null): number {
-  if (!ans) return 3;
-  const dispoRaw = (ans[norm("disponibilité")] || ans[norm("disponibilite")] || (ans as any)["disponibilité"] || (ans as any)["disponibilite"] || "").toLowerCase();
-  const digits = dispoRaw.match(/\d+/g);
-  if (digits?.length) { const n = parseInt(digits[0], 10); if (Number.isFinite(n)) return Math.max(1, Math.min(6, n)); }
-  if (/(lun|mar|mer|jeu|ven|sam|dim)/.test(dispoRaw)) {
-    const n = dispoRaw.split(/[ ,;\/-]+/).filter(Boolean).length;
-    return Math.max(1, Math.min(6, n));
-  }
+
+type Goal = "hypertrophy" | "fatloss" | "strength" | "endurance" | "mobility" | "general";
+type EquipLevel = "full" | "limited" | "none";
+
+function classifyGoal(raw: string): Goal {
+  const s = norm(raw);
+  if (/(prise|muscle|hypertroph|volume|masse)/.test(s)) return "hypertrophy";
+  if (/(perte|mince|seche|gras|poids|fat)/.test(s)) return "fatloss";
+  if (/(force|1rm|5x5|power)/.test(s)) return "strength";
+  if (/(endurance|cardio|marathon|course|vélo|velo|trail|tri)/.test(s)) return "endurance";
+  if (/(mobilite|souplesse|douleur|recup|rehab)/.test(s)) return "mobility";
+  return "general";
+}
+function parseFreq(dispo: string): number {
+  const s = norm(dispo);
+  const digits = s.match(/\d+/g);
+  if (digits?.length) return Math.max(1, Math.min(6, parseInt(digits[0], 10)));
+  if (/(lun|mar|mer|jeu|ven|sam|dim)/.test(s)) return Math.max(1, Math.min(6, s.split(/[ ,;\/-]+/).filter(Boolean).length));
   return 3;
 }
-function generateSessionsFromAnswers(ans: Answers): AiSession[] {
+
+function inferEquipment(materiel: string, lieu: string): { level: EquipLevel; items: string[]; gym: boolean } {
+  const m = norm(materiel);
+  const l = norm(lieu);
+  const gym = /(salle|gym|fitness|basic-fit|keepcool|neo|temple|crossfit)/.test(l);
+  if (gym) return { level: "full", items: ["barre", "rack", "machines", "haltères", "câbles"], gym: true };
+  if (/(aucun|rien|sans)/.test(m) || m === "") return { level: "none", items: [], gym: false };
+
+  const items: string[] = [];
+  if (/(halter|haltère|dumbbell)/.test(m)) items.push("haltères");
+  if (/(kettlebell|kettle)/.test(m)) items.push("kettlebell");
+  if (/(elastique|bande|resistance band)/.test(m)) items.push("élastiques");
+  if (/(barre|barbell)/.test(m)) items.push("barre");
+  if (/(rack|power rack)/.test(m)) items.push("rack");
+  if (/(banc)/.test(m)) items.push("banc");
+  if (/(trx|anneaux)/.test(m)) items.push("TRX/anneaux");
+
+  const hasBar = items.includes("barre") || items.includes("rack");
+  const level: EquipLevel = hasBar ? "limited" : "limited"; // par défaut limité (plein = gym)
+  return { level, items, gym: false };
+}
+
+function generateGoalProgrammeFromAnswers(ans: Answers): AiSession[] {
   const get = (k: string) => ans[norm(k)] || ans[k] || "";
 
-  const prenom = get("prénom") || get("prenom");
-  const age = Number((get("age") || "").replace(",", "."));
-  const niveau = (get("niveau") || "débutant").toLowerCase();
-  const objectif = (get("objectif") || "").toLowerCase();
-  const dispo = (get("disponibilité") || get("disponibilite") || "").toLowerCase();
-  const lieu = (get("a quel endroit v tu faire ta seance ?") || "").toLowerCase();
-  const materiel = (get("as tu du matériel a ta disposition") || get("as tu du materiel a ta disposition") || "").toLowerCase();
+  const objectif = get("objectif");
+  const dispo = get("disponibilité") || get("disponibilite") || "";
+  const lieu = get("a quel endroit v tu faire ta seance ?") || "";
+  const materiel = get("as tu du matériel a ta disposition") || get("as tu du materiel a ta disposition") || "";
 
-  let freq = 3; const digits = dispo.match(/\d+/g);
-  if (digits?.length) freq = Math.max(1, Math.min(6, parseInt(digits[0], 10)));
-  else if (/(lun|mar|mer|jeu|ven|sam|dim)/.test(dispo)) freq = Math.max(1, Math.min(6, dispo.split(/[ ,;\/-]+/).filter(Boolean).length));
+  const goal = classifyGoal(objectif);
+  const freq = parseFreq(dispo);
+  const equipInfo = inferEquipment(materiel, lieu);
 
-  const baseMin = niveau.includes("debut") || niveau.includes("début") ? 25 : niveau.includes("inter") ? 35 : 45;
-  let intensity: "faible" | "modérée" | "élevée" = (niveau.includes("debut") || niveau.includes("début")) ? "faible" : (niveau.includes("inter")) ? "modérée" : "élevée";
-  if (isFinite(age) && age >= 55) intensity = intensity === "élevée" ? "modérée" : "faible";
+  const baseMinByGoal: Record<Goal, number> = {
+    hypertrophy: 55, strength: 60, fatloss: 45, endurance: 40, mobility: 30, general: 45
+  };
+  const intensityByGoal: Record<Goal, "faible"|"modérée"|"élevée"> = {
+    hypertrophy: "élevée", strength: "élevée", fatloss: "modérée", endurance: "modérée", mobility: "faible", general: "modérée"
+  };
 
-  const noEquip = /(aucun|non|sans)/.test(materiel) || materiel === "";
-  const atGym = /(salle|gym|fitness)/.test(lieu);
-  const muscuPossible = !noEquip || atGym;
+  // Titres adaptés par objectif ET matériel
+  const titlesGym = {
+    hypertrophy: ["[Hypertrophie] Haut du corps (Gym)", "[Hypertrophie] Bas du corps (Gym)", "[Hypertrophie] Full Body (Machines)"],
+    strength:    ["[Force] Bas du corps 5×5 (Barre)", "[Force] Haut du corps 5×5 (Barre)", "[Force] Full Body 3×5"],
+  };
+  const titlesLimited = {
+    hypertrophy: ["[Hypertrophie] Haut du corps (Haltères)", "[Hypertrophie] Bas du corps (Haltères)", "[Hypertrophie] Full Body (DB)"],
+    strength:    ["[Force] Bas du corps (DB/Kettlebell)", "[Force] Haut du corps (DB)", "[Force] Full Body (DB)"],
+  };
+  const titlesNone = {
+    hypertrophy: ["[Hypertrophie] Full Body (Poids du corps)", "[Hypertrophie] Haut du corps (PB)", "[Hypertrophie] Bas du corps (PB)"],
+  };
 
-  let pool: WorkoutType[] = muscuPossible ? ["muscu", "cardio", "hiit"] : ["cardio", "hiit", "mobilité"];
-  if (objectif.includes("perte") || objectif.includes("mince") || objectif.includes("seche")) pool = muscuPossible ? ["hiit","cardio","muscu"] : ["hiit","cardio","mobilité"];
-  else if (objectif.includes("prise") || objectif.includes("muscle") || objectif.includes("force")) pool = muscuPossible ? ["muscu","muscu","cardio"] : ["hiit","cardio","mobilité"];
-  else if (objectif.includes("endurance") || objectif.includes("cardio")) pool = ["cardio","hiit","mobilité"];
+  const titlesByGoalGeneric: Record<Goal, string[]> = {
+    hypertrophy: equipInfo.level === "full" ? titlesGym.hypertrophy
+               : equipInfo.level === "limited" ? titlesLimited.hypertrophy
+               : titlesNone.hypertrophy,
+    strength:    equipInfo.level === "full" ? titlesGym.strength
+               : titlesLimited.strength,
+    fatloss:     equipInfo.level === "none" ? ["[Fatloss] Circuit PB 1", "[Fatloss] HIIT PB 30/30", "[Fatloss] Circuit PB 2"]
+               : ["[Fatloss] Circuit Full Body 1", "[Fatloss] Intervalles HIIT", "[Fatloss] Circuit Full Body 2"],
+    endurance:   ["[Endurance] Zone 2", "[Endurance] Intervalles 4×4", "[Endurance] Tempo Run"],
+    mobility:    ["[Mobilité] Hanches & Colonne", "[Mobilité] Épaules & T-spine", "[Mobilité] Full Body"],
+    general:     equipInfo.level === "none"
+               ? ["[Général] PB A", "[Général] PB B", "[Général] Z2 + Core (PB)"]
+               : ["[Général] Full Body A", "[Général] Full Body B", "[Général] Z2 + Core"],
+  };
 
-  const noteParts: string[] = [];
-  if (prenom) noteParts.push(`Pour ${prenom}`);
-  if (noEquip) noteParts.push("Sans matériel");
-  if (atGym) noteParts.push("Salle");
+  const today = new Date();
+  const slots = titlesByGoalGeneric[goal];
+  const nb = Math.max(1, Math.min(6, freq));
+  const out: AiSession[] = [];
 
-  const today = new Date(); const nb = Math.max(1, Math.min(6, freq)); const sessions: AiSession[] = [];
   for (let i = 0; i < nb; i++) {
-    const date = new Date(today); date.setDate(today.getDate() + i * Math.ceil(7/nb));
-    const y = date.getFullYear(), m = String(date.getMonth()+1).padStart(2,"0"), d = String(date.getDate()).padStart(2,"0");
-    const type = pool[i % pool.length];
-    sessions.push({
-      id: `ai-${y}${m}${d}-${i}`,
-      title: `${objectif.includes("perte") ? "Brûle-graisse" : objectif.includes("prise") || objectif.includes("force") ? "Force/Muscu" : objectif.includes("endurance") || objectif.includes("cardio") ? "Endurance" : "Full body"} — Séance ${i+1}`,
-      type, date: `${y}-${m}-${d}`, plannedMin: baseMin, intensity, note: noteParts.join(" · ") || undefined, recommendedBy: "Coach Files",
+    const d = new Date(today);
+    d.setDate(today.getDate() + i * Math.ceil(7 / nb));
+    const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,"0"), da = String(d.getDate()).padStart(2,"0");
+
+    const title = slots[i % slots.length];
+    let type: WorkoutType = "muscu";
+    if (goal === "endurance") type = "cardio";
+    else if (goal === "mobility") type = "mobilité";
+    else if (goal === "fatloss" && equipInfo.level === "none") type = "hiit";
+
+    out.push({
+      id: `goal-${goal}-${equipInfo.level}-${y}${m}${da}-${i}`,
+      title,
+      type,
+      date: `${y}-${m}-${da}`,
+      plannedMin: baseMinByGoal[goal],
+      intensity: intensityByGoal[goal],
+      note: equipInfo.gym ? "Salle : accès complet aux machines et barres."
+           : equipInfo.level === "limited" ? `Matériel dispo : ${equipInfo.items.join(", ") || "quelques charges"}.`
+           : "Sans matériel — variantes au poids du corps.",
+      recommendedBy: "Coach Files",
     });
   }
-  return sessions;
+  return out;
 }
 
 /* ===================== Page ===================== */
@@ -306,48 +355,26 @@ export default async function Page({
 }) {
   const store = parseStore(cookies().get("app_sessions")?.value);
 
-  // (Toujours supprimé) bloc "Mes séances (actives)"
-
-  // Enregistrées (done)
   const past = store.sessions
     .filter(s => s.status === "done")
     .sort((a, b) => (b.endedAt || "").localeCompare(a.endedAt || ""));
 
-  // Propositions IA
   const programme = await fetchAiProgramme();
   const aiSessions = programme?.sessions ?? [];
 
-  // ======= Mes infos (rétabli complet) =======
+  // ======= Mes infos (sans "Nom") =======
   const detectedEmail = await getSignedInEmail();
   const emailFromCookie = cookies().get("app_email")?.value || "";
-  const emailForLink = detectedEmail || emailFromCookie;
-
-  let clientPrenom = "", clientNom = "", clientAge: number | undefined, clientEmailDisplay = emailForLink;
-  if (emailForLink) {
-    try {
-      const ans = await getAnswersForEmail(emailForLink, SHEET_ID, SHEET_RANGE);
-      const get = (k: string) => (ans ? ans[norm(k)] || ans[k] || "" : "");
-      clientPrenom = get("prénom") || get("prenom") || "";
-      clientNom = get("nom") || "";
-      const ageStr = get("age");
-      const num = Number((ageStr || "").toString().replace(",", "."));
-      clientAge = isFinite(num) && num > 0 ? Math.floor(num) : undefined;
-      const emailSheet = get("email") || get("adresse mail") || get("e-mail") || get("mail");
-      if (!clientEmailDisplay && emailSheet) clientEmailDisplay = emailSheet;
-    } catch {}
-  }
+  const clientEmailDisplay = detectedEmail || emailFromCookie;
 
   const questionnaireUrl = (() => {
     const qp = new URLSearchParams();
     if (clientEmailDisplay) qp.set("email", clientEmailDisplay);
-    if (clientPrenom) qp.set("prenom", clientPrenom);
-    if (clientNom) qp.set("nom", clientNom);
     const base = QUESTIONNAIRE_BASE.replace(/\/?$/, "");
     const qs = qp.toString();
     return qs ? `${base}?${qs}` : base;
   })();
 
-  // Pagination IA (vue compacte)
   const takeDefault = 3;
   const take = Math.max(1, Math.min(12, Number(searchParams?.take ?? takeDefault) || takeDefault));
   const reqOffset = Math.max(0, Number(searchParams?.offset ?? 0) || 0);
@@ -373,13 +400,11 @@ export default async function Page({
 
   return (
     <div className="container" style={{ paddingTop: 24, paddingBottom: 32, fontSize: "var(--settings-fs, 12px)" }}>
-      {/* Header */}
       <div className="page-header">
         <div><h1 className="h1" style={{ fontSize: 22 }}>Mon profil</h1></div>
         <a href="/dashboard" className="btn" style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500, padding: "6px 10px", lineHeight: 1.2 }}>← Retour</a>
       </div>
 
-      {/* Alerts */}
       <div className="space-y-3">
         {!!searchParams?.success && (
           <div className="card" style={{ border: "1px solid rgba(16,185,129,.35)", background: "rgba(16,185,129,.08)", fontWeight: 600 }}>
@@ -394,16 +419,15 @@ export default async function Page({
         {!!searchParams?.error && (<div className="card" style={{ border: "1px solid rgba(239,68,68,.35)", background: "rgba(239,68,68,.08)", fontWeight: 600, whiteSpace: "pre-wrap" }}>⚠️ {displayedError}</div>)}
       </div>
 
-      {/* ===== Mes infos (complet) ===== */}
+      {/* Mes infos (Prénom/Âge enlevés si tu préfères, on garde Mail visible) */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
           <h2>Mes infos</h2>
         </div>
         <div className="card">
           <div className="text-sm" style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-            <span><b>Prénom :</b> {clientPrenom || <i className="text-gray-400">Non renseigné</i>}</span>
-            <span><b>Nom :</b> {clientNom || <i className="text-gray-400">Non renseigné</i>}</span>
-            <span><b>Age :</b> {typeof clientAge === "number" ? `${clientAge} ans` : <i className="text-gray-400">Non renseigné</i>}</span>
+            <span><b>Prénom :</b> <i className="text-gray-400">Selon questionnaire</i></span>
+            <span><b>Age :</b> <i className="text-gray-400">Selon questionnaire</i></span>
           </div>
           <div className="text-sm" style={{ marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={clientEmailDisplay || "Non renseigné"}>
             <b>Mail :</b>{" "}
@@ -412,12 +436,12 @@ export default async function Page({
         </div>
       </section>
 
-      {/* Séances proposées par Files — version compacte */}
+      {/* Séances proposées — compacte */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <div>
-            <h2 style={{ marginBottom: 6 }}>Séances proposées par Files</h2>
-            <p className="text-sm" style={{ color: "#6b7280" }}>Cliquez sur une séance pour voir le détail.</p>
+            <h2 style={{ marginBottom: 6 }}>Séances proposées</h2>
+            <p className="text-sm" style={{ color: "#6b7280" }}>Adaptées à votre objectif et votre matériel.</p>
           </div>
           <a href={questionnaireUrl} className="btn btn-dash">Je mets à jour</a>
         </div>
@@ -461,7 +485,7 @@ export default async function Page({
         )}
       </section>
 
-      {/* Séances enregistrées — version compacte */}
+      {/* Séances enregistrées — compacte */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h2>Séances enregistrées</h2>
@@ -478,7 +502,6 @@ export default async function Page({
         ) : (
           <ul className="card divide-y list-none pl-0">
             {past.slice(0, 12).map((s) => {
-              const mins = minutesBetween(s.startedAt, s.endedAt);
               const qp = new URLSearchParams({ title: s.title, date: s.date, type: s.type, plannedMin: s.plannedMin ? String(s.plannedMin) : "" });
               const href = `/dashboard/seance/${encodeURIComponent(s.id)}?${qp.toString()}`;
               return (
@@ -489,12 +512,11 @@ export default async function Page({
                         {s.title}
                       </a>
                       <div className="text-sm" style={{ color: "#6b7280" }}>
-                        {fmtDateISO(s.endedAt)}{mins ? ` · ${mins} min` : ""}{s.plannedMin ? ` (prévu ${s.plannedMin} min)` : ""}
+                        {fmtDateISO(s.endedAt)}{s.plannedMin ? ` (prévu ${s.plannedMin} min)` : ""}
                       </div>
                     </div>
                     <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>{s.type}</span>
                   </div>
-
                   <div className="mt-3">
                     <form action={deleteSessionAction} method="post">
                       <input type="hidden" name="id" value={s.id} />
