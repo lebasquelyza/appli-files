@@ -494,7 +494,7 @@ function buildSessionBlocks(profile: Profile, kind: { title: string; type: Worko
       addSafeAcc(safe(EXOS.pb.hipThrust, I)); addSafeAcc(safe(EXOS.pb.plank, I));
     }
   }
-
+};
  // 3) Fin (5-8')
 if (fin.length === 0) {
   if (profile.goal === "mobility") {
