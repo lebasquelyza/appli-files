@@ -192,15 +192,15 @@ export default async function Page({
 }) {
   const id = decodeURIComponent(params.id);
 
-  // 1) séances enregistrées (cookies)
+  // 1) cookies
   const store = parseStore(cookies().get("app_sessions")?.value);
   let saved = store.sessions.find(s => s.id === id);
 
-  // 2) séances IA par id
+  // 2) IA par id
   const programme = await fetchAiProgramme();
   const aiById = programme?.sessions.find(s => s.id === id);
 
-  // 3) si pas trouvé, tenter match par clé composite depuis query (title|date|type)
+  // 3) clé composite via query
   const qpTitle = typeof searchParams?.title === "string" ? searchParams!.title : "";
   const qpDate  = typeof searchParams?.date  === "string" ? searchParams!.date  : "";
   const qpType  = (typeof searchParams?.type  === "string" ? searchParams!.type  : "") as WorkoutType;
@@ -208,18 +208,16 @@ export default async function Page({
 
   const key = (t: string, d: string, ty: string) => `${t}|${d}|${ty}`;
 
-  // cherche par clé parmi cookies
   if (!saved && qpTitle && qpDate && qpType) {
     saved = store.sessions.find(s => key(s.title, s.date, s.type) === key(qpTitle, qpDate, qpType));
   }
 
-  // cherche par clé parmi IA courantes
   let ai = aiById;
   if (!ai && qpTitle && qpDate && qpType && programme) {
     ai = programme.sessions.find(s => key(s.title, s.date, s.type) === key(qpTitle, qpDate, qpType));
   }
 
-  // Si toujours rien: construit une séance synthétique depuis la query pour éviter "introuvable"
+  // Construction des données (fallback si rien trouvé)
   let title = "", type: WorkoutType = "muscu", date = "", plannedMin: number | undefined, note: string | undefined;
   let intensity: "faible" | "modérée" | "élevée" | undefined;
   let exercises: NormalizedExercise[] = [];
@@ -231,12 +229,10 @@ export default async function Page({
     title = ai.title; type = ai.type; date = ai.date; plannedMin = ai.plannedMin; note = ai.note; intensity = ai.intensity;
     exercises = getExercisesFromAi(ai);
   } else if (qpTitle && qpDate && qpType) {
-    // séance "reconstruite"
     const fake: AiSession = { id, title: qpTitle, type: qpType, date: qpDate, plannedMin: qpPlannedMin, intensity: "modérée" };
     title = fake.title; type = fake.type; date = fake.date; plannedMin = fake.plannedMin; intensity = fake.intensity;
     exercises = fallbackExercises(fake);
   } else {
-    // Sans info exploitable: retourne au profil
     redirect("/dashboard/profile?error=Séance introuvable");
   }
 
@@ -274,9 +270,10 @@ export default async function Page({
         <a href="/dashboard/profile" className="btn" style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500, padding: "6px 10px" }}>
           ← Retour
         </a>
-        <button onClick={() => window.print()} className="btn no-print" style={{ background: "#111827", color: "white" }}>
+        {/* Pas d'onClick ici pour éviter les erreurs sur composant serveur */}
+        <a href="javascript:print()" className="btn no-print" style={{ background: "#111827", color: "white" }}>
           Imprimer
-        </button>
+        </a>
       </div>
 
       <div className="card" style={{ padding: 16 }}>
@@ -286,7 +283,6 @@ export default async function Page({
             <div className="text-sm" style={{ color: "#6b7280" }}>
               Prévu le <b style={{ color: "inherit" }}>{fmtDateYMD(date)}</b>
               {plannedMin ? ` · ${plannedMin} min` : ""}
-              { /* intensity est optionnelle */ }
             </div>
           </div>
           <span className={`shrink-0 h-fit inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(type)}`}>
