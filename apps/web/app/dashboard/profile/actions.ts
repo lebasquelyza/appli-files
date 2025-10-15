@@ -1,3 +1,4 @@
+// apps/web/app/dashboard/profile/actions.ts
 "use server";
 
 import { cookies } from "next/headers";
@@ -28,13 +29,15 @@ function parseStore(val?: string | null): Store {
   } catch {}
   return { sessions: [] };
 }
+
 function uid() {
   return "id-" + Math.random().toString(36).slice(2, 10);
 }
+
 function toYMD(d = new Date()) {
-  const y = d.getFullYear(),
-    m = String(d.getMonth() + 1).padStart(2, "0"),
-    da = String(d.getDate()).padStart(2, "0");
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const da = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${da}`;
 }
 
@@ -49,6 +52,7 @@ export async function addSessionAction(formData: FormData) {
   const startNow = (formData.get("startNow") || "").toString() === "1";
 
   if (!title) redirect("/dashboard/profile?error=titre");
+
   const store = parseStore(cookies().get("app_sessions")?.value);
 
   const w: Workout = {
@@ -64,11 +68,13 @@ export async function addSessionAction(formData: FormData) {
   };
 
   const next: Store = { sessions: [w, ...store.sessions].slice(0, 300) };
+
   cookies().set("app_sessions", JSON.stringify(next), {
     path: "/",
     sameSite: "lax",
     maxAge: 60 * 60 * 24 * 365,
     httpOnly: false,
   });
+
   redirect("/dashboard/profile?success=1");
 }
