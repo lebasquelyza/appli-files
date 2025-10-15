@@ -213,11 +213,24 @@ function readNum(s: string): number | undefined {
 }
 function classifyGoal(raw: string): Goal {
   const s = norm(raw);
-  if (/(prise|muscle|hypertroph|volume|masse)/.test(s)) return "hypertrophy";
-  if (/(perte|mince|seche|gras|poids|fat)/.test(s)) return "fatloss";
-  if (/(force|1rm|5x5|power)/.test(s)) return "strength";
-  if (/(endurance|cardio|marathon|vélo|velo|trail|tri)/.test(s)) return "endurance";
-  if (/(mobilite|souplesse|douleur|recup|rehab)/.test(s)) return "mobility";
+
+  // Hypertrophie / prise de masse / tonification
+  if (/(prise|hypertroph|volume|masse|muscle|bodybuild|construction)/.test(s)) return "hypertrophy";
+  if (/(tonifi|galb|se dessiner|shape)/.test(s)) return "hypertrophy";
+
+  // Perte de graisse / sèche / recomposition
+  if (/(perte|mince|sech|sèche|gras|poids|cut|dry|recomp|affiner|affinage)/.test(s)) return "fatloss";
+
+  // Force / puissance
+  if (/(force|1rm|5x5|3x5|power|puissance|max strength|haltérophil|weightlifting)/.test(s)) return "strength";
+
+  // Endurance/cardio (y compris “endurance musculaire”)
+  if (/(endurance|cardio|marathon|semi|trail|tri|vélo|velo|cycl|rameur|row|course|running|footing|z2|intervalles)/.test(s)) return "endurance";
+  if (/(endurance musculaire|metcon|wod|crossfit)/.test(s)) return "endurance";
+
+  // Mobilité / douleurs / réhab
+  if (/(mobilit|souplesse|etirement|étirement|douleur|raideur|rehab|réhab|reeduc|rééduc|posture)/.test(s)) return "mobility";
+
   return "general";
 }
 function detectSubGoals(raw: string): SubGoal[] {
@@ -299,7 +312,17 @@ function buildProfileFromAnswers(ans: Answers): Profile {
   const taille = readNum(get("taille"));
   const imc = poids && taille ? Math.round((poids / Math.pow(taille/100, 2)) * 10) / 10 : undefined;
 
-  const objectif = get("objectif");
+  // élargit la lecture de l’objectif
+  const objectif =
+    get("objectif") ||
+    get("objectif principal") ||
+    get("ton objectif") ||
+    get("ton objectif principal") ||
+    get("objectif sportif") ||
+    get("but") ||
+    get("but principal") ||
+    "";
+
   const sousObj  = get("zones a travailler") || get("zones à travailler") || "";
   const niveau   = get("niveau") || "";
   const dispo    = get("disponibilité") || get("disponibilite") || "";
@@ -320,12 +343,22 @@ function buildProfileFromAnswers(ans: Answers): Profile {
   const cardioPref = detectCardioPref(cardio);
   const injuries = detectInjuries(bless);
 
+  // ----- Fallback si l'objectif est resté "general"
+  let finalGoal: Goal = goal;
+  if (finalGoal === "general") {
+    if (/(wod|crossfit|metcon|emom|amrap)/.test(norm(objectif))) finalGoal = "endurance";
+    else if (subGoals.some(sg => ["glutes","legs","chest","back","arms","shoulders"].includes(sg))) finalGoal = "hypertrophy";
+    else if (detectCardioPref(objectif) !== "mixed") finalGoal = "endurance";
+    else if (/(mobilit|souplesse|douleur|rehab|réhab|reeduc|rééduc|posture)/.test(norm(bless))) finalGoal = "mobility";
+  }
+
   return {
     email: email || "",
     prenom: prenom || undefined,
     age: typeof age === "number" ? age : undefined,
     height: taille, weight: poids, imc,
-    goal, subGoals, level, freq, timePerSession,
+    goal: finalGoal,
+    subGoals, level, freq, timePerSession,
     equipLevel: equip.level, equipItems: equip.items, gym: equip.gym, location: equip.location as any,
     cardioPref, injuries,
     sleepOk: /(bien|ok|correct)/.test(norm(sommeil)) || undefined,
@@ -399,6 +432,7 @@ function durationFor(p: Profile): number {
   if (typeof p.age === "number" && p.age >= 55) d = Math.min(d, 55);
   return Math.max(25, Math.min(90, d));
 }
+
 /* ======== Bibliothèque d’exos (par matériel / blessure) ======== */
 const EXOS = {
   pb: { // poids du corps
@@ -535,8 +569,6 @@ function buildSessionBlocks(
     { name:"fin" as const, items: fin },
   ];
 }
-
-
 /* ============ BLOC 3/4 — IA/Rules Fetch + Page UI (avec blocs & exos détaillés) ============ */
 
 /* ===================== Fetch IA (ou règles) ===================== */
@@ -872,6 +904,7 @@ export default async function Page({
 /* ===================== Actions basiques ===================== */
 function uid() { return "id-" + Math.random().toString(36).slice(2, 10); }
 function toYMD(d = new Date()) { const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,"0"), da=String(d.getDate()).padStart(2,"0"); return `${y}-${m}-${da}`; }
+
 async function addSessionAction(formData: FormData) {
   "use server";
   const title = (formData.get("title") || "").toString().trim();
