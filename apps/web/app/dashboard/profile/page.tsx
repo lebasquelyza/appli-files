@@ -439,7 +439,8 @@ const EXOS = {
   catCow: { /* ... */ },
   thoracic: { /* ... */ },
   doorway: { /* ... */ },
-}
+},
+   };
 /* ======== Filtre blessures ======== */
 function safe(ex: NormalizedExercise, injuries: string[]): NormalizedExercise | null {
   if (injuries.includes("genoux") && /squat|fente|press/i.test(ex.name)) return null;
