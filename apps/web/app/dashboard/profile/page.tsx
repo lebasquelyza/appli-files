@@ -18,13 +18,13 @@ type NormalizedExercise = {
   notes?: string;
 
   // champs avancés
-  tempo?: string;          // ex: "3-1-1"
-  rir?: number;            // reps in reserve
-  load?: string;           // ex: "20kg", "RPE 8", "75% 1RM"
-  equipment?: string;      // ex: "haltères, banc"
-  target?: string;         // ex: "pectoraux, triceps"
-  alt?: string;            // alternative si pas de matériel
-  videoUrl?: string;       // lien demo
+  tempo?: string;
+  rir?: number;
+  load?: string;
+  equipment?: string;
+  target?: string;
+  alt?: string;
+  videoUrl?: string;
   block?: "echauffement" | "principal" | "fin" | "accessoires";
 };
 
@@ -33,13 +33,13 @@ type Workout = {
   title: string;
   type: WorkoutType;
   status: WorkoutStatus;
-  date: string;        // YYYY-MM-DD (prévu)
-  plannedMin?: number; // durée prévue
-  startedAt?: string;  // ISO quand démarrée
-  endedAt?: string;    // ISO quand terminée
+  date: string;
+  plannedMin?: number;
+  startedAt?: string;
+  endedAt?: string;
   note?: string;
-  createdAt: string;   // ISO
-  exercises?: NormalizedExercise[]; // détails persistés si dispo
+  createdAt: string;
+  exercises?: NormalizedExercise[];
 };
 
 type Store = { sessions: Workout[] };
@@ -48,7 +48,7 @@ type AiSession = {
   id: string;
   title: string;
   type: WorkoutType;
-  date: string;          // YYYY-MM-DD
+  date: string;
   plannedMin?: number;
   note?: string;
   intensity?: "faible" | "modérée" | "élevée";
@@ -137,7 +137,7 @@ async function fetchAiProgramme(userId?: string): Promise<AiProgramme | null> {
     }
   }
 
-  // Pas de données API : on affiche (sans persister) un fallback local basé sur la dernière réponse
+  // Pas de données API : fallback local depuis la dernière réponse
   try {
     const email = (await getSignedInEmail()) || cookies().get("app_email")?.value || "";
     if (email) {
@@ -315,17 +315,30 @@ function normalizeMaybeArray(v: any): any[] {
 }
 
 /* ======== Mapping IA → exercices détaillés ======== */
-{/* …dans la liste des séances IA… */}
-<div className="min-w-0">
-  <a href={`/dashboard/seance/${s.id}`} className="font-medium underline-offset-2 hover:underline" style={{ fontSize: 16 }}>
-    {s.title}
-  </a>
-  <div className="text-sm" style={{ color: "#6b7280" }}>
-    Prévu le <b style={{ color: "inherit" }}>{fmtDateYMD(s.date)}</b>
-    {s.plannedMin ? ` · ${s.plannedMin} min` : ""}
-    {s.intensity ? ` · intensité ${s.intensity}` : ""}
-  </div>
-</div>
+function fromApiExercises(s: AiSession): NormalizedExercise[] | null {
+  const candidates: any[] = [
+    s.exercises,
+    s.blocks,
+    s.plan?.exercises,
+    s.plan?.blocks,
+    s.plan?.day?.exercises,
+    s.plan?.day?.blocks,
+    s.content?.items,
+    s.content?.exercises,
+    s.content?.blocks,
+  ].flatMap(normalizeMaybeArray);
+
+  if (!candidates.length) return null;
+
+  const out: NormalizedExercise[] = [];
+  for (const it of candidates) {
+    const name = it?.name || it?.title || it?.exercise || it?.mov || it?.move || it?.movename;
+    if (!name) continue;
+
+    const sets = it?.sets ?? it?.series ?? it?.nbSets ?? it?.rounds;
+    const reps = it?.reps ?? it?.rep ?? it?.nbReps ?? it?.time ?? it?.duration ?? it?.seconds;
+    const rest = it?.rest ?? it?.rest_sec ?? it?.recup ?? it?.pause ?? it?.recovery;
+    const notes = it?.notes ?? it?.note ?? it?.tip ?? it?.tips ?? it?.cues;
 
     // champs avancés
     const tempo = it?.tempo ?? it?.cadence;
@@ -773,7 +786,7 @@ export default async function Page({
 }) {
   const store = parseStore(cookies().get("app_sessions")?.value);
 
-  // (SUPPRIMÉ) "Mes séances (actives)" — on n’affiche plus ce bloc
+  // (SUPPRIMÉ) "Mes séances (actives)"
 
   // Enregistrées (done)
   const past = store.sessions
@@ -784,7 +797,7 @@ export default async function Page({
   const programme = await fetchAiProgramme();
   const aiSessions = programme?.sessions ?? [];
 
-  // Infos client (dernière réponse)
+  // Infos client
   const detectedEmail = await getSignedInEmail();
   const emailFromCookie = cookies().get("app_email")?.value || "";
   const emailForLink = detectedEmail || emailFromCookie;
@@ -809,7 +822,7 @@ export default async function Page({
     } catch {}
   }
 
-  // URL questionnaire préremplie (email + prénom + nom)
+  // URL questionnaire préremplie
   const questionnaireUrl = (() => {
     const qp = new URLSearchParams();
     if (clientEmailDisplay) qp.set("email", clientEmailDisplay);
@@ -820,7 +833,7 @@ export default async function Page({
     return qs ? `${base}?${qs}` : base;
   })();
 
-  // Dispo + pagination (uniquement pour les séances IA)
+  // Dispo + pagination (IA)
   const defaultTake = inferAvailability(clientAnswers);
   const take = Math.max(1, Math.min(12, Number(searchParams?.take ?? defaultTake) || defaultTake));
   const reqOffset = Math.max(0, Number(searchParams?.offset ?? 0) || 0);
@@ -848,7 +861,7 @@ export default async function Page({
     return `/dashboard/profile?${sp.toString()}`;
   }
 
-  // util: tri par bloc pour l’affichage
+  // tri bloc
   const blockOrder = { echauffement: 0, principal: 1, accessoires: 2, fin: 3 } as const;
   const sortByBlock = (arr: NormalizedExercise[]) =>
     arr.slice().sort((a, b) => {
@@ -857,7 +870,7 @@ export default async function Page({
       return A - B;
     });
 
-  // rendu d’une liste d’exercices détaillés — TEXTE SIMPLE, TOUT VISIBLE
+  // rendu simple
   function ExercisesDetailPlain({ sid, exercises }: { sid: string; exercises: NormalizedExercise[] }) {
     const exs = sortByBlock(exercises);
     return (
@@ -932,7 +945,7 @@ export default async function Page({
         )}
       </div>
 
-      {/* Mes infos (dernière réponse questionnaire) */}
+      {/* Mes infos */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
           <h2>Mes infos</h2>
@@ -941,7 +954,7 @@ export default async function Page({
         <div className="card">
           <div className="text-sm" style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
             <span><b>Prénom :</b> {clientPrenom || <i className="text-gray-400">Non renseigné</i>}</span>
-            {/* ⬇️ LIGNE NOM SUPPRIMÉE */}
+            {/* ligne NOM supprimée */}
             <span><b>Age :</b> {typeof clientAge === "number" ? `${clientAge} ans` : <i className="text-gray-400">Non renseigné</i>}</span>
           </div>
 
@@ -962,7 +975,7 @@ export default async function Page({
         </div>
       </section>
 
-      {/* Séances proposées par Files — tout en texte, visible sans JS */}
+      {/* Séances proposées par Files — TITRE CLIQUABLE */}
       <section className="section" style={{ marginTop: 12 }}>
         <div
           className="section-head"
@@ -971,25 +984,18 @@ export default async function Page({
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            gap: 12,
-            writingMode: "horizontal-tb",
-            textOrientation: "mixed"
+            gap: 12
           }}
         >
-          <div style={{ writingMode: "horizontal-tb", textOrientation: "mixed" }}>
+          <div>
             <h2 style={{ marginBottom: 6 }}>Séances proposées par Files</h2>
-            <p className="text-sm" style={{ color: "#6b7280", writingMode: "horizontal-tb", textOrientation: "mixed" }}>
-              <b>Programme généré automatiquement à partir de vos réponses (sans Javascript&nbsp;: contenu directement visible).</b>
+            <p className="text-sm" style={{ color: "#6b7280" }}>
+              <b>Programme généré à partir de vos réponses (contenu visible sans JS).</b>
             </p>
           </div>
 
-          {/* Bouton : "Je mets à jour" → envoie vers le questionnaire prérempli */}
           <div className="flex flex-col sm:flex-row gap-2 mt-0">
-            <a
-              href={questionnaireUrl}
-              className="btn btn-dash"
-              style={{ width: "100%", textAlign: "center" }}
-            >
+            <a href={questionnaireUrl} className="btn btn-dash" style={{ width: "100%", textAlign: "center" }}>
               Je mets à jour
             </a>
           </div>
@@ -1020,7 +1026,9 @@ export default async function Page({
                   <li key={s.id} className="py-3">
                     <div className="flex items-start justify-between">
                       <div className="min-w-0">
-                        <div className="font-medium" style={{ fontSize: 16 }}>{s.title}</div>
+                        <a href={`/dashboard/seance/${s.id}`} className="font-medium underline-offset-2 hover:underline" style={{ fontSize: 16 }}>
+                          {s.title}
+                        </a>
                         <div className="text-sm" style={{ color: "#6b7280" }}>
                           Prévu le <b style={{ color: "inherit" }}>{fmtDateYMD(s.date)}</b>
                           {s.plannedMin ? ` · ${s.plannedMin} min` : ""}
@@ -1043,7 +1051,6 @@ export default async function Page({
                     )}
 
                     <div className="flex flex-wrap gap-8 mt-3">
-                      {/* Enregistre directement dans « Séances enregistrées » */}
                       <form action={saveSingleAiSessionAction} method="post">
                         <input type="hidden" name="id" value={s.id} />
                         <input type="hidden" name="title" value={s.title} />
@@ -1057,7 +1064,6 @@ export default async function Page({
                         </button>
                       </form>
 
-                      {/* Option : ajouter aux séances actives et démarrer */}
                       <form action={addSessionAction} method="post">
                         <input type="hidden" name="title" value={s.title} />
                         <input type="hidden" name="type" value={s.type} />
@@ -1081,9 +1087,7 @@ export default async function Page({
         )}
       </section>
 
-      {/* (SUPPRIMÉ) Bloc "Mes séances (actives)" — intégralement retiré */}
-
-      {/* Séances enregistrées — affichage en texte simple */}
+      {/* Séances enregistrées — TITRE CLIQUABLE */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h2>Séances enregistrées</h2>
@@ -1105,7 +1109,9 @@ export default async function Page({
                 <li key={s.id} className="py-3">
                   <div className="flex items-start justify-between">
                     <div className="min-w-0">
-                      <div className="font-medium" style={{ fontSize: 16 }}>{s.title}</div>
+                      <a href={`/dashboard/seance/${s.id}`} className="font-medium underline-offset-2 hover:underline" style={{ fontSize: 16 }}>
+                        {s.title}
+                      </a>
                       <div className="text-sm" style={{ color: "#6b7280" }}>
                         {fmtDateISO(s.endedAt)}
                         {mins ? ` · ${mins} min` : ""}
@@ -1140,3 +1146,4 @@ export default async function Page({
     </div>
   );
 }
+
