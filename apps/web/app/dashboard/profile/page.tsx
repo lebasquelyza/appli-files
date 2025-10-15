@@ -1,18 +1,15 @@
 // apps/web/app/dashboard/profile/page.tsx
-
 import { cookies } from "next/headers";
 
-/* ==== ENV ==== */
-const QUESTIONNAIRE_BASE =
-  process.env.FILES_COACHING_QUESTIONNAIRE_BASE || "https://example.com/questionnaire";
+// ENV (avec valeurs de secours pour éviter les crashs en build)
+const SHEET_ID = process.env.SHEET_ID || "";
+const SHEET_RANGE = process.env.SHEET_RANGE || "A1:Z9999";
+const SHEET_GID = process.env.SHEET_GID || "";
 const API_BASE = process.env.FILES_COACHING_API_BASE || process.env.APP_BASE_URL || "";
 const API_KEY = process.env.OPEN_API_KEY || process.env.OPENAI_API_KEY || "";
-const SHEET_ID = process.env.SHEET_ID || "";
-const SHEET_RANGE = process.env.SHEET_RANGE || "Réponses!A:Z";
-const SHEET_GID = process.env.SHEET_GID || "";
-
-/* ==== Types ==== */
+const QUESTIONNAIRE_BASE = process.env.FILES_COACHING_QUESTIONNAIRE_BASE || "/questionnaire";
 type WorkoutType = "muscu" | "cardio" | "hiit" | "mobilité";
+
 type Workout = {
   id: string;
   title: string;
@@ -25,9 +22,8 @@ type Workout = {
   note?: string;
   createdAt: string;
 };
-type Store = { sessions: Workout[] };
 
-type Answers = Record<string, string>;
+type Store = { sessions: Workout[] };
 
 type AiExercise = {
   name: string;
@@ -35,12 +31,17 @@ type AiExercise = {
   sets?: number;
   durationSec?: number;
   rest?: string;
-  rir?: number;
+  rir?: string;
   tempo?: string;
   notes?: string;
   alt?: string;
 };
-type AiBlock = { name: "echauffement" | "principal" | "accessoires" | "fin"; items: AiExercise[] };
+
+type AiBlock = {
+  name: "echauffement" | "principal" | "accessoires" | "fin";
+  items: AiExercise[];
+};
+
 type AiSession = {
   id: string;
   title: string;
@@ -55,9 +56,10 @@ type AiSession = {
   plan?: any;
   content?: any;
 };
-type AiProgramme = { sessions: AiSession[] };
 
-/* ==== Utils simples ==== */
+type AiProgramme = { sessions: AiSession[] };
+type Answers = Record<string, string>;
+
 function parseStore(val?: string | null): Store {
   if (!val) return { sessions: [] };
   try {
@@ -66,6 +68,7 @@ function parseStore(val?: string | null): Store {
   } catch {}
   return { sessions: [] };
 }
+
 function fmtDateISO(iso?: string) {
   if (!iso) return "—";
   try {
@@ -82,15 +85,17 @@ function fmtDateISO(iso?: string) {
   } catch {}
   return iso || "—";
 }
+
 function fmtDateYMD(ymd?: string) {
   if (!ymd) return "—";
   try {
-    const [y, m, d] = (ymd || "").split("-").map(Number);
-    const dt = new Date(y || 2000, (m || 1) - 1, d || 1);
+    const [y, m, d] = ymd.split("-").map(Number);
+    const dt = new Date(y, (m || 1) - 1, d || 1);
     return dt.toLocaleDateString("fr-FR", { year: "numeric", month: "long", day: "numeric" });
   } catch {}
-  return ymd!;
+  return ymd || "—";
 }
+
 function typeBadgeClass(t: WorkoutType) {
   switch (t) {
     case "muscu":
@@ -103,23 +108,9 @@ function typeBadgeClass(t: WorkoutType) {
       return "bg-violet-50 text-violet-700 ring-1 ring-violet-200";
   }
 }
-function clampOffset(total: number, take: number, offset: number) {
-  if (total <= 0) return { offset: 0, emptyReason: "none" as const };
-  if (offset >= total)
-    return {
-      offset: Math.max(0, Math.ceil(total / take) * take - take),
-      emptyReason: "ranout" as const,
-    };
-  return { offset, emptyReason: "none" as const };
-}
+
 const norm = (s: string) =>
-  (s || "")
-    .toString()
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/\p{Diacritic}+/gu, "");
-/* ======== Google Sheets (CSV public) ======== */
+  s.toString().trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 async function fetchValues(sheetId: string, range: string) {
   const sheetName = (range.split("!")[0] || "").replace(/^'+|'+$/g, "");
   if (!sheetId) throw new Error("SHEETS_CONFIG_MISSING");
@@ -132,21 +123,15 @@ async function fetchValues(sheetId: string, range: string) {
       )}`
     );
     tries.push(
-      `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&gid=${encodeURIComponent(
-        SHEET_GID
-      )}`
+      `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&gid=${encodeURIComponent(SHEET_GID)}`
     );
     tries.push(
-      `https://docs.google.com/spreadsheets/d/${sheetId}/pub?output=csv&gid=${encodeURIComponent(
-        SHEET_GID
-      )}`
+      `https://docs.google.com/spreadsheets/d/${sheetId}/pub?output=csv&gid=${encodeURIComponent(SHEET_GID)}`
     );
   }
   if (sheetName) {
     tries.push(
-      `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(
-        sheetName
-      )}`
+      `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`
     );
   }
 
@@ -189,8 +174,8 @@ async function fetchValues(sheetId: string, range: string) {
   throw new Error("SHEETS_FETCH_FAILED");
 }
 
-/* ======== Lecture des réponses (DERNIÈRE ligne pour un email donné) ======== */
 const NO_HEADER_COLS = { nom: 0, prenom: 1, age: 2, email: 10 };
+
 async function getAnswersForEmail(email: string, sheetId: string, range: string): Promise<Answers | null> {
   const data = await fetchValues(sheetId, range);
   const values: string[][] = data.values || [];
@@ -238,51 +223,11 @@ async function getAnswersForEmail(email: string, sheetId: string, range: string)
   }
   return null;
 }
-
-/* ======== Fallback "règles" très simple si pas d'API ======== */
-function generateProgrammeFromAnswers(ans: Answers): AiSession[] {
-  const obj = norm(ans["objectif"] || ans["goal"] || "");
-  const dispo = Number((ans["disponibilite"] || ans["disponibilité"] || ans["sessions_par_semaine"] || "3").toString().replace(",", ".")) || 3;
-  const type: WorkoutType = obj.includes("perte") || obj.includes("minceur") ? "cardio" : "muscu";
-  const base: AiSession = {
-    id: "ai-local-1",
-    title: type === "cardio" ? "Cardio fractionné" : "Full-body guidé",
-    type,
-    date: new Date().toISOString().slice(0, 10),
-    plannedMin: 35,
-    intensity: "modérée",
-    recommendedBy: "Règles locales",
-    blocks: [
-      { name: "echauffement", items: [{ name: "Mobilité dynamique", durationSec: 300 }] },
-      {
-        name: "principal",
-        items:
-          type === "cardio"
-            ? [{ name: "Intervalles 1' / 1'", durationSec: 20 * 60, notes: "RPE 6-7" }]
-            : [
-                { name: "Squat goblet", reps: "8-10", sets: 3, rest: "90s" },
-                { name: "Pompes", reps: "8-12", sets: 3, rest: "90s" },
-                { name: "Rowing haltères", reps: "10-12", sets: 3, rest: "90s" },
-              ],
-      },
-      { name: "fin", items: [{ name: "Retour au calme", durationSec: 300 }] },
-    ],
-  };
-  const sessions: AiSession[] = Array.from({ length: Math.min(7, Math.max(1, dispo)) }, (_, i) => ({
-    ...base,
-    id: `ai-local-${i + 1}`,
-    date: new Date(Date.now() + i * 24 * 3600 * 1000).toISOString().slice(0, 10),
-    title: i === 0 ? base.title : `${base.title} #${i + 1}`,
-  }));
-  return sessions;
-}
-/* ======== Email détecté (mock : cookie) ======== */
-async function getSignedInEmail() {
-  // Adapte si tu as une vraie auth : NextAuth, Supabase, etc.
-  return cookies().get("app_email")?.value || "";
+async function getSignedInEmail(): Promise<string | null> {
+  // simplifié : on lit un cookie "app_email" si présent
+  return cookies().get("app_email")?.value || null;
 }
 
-/* ======== Fetch IA avec fallback règles/Sheets ======== */
 async function fetchAiProgramme(userId?: string): Promise<AiProgramme | null> {
   const uidFromCookie = cookies().get("fc_uid")?.value;
   const uid = userId || uidFromCookie || "me";
@@ -291,7 +236,7 @@ async function fetchAiProgramme(userId?: string): Promise<AiProgramme | null> {
     `${API_BASE}/api/programme?user=${encodeURIComponent(uid)}`,
     `${API_BASE}/api/program?user=${encodeURIComponent(uid)}`,
     `${API_BASE}/api/sessions?source=ai&user=${encodeURIComponent(uid)}`,
-  ].filter(Boolean) as string[];
+  ].filter(Boolean);
 
   for (const url of endpoints) {
     try {
@@ -324,46 +269,44 @@ async function fetchAiProgramme(userId?: string): Promise<AiProgramme | null> {
     } catch {}
   }
 
-  // Fallback : analyse questionnaire + règles locales
+  // Fallback : moteur de règles local (questionnaire)
   try {
     const email = (await getSignedInEmail()) || cookies().get("app_email")?.value || "";
     if (email) {
       const ans = await getAnswersForEmail(email, SHEET_ID, SHEET_RANGE);
       if (ans) {
-        const sessions = generateProgrammeFromAnswers(ans);
+        // mini-générateur très simple si pas d’API : 1 séance générique
+        const sessions: AiSession[] = [
+          {
+            id: "ai-fallback-1",
+            title: "Séance perso (fallback)",
+            type: "muscu",
+            date: new Date().toISOString().slice(0, 10),
+            plannedMin: 45,
+            note: "Générée depuis le questionnaire",
+          },
+        ];
         return { sessions };
       }
     }
   } catch {}
+
   return null;
 }
 
-/* ======== Helpers UI ======== */
-function urlWith(current: Record<string, string | number | undefined>, p: Record<string, string | number | undefined>) {
-  const sp = new URLSearchParams();
-  for (const k of Object.keys(current)) {
-    const v = current[k];
-    if (v !== undefined && v !== "") sp.set(k, String(v));
-  }
-  for (const k of Object.keys(p)) {
-    const v = p[k];
-    if (v !== undefined) sp.set(k, String(v));
-  }
-  return `/dashboard/profile?${sp.toString()}`;
-}
-/* ===================== Page ===================== */
 export default async function Page({
   searchParams,
 }: {
-  searchParams?: { success?: string; error?: string; done?: string; deleted?: string; take?: string; offset?: string };
+  searchParams?: { success?: string; error?: string; done?: string; deleted?: string };
 }) {
-  // Store (séances terminées)
+  // Store local (cookie)
   const store = parseStore(cookies().get("app_sessions")?.value);
+
   const past = store.sessions
     .filter((s) => s.status === "done")
     .sort((a, b) => (b.endedAt || "").localeCompare(a.endedAt || ""));
 
-  // Mes infos (via dernière réponse)
+  // Mes infos (depuis la dernière réponse Sheets)
   const detectedEmail = await getSignedInEmail();
   const emailFromCookie = cookies().get("app_email")?.value || "";
   const emailForLink = detectedEmail || emailFromCookie;
@@ -371,6 +314,7 @@ export default async function Page({
   let clientPrenom = "",
     clientAge: number | undefined,
     clientEmailDisplay = emailForLink;
+
   try {
     if (emailForLink) {
       const ans = await getAnswersForEmail(emailForLink, SHEET_ID, SHEET_RANGE);
@@ -386,20 +330,9 @@ export default async function Page({
     }
   } catch {}
 
-  // Propositions (IA ou règles)
+  // Propositions IA (sans pagination)
   const programme = await fetchAiProgramme();
   const aiSessions = programme?.sessions ?? [];
-
-  // Pagination compacte
-  const takeDefault = 3;
-  const take = Math.max(1, Math.min(12, Number(searchParams?.take ?? takeDefault) || takeDefault));
-  const reqOffset = Math.max(0, Number(searchParams?.offset ?? 0) || 0);
-  const totalAi = aiSessions.length;
-  const clampedAi = clampOffset(totalAi, take, reqOffset);
-  const visibleAi = aiSessions.slice(clampedAi.offset, clampedAi.offset + take);
-  const hasMoreAi = clampedAi.offset + take < totalAi;
-
-  const displayedError = searchParams?.error || "";
 
   const questionnaireUrl = (() => {
     const qp = new URLSearchParams();
@@ -410,14 +343,7 @@ export default async function Page({
     return qs ? `${base}?${qs}` : base;
   })();
 
-  const currentParams = {
-    success: searchParams?.success,
-    error: searchParams?.error,
-    done: searchParams?.done,
-    deleted: searchParams?.deleted,
-    take,
-    offset: reqOffset,
-  } as Record<string, string | number | undefined>;
+  const displayedError = searchParams?.error || "";
 
   return (
     <div className="container" style={{ paddingTop: 24, paddingBottom: 32, fontSize: "var(--settings-fs, 12px)" }}>
@@ -459,7 +385,7 @@ export default async function Page({
             Séance supprimée.
           </div>
         )}
-        {!!searchParams?.error && (
+        {!!displayedError && (
           <div className="card" style={{ border: "1px solid rgba(239,68,68,.35)", background: "rgba(239,68,68,.08)", fontWeight: 600, whiteSpace: "pre-wrap" }}>
             ⚠️ {displayedError}
           </div>
@@ -492,110 +418,118 @@ export default async function Page({
           </div>
         </div>
       </section>
-{/* Séances proposées — titres cliquables uniquement (sans pagination) */}
-<section className="section" style={{ marginTop: 12 }}>
-  <div
-    className="section-head"
-    style={{ marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}
-  >
-    <div>
-      <h2 style={{ marginBottom: 6 }}>Séances proposées</h2>
-      <p className="text-sm" style={{ color: "#6b7280" }}>
-        Personnalisées via l’analyse complète de vos réponses.
-      </p>
-    </div>
-    <a href={questionnaireUrl} className="btn btn-dash">Je mets à jour</a>
-  </div>
 
-  {aiSessions.length === 0 ? (
-    <div className="card text-sm" style={{ color: "#6b7280" }}>
-      <div className="flex items-center gap-3">
-        <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted">🤖</span>
-        <span>
-          Pas encore de séances. <a className="link" href={questionnaireUrl}>Remplissez le questionnaire</a>.
-        </span>
-      </div>
-    </div>
-  ) : (
-    <ul className="space-y-2 list-none pl-0">
-      {aiSessions.map((s) => {
-        const qp = new URLSearchParams({
-          title: s.title,
-          date: s.date,
-          type: s.type,
-          plannedMin: s.plannedMin ? String(s.plannedMin) : "",
-        });
-        const href = `/dashboard/seance/${encodeURIComponent(s.id)}?${qp.toString()}`;
+      {/* Séances proposées — titres cliquables uniquement (sans pagination) */}
+      <section className="section" style={{ marginTop: 12 }}>
+        <div
+          className="section-head"
+          style={{ marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}
+        >
+          <div>
+            <h2 style={{ marginBottom: 6 }}>Séances proposées</h2>
+            <p className="text-sm" style={{ color: "#6b7280" }}>Personnalisées via l’analyse complète de vos réponses.</p>
+          </div>
+          <a href={questionnaireUrl} className="btn btn-dash">
+            Je mets à jour
+          </a>
+        </div>
 
-        return (
-          <li key={s.id} className="card p-3">
-            <div className="flex items-center justify-between gap-3">
-              <a
-                href={href}
-                className="font-medium underline-offset-2 hover:underline truncate"
-                style={{ fontSize: 16, display: "inline-block", maxWidth: "100%" }}
-                title={s.title}
-              >
-                {s.title}
-              </a>
-              <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>
-                {s.type}
+        {aiSessions.length === 0 ? (
+          <div className="card text-sm" style={{ color: "#6b7280" }}>
+            <div className="flex items-center gap-3">
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted">🤖</span>
+              <span>
+                Pas encore de séances. <a className="link" href={questionnaireUrl}>Remplissez le questionnaire</a>.
               </span>
             </div>
-          </li>
-        );
-      })}
-    </ul>
-  )}
-</section>
-{/* Séances enregistrées — compacte */}
-<section className="section" style={{ marginTop: 12 }}>
-  <div className="section-head" style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-    <h2>Séances enregistrées</h2>
-    {past.length > 12 && (
-      <span className="text-xs" style={{ color: "#6b7280" }}>
-        Affichage des 12 dernières
-      </span>
-    )}
-  </div>
+          </div>
+        ) : (
+          <ul className="space-y-2 list-none pl-0">
+            {aiSessions.map((s) => {
+              const qp = new URLSearchParams({
+                title: s.title,
+                date: s.date,
+                type: s.type,
+                plannedMin: s.plannedMin ? String(s.plannedMin) : "",
+              });
+              const href = `/dashboard/seance/${encodeURIComponent(s.id)}?${qp.toString()}`;
 
-  {past.length === 0 ? (
-    <div className="card text-sm" style={{ color: "#6b7280" }}>
-      <div className="flex items-center gap-3">
-        <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted">🗓️</span>
-        <span>Aucune séance enregistrée.</span>
-      </div>
-    </div>
-  ) : (
-    <ul className="card divide-y list-none pl-0">
-      {past.slice(0, 12).map((s) => {
-        const qp = new URLSearchParams({
-          title: s.title,
-          date: s.date,
-          type: s.type,
-          plannedMin: s.plannedMin ? String(s.plannedMin) : "",
-        });
-        const href = `/dashboard/seance/${encodeURIComponent(s.id)}?${qp.toString()}`;
-        return (
-          <li key={s.id} className="py-3">
-            <div className="flex items-center justify-between">
-              <div className="min-w-0">
-                <a href={href} className="font-medium underline-offset-2 hover:underline" style={{ fontSize: 16 }}>
-                  {s.title}
-                </a>
-                <div className="text-sm" style={{ color: "#6b7280" }}>
-                  {fmtDateISO(s.endedAt)}
-                  {s.plannedMin ? ` (prévu ${s.plannedMin} min)` : ""}
-                </div>
-              </div>
-              <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>{s.type}</span>
+              return (
+                <li key={s.id} className="card p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <a
+                      href={href}
+                      className="font-medium underline-offset-2 hover:underline truncate"
+                      style={{ fontSize: 16, display: "inline-block", maxWidth: "100%" }}
+                      title={s.title}
+                    >
+                      {s.title}
+                    </a>
+                    <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>
+                      {s.type}
+                    </span>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
+      {/* Séances enregistrées — compacte */}
+      <section className="section" style={{ marginTop: 12 }}>
+        <div
+          className="section-head"
+          style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}
+        >
+          <h2>Séances enregistrées</h2>
+          {past.length > 12 && (
+            <span className="text-xs" style={{ color: "#6b7280" }}>
+              Affichage des 12 dernières
+            </span>
+          )}
+        </div>
+
+        {past.length === 0 ? (
+          <div className="card text-sm" style={{ color: "#6b7280" }}>
+            <div className="flex items-center gap-3">
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted">🗓️</span>
+              <span>Aucune séance enregistrée.</span>
             </div>
-          </li>
-        );
-      })}
-    </ul>
-</section>
+          </div>
+        ) : (
+          <ul className="card divide-y list-none pl-0">
+            {past.slice(0, 12).map((s) => {
+              const qp = new URLSearchParams({
+                title: s.title,
+                date: s.date,
+                type: s.type,
+                plannedMin: s.plannedMin ? String(s.plannedMin) : "",
+              });
+              const href = `/dashboard/seance/${encodeURIComponent(s.id)}?${qp.toString()}`;
 
-</div> {/* ← ferme <div className="container"> */}
-); // fin du return
+              return (
+                <li key={s.id} className="py-3">
+                  <div className="flex items-center justify-between">
+                    <div className="min-w-0">
+                      <a href={href} className="font-medium underline-offset-2 hover:underline" style={{ fontSize: 16 }}>
+                        {s.title}
+                      </a>
+                      <div className="text-sm" style={{ color: "#6b7280" }}>
+                        {fmtDateISO(s.endedAt)}
+                        {s.plannedMin ? ` (prévu ${s.plannedMin} min)` : ""}
+                      </div>
+                    </div>
+                    <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>
+                      {s.type}
+                    </span>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+    </div>
+  );
 }
