@@ -399,7 +399,6 @@ function durationFor(p: Profile): number {
   if (typeof p.age === "number" && p.age >= 55) d = Math.min(d, 55);
   return Math.max(25, Math.min(90, d));
 }
-
 /* ======== Bibliothèque d’exos (par matériel / blessure) ======== */
 const EXOS = {
   pb: { // poids du corps
@@ -411,7 +410,8 @@ const EXOS = {
     lunge: { name:"Fentes marchées", reps:"10/10", sets:3, rest:"60s", equipment:"PB", target:"cuisses/fessiers" },
     burpee: { name:"Burpees", reps:"10-12", sets:4, rest:"45s", equipment:"PB", target:"full/hiit" },
   },
-  db: { // haltères / KB / élastiques
+
+  db: { // haltères / élastiques / kettlebell
     goblet: { name:"Goblet Squat (DB/KB)", reps:"8-12", sets:4, rest:"90s", equipment:"DB/KB", target:"cuisses/fessiers" },
     rdl: { name:"Romanian Deadlift (DB)", reps:"8-12", sets:4, rest:"90s", equipment:"DB", target:"ischios/fessiers" },
     bench: { name:"Développé couché haltères", reps:"8-12", sets:4, rest:"90s", equipment:"DB", target:"pecs" },
@@ -421,7 +421,8 @@ const EXOS = {
     triceps: { name:"Extensions triceps (DB)", reps:"10-12", sets:3, rest:"60s", equipment:"DB", target:"bras" },
     bandFacePull: { name:"Face Pull (élastique)", reps:"12-15", sets:3, rest:"60s", equipment:"Band", target:"haut du dos" },
   },
-  gym: {
+
+  gym: { // salle
     backSquat: { name:"Back Squat (barre)", reps:"5×5", sets:5, rest:"120s", equipment:"Barre/Rack", target:"cuisses/fessiers", tempo:"30X1", rir:2 },
     deadlift: { name:"Soulevé de terre", reps:"3×5", sets:3, rest:"180s", equipment:"Barre", target:"chaîne postérieure", rir:2 },
     bench: { name:"Développé couché (barre)", reps:"5×5", sets:5, rest:"120s", equipment:"Barre", target:"pecs", rir:2 },
@@ -429,18 +430,21 @@ const EXOS = {
     legPress: { name:"Presse à cuisses", reps:"10-12", sets:4, rest:"90s", equipment:"Machine", target:"cuisses" },
     cableRow: { name:"Row poulie", reps:"10-12", sets:4, rest:"75s", equipment:"Poulie", target:"dos" },
   },
-  wod: {
+
+  wod: { // formats type box/cross
     emom: (min=12)=> ({ name:`EMOM ${min}'`, sets:1, reps:`Tour/minute`, rest:"—", notes:"Alt: 1) 12 KBS, 2) 10 Burpees, 3) 15 Air Squats", equipment:"KB/PB", target:"metcon" }),
     amrap: (min=12)=> ({ name:`AMRAP ${min}'`, sets:1, reps:"Rondes max", rest:"—", notes:"10 DB Thrusters · 10 Sit-ups · 10 Box Step-ups", equipment:"DB/PB", target:"metcon" }),
     intervalsRun: { name:"Course 4×4' Z4 (récup 3')", sets:4, durationSec:240, rest:"180s", equipment:"Running", target:"cardio" }
   },
- mobility: {
-  "90_90": { name:"90/90 hanches", durationSec:45, sets:2, rest:"20s", target:"mobilité" },
-  catCow: { /* ... */ },
-  thoracic: { /* ... */ },
-  doorway: { /* ... */ },
-},
-   };
+
+  mobility: {
+    "90_90": { name:"90/90 hanches", durationSec:45, sets:2, rest:"20s", target:"mobilité" },
+    catCow: { name:"Cat-Cow", durationSec:60, sets:2, rest:"20s", target:"mobilité" },
+    thoracic: { name:"Ouvertures T-spine", durationSec:45, sets:2, rest:"20s", target:"mobilité" },
+    doorway: { name:"Étirement pectoraux à l’embrasure", durationSec:45, sets:2, rest:"20s", target:"mobilité" },
+  },
+}; // ←← ferme bien l'objet EXOS
+
 /* ======== Filtre blessures ======== */
 function safe(ex: NormalizedExercise, injuries: string[]): NormalizedExercise | null {
   if (injuries.includes("genoux") && /squat|fente|press/i.test(ex.name)) return null;
@@ -450,7 +454,11 @@ function safe(ex: NormalizedExercise, injuries: string[]): NormalizedExercise | 
 }
 
 /* ======== Génération d’une séance détaillée (blocs) ======== */
-function buildSessionBlocks(profile: Profile, kind: { title: string; type: WorkoutType }, plannedMin: number) {
+function buildSessionBlocks(
+  profile: Profile,
+  kind: { title: string; type: WorkoutType },
+  plannedMin: number
+) {
   const warmup: NormalizedExercise[] = [];
   const main: NormalizedExercise[] = [];
   const fin: NormalizedExercise[] = [];
@@ -458,14 +466,16 @@ function buildSessionBlocks(profile: Profile, kind: { title: string; type: Worko
 
   // 1) Échauffement (10-12')
   warmup.push({ name:"Mobilité dynamique bas/haut", durationSec:300, rest:"—", block:"echauffement", notes:"chevilles, hanches, T-spine" });
-  if (profile.goal !== "mobility") warmup.push({ name:"Activation core (Deadbug)", durationSec:120, rest:"30s", block:"echauffement" });
+  if (profile.goal !== "mobility") {
+    warmup.push({ name:"Activation core (Deadbug)", durationSec:120, rest:"30s", block:"echauffement" });
+  }
 
   // 2) Principal selon contexte
   const addSafe = (e?: NormalizedExercise | null) => { if (e) main.push({ ...e, block:"principal" }); };
   const addSafeAcc = (e?: NormalizedExercise | null) => { if (e) acc.push({ ...e, block:"accessoires" }); };
   const I = profile.injuries;
 
-  if (profile.location === "box" || profile.likesWOD) {
+  if (profile.location === "box" || (profile as any).likesWOD) {
     // WOD style
     addSafe(EXOS.wod.emom(12));
     addSafe(EXOS.wod.amrap(10));
@@ -495,25 +505,28 @@ function buildSessionBlocks(profile: Profile, kind: { title: string; type: Worko
       addSafeAcc(safe(EXOS.pb.hipThrust, I)); addSafeAcc(safe(EXOS.pb.plank, I));
     }
   }
-};
- // 3) Fin (5-8')
-if (fin.length === 0) {
-  if (profile.goal === "mobility") {
-    const a = EXOS.mobility?.["90_90"];
-    const b = EXOS.mobility?.doorway;
-    if (a) fin.push({ ...a, block: "fin" });
-    if (b) fin.push({ ...b, block: "fin" });
-  } else {
-    fin.push({ name: "Stretching léger full body", durationSec: 300, rest: "—", block: "fin" });
-  }
-}
 
-  // Ajustements durée: on tronque accessoires si trop long
+  // 3) Fin (5-8') — uniquement s'il n'y a pas déjà un finisher
+  if (fin.length === 0) {
+    if (profile.goal === "mobility") {
+      const a = EXOS.mobility?.["90_90"];
+      const b = EXOS.mobility?.doorway;
+      if (a) fin.push({ ...a, block: "fin" });
+      if (b) fin.push({ ...b, block: "fin" });
+    } else {
+      fin.push({ name: "Stretching léger full body", durationSec: 300, rest: "—", block: "fin" });
+    }
+  }
+
+  // 4) Ajustement durée (on coupe les accessoires si trop long)
   const approxTime = (arr: NormalizedExercise[]) =>
     arr.reduce((t, e) => t + (e.durationSec ? e.durationSec * (e.sets || 1) : (e.sets || 3) * 60), 0);
   const targetSec = plannedMin * 60;
   let totalSec = approxTime(warmup) + approxTime(main) + approxTime(fin) + approxTime(acc);
-  while (totalSec > targetSec && acc.length) { acc.pop(); totalSec = approxTime(warmup) + approxTime(main) + approxTime(fin) + approxTime(acc); }
+  while (totalSec > targetSec && acc.length) {
+    acc.pop();
+    totalSec = approxTime(warmup) + approxTime(main) + approxTime(fin) + approxTime(acc);
+  }
 
   return [
     { name:"echauffement" as const, items: warmup },
@@ -522,6 +535,8 @@ if (fin.length === 0) {
     { name:"fin" as const, items: fin },
   ];
 }
+
+
 /* ============ BLOC 3/4 — IA/Rules Fetch + Page UI (avec blocs & exos détaillés) ============ */
 
 /* ===================== Fetch IA (ou règles) ===================== */
