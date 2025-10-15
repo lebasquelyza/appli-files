@@ -80,7 +80,7 @@ async function getSignedInEmail(): Promise<string> {
   return cookies().get("app_email")?.value || "";
 }
 
-/* ===================== Fetch IA ===================== */
+/* ===================== Fetch IA (ou règles) ===================== */
 async function fetchAiProgramme(userId?: string): Promise<AiProgramme | null> {
   const uidFromCookie = cookies().get("fc_uid")?.value;
   const uid = userId || uidFromCookie || "me";
@@ -120,7 +120,7 @@ async function fetchAiProgramme(userId?: string): Promise<AiProgramme | null> {
     } catch {}
   }
 
-  // Fallback local (moteur de règles)
+  // Fallback : moteur de règles local (analyse complète du questionnaire)
   try {
     const email = (await getSignedInEmail()) || cookies().get("app_email")?.value || "";
     if (email) {
@@ -170,7 +170,7 @@ function clampOffset(total: number, take: number, offset: number) {
   return { offset, emptyReason: "none" as const };
 }
 
-/* ======== Google Sheets (PUBLIC via lien) ======== */
+/* ======== Google Sheets (CSV public) ======== */
 async function fetchValues(sheetId: string, range: string) {
   const sheetName = (range.split("!")[0] || "").replace(/^'+|'+$/g, "");
   if (!sheetId) throw new Error("SHEETS_CONFIG_MISSING");
@@ -237,20 +237,20 @@ type Profile = {
   email: string;
   prenom?: string;
   age?: number;
-  height?: number; // cm
-  weight?: number; // kg
+  height?: number;
+  weight?: number;
   imc?: number;
   goal: Goal;
   subGoals: SubGoal[];
   level: "debutant" | "intermediaire" | "avance";
-  freq: number;              // séances/semaine
-  timePerSession: number;    // minutes
+  freq: number;
+  timePerSession: number;
   equipLevel: EquipLevel;
   equipItems: string[];
   gym: boolean;
   location: "gym" | "home" | "outdoor" | "mixed";
   cardioPref?: "run" | "bike" | "row" | "walk" | "mixed";
-  injuries: string[];        // mots-clés (e.g. "epaules", "genoux", "dos")
+  injuries: string[];
   sleepOk?: boolean;
   stressHigh?: boolean;
 };
@@ -259,20 +259,17 @@ function readNum(s: string): number | undefined {
   const n = Number(String(s).replace(",", "."));
   return Number.isFinite(n) ? n : undefined;
 }
-
 function classifyGoal(raw: string): Goal {
   const s = norm(raw);
   if (/(prise|muscle|hypertroph|volume|masse)/.test(s)) return "hypertrophy";
   if (/(perte|mince|seche|gras|poids|fat)/.test(s)) return "fatloss";
   if (/(force|1rm|5x5|power)/.test(s)) return "strength";
-  if (/(endurance|cardio|marathon|course|vélo|velo|trail|tri)/.test(s)) return "endurance";
+  if (/(endurance|cardio|marathon|vélo|velo|trail|tri)/.test(s)) return "endurance";
   if (/(mobilite|souplesse|douleur|recup|rehab)/.test(s)) return "mobility";
   return "general";
 }
-
 function detectSubGoals(raw: string): SubGoal[] {
-  const s = norm(raw);
-  const out: SubGoal[] = [];
+  const s = norm(raw); const out: SubGoal[] = [];
   if (/(fessier|glute|booty)/.test(s)) out.push("glutes");
   if (/(cuisse|jambe|quadri|ischio)/.test(s)) out.push("legs");
   if (/(pec|poitrine|chest)/.test(s)) out.push("chest");
@@ -284,7 +281,6 @@ function detectSubGoals(raw: string): SubGoal[] {
   if (/(rehab|reeduc|douleur)/.test(s)) out.push("rehab");
   return Array.from(new Set(out));
 }
-
 function parseLevel(raw: string): Profile["level"] {
   const s = norm(raw);
   if (/(debut)/.test(s)) return "debutant";
@@ -292,7 +288,6 @@ function parseLevel(raw: string): Profile["level"] {
   if (/(avance|expert|confirm)/.test(s)) return "avance";
   return "intermediaire";
 }
-
 function parseFreq(raw: string): number {
   const s = norm(raw);
   const digits = s.match(/\d+/g);
@@ -300,7 +295,6 @@ function parseFreq(raw: string): number {
   if (/(lun|mar|mer|jeu|ven|sam|dim)/.test(s)) return Math.max(1, Math.min(6, s.split(/[ ,;\/-]+/).filter(Boolean).length));
   return 3;
 }
-
 function parseTimePerSession(raw: string): number {
   const s = norm(raw);
   const mins = s.match(/\b(\d{2,3})\s*(?:min|m)\b/);
@@ -309,41 +303,34 @@ function parseTimePerSession(raw: string): number {
   if (/(long|complet)/.test(s)) return 60;
   return 45;
 }
-
-function inferEquipment(materiel: string, lieu: string): { level: EquipLevel; items: string[]; gym: boolean; location: Profile["location"] } {
-  const m = norm(materiel);
-  const l = norm(lieu);
+function inferEquipment(materiel: string, lieu: string) {
+  const m = norm(materiel); const l = norm(lieu);
   const gym = /(salle|gym|fitness|basic-fit|keepcool|neo|temple|crossfit)/.test(l);
-  if (gym) return { level: "full", items: ["barre", "rack", "machines", "haltères", "câbles"], gym: true, location: "gym" };
-  if (/(aucun|rien|sans)/.test(m) || m === "") return { level: "none", items: [], gym: false, location: /(exter|parc|dehors|outdoor)/.test(l) ? "outdoor" : "home" };
-
+  if (gym) return { level: "full" as const, items: ["barre","rack","machines","haltères","câbles"], gym: true, location: "gym" as const };
+  if (/(aucun|rien|sans)/.test(m) || m === "") return { level: "none" as const, items: [], gym: false, location: /(exter|dehors|outdoor|parc)/.test(l) ? "outdoor" as const : "home" as const };
   const items: string[] = [];
   if (/(halter|haltère|dumbbell)/.test(m)) items.push("haltères");
   if (/(kettlebell|kettle)/.test(m)) items.push("kettlebell");
-  if (/(elastique|bande|resistance band)/.test(m)) items.push("élastiques");
-  if (/(barre|barbell)/.test(m)) items.push("barre");
-  if (/(rack|power rack)/.test(m)) items.push("rack");
+  if (/(elastique|bande)/.test(m)) items.push("élastiques");
+  if (/(barre)/.test(m)) items.push("barre");
+  if (/(rack)/.test(m)) items.push("rack");
   if (/(banc)/.test(m)) items.push("banc");
   if (/(trx|anneaux)/.test(m)) items.push("TRX/anneaux");
-  const level: EquipLevel = (items.includes("barre") || items.includes("rack")) ? "limited" : "limited";
-  return { level, items, gym: false, location: /(exter|parc|dehors|outdoor)/.test(l) ? "outdoor" : "home" };
+  return { level: "limited" as const, items, gym: false, location: /(exter|dehors|outdoor|parc)/.test(l) ? "outdoor" as const : "home" as const };
 }
-
 function detectCardioPref(raw: string): Profile["cardioPref"] {
   const s = norm(raw);
   if (/(course|run|footing|tapis)/.test(s)) return "run";
-  if (/(velo|vélo|bike|cycling|spinning)/.test(s)) return "bike";
+  if (/(velo|vélo|bike|spinning)/.test(s)) return "bike";
   if (/(rameur|row)/.test(s)) return "row";
   if (/(marche|step)/.test(s)) return "walk";
   return "mixed";
 }
-
 function detectInjuries(raw: string): string[] {
-  const s = norm(raw);
-  const out: string[] = [];
+  const s = norm(raw); const out: string[] = [];
   if (/(epaule|epaules)/.test(s)) out.push("epaules");
   if (/(genou|genoux)/.test(s)) out.push("genoux");
-  if (/(dos|lombaire|lombalgie|hernie)/.test(s)) out.push("dos");
+  if (/(dos|lombaire|hernie)/.test(s)) out.push("dos");
   if (/(cheville|tendon|tendinite)/.test(s)) out.push("chevilles/tendons");
   return out;
 }
@@ -356,19 +343,19 @@ function buildProfileFromAnswers(ans: Answers): Profile {
   const age = readNum(get("age"));
   const poids = readNum(get("poids"));
   const taille = readNum(get("taille"));
-  const imc = poids && taille ? Math.round((poids / Math.pow((taille/100), 2)) * 10) / 10 : undefined;
+  const imc = poids && taille ? Math.round((poids / Math.pow(taille/100, 2)) * 10) / 10 : undefined;
 
   const objectif = get("objectif");
-  const sousObj = get("zones a travailler") || get("zones à travailler") || "";
-  const niveau = get("niveau") || "";
-  const dispo = get("disponibilité") || get("disponibilite") || "";
-  const temps = get("temps par seance") || get("temps par séance") || "";
-  const lieu = get("a quel endroit v tu faire ta seance ?") || "";
+  const sousObj  = get("zones a travailler") || get("zones à travailler") || "";
+  const niveau   = get("niveau") || "";
+  const dispo    = get("disponibilité") || get("disponibilite") || "";
+  const temps    = get("temps par seance") || get("temps par séance") || "";
+  const lieu     = get("a quel endroit v tu faire ta seance ?") || "";
   const materiel = get("as tu du matériel a ta disposition") || get("as tu du materiel a ta disposition") || "";
-  const cardio = get("cardio prefere") || get("cardio préféré") || get("preference cardio") || "";
-  const blessures = get("blessures") || get("douleurs") || "";
-  const sommeil = get("sommeil") || "";
-  const stress = get("stress") || "";
+  const cardio   = get("cardio prefere") || get("cardio préféré") || get("preference cardio") || "";
+  const bless    = get("blessures") || get("douleurs") || "";
+  const sommeil  = get("sommeil") || "";
+  const stress   = get("stress") || "";
 
   const goal = classifyGoal(objectif || sousObj);
   const subGoals = detectSubGoals(objectif + " " + sousObj);
@@ -377,7 +364,7 @@ function buildProfileFromAnswers(ans: Answers): Profile {
   const timePerSession = parseTimePerSession(temps);
   const equip = inferEquipment(materiel, lieu);
   const cardioPref = detectCardioPref(cardio);
-  const injuries = detectInjuries(blessures);
+  const injuries = detectInjuries(bless);
 
   return {
     email: email || "",
@@ -392,45 +379,39 @@ function buildProfileFromAnswers(ans: Answers): Profile {
   };
 }
 
-/* ======== Génération programme depuis le profil ======== */
 function titleForSession(profile: Profile, i: number): { title: string; type: WorkoutType } {
   const g = profile.goal;
   const has = (sg: SubGoal) => profile.subGoals.includes(sg);
-
-  // mapping des titres par objectif + sous-objectif + matériel
   if (g === "hypertrophy") {
     const poolGym = [
-      has("glutes") ? "[Hypertrophie] Bas du corps GLUTES (Gym)" : "[Hypertrophie] Bas du corps (Gym)",
-      has("chest")  ? "[Hypertrophie] Haut du corps PEC (Gym)"   : "[Hypertrophie] Haut du corps (Gym)",
+      has("glutes") ? "[Hypertrophie] Bas GLUTES (Gym)" : "[Hypertrophie] Bas (Gym)",
+      has("chest")  ? "[Hypertrophie] Haut PEC (Gym)"   : "[Hypertrophie] Haut (Gym)",
       "[Hypertrophie] Full Body (Machines)"
     ];
     const poolLimited = [
-      has("glutes") ? "[Hypertrophie] Bas GLUTES (Haltères)" : "[Hypertrophie] Bas (Haltères)",
-      has("chest")  ? "[Hypertrophie] Haut PEC (DB)"         : "[Hypertrophie] Haut (DB)",
+      has("glutes") ? "[Hypertrophie] Bas GLUTES (DB)" : "[Hypertrophie] Bas (DB)",
+      has("chest")  ? "[Hypertrophie] Haut PEC (DB)"   : "[Hypertrophie] Haut (DB)",
       "[Hypertrophie] Full Body (DB/Élastiques)"
     ];
     const poolNone = [
-      has("glutes") ? "[Hypertrophie] GLUTES (Poids du corps)" : "[Hypertrophie] Full Body (Poids du corps)",
+      has("glutes") ? "[Hypertrophie] GLUTES (PB)" : "[Hypertrophie] Full Body (PB)",
       "[Hypertrophie] Haut (PB)", "[Hypertrophie] Bas (PB)"
     ];
     const arr = profile.equipLevel === "full" ? poolGym : profile.equipLevel === "limited" ? poolLimited : poolNone;
     return { title: arr[i % arr.length], type: "muscu" };
   }
-
   if (g === "strength") {
     const arr = profile.equipLevel === "full"
-      ? ["[Force] Bas du corps 5×5 (Barre)", "[Force] Haut du corps 5×5 (Barre)", "[Force] Full Body 3×5"]
-      : ["[Force] Bas (DB/Kettlebell)", "[Force] Haut (DB)", "[Force] Full Body (DB)"];
+      ? ["[Force] Bas 5×5 (Barre)", "[Force] Haut 5×5 (Barre)", "[Force] Full 3×5"]
+      : ["[Force] Bas (DB/KB)", "[Force] Haut (DB)", "[Force] Full (DB)"];
     return { title: arr[i % arr.length], type: "muscu" };
   }
-
   if (g === "fatloss") {
     const arr = profile.equipLevel === "none"
-      ? ["[Fatloss] HIIT PB 30/30", "[Fatloss] Circuit PB", "[Fatloss] Z2 Marche rapide"]
+      ? ["[Fatloss] HIIT 30/30 (PB)", "[Fatloss] Circuit PB", "[Fatloss] Z2 Marche active"]
       : ["[Fatloss] Intervalles", "[Fatloss] Circuit Full Body", "[Fatloss] Z2 + Core"];
     return { title: arr[i % arr.length], type: profile.equipLevel === "none" ? "hiit" : "muscu" };
   }
-
   if (g === "endurance") {
     const pref = profile.cardioPref;
     if (pref === "bike") return { title: "[Endurance] Vélo Z2 + 4×4", type: "cardio" };
@@ -438,34 +419,29 @@ function titleForSession(profile: Profile, i: number): { title: string; type: Wo
     if (pref === "walk") return { title: "[Endurance] Marche active Z2", type: "cardio" };
     return { title: ["[Endurance] Zone 2", "[Endurance] Intervalles 4×4", "[Endurance] Tempo"][i % 3], type: "cardio" };
   }
-
   if (g === "mobility") {
     const arr = ["[Mobilité] Hanches & Colonne", "[Mobilité] Épaules & T-spine", "[Mobilité] Full Body"];
     return { title: arr[i % arr.length], type: "mobilité" };
   }
-
   const arr = profile.equipLevel === "none"
     ? ["[Général] PB A", "[Général] PB B", "[Général] Cardio Z2 (PB)"]
     : ["[Général] Full Body A", "[Général] Full Body B", "[Général] Z2 + Core"];
-  return { title: arr[i % arr.length], type: profile.goal === "endurance" ? "cardio" : "muscu" };
+  return { title: arr[i % arr.length], type: "muscu" };
 }
 
-function intensityFor(profile: Profile): "faible" | "modérée" | "élevée" {
-  if (profile.goal === "mobility") return "faible";
-  if (profile.goal === "strength" || profile.goal === "hypertrophy") return profile.level === "avance" ? "élevée" : "modérée";
-  if (profile.goal === "fatloss") return "modérée";
-  if (profile.goal === "endurance") return "modérée";
+function intensityFor(p: Profile): "faible" | "modérée" | "élevée" {
+  if (p.goal === "mobility") return "faible";
+  if (p.goal === "strength" || p.goal === "hypertrophy") return p.level === "avance" ? "élevée" : "modérée";
+  if (p.goal === "fatloss") return "modérée";
+  if (p.goal === "endurance") return "modérée";
   return "modérée";
 }
-
-function durationFor(profile: Profile): number {
-  let d = profile.timePerSession || 45;
-  // ajuster selon niveau et objectif
-  if (profile.goal === "strength") d = Math.max(d, 55);
-  if (profile.goal === "mobility") d = Math.min(d, 35);
-  if (profile.goal === "fatloss" && d < 35) d = 35;
-  // si >55 ans, on évite trop long par défaut
-  if (typeof profile.age === "number" && profile.age >= 55) d = Math.min(d, 55);
+function durationFor(p: Profile): number {
+  let d = p.timePerSession || 45;
+  if (p.goal === "strength") d = Math.max(d, 55);
+  if (p.goal === "mobility") d = Math.min(d, 35);
+  if (p.goal === "fatloss" && d < 35) d = 35;
+  if (typeof p.age === "number" && p.age >= 55) d = Math.min(d, 55);
   return Math.max(25, Math.min(90, d));
 }
 
@@ -517,7 +493,7 @@ export default async function Page({
     .filter(s => s.status === "done")
     .sort((a, b) => (b.endedAt || "").localeCompare(a.endedAt || ""));
 
-  // ======= Mes infos depuis la sheet (Prénom + Âge + Mail) =======
+  // ===== Mes infos (Prénom + Âge + Mail) depuis la dernière réponse =====
   const detectedEmail = await getSignedInEmail();
   const emailFromCookie = cookies().get("app_email")?.value || "";
   const emailForLink = detectedEmail || emailFromCookie;
@@ -538,7 +514,7 @@ export default async function Page({
     }
   } catch {}
 
-  // Propositions IA (ou fallback règles)
+  // Propositions (IA ou règles)
   const programme = await fetchAiProgramme();
   const aiSessions = programme?.sessions ?? [];
 
@@ -546,7 +522,6 @@ export default async function Page({
   const takeDefault = 3;
   const take = Math.max(1, Math.min(12, Number(searchParams?.take ?? takeDefault) || takeDefault));
   const reqOffset = Math.max(0, Number(searchParams?.offset ?? 0) || 0);
-
   const totalAi = aiSessions.length;
   const clampedAi = clampOffset(totalAi, take, reqOffset);
   const visibleAi = aiSessions.slice(clampedAi.offset, clampedAi.offset + take);
@@ -597,7 +572,7 @@ export default async function Page({
         {!!searchParams?.error && (<div className="card" style={{ border: "1px solid rgba(239,68,68,.35)", background: "rgba(239,68,68,.08)", fontWeight: 600, whiteSpace: "pre-wrap" }}>⚠️ {displayedError}</div>)}
       </div>
 
-      {/* ===== Mes infos (Prénom + Âge + Mail depuis la sheet) ===== */}
+      {/* ===== Mes infos (Prénom + Âge + Mail) ===== */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
           <h2>Mes infos</h2>
@@ -614,12 +589,12 @@ export default async function Page({
         </div>
       </section>
 
-      {/* Séances proposées — liste compacte cliquable */}
+      {/* Séances proposées — liste compacte (sans “Prévu le”) */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <div>
             <h2 style={{ marginBottom: 6 }}>Séances proposées</h2>
-            <p className="text-sm" style={{ color: "#6b7280" }}>Adaptées à votre objectif, matériel, niveau, blessures et disponibilités.</p>
+            <p className="text-sm" style={{ color: "#6b7280" }}>Personnalisées via l’analyse complète de vos réponses (objectif, matériel, niveau, blessures, etc.).</p>
           </div>
           <a href={questionnaireUrl} className="btn btn-dash">Je mets à jour</a>
         </div>
@@ -645,7 +620,9 @@ export default async function Page({
                           {s.title}
                         </a>
                         <div className="text-sm" style={{ color: "#6b7280" }}>
-                          Prévu le <b style={{ color: "inherit" }}>{fmtDateYMD(s.date)}</b>{s.plannedMin ? ` · ${s.plannedMin} min` : ""}{s.intensity ? ` · intensité ${s.intensity}` : ""}
+                          <b style={{ color: "inherit" }}>{fmtDateYMD(s.date)}</b>
+                          {s.plannedMin ? ` · ${s.plannedMin} min` : ""}
+                          {s.intensity ? ` · intensité ${s.intensity}` : ""}
                         </div>
                       </div>
                       <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>{s.type}</span>
