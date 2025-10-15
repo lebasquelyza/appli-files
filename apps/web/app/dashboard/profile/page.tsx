@@ -1,11 +1,18 @@
-// apps/web/app/dashboard/profile/actions.ts
-"use server";
+// apps/web/app/dashboard/profile/page.tsx
 
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
 
+/* ==== ENV ==== */
+const QUESTIONNAIRE_BASE =
+  process.env.FILES_COACHING_QUESTIONNAIRE_BASE || "https://example.com/questionnaire";
+const API_BASE = process.env.FILES_COACHING_API_BASE || process.env.APP_BASE_URL || "";
+const API_KEY = process.env.OPEN_API_KEY || process.env.OPENAI_API_KEY || "";
+const SHEET_ID = process.env.SHEET_ID || "";
+const SHEET_RANGE = process.env.SHEET_RANGE || "Réponses!A:Z";
+const SHEET_GID = process.env.SHEET_GID || "";
+
+/* ==== Types ==== */
 type WorkoutType = "muscu" | "cardio" | "hiit" | "mobilité";
-
 type Workout = {
   id: string;
   title: string;
@@ -18,43 +25,45 @@ type Workout = {
   note?: string;
   createdAt: string;
 };
-
 type Store = { sessions: Workout[] };
 
+type Answers = Record<string, string>;
+
+type AiExercise = {
+  name: string;
+  reps?: string;
+  sets?: number;
+  durationSec?: number;
+  rest?: string;
+  rir?: number;
+  tempo?: string;
+  notes?: string;
+  alt?: string;
+};
+type AiBlock = { name: "echauffement" | "principal" | "accessoires" | "fin"; items: AiExercise[] };
+type AiSession = {
+  id: string;
+  title: string;
+  type: WorkoutType;
+  date: string;
+  plannedMin?: number;
+  note?: string;
+  intensity?: string | number;
+  recommendedBy?: string;
+  exercises?: AiExercise[];
+  blocks?: AiBlock[];
+  plan?: any;
+  content?: any;
+};
+type AiProgramme = { sessions: AiSession[] };
+
+/* ==== Utils simples ==== */
 function parseStore(val?: string | null): Store {
   if (!val) return { sessions: [] };
-  try { const o = JSON.parse(val!); if (Array.isArray(o?.sessions)) return { sessions: o.sessions as Workout[] }; } catch {}
-  return { sessions: [] };
-}
-function uid() { return "id-" + Math.random().toString(36).slice(2, 10); }
-function toYMD(d = new Date()) { const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,"0"), da=String(d.getDate()).padStart(2,"0"); return `${y}-${m}-${da}`; }
-
-export async function addSessionAction(formData: FormData) {
-  const title = (formData.get("title") || "").toString().trim();
-  const type = (formData.get("type") || "muscu").toString() as WorkoutType;
-  const date = (formData.get("date") || toYMD()).toString();
-  const plannedMinStr = (formData.get("plannedMin") || "").toString().replace(",", ".");
-  const note = (formData.get("note") || "").toString().slice(0, 240);
-  const startNow = (formData.get("startNow") || "").toString() === "1";
-
-  if (!title) redirect("/dashboard/profile?error=titre");
-  const store = parseStore(cookies().get("app_sessions")?.value);
-
-  const w: Workout = {
-    id: uid(), title, type, status: "active", date,
-    plannedMin: plannedMinStr ? Number(plannedMinStr) : undefined,
-    startedAt: startNow ? new Date().toISOString() : undefined,
-    note: note || undefined, createdAt: new Date().toISOString(),
-  };
-
-  const next: Store = { sessions: [w, ...store.sessions].slice(0, 300) };
-  cookies().set("app_sessions", JSON.stringify(next), { path: "/", sameSite: "lax", maxAge: 60*60*24*365, httpOnly: false });
-  redirect("/dashboard/profile?success=1");
-}
-/* ============ Page Profil — Bloc 2: Utils + Google Sheets helpers ============ */
-function parseStore(val?: string | null): Store {
-  if (!val) return { sessions: [] };
-  try { const o = JSON.parse(val!); if (Array.isArray(o?.sessions)) return { sessions: o.sessions as Workout[] }; } catch {}
+  try {
+    const o = JSON.parse(val!);
+    if (Array.isArray(o?.sessions)) return { sessions: o.sessions as Workout[] };
+  } catch {}
   return { sessions: [] };
 }
 function fmtDateISO(iso?: string) {
@@ -62,7 +71,13 @@ function fmtDateISO(iso?: string) {
   try {
     const d = new Date(iso);
     if (!isNaN(d.getTime())) {
-      return d.toLocaleString("fr-FR", { year:"numeric", month:"long", day:"numeric", hour:"2-digit", minute:"2-digit" });
+      return d.toLocaleString("fr-FR", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
     }
   } catch {}
   return iso || "—";
@@ -70,26 +85,40 @@ function fmtDateISO(iso?: string) {
 function fmtDateYMD(ymd?: string) {
   if (!ymd) return "—";
   try {
-    const [y, m, d] = ymd.split("-").map(Number);
-    const dt = new Date(y, (m || 1) - 1, d || 1);
-    return dt.toLocaleDateString("fr-FR", { year:"numeric", month:"long", day:"numeric" });
+    const [y, m, d] = (ymd || "").split("-").map(Number);
+    const dt = new Date(y || 2000, (m || 1) - 1, d || 1);
+    return dt.toLocaleDateString("fr-FR", { year: "numeric", month: "long", day: "numeric" });
   } catch {}
-  return ymd;
+  return ymd!;
 }
 function typeBadgeClass(t: WorkoutType) {
   switch (t) {
-    case "muscu": return "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200";
-    case "cardio": return "bg-sky-50 text-sky-700 ring-1 ring-sky-200";
-    case "hiit":  return "bg-amber-50 text-amber-700 ring-1 ring-amber-200";
-    case "mobilité": return "bg-violet-50 text-violet-700 ring-1 ring-violet-200";
+    case "muscu":
+      return "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200";
+    case "cardio":
+      return "bg-sky-50 text-sky-700 ring-1 ring-sky-200";
+    case "hiit":
+      return "bg-amber-50 text-amber-700 ring-1 ring-amber-200";
+    case "mobilité":
+      return "bg-violet-50 text-violet-700 ring-1 ring-violet-200";
   }
 }
 function clampOffset(total: number, take: number, offset: number) {
   if (total <= 0) return { offset: 0, emptyReason: "none" as const };
-  if (offset >= total) return { offset: Math.max(0, Math.ceil(total / take) * take - take), emptyReason: "ranout" as const };
+  if (offset >= total)
+    return {
+      offset: Math.max(0, Math.ceil(total / take) * take - take),
+      emptyReason: "ranout" as const,
+    };
   return { offset, emptyReason: "none" as const };
 }
-
+const norm = (s: string) =>
+  (s || "")
+    .toString()
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}+/gu, "");
 /* ======== Google Sheets (CSV public) ======== */
 async function fetchValues(sheetId: string, range: string) {
   const sheetName = (range.split("!")[0] || "").replace(/^'+|'+$/g, "");
@@ -97,12 +126,28 @@ async function fetchValues(sheetId: string, range: string) {
 
   const tries: string[] = [];
   if (SHEET_GID) {
-    tries.push(`https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&id=${sheetId}&gid=${encodeURIComponent(SHEET_GID)}`);
-    tries.push(`https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&gid=${encodeURIComponent(SHEET_GID)}`);
-    tries.push(`https://docs.google.com/spreadsheets/d/${sheetId}/pub?output=csv&gid=${encodeURIComponent(SHEET_GID)}`);
+    tries.push(
+      `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&id=${sheetId}&gid=${encodeURIComponent(
+        SHEET_GID
+      )}`
+    );
+    tries.push(
+      `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&gid=${encodeURIComponent(
+        SHEET_GID
+      )}`
+    );
+    tries.push(
+      `https://docs.google.com/spreadsheets/d/${sheetId}/pub?output=csv&gid=${encodeURIComponent(
+        SHEET_GID
+      )}`
+    );
   }
   if (sheetName) {
-    tries.push(`https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`);
+    tries.push(
+      `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(
+        sheetName
+      )}`
+    );
   }
 
   for (const url of tries) {
@@ -114,23 +159,29 @@ async function fetchValues(sheetId: string, range: string) {
       if (looksHtml) continue;
 
       const rows: string[][] = [];
-      const lines = text.split(/\r?\n/).filter(l => l.trim() !== "");
+      const lines = text.split(/\r?\n/).filter((l) => l.trim() !== "");
       for (const line of lines) {
         const cells: string[] = [];
-        let cur = "", inQuotes = false;
+        let cur = "",
+          inQuotes = false;
         for (let i = 0; i < line.length; i++) {
           const ch = line[i];
           if (ch === '"') {
-            if (inQuotes && line[i + 1] === '"') { cur += '"'; i++; }
-            else { inQuotes = !inQuotes; }
+            if (inQuotes && line[i + 1] === '"') {
+              cur += '"';
+              i++;
+            } else {
+              inQuotes = !inQuotes;
+            }
           } else if (ch === "," && !inQuotes) {
-            cells.push(cur.trim()); cur = "";
+            cells.push(cur.trim());
+            cur = "";
           } else {
             cur += ch;
           }
         }
         cells.push(cur.trim());
-        rows.push(cells.map(c => c.replace(/^"|"$/g, "")));
+        rows.push(cells.map((c) => c.replace(/^"|"$/g, "")));
       }
       return { values: rows };
     }
@@ -147,20 +198,20 @@ async function getAnswersForEmail(email: string, sheetId: string, range: string)
 
   const firstRowNorm = values[0].map(norm);
   const headerCandidates = ["adresse mail", "email", "e-mail", "mail"];
-  const hasHeader = firstRowNorm.some(h => headerCandidates.includes(h));
+  const hasHeader = firstRowNorm.some((h) => headerCandidates.includes(h));
 
   let headers: string[] = [];
   let idxEmail = -1;
 
   if (hasHeader) {
     headers = firstRowNorm;
-    idxEmail = headers.findIndex(h => headerCandidates.includes(h));
+    idxEmail = headers.findIndex((h) => headerCandidates.includes(h));
   } else {
     const width = Math.max(values[0]?.length || 0, NO_HEADER_COLS.email + 1);
     headers = Array.from({ length: width }, (_, i) => `col${i}`);
-    headers[NO_HEADER_COLS.nom]   = "nom";
-    headers[NO_HEADER_COLS.prenom]= "prenom";
-    headers[NO_HEADER_COLS.age]   = "age";
+    headers[NO_HEADER_COLS.nom] = "nom";
+    headers[NO_HEADER_COLS.prenom] = "prenom";
+    headers[NO_HEADER_COLS.age] = "age";
     headers[NO_HEADER_COLS.email] = "email";
     idxEmail = NO_HEADER_COLS.email;
   }
@@ -178,18 +229,60 @@ async function getAnswersForEmail(email: string, sheetId: string, range: string)
         const key = headers[j] || `col${j}`;
         rec[key] = (row[j] ?? "").trim();
       }
-      rec["nom"]    = rec["nom"]    || rec[`col${NO_HEADER_COLS.nom}`]    || "";
+      rec["nom"] = rec["nom"] || rec[`col${NO_HEADER_COLS.nom}`] || "";
       rec["prenom"] = rec["prenom"] || rec[`col${NO_HEADER_COLS.prenom}`] || "";
-      rec["age"]    = rec["age"]    || rec[`col${NO_HEADER_COLS.age}`]    || "";
-      rec["email"]  = rec["email"]  || rec[`col${NO_HEADER_COLS.email}`]  || "";
+      rec["age"] = rec["age"] || rec[`col${NO_HEADER_COLS.age}`] || "";
+      rec["email"] = rec["email"] || rec[`col${NO_HEADER_COLS.email}`] || "";
       return rec;
     }
   }
   return null;
 }
-/* ============ Page Profil — Bloc 3: Fetch AI + UI ============ */
 
-/* ===================== Fetch IA (ou règles en fallback) ===================== */
+/* ======== Fallback "règles" très simple si pas d'API ======== */
+function generateProgrammeFromAnswers(ans: Answers): AiSession[] {
+  const obj = norm(ans["objectif"] || ans["goal"] || "");
+  const dispo = Number((ans["disponibilite"] || ans["disponibilité"] || ans["sessions_par_semaine"] || "3").toString().replace(",", ".")) || 3;
+  const type: WorkoutType = obj.includes("perte") || obj.includes("minceur") ? "cardio" : "muscu";
+  const base: AiSession = {
+    id: "ai-local-1",
+    title: type === "cardio" ? "Cardio fractionné" : "Full-body guidé",
+    type,
+    date: new Date().toISOString().slice(0, 10),
+    plannedMin: 35,
+    intensity: "modérée",
+    recommendedBy: "Règles locales",
+    blocks: [
+      { name: "echauffement", items: [{ name: "Mobilité dynamique", durationSec: 300 }] },
+      {
+        name: "principal",
+        items:
+          type === "cardio"
+            ? [{ name: "Intervalles 1' / 1'", durationSec: 20 * 60, notes: "RPE 6-7" }]
+            : [
+                { name: "Squat goblet", reps: "8-10", sets: 3, rest: "90s" },
+                { name: "Pompes", reps: "8-12", sets: 3, rest: "90s" },
+                { name: "Rowing haltères", reps: "10-12", sets: 3, rest: "90s" },
+              ],
+      },
+      { name: "fin", items: [{ name: "Retour au calme", durationSec: 300 }] },
+    ],
+  };
+  const sessions: AiSession[] = Array.from({ length: Math.min(7, Math.max(1, dispo)) }, (_, i) => ({
+    ...base,
+    id: `ai-local-${i + 1}`,
+    date: new Date(Date.now() + i * 24 * 3600 * 1000).toISOString().slice(0, 10),
+    title: i === 0 ? base.title : `${base.title} #${i + 1}`,
+  }));
+  return sessions;
+}
+/* ======== Email détecté (mock : cookie) ======== */
+async function getSignedInEmail() {
+  // Adapte si tu as une vraie auth : NextAuth, Supabase, etc.
+  return cookies().get("app_email")?.value || "";
+}
+
+/* ======== Fetch IA avec fallback règles/Sheets ======== */
 async function fetchAiProgramme(userId?: string): Promise<AiProgramme | null> {
   const uidFromCookie = cookies().get("fc_uid")?.value;
   const uid = userId || uidFromCookie || "me";
@@ -198,7 +291,7 @@ async function fetchAiProgramme(userId?: string): Promise<AiProgramme | null> {
     `${API_BASE}/api/programme?user=${encodeURIComponent(uid)}`,
     `${API_BASE}/api/program?user=${encodeURIComponent(uid)}`,
     `${API_BASE}/api/sessions?source=ai&user=${encodeURIComponent(uid)}`,
-  ];
+  ].filter(Boolean) as string[];
 
   for (const url of endpoints) {
     try {
@@ -217,19 +310,21 @@ async function fetchAiProgramme(userId?: string): Promise<AiProgramme | null> {
         title: String(r.title ?? r.name ?? "Séance personnalisée"),
         type: (r.type ?? r.category ?? "muscu") as WorkoutType,
         date: String(r.date ?? r.day ?? r.when ?? new Date().toISOString().slice(0, 10)),
-        plannedMin: typeof r.plannedMin === "number" ? r.plannedMin : typeof r.duration === "number" ? r.duration : undefined,
+        plannedMin:
+          typeof r.plannedMin === "number" ? r.plannedMin : typeof r.duration === "number" ? r.duration : undefined,
         note: typeof r.note === "string" ? r.note : typeof r.notes === "string" ? r.notes : undefined,
         intensity: r.intensity as any,
         recommendedBy: r.recommendedBy ?? r.model ?? "Coach Files",
         exercises: Array.isArray(r.exercises) ? r.exercises : undefined,
         blocks: Array.isArray(r.blocks) ? r.blocks : undefined,
-        plan: r.plan, content: r.content,
+        plan: r.plan,
+        content: r.content,
       }));
       return { sessions };
     } catch {}
   }
 
-  // Fallback : moteur de règles local (analyse complète du questionnaire)
+  // Fallback : analyse questionnaire + règles locales
   try {
     const email = (await getSignedInEmail()) || cookies().get("app_email")?.value || "";
     if (email) {
@@ -243,24 +338,39 @@ async function fetchAiProgramme(userId?: string): Promise<AiProgramme | null> {
   return null;
 }
 
+/* ======== Helpers UI ======== */
+function urlWith(current: Record<string, string | number | undefined>, p: Record<string, string | number | undefined>) {
+  const sp = new URLSearchParams();
+  for (const k of Object.keys(current)) {
+    const v = current[k];
+    if (v !== undefined && v !== "") sp.set(k, String(v));
+  }
+  for (const k of Object.keys(p)) {
+    const v = p[k];
+    if (v !== undefined) sp.set(k, String(v));
+  }
+  return `/dashboard/profile?${sp.toString()}`;
+}
 /* ===================== Page ===================== */
 export default async function Page({
   searchParams,
 }: {
   searchParams?: { success?: string; error?: string; done?: string; deleted?: string; take?: string; offset?: string };
 }) {
+  // Store (séances terminées)
   const store = parseStore(cookies().get("app_sessions")?.value);
-
   const past = store.sessions
-    .filter(s => s.status === "done")
+    .filter((s) => s.status === "done")
     .sort((a, b) => (b.endedAt || "").localeCompare(a.endedAt || ""));
 
-  // ===== Mes infos (Prénom + Âge + Mail) depuis la dernière réponse =====
+  // Mes infos (via dernière réponse)
   const detectedEmail = await getSignedInEmail();
   const emailFromCookie = cookies().get("app_email")?.value || "";
   const emailForLink = detectedEmail || emailFromCookie;
 
-  let clientPrenom = "", clientAge: number | undefined, clientEmailDisplay = emailForLink;
+  let clientPrenom = "",
+    clientAge: number | undefined,
+    clientEmailDisplay = emailForLink;
   try {
     if (emailForLink) {
       const ans = await getAnswersForEmail(emailForLink, SHEET_ID, SHEET_RANGE);
@@ -289,8 +399,7 @@ export default async function Page({
   const visibleAi = aiSessions.slice(clampedAi.offset, clampedAi.offset + take);
   const hasMoreAi = clampedAi.offset + take < totalAi;
 
-  const rawError = searchParams?.error || "";
-  const displayedError = rawError;
+  const displayedError = searchParams?.error || "";
 
   const questionnaireUrl = (() => {
     const qp = new URLSearchParams();
@@ -301,37 +410,60 @@ export default async function Page({
     return qs ? `${base}?${qs}` : base;
   })();
 
-  function urlWith(p: Record<string, string | number | undefined>) {
-    const sp = new URLSearchParams();
-    if (searchParams?.success) sp.set("success", searchParams.success);
-    if (searchParams?.error) sp.set("error", searchParams.error);
-    if (searchParams?.done) sp.set("done", searchParams.done);
-    if (searchParams?.deleted) sp.set("deleted", searchParams.deleted);
-    sp.set("take", String(p.take ?? take));
-    sp.set("offset", String(p.offset ?? reqOffset));
-    return `/dashboard/profile?${sp.toString()}`;
-  }
+  const currentParams = {
+    success: searchParams?.success,
+    error: searchParams?.error,
+    done: searchParams?.done,
+    deleted: searchParams?.deleted,
+    take,
+    offset: reqOffset,
+  } as Record<string, string | number | undefined>;
 
   return (
     <div className="container" style={{ paddingTop: 24, paddingBottom: 32, fontSize: "var(--settings-fs, 12px)" }}>
       <div className="page-header">
-        <div><h1 className="h1" style={{ fontSize: 22 }}>Mon profil</h1></div>
-        <a href="/dashboard" className="btn" style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500, padding: "6px 10px", lineHeight: 1.2 }}>← Retour</a>
+        <div>
+          <h1 className="h1" style={{ fontSize: 22 }}>
+            Mon profil
+          </h1>
+        </div>
+        <a
+          href="/dashboard"
+          className="btn"
+          style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500, padding: "6px 10px", lineHeight: 1.2 }}
+        >
+          ← Retour
+        </a>
       </div>
 
       {/* Alerts */}
       <div className="space-y-3">
         {!!searchParams?.success && (
           <div className="card" style={{ border: "1px solid rgba(16,185,129,.35)", background: "rgba(16,185,129,.08)", fontWeight: 600 }}>
-            {searchParams.success === "programme" ? "✓ Programme IA mis à jour."
-            : searchParams.success === "programme:dejainclus" ? "ℹ️ Déjà enregistrée."
-            : searchParams.success === "programme:seance:enregistree" ? "✓ Séance enregistrée."
-            : "✓ Séance ajoutée."}
+            {searchParams.success === "programme"
+              ? "✓ Programme IA mis à jour."
+              : searchParams.success === "programme:dejainclus"
+              ? "ℹ️ Déjà enregistrée."
+              : searchParams.success === "programme:seance:enregistree"
+              ? "✓ Séance enregistrée."
+              : "✓ Séance ajoutée."}
           </div>
         )}
-        {!!searchParams?.done && (<div className="card" style={{ border: "1px solid rgba(59,130,246,.35)", background: "rgba(59,130,246,.08)", fontWeight: 600 }}>✓ Séance terminée.</div>)}
-        {!!searchParams?.deleted && (<div className="card" style={{ border: "1px solid rgba(239,68,68,.35)", background: "rgba(239,68,68,.08)", fontWeight: 600 }}>Séance supprimée.</div>)}
-        {!!searchParams?.error && (<div className="card" style={{ border: "1px solid rgba(239,68,68,.35)", background: "rgba(239,68,68,.08)", fontWeight: 600, whiteSpace: "pre-wrap" }}>⚠️ {displayedError}</div>)}
+        {!!searchParams?.done && (
+          <div className="card" style={{ border: "1px solid rgba(59,130,246,.35)", background: "rgba(59,130,246,.08)", fontWeight: 600 }}>
+            ✓ Séance terminée.
+          </div>
+        )}
+        {!!searchParams?.deleted && (
+          <div className="card" style={{ border: "1px solid rgba(239,68,68,.35)", background: "rgba(239,68,68,.08)", fontWeight: 600 }}>
+            Séance supprimée.
+          </div>
+        )}
+        {!!searchParams?.error && (
+          <div className="card" style={{ border: "1px solid rgba(239,68,68,.35)", background: "rgba(239,68,68,.08)", fontWeight: 600, whiteSpace: "pre-wrap" }}>
+            ⚠️ {displayedError}
+          </div>
+        )}
       </div>
 
       {/* ===== Mes infos (Prénom + Âge + Mail) ===== */}
@@ -341,12 +473,22 @@ export default async function Page({
         </div>
         <div className="card">
           <div className="text-sm" style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-            <span><b>Prénom :</b> {clientPrenom || <i className="text-gray-400">Non renseigné</i>}</span>
-            <span><b>Âge :</b> {typeof clientAge === "number" ? `${clientAge} ans` : <i className="text-gray-400">Non renseigné</i>}</span>
+            <span>
+              <b>Prénom :</b> {clientPrenom || <i className="text-gray-400">Non renseigné</i>}
+            </span>
+            <span>
+              <b>Âge :</b> {typeof clientAge === "number" ? `${clientAge} ans` : <i className="text-gray-400">Non renseigné</i>}
+            </span>
           </div>
           <div className="text-sm" style={{ marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={clientEmailDisplay || "Non renseigné"}>
             <b>Mail :</b>{" "}
-            {clientEmailDisplay ? <a href={`mailto:${clientEmailDisplay}`} className="underline">{clientEmailDisplay}</a> : <span className="text-gray-400">Non renseigné</span>}
+            {clientEmailDisplay ? (
+              <a href={`mailto:${clientEmailDisplay}`} className="underline">
+                {clientEmailDisplay}
+              </a>
+            ) : (
+              <span className="text-gray-400">Non renseigné</span>
+            )}
           </div>
         </div>
       </section>
@@ -356,23 +498,34 @@ export default async function Page({
         <div className="section-head" style={{ marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <div>
             <h2 style={{ marginBottom: 6 }}>Séances proposées</h2>
-            <p className="text-sm" style={{ color: "#6b7280" }}>Personnalisées via l’analyse complète de vos réponses (objectif, matériel, niveau, blessures, etc.).</p>
+            <p className="text-sm" style={{ color: "#6b7280" }}>
+              Personnalisées via l’analyse complète de vos réponses (objectif, matériel, niveau, blessures, etc.).
+            </p>
           </div>
-          <a href={questionnaireUrl} className="btn btn-dash">Je mets à jour</a>
+          <a href={questionnaireUrl} className="btn btn-dash">
+            Je mets à jour
+          </a>
         </div>
 
         {visibleAi.length === 0 ? (
           <div className="card text-sm" style={{ color: "#6b7280" }}>
             <div className="flex items-center gap-3">
               <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted">🤖</span>
-              <span>Pas encore de séances. <a className="link" href={questionnaireUrl}>Remplissez le questionnaire</a>.</span>
+              <span>
+                Pas encore de séances. <a className="link" href={questionnaireUrl}>Remplissez le questionnaire</a>.
+              </span>
             </div>
           </div>
         ) : (
           <>
             <ul className="space-y-3 list-none pl-0">
               {visibleAi.map((s) => {
-                const qp = new URLSearchParams({ title: s.title, date: s.date, type: s.type, plannedMin: s.plannedMin ? String(s.plannedMin) : "" });
+                const qp = new URLSearchParams({
+                  title: s.title,
+                  date: s.date,
+                  type: s.type,
+                  plannedMin: s.plannedMin ? String(s.plannedMin) : "",
+                });
                 const href = `/dashboard/seance/${encodeURIComponent(s.id)}?${qp.toString()}`;
 
                 return (
@@ -397,10 +550,14 @@ export default async function Page({
                       <div className="mt-3 grid gap-2">
                         {s.blocks.map((b) => (
                           <div key={b.name} className="rounded border p-2">
-                            <div className="text-xs uppercase tracking-wide mb-2" style={{ color:"#6b7280" }}>
-                              {b.name === "echauffement" ? "Échauffement" :
-                               b.name === "principal" ? "Bloc principal" :
-                               b.name === "accessoires" ? "Accessoires" : "Fin de séance"}
+                            <div className="text-xs uppercase tracking-wide mb-2" style={{ color: "#6b7280" }}>
+                              {b.name === "echauffement"
+                                ? "Échauffement"
+                                : b.name === "principal"
+                                ? "Bloc principal"
+                                : b.name === "accessoires"
+                                ? "Accessoires"
+                                : "Fin de séance"}
                             </div>
                             <ul className="text-sm grid gap-1 list-disc pl-5">
                               {b.items.map((e, idx) => (
@@ -408,7 +565,7 @@ export default async function Page({
                                   <b>{e.name}</b>
                                   {e.reps ? ` — ${e.reps}` : ""}
                                   {typeof e.sets === "number" ? ` · ${e.sets} séries` : ""}
-                                  {e.durationSec ? ` · ${Math.round(e.durationSec/60)}'` : ""}
+                                  {e.durationSec ? ` · ${Math.round(e.durationSec / 60)}'` : ""}
                                   {e.rest ? ` · repos ${e.rest}` : ""}
                                   {e.rir ? ` · RIR ${e.rir}` : ""}
                                   {e.tempo ? ` · tempo ${e.tempo}` : ""}
@@ -427,8 +584,20 @@ export default async function Page({
             </ul>
 
             <div className="flex justify-between mt-3">
-              <a href={urlWith({ take, offset: Math.max(0, clampedAi.offset - take) })} className={`btn ${clampedAi.offset <= 0 ? "pointer-events-none opacity-50" : ""}`} aria-disabled={clampedAi.offset <= 0}>← Voir précédent</a>
-              <a href={urlWith({ take, offset: clampedAi.offset + take })} className={`btn ${!hasMoreAi ? "pointer-events-none opacity-50" : ""}`} aria-disabled={!hasMoreAi}>Voir plus →</a>
+              <a
+                href={urlWith(currentParams, { offset: Math.max(0, clampedAi.offset - take), take })}
+                className={`btn ${clampedAi.offset <= 0 ? "pointer-events-none opacity-50" : ""}`}
+                aria-disabled={clampedAi.offset <= 0}
+              >
+                ← Voir précédent
+              </a>
+              <a
+                href={urlWith(currentParams, { offset: clampedAi.offset + take, take })}
+                className={`btn ${!hasMoreAi ? "pointer-events-none opacity-50" : ""}`}
+                aria-disabled={!hasMoreAi}
+              >
+                Voir plus →
+              </a>
             </div>
           </>
         )}
@@ -438,7 +607,11 @@ export default async function Page({
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h2>Séances enregistrées</h2>
-          {past.length > 12 && <span className="text-xs" style={{ color: "#6b7280" }}>Affichage des 12 dernières</span>}
+          {past.length > 12 && (
+            <span className="text-xs" style={{ color: "#6b7280" }}>
+              Affichage des 12 dernières
+            </span>
+          )}
         </div>
 
         {past.length === 0 ? (
@@ -451,7 +624,12 @@ export default async function Page({
         ) : (
           <ul className="card divide-y list-none pl-0">
             {past.slice(0, 12).map((s) => {
-              const qp = new URLSearchParams({ title: s.title, date: s.date, type: s.type, plannedMin: s.plannedMin ? String(s.plannedMin) : "" });
+              const qp = new URLSearchParams({
+                title: s.title,
+                date: s.date,
+                type: s.type,
+                plannedMin: s.plannedMin ? String(s.plannedMin) : "",
+              });
               const href = `/dashboard/seance/${encodeURIComponent(s.id)}?${qp.toString()}`;
               return (
                 <li key={s.id} className="py-3">
@@ -461,7 +639,8 @@ export default async function Page({
                         {s.title}
                       </a>
                       <div className="text-sm" style={{ color: "#6b7280" }}>
-                        {fmtDateISO(s.endedAt)}{s.plannedMin ? ` (prévu ${s.plannedMin} min)` : ""}
+                        {fmtDateISO(s.endedAt)}
+                        {s.plannedMin ? ` (prévu ${s.plannedMin} min)` : ""}
                       </div>
                     </div>
                     <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>{s.type}</span>
@@ -474,57 +653,4 @@ export default async function Page({
       </section>
     </div>
   );
-}
-// apps/web/app/dashboard/profile/actions.ts
-"use server";
-
-import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
-
-type WorkoutType = "muscu" | "cardio" | "hiit" | "mobilité";
-
-type Workout = {
-  id: string;
-  title: string;
-  type: WorkoutType;
-  status: "active" | "done";
-  date: string;
-  plannedMin?: number;
-  startedAt?: string;
-  endedAt?: string;
-  note?: string;
-  createdAt: string;
-};
-
-type Store = { sessions: Workout[] };
-
-function parseStore(val?: string | null): Store {
-  if (!val) return { sessions: [] };
-  try { const o = JSON.parse(val!); if (Array.isArray(o?.sessions)) return { sessions: o.sessions as Workout[] }; } catch {}
-  return { sessions: [] };
-}
-function uid() { return "id-" + Math.random().toString(36).slice(2, 10); }
-function toYMD(d = new Date()) { const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,"0"), da=String(d.getDate()).padStart(2,"0"); return `${y}-${m}-${da}`; }
-
-export async function addSessionAction(formData: FormData) {
-  const title = (formData.get("title") || "").toString().trim();
-  const type = (formData.get("type") || "muscu").toString() as WorkoutType;
-  const date = (formData.get("date") || toYMD()).toString();
-  const plannedMinStr = (formData.get("plannedMin") || "").toString().replace(",", ".");
-  const note = (formData.get("note") || "").toString().slice(0, 240);
-  const startNow = (formData.get("startNow") || "").toString() === "1";
-
-  if (!title) redirect("/dashboard/profile?error=titre");
-  const store = parseStore(cookies().get("app_sessions")?.value);
-
-  const w: Workout = {
-    id: uid(), title, type, status: "active", date,
-    plannedMin: plannedMinStr ? Number(plannedMinStr) : undefined,
-    startedAt: startNow ? new Date().toISOString() : undefined,
-    note: note || undefined, createdAt: new Date().toISOString(),
-  };
-
-  const next: Store = { sessions: [w, ...store.sessions].slice(0, 300) };
-  cookies().set("app_sessions", JSON.stringify(next), { path: "/", sameSite: "lax", maxAge: 60*60*24*365, httpOnly: false });
-  redirect("/dashboard/profile?success=1");
 }
