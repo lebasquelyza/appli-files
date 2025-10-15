@@ -114,14 +114,13 @@ async function fetchAiProgramme(userId?: string): Promise<AiProgramme | null> {
         recommendedBy: r.recommendedBy ?? r.model ?? "Coach Files",
         exercises: Array.isArray(r.exercises) ? r.exercises : undefined,
         blocks: Array.isArray(r.blocks) ? r.blocks : undefined,
-        plan: r.plan,
-        content: r.content,
+        plan: r.plan, content: r.content,
       }));
       return { sessions };
     } catch {}
   }
 
-  // fallback local depuis la dernière réponse
+  // fallback local : si pas d’API disponible, on génère
   try {
     const email = (await getSignedInEmail()) || cookies().get("app_email")?.value || "";
     if (email) {
@@ -234,15 +233,13 @@ async function fetchValues(sheetId: string, range: string) {
   throw new Error("SHEETS_FETCH_FAILED");
 }
 
-/* ======== Normalisation ======== */
+/* ======== Normalisation & génération ======== */
 type Answers = Record<string, string>;
 function norm(s: string) {
   return s.trim().toLowerCase().replace(/\s+/g, " ")
     .replace(/[éèêë]/g, "e").replace(/[àâä]/g, "a").replace(/[îï]/g, "i")
     .replace(/[ôö]/g, "o").replace(/[ùûü]/g, "u").replace(/[’']/g, "'");
 }
-
-/* ======== Génération fallback si pas d’API ======== */
 function inferAvailability(ans: Answers | null): number {
   if (!ans) return 3;
   const dispoRaw = (ans[norm("disponibilité")] || ans[norm("disponibilite")] || (ans as any)["disponibilité"] || (ans as any)["disponibilite"] || "").toLowerCase();
@@ -256,6 +253,7 @@ function inferAvailability(ans: Answers | null): number {
 }
 function generateSessionsFromAnswers(ans: Answers): AiSession[] {
   const get = (k: string) => ans[norm(k)] || ans[k] || "";
+
   const prenom = get("prénom") || get("prenom");
   const age = Number((get("age") || "").replace(",", "."));
   const niveau = (get("niveau") || "débutant").toLowerCase();
@@ -308,7 +306,7 @@ export default async function Page({
 }) {
   const store = parseStore(cookies().get("app_sessions")?.value);
 
-  // (SUPPRIMÉ) "Mes séances (actives)"
+  // (Toujours supprimé) bloc "Mes séances (actives)"
 
   // Enregistrées (done)
   const past = store.sessions
@@ -319,21 +317,37 @@ export default async function Page({
   const programme = await fetchAiProgramme();
   const aiSessions = programme?.sessions ?? [];
 
-  // Infos client
+  // ======= Mes infos (rétabli complet) =======
   const detectedEmail = await getSignedInEmail();
   const emailFromCookie = cookies().get("app_email")?.value || "";
   const emailForLink = detectedEmail || emailFromCookie;
 
-  // Questionnaire URL préremplie
+  let clientPrenom = "", clientNom = "", clientAge: number | undefined, clientEmailDisplay = emailForLink;
+  if (emailForLink) {
+    try {
+      const ans = await getAnswersForEmail(emailForLink, SHEET_ID, SHEET_RANGE);
+      const get = (k: string) => (ans ? ans[norm(k)] || ans[k] || "" : "");
+      clientPrenom = get("prénom") || get("prenom") || "";
+      clientNom = get("nom") || "";
+      const ageStr = get("age");
+      const num = Number((ageStr || "").toString().replace(",", "."));
+      clientAge = isFinite(num) && num > 0 ? Math.floor(num) : undefined;
+      const emailSheet = get("email") || get("adresse mail") || get("e-mail") || get("mail");
+      if (!clientEmailDisplay && emailSheet) clientEmailDisplay = emailSheet;
+    } catch {}
+  }
+
   const questionnaireUrl = (() => {
     const qp = new URLSearchParams();
-    if (emailForLink) qp.set("email", emailForLink);
+    if (clientEmailDisplay) qp.set("email", clientEmailDisplay);
+    if (clientPrenom) qp.set("prenom", clientPrenom);
+    if (clientNom) qp.set("nom", clientNom);
     const base = QUESTIONNAIRE_BASE.replace(/\/?$/, "");
     const qs = qp.toString();
     return qs ? `${base}?${qs}` : base;
   })();
 
-  // Pagination IA (moins de détails affichés)
+  // Pagination IA (vue compacte)
   const takeDefault = 3;
   const take = Math.max(1, Math.min(12, Number(searchParams?.take ?? takeDefault) || takeDefault));
   const reqOffset = Math.max(0, Number(searchParams?.offset ?? 0) || 0);
@@ -380,12 +394,30 @@ export default async function Page({
         {!!searchParams?.error && (<div className="card" style={{ border: "1px solid rgba(239,68,68,.35)", background: "rgba(239,68,68,.08)", fontWeight: 600, whiteSpace: "pre-wrap" }}>⚠️ {displayedError}</div>)}
       </div>
 
+      {/* ===== Mes infos (complet) ===== */}
+      <section className="section" style={{ marginTop: 12 }}>
+        <div className="section-head" style={{ marginBottom: 8 }}>
+          <h2>Mes infos</h2>
+        </div>
+        <div className="card">
+          <div className="text-sm" style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+            <span><b>Prénom :</b> {clientPrenom || <i className="text-gray-400">Non renseigné</i>}</span>
+            <span><b>Nom :</b> {clientNom || <i className="text-gray-400">Non renseigné</i>}</span>
+            <span><b>Age :</b> {typeof clientAge === "number" ? `${clientAge} ans` : <i className="text-gray-400">Non renseigné</i>}</span>
+          </div>
+          <div className="text-sm" style={{ marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={clientEmailDisplay || "Non renseigné"}>
+            <b>Mail :</b>{" "}
+            {clientEmailDisplay ? <a href={`mailto:${clientEmailDisplay}`} className="underline">{clientEmailDisplay}</a> : <span className="text-gray-400">Non renseigné</span>}
+          </div>
+        </div>
+      </section>
+
       {/* Séances proposées par Files — version compacte */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <div>
             <h2 style={{ marginBottom: 6 }}>Séances proposées par Files</h2>
-            <p className="text-sm" style={{ color: "#6b7280" }}>Cliquez sur une séance pour voir le détail complet.</p>
+            <p className="text-sm" style={{ color: "#6b7280" }}>Cliquez sur une séance pour voir le détail.</p>
           </div>
           <a href={questionnaireUrl} className="btn btn-dash">Je mets à jour</a>
         </div>
@@ -394,14 +426,13 @@ export default async function Page({
           <div className="card text-sm" style={{ color: "#6b7280" }}>
             <div className="flex items-center gap-3">
               <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted">🤖</span>
-              <span>Pas encore de séances. <a className="link" href={questionnaireUrl}>Remplissez le questionnaire</a>, puis revenez ici.</span>
+              <span>Pas encore de séances. <a className="link" href={questionnaireUrl}>Remplissez le questionnaire</a>.</span>
             </div>
           </div>
         ) : (
           <>
             <ul className="card divide-y list-none pl-0">
               {visibleAi.map((s) => {
-                // Lien robuste: id + title/date/type en query
                 const qp = new URLSearchParams({ title: s.title, date: s.date, type: s.type, plannedMin: s.plannedMin ? String(s.plannedMin) : "" });
                 const href = `/dashboard/seance/${encodeURIComponent(s.id)}?${qp.toString()}`;
                 return (
@@ -417,7 +448,6 @@ export default async function Page({
                       </div>
                       <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>{s.type}</span>
                     </div>
-                    {/* Plus de coachText ni de liste d’exercices ici */}
                   </li>
                 );
               })}
@@ -481,7 +511,7 @@ export default async function Page({
   );
 }
 
-/* ===================== Actions serveur ===================== */
+/* ===================== Actions ===================== */
 function uid() { return "id-" + Math.random().toString(36).slice(2, 10); }
 function toYMD(d = new Date()) {
   const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, "0"), da = String(d.getDate()).padStart(2, "0");
@@ -514,9 +544,7 @@ async function addSessionAction(formData: FormData) {
 
   const next: Store = { sessions: [w, ...store.sessions].slice(0, 300) };
 
-  cookies().set("app_sessions", JSON.stringify(next), {
-    path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365, httpOnly: false,
-  });
+  cookies().set("app_sessions", JSON.stringify(next), { path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365, httpOnly: false });
 
   redirect("/dashboard/profile?success=1");
 }
@@ -528,9 +556,7 @@ async function deleteSessionAction(formData: FormData) {
   const store = parseStore(cookies().get("app_sessions")?.value);
   const sessions = store.sessions.filter(s => s.id !== id);
 
-  cookies().set("app_sessions", JSON.stringify({ sessions }), {
-    path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365, httpOnly: false,
-  });
+  cookies().set("app_sessions", JSON.stringify({ sessions }), { path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365, httpOnly: false });
 
   redirect("/dashboard/profile?deleted=1");
 }
@@ -584,4 +610,3 @@ async function getAnswersForEmail(email: string, sheetId: string, range: string)
   }
   return null;
 }
-
