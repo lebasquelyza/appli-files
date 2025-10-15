@@ -493,115 +493,84 @@ export default async function Page({
         </div>
       </section>
 
-      {/* Séances proposées — avec affichage des blocs/exos */}
-      <section className="section" style={{ marginTop: 12 }}>
-        <div className="section-head" style={{ marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-          <div>
-            <h2 style={{ marginBottom: 6 }}>Séances proposées</h2>
-            <p className="text-sm" style={{ color: "#6b7280" }}>
-              Personnalisées via l’analyse complète de vos réponses (objectif, matériel, niveau, blessures, etc.).
-            </p>
-          </div>
-          <a href={questionnaireUrl} className="btn btn-dash">
-            Je mets à jour
-          </a>
-        </div>
+      {/* Séances proposées — titres cliquables uniquement */}
+<section className="section" style={{ marginTop: 12 }}>
+  <div
+    className="section-head"
+    style={{ marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}
+  >
+    <div>
+      <h2 style={{ marginBottom: 6 }}>Séances proposées</h2>
+      <p className="text-sm" style={{ color: "#6b7280" }}>
+        Personnalisées via l’analyse complète de vos réponses.
+      </p>
+    </div>
+    <a href={questionnaireUrl} className="btn btn-dash">Je mets à jour</a>
+  </div>
 
-        {visibleAi.length === 0 ? (
-          <div className="card text-sm" style={{ color: "#6b7280" }}>
-            <div className="flex items-center gap-3">
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted">🤖</span>
-              <span>
-                Pas encore de séances. <a className="link" href={questionnaireUrl}>Remplissez le questionnaire</a>.
-              </span>
-            </div>
-          </div>
-        ) : (
-          <>
-            <ul className="space-y-3 list-none pl-0">
-              {visibleAi.map((s) => {
-                const qp = new URLSearchParams({
-                  title: s.title,
-                  date: s.date,
-                  type: s.type,
-                  plannedMin: s.plannedMin ? String(s.plannedMin) : "",
-                });
-                const href = `/dashboard/seance/${encodeURIComponent(s.id)}?${qp.toString()}`;
+  {visibleAi.length === 0 ? (
+    <div className="card text-sm" style={{ color: "#6b7280" }}>
+      <div className="flex items-center gap-3">
+        <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted">🤖</span>
+        <span>
+          Pas encore de séances. <a className="link" href={questionnaireUrl}>Remplissez le questionnaire</a>.
+        </span>
+      </div>
+    </div>
+  ) : (
+    <>
+      <ul className="space-y-2 list-none pl-0">
+        {visibleAi.map((s) => {
+          const qp = new URLSearchParams({
+            title: s.title,
+            date: s.date,
+            type: s.type,
+            plannedMin: s.plannedMin ? String(s.plannedMin) : "",
+          });
+          const href = `/dashboard/seance/${encodeURIComponent(s.id)}?${qp.toString()}`;
 
-                return (
-                  <li key={s.id} className="card p-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <a href={href} className="font-medium underline-offset-2 hover:underline" style={{ fontSize: 16 }}>
-                          {s.title}
-                        </a>
-                        <div className="text-sm" style={{ color: "#6b7280" }}>
-                          <b style={{ color: "inherit" }}>{fmtDateYMD(s.date)}</b>
-                          {s.plannedMin ? ` · ${s.plannedMin} min` : ""}
-                          {s.intensity ? ` · intensité ${s.intensity}` : ""}
-                          {s.note ? ` · ${s.note}` : ""}
-                        </div>
-                      </div>
-                      <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>{s.type}</span>
-                    </div>
+          return (
+            <li key={s.id} className="card p-3">
+              <div className="flex items-center justify-between gap-3">
+                <a
+                  href={href}
+                  className="font-medium underline-offset-2 hover:underline truncate"
+                  style={{ fontSize: 16, display: "inline-block", maxWidth: "100%" }}
+                  title={s.title}
+                >
+                  {s.title}
+                </a>
+                <span
+                  className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}
+                >
+                  {s.type}
+                </span>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
 
-                    {/* Détails blocs */}
-                    {s.blocks?.length ? (
-                      <div className="mt-3 grid gap-2">
-                        {s.blocks.map((b) => (
-                          <div key={b.name} className="rounded border p-2">
-                            <div className="text-xs uppercase tracking-wide mb-2" style={{ color: "#6b7280" }}>
-                              {b.name === "echauffement"
-                                ? "Échauffement"
-                                : b.name === "principal"
-                                ? "Bloc principal"
-                                : b.name === "accessoires"
-                                ? "Accessoires"
-                                : "Fin de séance"}
-                            </div>
-                            <ul className="text-sm grid gap-1 list-disc pl-5">
-                              {b.items.map((e, idx) => (
-                                <li key={idx}>
-                                  <b>{e.name}</b>
-                                  {e.reps ? ` — ${e.reps}` : ""}
-                                  {typeof e.sets === "number" ? ` · ${e.sets} séries` : ""}
-                                  {e.durationSec ? ` · ${Math.round(e.durationSec / 60)}'` : ""}
-                                  {e.rest ? ` · repos ${e.rest}` : ""}
-                                  {e.rir ? ` · RIR ${e.rir}` : ""}
-                                  {e.tempo ? ` · tempo ${e.tempo}` : ""}
-                                  {e.notes ? ` · ${e.notes}` : ""}
-                                  {e.alt ? <span className="text-gray-500"> (Alt: {e.alt})</span> : null}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        ))}
-                      </div>
-                    ) : null}
-                  </li>
-                );
-              })}
-            </ul>
+      <div className="flex justify-between mt-3">
+        <a
+          href={urlWith(currentParams, { offset: Math.max(0, clampedAi.offset - take), take })}
+          className={`btn ${clampedAi.offset <= 0 ? "pointer-events-none opacity-50" : ""}`}
+          aria-disabled={clampedAi.offset <= 0}
+        >
+          ← Voir précédent
+        </a>
+        <a
+          href={urlWith(currentParams, { offset: clampedAi.offset + take, take })}
+          className={`btn ${!hasMoreAi ? "pointer-events-none opacity-50" : ""}`}
+          aria-disabled={!hasMoreAi}
+        >
+          Voir plus →
+        </a>
+      </div>
+    </>
+  )}
+</section>
 
-            <div className="flex justify-between mt-3">
-              <a
-                href={urlWith(currentParams, { offset: Math.max(0, clampedAi.offset - take), take })}
-                className={`btn ${clampedAi.offset <= 0 ? "pointer-events-none opacity-50" : ""}`}
-                aria-disabled={clampedAi.offset <= 0}
-              >
-                ← Voir précédent
-              </a>
-              <a
-                href={urlWith(currentParams, { offset: clampedAi.offset + take, take })}
-                className={`btn ${!hasMoreAi ? "pointer-events-none opacity-50" : ""}`}
-                aria-disabled={!hasMoreAi}
-              >
-                Voir plus →
-              </a>
-            </div>
-          </>
-        )}
-      </section>
 
       {/* Séances enregistrées — compacte */}
       <section className="section" style={{ marginTop: 12 }}>
