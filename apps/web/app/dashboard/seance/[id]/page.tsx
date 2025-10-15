@@ -24,14 +24,11 @@ type AiSession = {
 };
 type AiProgramme = { sessions: AiSession[] };
 
-/** ===== Config (mêmes vars que la page profil) ===== */
+/** ===== Config ===== */
 const API_BASE = process.env.FILES_COACHING_API_BASE || "https://files-coaching.com";
 const API_KEY  = process.env.FILES_COACHING_API_KEY || "";
-const SHEET_ID = process.env.SHEET_ID || "1XH-BOUj4tXAVy49ONBIdLiWM97hQ-Fg8h5-OTRGvHC4";
-const SHEET_RANGE = process.env.SHEET_RANGE || "Réponses!A1:K";
-const SHEET_GID = process.env.SHEET_GID || "1160551014";
 
-/** ===== Utils réutilisés ===== */
+/** ===== Utils ===== */
 function parseStore(val?: string | null): Store {
   if (!val) return { sessions: [] };
   try { const o = JSON.parse(val!); if (Array.isArray(o?.sessions)) return { sessions: o.sessions as Workout[] }; } catch {}
@@ -51,10 +48,14 @@ function typeBadgeClass(t: WorkoutType) {
   }
 }
 
+/** ===== Exos helpers ===== */
 function normalizeMaybeArray(v: any): any[] {
   if (!v) return []; if (Array.isArray(v)) return v;
-  if (typeof v === "object") { if (Array.isArray(v.items)) return v.items;
-    if (Array.isArray(v.exercises)) return v.exercises; if (Array.isArray(v.blocks)) return v.blocks; }
+  if (typeof v === "object") {
+    if (Array.isArray(v.items)) return v.items;
+    if (Array.isArray(v.exercises)) return v.exercises;
+    if (Array.isArray(v.blocks)) return v.blocks;
+  }
   return [];
 }
 function fromApiExercises(s: AiSession): NormalizedExercise[] | null {
@@ -142,7 +143,7 @@ function getExercisesFromAi(s: AiSession): NormalizedExercise[] {
   return fromApiExercises(s) ?? fallbackExercises(s);
 }
 
-/** ===== Fetch AI comme sur la page profil ===== */
+/** ===== Fetch IA ===== */
 async function fetchAiProgramme(): Promise<AiProgramme | null> {
   const uidFromCookie = cookies().get("fc_uid")?.value;
   const uid = uidFromCookie || "me";
@@ -181,13 +182,44 @@ async function fetchAiProgramme(): Promise<AiProgramme | null> {
   return null;
 }
 
-/** ===== Page ===== */
-export default async function Page({ params }: { params: { id: string } }) {
-  const id = params.id;
+/** ===== Page détail ===== */
+export default async function Page({
+  params,
+  searchParams
+}: {
+  params: { id: string },
+  searchParams?: Record<string,string | string[] | undefined>
+}) {
+  const id = decodeURIComponent(params.id);
 
-  // 1) Cherche d'abord dans les "séances enregistrées"
+  // 1) séances enregistrées (cookies)
   const store = parseStore(cookies().get("app_sessions")?.value);
-  const saved = store.sessions.find(s => s.id === id);
+  let saved = store.sessions.find(s => s.id === id);
+
+  // 2) séances IA par id
+  const programme = await fetchAiProgramme();
+  const aiById = programme?.sessions.find(s => s.id === id);
+
+  // 3) si pas trouvé, tenter match par clé composite depuis query (title|date|type)
+  const qpTitle = typeof searchParams?.title === "string" ? searchParams!.title : "";
+  const qpDate  = typeof searchParams?.date  === "string" ? searchParams!.date  : "";
+  const qpType  = (typeof searchParams?.type  === "string" ? searchParams!.type  : "") as WorkoutType;
+  const qpPlannedMin = typeof searchParams?.plannedMin === "string" && searchParams!.plannedMin ? Number(searchParams!.plannedMin) : undefined;
+
+  const key = (t: string, d: string, ty: string) => `${t}|${d}|${ty}`;
+
+  // cherche par clé parmi cookies
+  if (!saved && qpTitle && qpDate && qpType) {
+    saved = store.sessions.find(s => key(s.title, s.date, s.type) === key(qpTitle, qpDate, qpType));
+  }
+
+  // cherche par clé parmi IA courantes
+  let ai = aiById;
+  if (!ai && qpTitle && qpDate && qpType && programme) {
+    ai = programme.sessions.find(s => key(s.title, s.date, s.type) === key(qpTitle, qpDate, qpType));
+  }
+
+  // Si toujours rien: construit une séance synthétique depuis la query pour éviter "introuvable"
   let title = "", type: WorkoutType = "muscu", date = "", plannedMin: number | undefined, note: string | undefined;
   let intensity: "faible" | "modérée" | "élevée" | undefined;
   let exercises: NormalizedExercise[] = [];
@@ -195,19 +227,19 @@ export default async function Page({ params }: { params: { id: string } }) {
   if (saved) {
     title = saved.title; type = saved.type; date = saved.date; plannedMin = saved.plannedMin; note = saved.note;
     exercises = Array.isArray(saved.exercises) ? saved.exercises : [];
+  } else if (ai) {
+    title = ai.title; type = ai.type; date = ai.date; plannedMin = ai.plannedMin; note = ai.note; intensity = ai.intensity;
+    exercises = getExercisesFromAi(ai);
+  } else if (qpTitle && qpDate && qpType) {
+    // séance "reconstruite"
+    const fake: AiSession = { id, title: qpTitle, type: qpType, date: qpDate, plannedMin: qpPlannedMin, intensity: "modérée" };
+    title = fake.title; type = fake.type; date = fake.date; plannedMin = fake.plannedMin; intensity = fake.intensity;
+    exercises = fallbackExercises(fake);
   } else {
-    // 2) Sinon dans les propositions IA
-    const programme = await fetchAiProgramme();
-    const ai = programme?.sessions.find(s => s.id === id);
-    if (!ai) {
-      redirect("/dashboard/profile?error=Séance introuvable");
-    }
-    title = ai!.title; type = ai!.type; date = ai!.date; plannedMin = ai!.plannedMin; note = ai!.note;
-    intensity = ai!.intensity;
-    exercises = getExercisesFromAi(ai!);
+    // Sans info exploitable: retourne au profil
+    redirect("/dashboard/profile?error=Séance introuvable");
   }
 
-  // Tri par bloc
   const blockOrder = { echauffement: 0, principal: 1, accessoires: 2, fin: 3 } as const;
   const exs = exercises.slice().sort((a,b) => {
     const A = a.block ? blockOrder[a.block] ?? 99 : 50;
@@ -228,7 +260,6 @@ export default async function Page({ params }: { params: { id: string } }) {
 
   return (
     <div className="container" style={{ paddingTop: 24, paddingBottom: 32, fontSize: "var(--settings-fs, 12px)" }}>
-      {/* Styles impression simples */}
       <style>{`
         @media print {
           .no-print { display: none !important; }
@@ -239,10 +270,13 @@ export default async function Page({ params }: { params: { id: string } }) {
         table.prog th { background: #f3f4f6; text-transform: uppercase; letter-spacing: .02em; font-weight: 700; }
       `}</style>
 
-      <div className="page-header no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <div className="page-header no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <a href="/dashboard/profile" className="btn" style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500, padding: "6px 10px" }}>
           ← Retour
         </a>
+        <button onClick={() => window.print()} className="btn no-print" style={{ background: "#111827", color: "white" }}>
+          Imprimer
+        </button>
       </div>
 
       <div className="card" style={{ padding: 16 }}>
@@ -252,7 +286,7 @@ export default async function Page({ params }: { params: { id: string } }) {
             <div className="text-sm" style={{ color: "#6b7280" }}>
               Prévu le <b style={{ color: "inherit" }}>{fmtDateYMD(date)}</b>
               {plannedMin ? ` · ${plannedMin} min` : ""}
-              {intensity ? ` · intensité ${intensity}` : ""}
+              { /* intensity est optionnelle */ }
             </div>
           </div>
           <span className={`shrink-0 h-fit inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(type)}`}>
@@ -262,9 +296,7 @@ export default async function Page({ params }: { params: { id: string } }) {
 
         <div className="text-sm" style={{ marginTop: 12, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
           🧭 {coachIntro}
-          {"\n"}⏱️ Durée: {plannedMin ? `${plannedMin} min` : "25–45 min"}
-          {" · "}Intensité: {intensity || "modérée"}
-          {note ? `\n📝 Note: ${note}` : ""}
+          {"\n"}⏱️ Durée: {plannedMin ? `${plannedMin} min` : "25–45 min"} · Intensité: {intensity || "modérée"}
           {"\n"}💡 Conseils: {coachTips}
         </div>
 
@@ -287,7 +319,13 @@ export default async function Page({ params }: { params: { id: string } }) {
               <tbody>
                 {exs.map((ex, i) => (
                   <tr key={`row-${i}`}>
-                    <td><b>{ex.name}</b>{ex.target ? <div style={{opacity:.7}}>{ex.target}</div> : null}{ex.equipment ? <div style={{opacity:.7}}>Matériel: {ex.equipment}</div> : null}{ex.alt ? <div style={{opacity:.7}}>Alt: {ex.alt}</div> : null}{ex.videoUrl ? <div><a className="underline" href={ex.videoUrl} target="_blank" rel="noreferrer">Vidéo</a></div> : null}</td>
+                    <td>
+                      <b>{ex.name}</b>
+                      {ex.target ? <div style={{opacity:.7}}>{ex.target}</div> : null}
+                      {ex.equipment ? <div style={{opacity:.7}}>Matériel: {ex.equipment}</div> : null}
+                      {ex.alt ? <div style={{opacity:.7}}>Alt: {ex.alt}</div> : null}
+                      {ex.videoUrl ? <div><a className="underline" href={ex.videoUrl} target="_blank" rel="noreferrer">Vidéo</a></div> : null}
+                    </td>
                     <td>{typeof ex.sets === "number" ? ex.sets : "—"}</td>
                     <td>{ex.reps ? String(ex.reps) : (ex.durationSec ? `${ex.durationSec}s` : "—")}</td>
                     <td>{ex.rest || "—"}</td>
