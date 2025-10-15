@@ -59,7 +59,6 @@ function norm(s: string) {
     .replace(/[éèêë]/g,"e").replace(/[àâä]/g,"a").replace(/[îï]/g,"i")
     .replace(/[ôö]/g,"o").replace(/[ùûü]/g,"u").replace(/[’']/g,"'");
 }
-
 async function fetchValues(sheetId: string, range: string) {
   const sheetName = (range.split("!")[0] || "").replace(/^'+|'+$/g, "");
   const tries: string[] = [];
@@ -93,7 +92,6 @@ async function fetchValues(sheetId: string, range: string) {
   }
   throw new Error("SHEETS_FETCH_FAILED");
 }
-
 const NO_HEADER_COLS = { nom: 0, prenom: 1, age: 2, email: 10 };
 async function getAnswersForEmail(email: string, sheetId: string, range: string): Promise<Answers | null> {
   const data = await fetchValues(sheetId, range);
@@ -197,7 +195,7 @@ function inferEquipment(materiel: string, lieu: string): EquipLevel {
   return "limited";
 }
 
-/** ===== Fallback exos (objectif + matériel + sous-objectif + blessures) ===== */
+/** ===== Fallback exos (coach) ===== */
 function goalFromTitle(t: string): "hypertrophy"|"fatloss"|"strength"|"endurance"|"mobility"|"general" {
   const s = t.toLowerCase();
   if (s.includes("hypertroph")) return "hypertrophy";
@@ -209,7 +207,6 @@ function goalFromTitle(t: string): "hypertrophy"|"fatloss"|"strength"|"endurance
 }
 const BW = (n:string,p:Partial<NormalizedExercise>={})=>({ name:n, equipment:"poids du corps", ...p });
 const DB = (n:string,p:Partial<NormalizedExercise>={})=>({ name:n, equipment:"haltères", ...p });
-const KB = (n:string,p:Partial<NormalizedExercise>={})=>({ name:n, equipment:"kettlebell", ...p });
 const BB = (n:string,p:Partial<NormalizedExercise>={})=>({ name:n, equipment:"barre", ...p });
 const MC = (n:string,p:Partial<NormalizedExercise>={})=>({ name:n, equipment:"machine/câble", ...p });
 
@@ -225,56 +222,38 @@ function protectInjury(exs: NormalizedExercise[], injuries: string[]): Normalize
 
 function fallbackExercisesRich(title: string, type: WorkoutType, level: EquipLevel, plannedMin?: number, injuries: string[] = [], subGoalHint = ""): NormalizedExercise[] {
   const g = goalFromTitle(title);
-  const dur = plannedMin ?? (g === "mobility" ? 30 : g === "endurance" ? 40 : 50);
   const wantsGlutes = /glute|fessier/i.test(title + " " + subGoalHint);
-  const wantsChest  = /pec|chest/i.test(title + " " + subGoalHint);
 
   let exs: NormalizedExercise[] = [];
 
   if (g === "hypertrophy") {
     if (/(haut|upper)/i.test(title)) {
       exs = level === "full" ? [
-        BB("Développé couché",{sets:4,reps:"6–10",rest:"90s",tempo:"3-1-1",rir:2,target:"pectoraux, triceps",block:"principal"}),
-        MC("Tirage vertical",{sets:4,reps:"8–12",rest:"75s",rir:2,target:"dos, biceps",block:"principal"}),
+        BB("Développé couché",{sets:4,reps:"6–10",rest:"90s",block:"principal"}),
+        MC("Tirage vertical",{sets:4,reps:"8–12",rest:"75s",block:"principal"}),
         MC("Écarté poulie",{sets:3,reps:"12–15",rest:"60s",block:"accessoires"}),
         MC("Oiseau poulie",{sets:3,reps:"12–15",rest:"60s",block:"accessoires"}),
         BW("Planche",{sets:2,reps:"45s",rest:"45s",block:"fin"}),
-      ] : level === "limited" ? [
-        DB("Développé haltères",{sets:4,reps:"6–10",rest:"90s",rir:2,block:"principal"}),
-        DB("Rowing unilatéral",{sets:4,reps:"8–12/ côté",rest:"75s",rir:2,block:"principal"}),
-        DB("Élévations latérales",{sets:3,reps:"12–15",rest:"60s",block:"accessoires"}),
-        DB("Curl incliné",{sets:3,reps:"10–12",rest:"60s",block:"accessoires"}),
-        BW("Planche",{sets:2,reps:"45s",rest:"45s",block:"fin"}),
       ] : [
-        BW("Pompes",{sets:4,reps:"8–12",rest:"75s",rir:2,block:"principal"}),
-        BW("Tractions australiennes / table",{sets:4,reps:"10–12",rest:"75s",block:"principal"}),
-        BW("Dips banc / chaises",{sets:3,reps:"10–12",rest:"60s",block:"accessoires"}),
-        BW("Pike push-up",{sets:3,reps:"6–10",rest:"60s",block:"accessoires"}),
+        DB("Développé haltères",{sets:4,reps:"6–10",rest:"90s",block:"principal"}),
+        DB("Rowing unilatéral",{sets:4,reps:"8–12/ côté",rest:"75s",block:"principal"}),
+        DB("Élévations latérales",{sets:3,reps:"12–15",rest:"60s",block:"accessoires"}),
         BW("Planche",{sets:2,reps:"45s",rest:"45s",block:"fin"}),
       ];
-      if (wantsChest) exs.unshift({ name:"Activation pecs (poulie/cables)", sets:2, reps:"15", rest:"45s", block:"echauffement" });
     } else if (/(bas|lower)/i.test(title) || wantsGlutes) {
       exs = level === "full" ? [
-        BB("Back Squat",{sets:4,reps:"6–8",rest:"120s",load:"75–80% 1RM",block:"principal"}),
+        BB("Back Squat",{sets:4,reps:"6–8",rest:"120s",block:"principal"}),
         MC("Hip Thrust machine",{sets:4,reps:"8–12",rest:"90s",block:"principal"}),
         MC("Presse à cuisses",{sets:3,reps:"10–12",rest:"90s",block:"accessoires"}),
         MC("Leg curl",{sets:3,reps:"12–15",rest:"75s",block:"accessoires"}),
         BW("Core (planche lat.)",{sets:2,reps:"30–45s/côté",rest:"45s",block:"fin"}),
-      ] : level === "limited" ? [
+      ] : [
         DB("Goblet Squat",{sets:4,reps:"8–12",rest:"90s",block:"principal"}),
         DB("Hip Thrust haltères",{sets:4,reps:"10–12",rest:"90s",block:"principal"}),
         DB("Fentes marchées",{sets:3,reps:"12/ jambe",rest:"75s",block:"accessoires"}),
-        DB("Mollets debout",{sets:3,reps:"12–15",rest:"60s",block:"accessoires"}),
         BW("Dead bug",{sets:2,reps:"8–10",rest:"45s",block:"fin"}),
-      ] : [
-        BW("Squat PB tempo 3-1-1",{sets:4,reps:"12–15",rest:"75s",tempo:"3-1-1",block:"principal"}),
-        BW("Hip thrust 1 jambe",{sets:4,reps:"10–12/jambe",rest:"75s",block:"principal"}),
-        BW("Fente arrière",{sets:3,reps:"10–12/jambe",rest:"60s",block:"accessoires"}),
-        BW("Mollets sur marche",{sets:3,reps:"15–20",rest:"45s",block:"accessoires"}),
-        BW("Hollow hold",{sets:2,reps:"30–40s",rest:"45s",block:"fin"}),
       ];
     } else {
-      // full body
       exs = [
         (level==="full"?BB:level==="limited"?DB:BW)("Squat / Goblet Squat",{sets:4,reps:"8–12",rest:"90s",block:"principal"}),
         (level==="full"?MC:level==="limited"?DB:BW)("Presse / Pompes",{sets:4,reps:"8–12",rest:"75s",block:"principal"}),
@@ -287,24 +266,22 @@ function fallbackExercisesRich(title: string, type: WorkoutType, level: EquipLev
 
   if (g === "strength") {
     exs = level === "full" ? [
-      BB("Back Squat (5×5)",{sets:5,reps:5,rest:"150s",load:"75–80% 1RM",block:"principal"}),
-      BB("Développé couché (5×5)",{sets:5,reps:5,rest:"150s",load:"75–80% 1RM",block:"principal"}),
-      BB("Row barre (5×5)",{sets:5,reps:5,rest:"120s",load:"75–80% 1RM",block:"principal"}),
+      BB("Back Squat (5×5)",{sets:5,reps:5,rest:"150s",block:"principal"}),
+      BB("Développé couché (5×5)",{sets:5,reps:5,rest:"150s",block:"principal"}),
+      BB("Row barre (5×5)",{sets:5,reps:5,rest:"120s",block:"principal"}),
       BW("Core anti-extension",{sets:2,reps:"8–10",rest:"60s",block:"fin"}),
     ] : [
       DB("Goblet Squat lourd",{sets:5,reps:"5–6",rest:"120s",block:"principal"}),
       DB("Développé haltères",{sets:5,reps:"5–6",rest:"120s",block:"principal"}),
       DB("Rowing unilatéral strict",{sets:5,reps:"5–6/ côté",rest:"120s",block:"principal"}),
-      BW("Pompes tempo 3-1-1",{sets:3,reps:"6–10",rest:"90s",block:"accessoires"}),
     ];
   }
 
   if (g === "fatloss") {
     exs = level === "none" ? [
       BW("Échauffement cardio",{sets:1,reps:"8–10 min",block:"echauffement"}),
-      BW("HIIT 30s ON/30s OFF",{sets:10,reps:"30s/30s",rest:"90s après 5",notes:"RPE 8",block:"principal"}),
+      BW("HIIT 30s ON/30s OFF",{sets:10,reps:"30s/30s",rest:"90s après 5",block:"principal"}),
       BW("Circuit core (planche, hollow, climbers)",{sets:2,reps:"3 ex × 30s",rest:"30s",block:"fin"}),
-      BW("Marche active",{sets:1,reps:"20–40 min",block:"fin"}),
     ] : [
       BW("Échauffement cardio",{sets:1,reps:"8–10 min",block:"echauffement"}),
       DB("Complexe métabolique 3–4 tours",{notes:"6 ex : squats, tirage, pompes, fentes, swing/rameur, abdos",block:"principal"}),
@@ -317,13 +294,9 @@ function fallbackExercisesRich(title: string, type: WorkoutType, level: EquipLev
       BW("Échauffement Z1",{sets:1,reps:"10 min",block:"echauffement"}),
       BW("Intervalles 4×4",{sets:4,reps:"4 min Z4",rest:"3 min Z1–Z2",block:"principal"}),
       BW("Retour au calme + mobilité",{sets:1,reps:"8–10 min",block:"fin"}),
-    ] : /(tempo)/i.test(title) ? [
-      BW("Échauffement progressif",{sets:1,reps:"12 min",block:"echauffement"}),
-      BW("Tempo run",{sets:1,reps:"20–25 min @ seuil",block:"principal"}),
-      BW("Retour au calme",{sets:1,reps:"8–10 min",block:"fin"}),
     ] : [
       BW("Échauffement",{sets:1,reps:"8–10 min",block:"echauffement"}),
-      BW("Cardio continu Z2",{sets:1,reps:`${Math.max(20,dur-15)} min`,block:"principal"}),
+      BW("Cardio continu Z2",{sets:1,reps:`${Math.max(20,(plannedMin ?? 40)-15)} min`,block:"principal"}),
       BW("Retour au calme + mobilité",{sets:1,reps:"6–8 min",block:"fin"}),
     ];
   }
@@ -333,7 +306,6 @@ function fallbackExercisesRich(title: string, type: WorkoutType, level: EquipLev
       BW("Respiration diaphragmatique",{sets:1,reps:"2–3 min",block:"echauffement"}),
       BW("90/90 hanches",{sets:2,reps:"8–10/ côté",rest:"30–45s",block:"principal"}),
       BW("T-spine rotations",{sets:2,reps:"8–10/ côté",rest:"30–45s",block:"principal"}),
-      BW("Cossack squats assistés",{sets:2,reps:"6–8/ côté",rest:"45s",block:"principal"}),
       BW("Down-Dog → Cobra",{sets:2,reps:"6–8",rest:"30s",block:"fin"}),
     ];
   }
@@ -360,15 +332,12 @@ export default async function Page({
 }) {
   const id = decodeURIComponent(params.id);
 
-  // cookies
   const store = parseStore(cookies().get("app_sessions")?.value);
   let saved = store.sessions.find(s => s.id === id);
 
-  // IA
   const programme = await fetchAiProgramme();
   const aiById = programme?.sessions.find(s => s.id === id);
 
-  // query fallback
   const qpTitle = typeof searchParams?.title === "string" ? searchParams!.title : "";
   const qpDate  = typeof searchParams?.date  === "string" ? searchParams!.date  : "";
   const qpType  = (typeof searchParams?.type  === "string" ? searchParams!.type  : "") as WorkoutType;
@@ -384,7 +353,7 @@ export default async function Page({
     ai = programme.sessions.find(s => key(s.title, s.date, s.type) === key(qpTitle, qpDate, qpType));
   }
 
-  // Matériel & blessures depuis la sheet
+  // Profil (matériel + blessures) depuis la sheet
   let equipLevel: EquipLevel = "limited";
   let injuries: string[] = [];
   try {
@@ -461,7 +430,7 @@ export default async function Page({
           <div>
             <h1 style={{ fontSize: 20, margin: 0 }}>{title}</h1>
             <div className="text-sm" style={{ color: "#6b7280" }}>
-              Prévu le <b style={{ color: "inherit" }}>{fmtDateYMD(date)}</b>
+              <b style={{ color: "inherit" }}>{fmtDateYMD(date)}</b>
               {plannedMin ? ` · ${plannedMin} min` : ""}
             </div>
           </div>
