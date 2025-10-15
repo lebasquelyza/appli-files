@@ -1,3 +1,4 @@
+/* ============ BLOC 1/4 — Imports, Types, Config, Auth ============ */
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
@@ -51,8 +52,8 @@ type AiSession = {
   note?: string;
   intensity?: "faible" | "modérée" | "élevée";
   recommendedBy?: string;
-  exercises?: any[];
-  blocks?: any[];
+  exercises?: NormalizedExercise[];
+  blocks?: { name: "echauffement" | "principal" | "fin" | "accessoires"; items: NormalizedExercise[] }[];
   plan?: any;
   content?: any;
 };
@@ -79,57 +80,7 @@ async function getSignedInEmail(): Promise<string> {
   } catch {}
   return cookies().get("app_email")?.value || "";
 }
-
-/* ===================== Fetch IA (ou règles) ===================== */
-async function fetchAiProgramme(userId?: string): Promise<AiProgramme | null> {
-  const uidFromCookie = cookies().get("fc_uid")?.value;
-  const uid = userId || uidFromCookie || "me";
-
-  const endpoints = [
-    `${API_BASE}/api/programme?user=${encodeURIComponent(uid)}`,
-    `${API_BASE}/api/program?user=${encodeURIComponent(uid)}`,
-    `${API_BASE}/api/sessions?source=ai&user=${encodeURIComponent(uid)}`,
-  ];
-
-  for (const url of endpoints) {
-    try {
-      const res = await fetch(url, {
-        headers: { Accept: "application/json", ...(API_KEY ? { Authorization: `Bearer ${API_KEY}` } : {}) },
-        cache: "no-store",
-      });
-      if (!res.ok) continue;
-
-      const data = (await res.json()) as any;
-      const raw = Array.isArray(data?.sessions) ? data.sessions : Array.isArray(data) ? data : [];
-      if (!raw.length) continue;
-
-      const sessions: AiSession[] = raw.map((r: any, i: number) => ({
-        id: String(r.id ?? `ai-${i}`),
-        title: String(r.title ?? r.name ?? "Séance personnalisée"),
-        type: (r.type ?? r.category ?? "muscu") as WorkoutType,
-        date: String(r.date ?? r.day ?? r.when ?? new Date().toISOString().slice(0, 10)),
-        plannedMin: typeof r.plannedMin === "number" ? r.plannedMin : typeof r.duration === "number" ? r.duration : undefined,
-        note: typeof r.note === "string" ? r.note : typeof r.notes === "string" ? r.notes : undefined,
-        intensity: r.intensity as any,
-        recommendedBy: r.recommendedBy ?? r.model ?? "Coach Files",
-        exercises: Array.isArray(r.exercises) ? r.exercises : undefined,
-        blocks: Array.isArray(r.blocks) ? r.blocks : undefined,
-        plan: r.plan, content: r.content,
-      }));
-      return { sessions };
-    } catch {}
-  }
-
-  // Fallback : moteur de règles local (analyse complète du questionnaire)
-  try {
-    const email = (await getSignedInEmail()) || cookies().get("app_email")?.value || "";
-    if (email) {
-      const ans = await getAnswersForEmail(email, SHEET_ID, SHEET_RANGE);
-      if (ans) return { sessions: generateProgrammeFromAnswers(ans) };
-    }
-  } catch {}
-  return null;
-}
+/* ============ BLOC 2/4 — Utils + Profil + Moteur de règles + Bibliothèque d’exos ============ */
 
 /* ===================== Utils ===================== */
 function parseStore(val?: string | null): Store {
@@ -248,11 +199,12 @@ type Profile = {
   equipLevel: EquipLevel;
   equipItems: string[];
   gym: boolean;
-  location: "gym" | "home" | "outdoor" | "mixed";
+  location: "gym" | "home" | "outdoor" | "mixed" | "box";
   cardioPref?: "run" | "bike" | "row" | "walk" | "mixed";
   injuries: string[];
   sleepOk?: boolean;
   stressHigh?: boolean;
+  likesWOD?: boolean;
 };
 
 function readNum(s: string): number | undefined {
@@ -305,9 +257,11 @@ function parseTimePerSession(raw: string): number {
 }
 function inferEquipment(materiel: string, lieu: string) {
   const m = norm(materiel); const l = norm(lieu);
-  const gym = /(salle|gym|fitness|basic-fit|keepcool|neo|temple|crossfit)/.test(l);
-  if (gym) return { level: "full" as const, items: ["barre","rack","machines","haltères","câbles"], gym: true, location: "gym" as const };
-  if (/(aucun|rien|sans)/.test(m) || m === "") return { level: "none" as const, items: [], gym: false, location: /(exter|dehors|outdoor|parc)/.test(l) ? "outdoor" as const : "home" as const };
+  const isBox = /(crossfit|cross|wod|emom|amrap|box)/.test(l);
+  const gym = /(salle|gym|fitness|basic-fit|keepcool|neo|temple)/.test(l);
+  if (isBox) return { level: "limited" as const, items: ["barre","kettlebell","haltères","corde","anneaux/TRX"], gym: true, location: "box" as const, likesWOD: true };
+  if (gym) return { level: "full" as const, items: ["barre","rack","machines","haltères","câbles"], gym: true, location: "gym" as const, likesWOD: false };
+  if (/(aucun|rien|sans)/.test(m) || m === "") return { level: "none" as const, items: [], gym: false, location: /(exter|dehors|outdoor|parc)/.test(l) ? "outdoor" as const : "home" as const, likesWOD: false };
   const items: string[] = [];
   if (/(halter|haltère|dumbbell)/.test(m)) items.push("haltères");
   if (/(kettlebell|kettle)/.test(m)) items.push("kettlebell");
@@ -316,7 +270,7 @@ function inferEquipment(materiel: string, lieu: string) {
   if (/(rack)/.test(m)) items.push("rack");
   if (/(banc)/.test(m)) items.push("banc");
   if (/(trx|anneaux)/.test(m)) items.push("TRX/anneaux");
-  return { level: "limited" as const, items, gym: false, location: /(exter|dehors|outdoor|parc)/.test(l) ? "outdoor" as const : "home" as const };
+  return { level: "limited" as const, items, gym: false, location: /(exter|dehors|outdoor|parc)/.test(l) ? "outdoor" as const : "home" as const, likesWOD: false };
 }
 function detectCardioPref(raw: string): Profile["cardioPref"] {
   const s = norm(raw);
@@ -372,13 +326,15 @@ function buildProfileFromAnswers(ans: Answers): Profile {
     age: typeof age === "number" ? age : undefined,
     height: taille, weight: poids, imc,
     goal, subGoals, level, freq, timePerSession,
-    equipLevel: equip.level, equipItems: equip.items, gym: equip.gym, location: equip.location,
+    equipLevel: equip.level, equipItems: equip.items, gym: equip.gym, location: equip.location as any,
     cardioPref, injuries,
     sleepOk: /(bien|ok|correct)/.test(norm(sommeil)) || undefined,
     stressHigh: /(eleve|élevé|haut)/.test(norm(stress)) || undefined,
+    likesWOD: (equip as any).likesWOD || false,
   };
 }
 
+/* ======== Titre & Durée & Intensité ======== */
 function titleForSession(profile: Profile, i: number): { title: string; type: WorkoutType } {
   const g = profile.goal;
   const has = (sg: SubGoal) => profile.subGoals.includes(sg);
@@ -428,7 +384,6 @@ function titleForSession(profile: Profile, i: number): { title: string; type: Wo
     : ["[Général] Full Body A", "[Général] Full Body B", "[Général] Z2 + Core"];
   return { title: arr[i % arr.length], type: "muscu" };
 }
-
 function intensityFor(p: Profile): "faible" | "modérée" | "élevée" {
   if (p.goal === "mobility") return "faible";
   if (p.goal === "strength" || p.goal === "hypertrophy") return p.level === "avance" ? "élevée" : "modérée";
@@ -445,6 +400,183 @@ function durationFor(p: Profile): number {
   return Math.max(25, Math.min(90, d));
 }
 
+/* ======== Bibliothèque d’exos (par matériel / blessure) ======== */
+const EXOS = {
+  pb: { // poids du corps
+    squat: { name:"Squat au poids du corps", reps:"12-15", sets:3, rest:"60s", equipment:"PB", target:"cuisses/fessiers" },
+    hipThrust: { name:"Hip Thrust au sol", reps:"12-15", sets:3, rest:"60s", equipment:"PB", target:"fessiers" },
+    pushup: { name:"Pompes", reps:"8-12", sets:3, rest:"75s", equipment:"PB", target:"pecs/épaules/triceps", alt:"Pompes sur les genoux" },
+    rowInverted: { name:"Rowing inversé table/TRX", reps:"8-12", sets:3, rest:"75s", equipment:"PB", target:"dos", alt:"Row élastique" },
+    plank: { name:"Gainage planche", durationSec:40, sets:3, rest:"45s", equipment:"PB", target:"core" },
+    lunge: { name:"Fentes marchées", reps:"10/10", sets:3, rest:"60s", equipment:"PB", target:"cuisses/fessiers" },
+    burpee: { name:"Burpees", reps:"10-12", sets:4, rest:"45s", equipment:"PB", target:"full/hiit" },
+  },
+  db: { // haltères / KB / élastiques
+    goblet: { name:"Goblet Squat (DB/KB)", reps:"8-12", sets:4, rest:"90s", equipment:"DB/KB", target:"cuisses/fessiers" },
+    rdl: { name:"Romanian Deadlift (DB)", reps:"8-12", sets:4, rest:"90s", equipment:"DB", target:"ischios/fessiers" },
+    bench: { name:"Développé couché haltères", reps:"8-12", sets:4, rest:"90s", equipment:"DB", target:"pecs" },
+    ohp: { name:"Développé épaules (DB)", reps:"8-12", sets:3, rest:"90s", equipment:"DB", target:"épaules" },
+    row: { name:"Row haltère unilatéral", reps:"10/10", sets:4, rest:"75s", equipment:"DB", target:"dos" },
+    curl: { name:"Curl biceps (DB)", reps:"10-12", sets:3, rest:"60s", equipment:"DB", target:"bras" },
+    triceps: { name:"Extensions triceps (DB)", reps:"10-12", sets:3, rest:"60s", equipment:"DB", target:"bras" },
+    bandFacePull: { name:"Face Pull (élastique)", reps:"12-15", sets:3, rest:"60s", equipment:"Band", target:"haut du dos" },
+  },
+  gym: {
+    backSquat: { name:"Back Squat (barre)", reps:"5×5", sets:5, rest:"120s", equipment:"Barre/Rack", target:"cuisses/fessiers", tempo:"30X1", rir:2 },
+    deadlift: { name:"Soulevé de terre", reps:"3×5", sets:3, rest:"180s", equipment:"Barre", target:"chaîne postérieure", rir:2 },
+    bench: { name:"Développé couché (barre)", reps:"5×5", sets:5, rest:"120s", equipment:"Barre", target:"pecs", rir:2 },
+    pull: { name:"Tractions (assistées si besoin)", reps:"6-8", sets:4, rest:"120s", equipment:"Barre fixe", target:"dos" },
+    legPress: { name:"Presse à cuisses", reps:"10-12", sets:4, rest:"90s", equipment:"Machine", target:"cuisses" },
+    cableRow: { name:"Row poulie", reps:"10-12", sets:4, rest:"75s", equipment:"Poulie", target:"dos" },
+  },
+  wod: {
+    emom: (min=12)=> ({ name:`EMOM ${min}'`, sets:1, reps:`Tour/minute`, rest:"—", notes:"Alt: 1) 12 KBS, 2) 10 Burpees, 3) 15 Air Squats", equipment:"KB/PB", target:"metcon" }),
+    amrap: (min=12)=> ({ name:`AMRAP ${min}'`, sets:1, reps:"Rondes max", rest:"—", notes:"10 DB Thrusters · 10 Sit-ups · 10 Box Step-ups", equipment:"DB/PB", target:"metcon" }),
+    intervalsRun: { name:"Course 4×4' Z4 (récup 3')", sets:4, durationSec:240, rest:"180s", equipment:"Running", target:"cardio" }
+  },
+  mobility: {
+    90_90: { name:"90/90 hanches", durationSec:45, sets:2, rest:"20s", target:"mobilité" },
+    catCow: { name:"Cat-Cow", durationSec:60, sets:2, rest:"20s", target:"mobilité" },
+    thoracic: { name:"Ouvertures T-spine", durationSec:45, sets:2, rest:"20s", target:"mobilité" },
+    doorway: { name:"Étirement pectoraux à l’embrasure", durationSec:45, sets:2, rest:"20s", target:"mobilité" },
+  }
+};
+
+/* ======== Filtre blessures ======== */
+function safe(ex: NormalizedExercise, injuries: string[]): NormalizedExercise | null {
+  if (injuries.includes("genoux") && /squat|fente|press/i.test(ex.name)) return null;
+  if (injuries.includes("epaules") && /(développé|overhead|ohp|tractions)/i.test(ex.name)) return null;
+  if (injuries.includes("dos") && /(soulev|deadlift|row)/i.test(ex.name)) return null;
+  return ex;
+}
+
+/* ======== Génération d’une séance détaillée (blocs) ======== */
+function buildSessionBlocks(profile: Profile, kind: { title: string; type: WorkoutType }, plannedMin: number) {
+  const warmup: NormalizedExercise[] = [];
+  const main: NormalizedExercise[] = [];
+  const fin: NormalizedExercise[] = [];
+  const acc: NormalizedExercise[] = [];
+
+  // 1) Échauffement (10-12')
+  warmup.push({ name:"Mobilité dynamique bas/haut", durationSec:300, rest:"—", block:"echauffement", notes:"chevilles, hanches, T-spine" });
+  if (profile.goal !== "mobility") warmup.push({ name:"Activation core (Deadbug)", durationSec:120, rest:"30s", block:"echauffement" });
+
+  // 2) Principal selon contexte
+  const addSafe = (e?: NormalizedExercise | null) => { if (e) main.push({ ...e, block:"principal" }); };
+  const addSafeAcc = (e?: NormalizedExercise | null) => { if (e) acc.push({ ...e, block:"accessoires" }); };
+  const I = profile.injuries;
+
+  if (profile.location === "box" || profile.likesWOD) {
+    // WOD style
+    addSafe(EXOS.wod.emom(12));
+    addSafe(EXOS.wod.amrap(10));
+    fin.push({ name:"Finisher corde à sauter", durationSec:300, rest:"—", block:"fin", notes:"30\" on / 30\" off" });
+  } else if (profile.equipLevel === "full") {
+    if (/Haut/i.test(kind.title)) {
+      addSafe(safe(EXOS.gym.bench, I)); addSafe(safe(EXOS.gym.pull, I)); addSafe(safe(EXOS.gym.cableRow, I));
+      addSafeAcc(safe(EXOS.db.bandFacePull as any, I)); addSafeAcc(safe(EXOS.db.curl as any, I)); addSafeAcc(safe(EXOS.db.triceps as any, I));
+    } else if (/Bas/i.test(kind.title)) {
+      addSafe(safe(EXOS.gym.backSquat, I)); addSafe(safe(EXOS.gym.legPress, I)); addSafe(safe(EXOS.gym.deadlift, I));
+    } else {
+      addSafe(safe(EXOS.gym.backSquat, I)); addSafe(safe(EXOS.gym.bench, I)); addSafe(safe(EXOS.gym.cableRow, I));
+    }
+  } else if (profile.equipLevel === "limited") {
+    addSafe(safe(EXOS.db.goblet as any, I));
+    addSafe(safe(EXOS.db.row as any, I));
+    addSafe(safe(EXOS.db.bench as any, I));
+    addSafeAcc(safe(EXOS.db.rdl as any, I));
+    addSafeAcc(safe(EXOS.db.bandFacePull as any, I));
+  } else {
+    // Sans matériel / outdoor
+    if (kind.type === "hiit" || /HIIT|Circuit/i.test(kind.title)) {
+      addSafe(safe(EXOS.pb.burpee, I)); addSafe(safe(EXOS.pb.rowInverted, I)); addSafe(safe(EXOS.pb.lunge, I)); addSafe(safe(EXOS.pb.pushup, I));
+      fin.push({ name:"Sprint 6×20\" (récup 100\")", sets:6, durationSec:20, rest:"100s", block:"fin", target:"cardio" });
+    } else {
+      addSafe(safe(EXOS.pb.squat, I)); addSafe(safe(EXOS.pb.pushup, I)); addSafe(safe(EXOS.pb.rowInverted, I));
+      addSafeAcc(safe(EXOS.pb.hipThrust, I)); addSafeAcc(safe(EXOS.pb.plank, I));
+    }
+  }
+
+  // 3) Fin (5-8')
+  if (fin.length === 0) {
+    if (profile.goal === "mobility") {
+      fin.push({ ...EXOS.mobility.90_90, block:"fin" }); fin.push({ ...EXOS.mobility.doorway, block:"fin" });
+    } else {
+      fin.push({ name:"Stretching léger full body", durationSec:300, rest:"—", block:"fin" });
+    }
+  }
+
+  // Ajustements durée: on tronque accessoires si trop long
+  const approxTime = (arr: NormalizedExercise[]) =>
+    arr.reduce((t, e) => t + (e.durationSec ? e.durationSec * (e.sets || 1) : (e.sets || 3) * 60), 0);
+  const targetSec = plannedMin * 60;
+  let totalSec = approxTime(warmup) + approxTime(main) + approxTime(fin) + approxTime(acc);
+  while (totalSec > targetSec && acc.length) { acc.pop(); totalSec = approxTime(warmup) + approxTime(main) + approxTime(fin) + approxTime(acc); }
+
+  return [
+    { name:"echauffement" as const, items: warmup },
+    { name:"principal" as const, items: main },
+    { name:"accessoires" as const, items: acc },
+    { name:"fin" as const, items: fin },
+  ];
+}
+/* ============ BLOC 3/4 — IA/Rules Fetch + Page UI (avec blocs & exos détaillés) ============ */
+
+/* ===================== Fetch IA (ou règles) ===================== */
+async function fetchAiProgramme(userId?: string): Promise<AiProgramme | null> {
+  const uidFromCookie = cookies().get("fc_uid")?.value;
+  const uid = userId || uidFromCookie || "me";
+
+  const endpoints = [
+    `${API_BASE}/api/programme?user=${encodeURIComponent(uid)}`,
+    `${API_BASE}/api/program?user=${encodeURIComponent(uid)}`,
+    `${API_BASE}/api/sessions?source=ai&user=${encodeURIComponent(uid)}`,
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        headers: { Accept: "application/json", ...(API_KEY ? { Authorization: `Bearer ${API_KEY}` } : {}) },
+        cache: "no-store",
+      });
+      if (!res.ok) continue;
+
+      const data = (await res.json()) as any;
+      const raw = Array.isArray(data?.sessions) ? data.sessions : Array.isArray(data) ? data : [];
+      if (!raw.length) continue;
+
+      const sessions: AiSession[] = raw.map((r: any, i: number) => ({
+        id: String(r.id ?? `ai-${i}`),
+        title: String(r.title ?? r.name ?? "Séance personnalisée"),
+        type: (r.type ?? r.category ?? "muscu") as WorkoutType,
+        date: String(r.date ?? r.day ?? r.when ?? new Date().toISOString().slice(0, 10)),
+        plannedMin: typeof r.plannedMin === "number" ? r.plannedMin : typeof r.duration === "number" ? r.duration : undefined,
+        note: typeof r.note === "string" ? r.note : typeof r.notes === "string" ? r.notes : undefined,
+        intensity: r.intensity as any,
+        recommendedBy: r.recommendedBy ?? r.model ?? "Coach Files",
+        exercises: Array.isArray(r.exercises) ? r.exercises : undefined,
+        blocks: Array.isArray(r.blocks) ? r.blocks : undefined,
+        plan: r.plan, content: r.content,
+      }));
+      return { sessions };
+    } catch {}
+  }
+
+  // Fallback : moteur de règles local (analyse complète du questionnaire)
+  try {
+    const email = (await getSignedInEmail()) || cookies().get("app_email")?.value || "";
+    if (email) {
+      const ans = await getAnswersForEmail(email, SHEET_ID, SHEET_RANGE);
+      if (ans) {
+        const sessions = generateProgrammeFromAnswers(ans);
+        return { sessions: sessions };
+      }
+    }
+  } catch {}
+  return null;
+}
+
+/* ======== Programme via réponses ======== */
 function generateProgrammeFromAnswers(ans: Answers): AiSession[] {
   const p = buildProfileFromAnswers(ans);
   const nb = Math.max(1, Math.min(6, p.freq));
@@ -459,23 +591,28 @@ function generateProgrammeFromAnswers(ans: Answers): AiSession[] {
     d.setDate(today.getDate() + i * Math.ceil(7 / nb));
     const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,"0"), da = String(d.getDate()).padStart(2,"0");
 
-    const { title, type } = titleForSession(p, i);
+    const kind = titleForSession(p, i);
     const notes: string[] = [];
-    if (p.gym) notes.push("Salle : accès machines/barres");
+    if (p.gym) notes.push(p.location === "box" ? "Box : format WOD" : "Salle : accès machines/barres");
     if (p.equipLevel === "limited") notes.push(`Matériel : ${p.equipItems.join(", ") || "quelques charges"}`);
     if (p.equipLevel === "none") notes.push("Sans matériel");
     if (p.injuries.length) notes.push(`Prudence : ${p.injuries.join(", ")}`);
     if (p.imc) notes.push(`IMC: ${p.imc}`);
 
+    const blocks = buildSessionBlocks(p, kind, planned);
+    const exercises = blocks.flatMap(b => b.items);
+
     out.push({
       id: `rule-${p.goal}-${p.equipLevel}-${y}${m}${da}-${i}`,
-      title,
-      type,
+      title: kind.title,
+      type: kind.type,
       date: `${y}-${m}-${da}`,
       plannedMin: planned,
       intensity: intens,
       note: notes.join(" · "),
       recommendedBy: "Coach Files (règles)",
+      blocks,
+      exercises,
     });
   }
   return out;
@@ -589,7 +726,7 @@ export default async function Page({
         </div>
       </section>
 
-      {/* Séances proposées — liste compacte (sans “Prévu le”) */}
+      {/* Séances proposées — avec affichage des blocs/exos */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <div>
@@ -608,13 +745,14 @@ export default async function Page({
           </div>
         ) : (
           <>
-            <ul className="card divide-y list-none pl-0">
+            <ul className="space-y-3 list-none pl-0">
               {visibleAi.map((s) => {
                 const qp = new URLSearchParams({ title: s.title, date: s.date, type: s.type, plannedMin: s.plannedMin ? String(s.plannedMin) : "" });
                 const href = `/dashboard/seance/${encodeURIComponent(s.id)}?${qp.toString()}`;
+
                 return (
-                  <li key={s.id} className="py-3">
-                    <div className="flex items-center justify-between">
+                  <li key={s.id} className="card p-3">
+                    <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <a href={href} className="font-medium underline-offset-2 hover:underline" style={{ fontSize: 16 }}>
                           {s.title}
@@ -623,10 +761,41 @@ export default async function Page({
                           <b style={{ color: "inherit" }}>{fmtDateYMD(s.date)}</b>
                           {s.plannedMin ? ` · ${s.plannedMin} min` : ""}
                           {s.intensity ? ` · intensité ${s.intensity}` : ""}
+                          {s.note ? ` · ${s.note}` : ""}
                         </div>
                       </div>
                       <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>{s.type}</span>
                     </div>
+
+                    {/* Détails blocs */}
+                    {s.blocks?.length ? (
+                      <div className="mt-3 grid gap-2">
+                        {s.blocks.map((b) => (
+                          <div key={b.name} className="rounded border p-2">
+                            <div className="text-xs uppercase tracking-wide mb-2" style={{ color:"#6b7280" }}>
+                              {b.name === "echauffement" ? "Échauffement" :
+                               b.name === "principal" ? "Bloc principal" :
+                               b.name === "accessoires" ? "Accessoires" : "Fin de séance"}
+                            </div>
+                            <ul className="text-sm grid gap-1 list-disc pl-5">
+                              {b.items.map((e, idx) => (
+                                <li key={idx}>
+                                  <b>{e.name}</b>
+                                  {e.reps ? ` — ${e.reps}` : ""}
+                                  {typeof e.sets === "number" ? ` · ${e.sets} séries` : ""}
+                                  {e.durationSec ? ` · ${Math.round(e.durationSec/60)}'` : ""}
+                                  {e.rest ? ` · repos ${e.rest}` : ""}
+                                  {e.rir ? ` · RIR ${e.rir}` : ""}
+                                  {e.tempo ? ` · tempo ${e.tempo}` : ""}
+                                  {e.notes ? ` · ${e.notes}` : ""}
+                                  {e.alt ? <span className="text-gray-500"> (Alt: {e.alt})</span> : null}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
                   </li>
                 );
               })}
@@ -681,11 +850,12 @@ export default async function Page({
     </div>
   );
 }
+/* ============ BLOC 4/4 — Actions, Helpers Feuilles, Lecture réponses ============ */
 
 /* ===================== Actions basiques ===================== */
 function uid() { return "id-" + Math.random().toString(36).slice(2, 10); }
 function toYMD(d = new Date()) { const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,"0"), da=String(d.getDate()).padStart(2,"0"); return `${y}-${m}-${da}`; }
-async function addSessionAction(formData: FormData) {
+export async function addSessionAction(formData: FormData) {
   "use server";
   const title = (formData.get("title") || "").toString().trim();
   const type = (formData.get("type") || "muscu").toString() as WorkoutType;
