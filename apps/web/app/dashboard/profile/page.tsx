@@ -315,30 +315,17 @@ function normalizeMaybeArray(v: any): any[] {
 }
 
 /* ======== Mapping IA → exercices détaillés ======== */
-function fromApiExercises(s: AiSession): NormalizedExercise[] | null {
-  const candidates: any[] = [
-    s.exercises,
-    s.blocks,
-    s.plan?.exercises,
-    s.plan?.blocks,
-    s.plan?.day?.exercises,
-    s.plan?.day?.blocks,
-    s.content?.items,
-    s.content?.exercises,
-    s.content?.blocks,
-  ].flatMap(normalizeMaybeArray);
-
-  if (!candidates.length) return null;
-
-  const out: NormalizedExercise[] = [];
-  for (const it of candidates) {
-    const name = it?.name || it?.title || it?.exercise || it?.mov || it?.move || it?.movename;
-    if (!name) continue;
-
-    const sets = it?.sets ?? it?.series ?? it?.nbSets ?? it?.rounds;
-    const reps = it?.reps ?? it?.rep ?? it?.nbReps ?? it?.time ?? it?.duration ?? it?.seconds;
-    const rest = it?.rest ?? it?.rest_sec ?? it?.recup ?? it?.pause ?? it?.recovery;
-    const notes = it?.notes ?? it?.note ?? it?.tip ?? it?.tips ?? it?.cues;
+{/* …dans la liste des séances IA… */}
+<div className="min-w-0">
+  <a href={`/dashboard/seance/${s.id}`} className="font-medium underline-offset-2 hover:underline" style={{ fontSize: 16 }}>
+    {s.title}
+  </a>
+  <div className="text-sm" style={{ color: "#6b7280" }}>
+    Prévu le <b style={{ color: "inherit" }}>{fmtDateYMD(s.date)}</b>
+    {s.plannedMin ? ` · ${s.plannedMin} min` : ""}
+    {s.intensity ? ` · intensité ${s.intensity}` : ""}
+  </div>
+</div>
 
     // champs avancés
     const tempo = it?.tempo ?? it?.cadence;
