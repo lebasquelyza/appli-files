@@ -1,4 +1,6 @@
 // app/lib/coach/ai.ts
+"use server";
+
 // Module serveur : construit des séances personnalisées à partir de l'API ou des réponses Sheets.
 import { cookies } from "next/headers";
 
@@ -612,3 +614,29 @@ export async function fetchAiProgramme(getSignedInEmail: () => Promise<string>):
   } catch {}
   return null;
 }
+
+/* ===================== WRAPPERS DE CONFORT (compat) ===================== */
+// Source d’email par défaut (cookie "app_email")
+async function getSignedInEmailDefault(): Promise<string> {
+  return cookies().get("app_email")?.value || "";
+}
+
+/** Renvoie directement un tableau de séances IA */
+export async function getAiSessions(): Promise<AiSession[]> {
+  const prog = await fetchAiProgramme(getSignedInEmailDefault);
+  return prog?.sessions ?? [];
+}
+
+/** Renvoie { sessions } — pratique pour l’import default */
+export async function getProgrammeForUser(): Promise<AiProgramme | null> {
+  const prog = await fetchAiProgramme(getSignedInEmailDefault);
+  return prog ?? { sessions: [] };
+}
+
+// Alias compat pour pages qui chercheraient d’autres noms :
+export const generateProgrammeForUser = getProgrammeForUser;
+export const buildProgrammeForUser = getProgrammeForUser;
+export const generateProgramme = getProgrammeForUser;
+
+/** Export par défaut : { sessions } */
+export default getProgrammeForUser;
