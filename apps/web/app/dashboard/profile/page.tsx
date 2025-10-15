@@ -434,14 +434,12 @@ const EXOS = {
     amrap: (min=12)=> ({ name:`AMRAP ${min}'`, sets:1, reps:"Rondes max", rest:"—", notes:"10 DB Thrusters · 10 Sit-ups · 10 Box Step-ups", equipment:"DB/PB", target:"metcon" }),
     intervalsRun: { name:"Course 4×4' Z4 (récup 3')", sets:4, durationSec:240, rest:"180s", equipment:"Running", target:"cardio" }
   },
-  mobility: {
-    90_90: { name:"90/90 hanches", durationSec:45, sets:2, rest:"20s", target:"mobilité" },
-    catCow: { name:"Cat-Cow", durationSec:60, sets:2, rest:"20s", target:"mobilité" },
-    thoracic: { name:"Ouvertures T-spine", durationSec:45, sets:2, rest:"20s", target:"mobilité" },
-    doorway: { name:"Étirement pectoraux à l’embrasure", durationSec:45, sets:2, rest:"20s", target:"mobilité" },
-  }
-};
-
+ mobility: {
+  "90_90": { name:"90/90 hanches", durationSec:45, sets:2, rest:"20s", target:"mobilité" },
+  catCow: { /* ... */ },
+  thoracic: { /* ... */ },
+  doorway: { /* ... */ },
+}
 /* ======== Filtre blessures ======== */
 function safe(ex: NormalizedExercise, injuries: string[]): NormalizedExercise | null {
   if (injuries.includes("genoux") && /squat|fente|press/i.test(ex.name)) return null;
@@ -497,14 +495,17 @@ function buildSessionBlocks(profile: Profile, kind: { title: string; type: Worko
     }
   }
 
-  // 3) Fin (5-8')
-  if (fin.length === 0) {
-    if (profile.goal === "mobility") {
-      fin.push({ ...EXOS.mobility.90_90, block:"fin" }); fin.push({ ...EXOS.mobility.doorway, block:"fin" });
-    } else {
-      fin.push({ name:"Stretching léger full body", durationSec:300, rest:"—", block:"fin" });
-    }
+ // 3) Fin (5-8')
+if (fin.length === 0) {
+  if (profile.goal === "mobility") {
+    const a = EXOS.mobility?.["90_90"];
+    const b = EXOS.mobility?.doorway;
+    if (a) fin.push({ ...a, block: "fin" });
+    if (b) fin.push({ ...b, block: "fin" });
+  } else {
+    fin.push({ name: "Stretching léger full body", durationSec: 300, rest: "—", block: "fin" });
   }
+}
 
   // Ajustements durée: on tronque accessoires si trop long
   const approxTime = (arr: NormalizedExercise[]) =>
