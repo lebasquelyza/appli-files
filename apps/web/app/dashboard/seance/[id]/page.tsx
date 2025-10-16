@@ -78,6 +78,17 @@ function genericFallback(type: WorkoutType): NormalizedExercise[] {
   ];
 }
 
+/* ======================== Helpers sûrs pour SWC ======================== */
+function groupByBlock(exs: NormalizedExercise[]) {
+  const g: Record<string, NormalizedExercise[]> = {};
+  for (const ex of exs) {
+    const k = (ex.block || "principal") as string;
+    if (!g[k]) g[k] = [];
+    g[k].push(ex);
+  }
+  return g;
+}
+
 export const dynamic = "force-dynamic";
 
 /* ====================== Data Loader ====================== */
@@ -98,10 +109,10 @@ async function loadData(
   }
   const fromAi = programme?.sessions?.find((s) => s.id === id);
 
-  const qpTitle = typeof searchParams?.title === "string" ? searchParams!.title : "";
-  const qpDateRaw = typeof searchParams?.date === "string" ? searchParams!.date : "";
+  const qpTitle = typeof searchParams?.title === "string" ? (searchParams!.title as string) : "";
+  const qpDateRaw = typeof searchParams?.date === "string" ? (searchParams!.date as string) : "";
   const qpType = normalizeWorkoutType(
-    typeof searchParams?.type === "string" ? searchParams!.type : ""
+    typeof searchParams?.type === "string" ? (searchParams!.type as string) : ""
   );
   const qpPlannedMin =
     typeof searchParams?.plannedMin === "string" && searchParams!.plannedMin
@@ -237,20 +248,18 @@ export default async function Page({
   const blockOrder = { echauffement: 0, principal: 1, accessoires: 2, fin: 3 } as const;
 
   const exs = exercises.slice().sort((a, b) => {
-    const A = a.block ? blockOrder[a.block as keyof typeof blockOrder] ?? 99 : 50;
-    const B = b.block ? blockOrder[b.block as keyof typeof blockOrder] ?? 99 : 50;
+    const A = a.block ? (blockOrder as any)[a.block] ?? 99 : 50;
+    const B = b.block ? (blockOrder as any)[b.block] ?? 99 : 50;
     return A - B;
   });
 
-  // Construction des groupes SANS reduce/génériques pour éviter tout conflit TSX/JSX
-  const groups: { [k: string]: NormalizedExercise[] } = {};
-  for (const ex of exs) {
-    const k = ex.block || "principal";
-    if (!groups[k]) groups[k] = [];
-    groups[k].push(ex);
-  }
+  const groups = groupByBlock(exs);
 
-  return (
+  // Séparateur explicite pour l'insertion de ; avant du JSX, au cas où
+  /* eslint-disable no-extra-semi */
+  ; 
+
+  const content = (
     <div>
       <style dangerouslySetInnerHTML={{ __html: styles }} />
 
@@ -322,7 +331,7 @@ export default async function Page({
 
         {/* Blocs */}
         {(["echauffement", "principal", "accessoires", "fin"] as const).map((k) => {
-          const list = groups[k] || [];
+          const list = (groups as any)[k] || [];
           if (!list.length) return null;
           return (
             <section key={k} className="section" style={{ marginTop: 12 }}>
@@ -331,11 +340,11 @@ export default async function Page({
               </div>
 
               <div className="grid gap-3">
-                {list.map((ex, i) => {
+                {list.map((ex: NormalizedExercise, i: number) => {
                   const reps = ex.reps ? String(ex.reps) : ex.durationSec ? `${ex.durationSec}s` : "";
                   const load = ex.load || (typeof ex.rir === "number" ? `RIR ${ex.rir}` : "");
                   return (
-                    <article key={`${k}-${i}`} className="compact-card">
+                    <article key={`${String(k)}-${i}`} className="compact-card">
                       <div className="flex items-start justify-between gap-3">
                         <div className="exoname">{ex.name}</div>
                         {ex.block ? (
@@ -380,4 +389,6 @@ export default async function Page({
       </div>
     </div>
   );
+
+  return content;
 }
