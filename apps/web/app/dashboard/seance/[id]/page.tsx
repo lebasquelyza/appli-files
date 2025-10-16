@@ -1,4 +1,5 @@
 // apps/web/app/dashboard/seance/[id]/page.tsx
+import React from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import {
@@ -37,7 +38,7 @@ function parseStore(val?: string | null): { sessions: any[] } {
 function fmtDateYMD(ymd?: string) {
   if (!ymd) return "—";
   try {
-    const [y, m, d] = ymd.split("-").map(Number);
+    const [y, m, d] = (ymd || "").split("-").map(Number);
     return new Date(y, (m || 1) - 1, d || 1).toLocaleDateString("fr-FR", {
       year: "numeric",
       month: "long",
@@ -78,17 +79,6 @@ function genericFallback(type: WorkoutType): NormalizedExercise[] {
   ];
 }
 
-/* ======================== Helpers sûrs pour SWC ======================== */
-function groupByBlock(exs: NormalizedExercise[]) {
-  const g: Record<string, NormalizedExercise[]> = {};
-  for (const ex of exs) {
-    const k = (ex.block || "principal") as string;
-    if (!g[k]) g[k] = [];
-    g[k].push(ex);
-  }
-  return g;
-}
-
 export const dynamic = "force-dynamic";
 
 /* ====================== Data Loader ====================== */
@@ -109,10 +99,10 @@ async function loadData(
   }
   const fromAi = programme?.sessions?.find((s) => s.id === id);
 
-  const qpTitle = typeof searchParams?.title === "string" ? (searchParams!.title as string) : "";
-  const qpDateRaw = typeof searchParams?.date === "string" ? (searchParams!.date as string) : "";
+  const qpTitle = typeof searchParams?.title === "string" ? searchParams!.title : "";
+  const qpDateRaw = typeof searchParams?.date === "string" ? searchParams!.date : "";
   const qpType = normalizeWorkoutType(
-    typeof searchParams?.type === "string" ? (searchParams!.type as string) : ""
+    typeof searchParams?.type === "string" ? searchParams!.type : ""
   );
   const qpPlannedMin =
     typeof searchParams?.plannedMin === "string" && searchParams!.plannedMin
@@ -217,52 +207,25 @@ const styles = String.raw`
   @media print { .no-print { display: none !important; } }
 `;
 
-/* ======================== Page ======================== */
-export default async function Page({
-  params,
-  searchParams,
+/* ======================== View (JSX déplacé) ======================== */
+function PageView({
+  base,
+  profile,
+  groups,
+  plannedMin,
+  intensity,
+  coachIntro,
 }: {
-  params: { id?: string };
-  searchParams?: Record<string, string | string[] | undefined>;
+  base: AiSession;
+  profile: ReturnType<typeof buildProfileFromAnswers> | null;
+  groups: Record<string, NormalizedExercise[]>;
+  plannedMin: number;
+  intensity: string;
+  coachIntro: string;
 }) {
-  const id = decodeURIComponent(params?.id ?? "");
-  if (!id && !(searchParams?.title || searchParams?.date || searchParams?.type)) {
-    redirect("/dashboard/profile?error=Seance%20introuvable");
-  }
-
-  const { base, profile, exercises } = await loadData(id, searchParams);
-  if (!base) redirect("/dashboard/profile?error=Seance%20introuvable");
-
-  const plannedMin = base.plannedMin ?? (profile?.timePerSession ?? 45);
-  const intensity = base.intensity ?? "modérée";
-
-  const coachIntro =
-    base.type === "muscu"
-      ? "Exécution propre, contrôle du tempo et progression des charges."
-      : base.type === "cardio"
-      ? "Aérobie maîtrisée, souffle régulier en zone 2–3."
-      : base.type === "hiit"
-      ? "Pics d’intensité courts, technique impeccable."
-      : "Amplitude confortable, respiration calme, zéro douleur nette.";
-
-  const blockOrder = { echauffement: 0, principal: 1, accessoires: 2, fin: 3 } as const;
-
-  const exs = exercises.slice().sort((a, b) => {
-    const A = a.block ? (blockOrder as any)[a.block] ?? 99 : 50;
-    const B = b.block ? (blockOrder as any)[b.block] ?? 99 : 50;
-    return A - B;
-  });
-
-  const groups = groupByBlock(exs);
-
-  // Séparateur explicite pour l'insertion de ; avant du JSX, au cas où
-  /* eslint-disable no-extra-semi */
-  ; 
-
-  const content = (
+  return (
     <div>
       <style dangerouslySetInnerHTML={{ __html: styles }} />
-
       {/* top bar */}
       <div className="mb-2 flex items-center justify-between no-print" style={{ paddingInline: 12 }}>
         <a
@@ -331,7 +294,7 @@ export default async function Page({
 
         {/* Blocs */}
         {(["echauffement", "principal", "accessoires", "fin"] as const).map((k) => {
-          const list = (groups as any)[k] || [];
+          const list = groups[k] || [];
           if (!list.length) return null;
           return (
             <section key={k} className="section" style={{ marginTop: 12 }}>
@@ -340,11 +303,11 @@ export default async function Page({
               </div>
 
               <div className="grid gap-3">
-                {list.map((ex: NormalizedExercise, i: number) => {
+                {list.map((ex, i) => {
                   const reps = ex.reps ? String(ex.reps) : ex.durationSec ? `${ex.durationSec}s` : "";
                   const load = ex.load || (typeof ex.rir === "number" ? `RIR ${ex.rir}` : "");
                   return (
-                    <article key={`${String(k)}-${i}`} className="compact-card">
+                    <article key={`${k}-${i}`} className="compact-card">
                       <div className="flex items-start justify-between gap-3">
                         <div className="exoname">{ex.name}</div>
                         {ex.block ? (
@@ -389,6 +352,59 @@ export default async function Page({
       </div>
     </div>
   );
+}
 
-  return content;
+/* ======================== Page (server) ======================== */
+export default async function Page({
+  params,
+  searchParams,
+}: {
+  params: { id?: string };
+  searchParams?: Record<string, string | string[] | undefined>;
+}) {
+  const id = decodeURIComponent(params?.id ?? "");
+  if (!id && !(searchParams?.title || searchParams?.date || searchParams?.type)) {
+    redirect("/dashboard/profile?error=Seance%20introuvable");
+  }
+
+  const { base, profile, exercises } = await loadData(id, searchParams);
+  if (!base) redirect("/dashboard/profile?error=Seance%20introuvable");
+
+  const plannedMin = base.plannedMin ?? (profile?.timePerSession ?? 45);
+  const intensity = base.intensity ?? "modérée";
+
+  const coachIntro =
+    base.type === "muscu"
+      ? "Exécution propre, contrôle du tempo et progression des charges."
+      : base.type === "cardio"
+      ? "Aérobie maîtrisée, souffle régulier en zone 2–3."
+      : base.type === "hiit"
+      ? "Pics d’intensité courts, technique impeccable."
+      : "Amplitude confortable, respiration calme, zéro douleur nette.";
+
+  const blockOrder = { echauffement: 0, principal: 1, accessoires: 2, fin: 3 } as const;
+
+  const exs = exercises.slice().sort((a, b) => {
+    const A = a.block ? blockOrder[a.block as keyof typeof blockOrder] ?? 99 : 50;
+    const B = b.block ? blockOrder[b.block as keyof typeof blockOrder] ?? 99 : 50;
+    return A - B;
+  });
+
+  // groupement sans generics/casts près du return
+  const groups: Record<string, NormalizedExercise[]> = {};
+  for (const ex of exs) {
+    const k = ex.block || "principal";
+    (groups[k] ||= []).push(ex);
+  }
+
+  return (
+    <PageView
+      base={base}
+      profile={profile}
+      groups={groups}
+      plannedMin={plannedMin}
+      intensity={intensity}
+      coachIntro={coachIntro}
+    />
+  );
 }
