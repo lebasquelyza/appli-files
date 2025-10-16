@@ -146,6 +146,19 @@ const blockNames: Record<string,string> = {
   fin: "Fin / retour au calme",
 };
 
+/* -------------------- styles (fix parser) -------------------- */
+const styles = String.raw`
+  .compact-card { padding: 12px; border-radius: 16px; background:#fff; box-shadow: 0 1px 0 rgba(17,24,39,.05); border:1px solid #e5e7eb; }
+  .h1-compact { margin-bottom:2px; font-size: clamp(20px, 2.2vw, 24px); line-height:1.15; font-weight:800; }
+  .lead-compact { margin-top:4px; font-size: clamp(12px, 1.6vw, 14px); line-height:1.35; color:#4b5563; }
+  .section-title { font-size: clamp(16px,1.9vw,18px); line-height:1.2; margin:0; font-weight:800; }
+  .exoname { font-size: 15.5px; line-height:1.25; font-weight:700; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .meta-row { font-size:12.5px; color:#6b7280; margin-top:6px; display:grid; gap:4px; grid-template-columns:1fr; }
+  @media(min-width:640px){ .meta-row{ grid-template-columns:1fr 1fr; } }
+  @media print { .no-print { display: none !important; } }
+`;
+
 /* -------------------- page -------------------- */
 export default async function Page({
   params, searchParams,
@@ -180,18 +193,7 @@ export default async function Page({
 
   return (
     <>
-      <style>{`
-        /* mobile-first compact spacing + wrapper */
-        .compact-card { padding: 12px; border-radius: 16px; background:#fff; box-shadow: 0 1px 0 rgba(17,24,39,.05); border:1px solid #e5e7eb; }
-        .h1-compact { margin-bottom:2px; font-size: clamp(20px, 2.2vw, 24px); line-height:1.15; font-weight:800; }
-        .lead-compact { margin-top:4px; font-size: clamp(12px, 1.6vw, 14px); line-height:1.35; color:#4b5563; }
-        .section-title { font-size: clamp(16px,1.9vw,18px); line-height:1.2; margin:0; font-weight:800; }
-        .exoname { font-size: 15.5px; line-height:1.25; font-weight:700; }
-        .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
-        .meta-row { font-size:12.5px; color:#6b7280; margin-top:6px; display:grid; gap:4px; grid-template-columns:1fr; }
-        @media(min-width:640px){ .meta-row{ grid-template-columns:1fr 1fr; } }
-        @media print { .no-print { display: none !important; } }
-      `}</style>
+      <style dangerouslySetInnerHTML={{ __html: styles }} />
 
       {/* top bar */}
       <div className="mb-2 flex items-center justify-between no-print" style={{ paddingInline: 12 }}>
