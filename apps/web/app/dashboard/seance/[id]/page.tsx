@@ -242,12 +242,13 @@ export default async function Page({
     return A - B;
   });
 
-  // ⬇️ Remplacement du reduce générique par un typage via `as` pour éviter le conflit TSX/JSX
-  const groups = exs.reduce((acc, ex) => {
+  // Construction des groupes SANS reduce/génériques pour éviter tout conflit TSX/JSX
+  const groups: { [k: string]: NormalizedExercise[] } = {};
+  for (const ex of exs) {
     const k = ex.block || "principal";
-    (acc[k] ||= []).push(ex);
-    return acc;
-  }, {} as Record<string, NormalizedExercise[]>);
+    if (!groups[k]) groups[k] = [];
+    groups[k].push(ex);
+  }
 
   return (
     <div>
