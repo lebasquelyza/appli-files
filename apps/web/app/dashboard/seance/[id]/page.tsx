@@ -1,4 +1,3 @@
-// apps/web/app/dashboard/seance/[id]/page.tsx
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import React from "react";
@@ -24,9 +23,7 @@ async function getSignedInEmail(): Promise<string> {
     const session = await getServerSession(authOptions as any);
     const email = (session as any)?.user?.email as string | undefined;
     if (email) return email;
-  } catch {
-    // ok si next-auth n'est pas présent
-  }
+  } catch {}
   return cookies().get("app_email")?.value || "";
 }
 
@@ -42,7 +39,6 @@ function parseStore(val?: string | null): { sessions: any[] } {
 function isValidDate(d: Date) {
   return d instanceof Date && !Number.isNaN(d.getTime());
 }
-
 function fmtDateYMD(ymd?: string) {
   if (!ymd) return "—";
   try {
@@ -54,7 +50,6 @@ function fmtDateYMD(ymd?: string) {
     return "—";
   }
 }
-
 function normalizeWorkoutType(input?: string): WorkoutType {
   const s = String(input || "").trim().toLowerCase();
   if (["muscu", "musculation", "strength"].includes(s)) return "muscu";
@@ -63,7 +58,6 @@ function normalizeWorkoutType(input?: string): WorkoutType {
   if (["mobilite", "mobilité", "mobilité"].includes(s)) return "mobilité";
   return "muscu";
 }
-
 function typeBadgeClass(t: WorkoutType) {
   switch (t) {
     case "muscu": return "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200";
@@ -71,6 +65,7 @@ function typeBadgeClass(t: WorkoutType) {
     case "hiit":  return "bg-amber-50 text-amber-700 ring-1 ring-amber-200";
     case "mobilité": return "bg-violet-50 text-violet-700 ring-1 ring-violet-200";
   }
+  return "";
 }
 
 /** Baseline si vraiment rien à afficher */
@@ -100,7 +95,7 @@ function genericFallback(type: WorkoutType): NormalizedExercise[] {
 
 export const dynamic = "force-dynamic";
 
-/* ======================= Data loader (safe) ======================= */
+/* ======================= Data loader ======================= */
 async function loadData(
   id: string,
   searchParams?: Record<string, string | string[] | undefined>
@@ -211,23 +206,32 @@ export default async function Page({
   searchParams?: Record<string, string | string[] | undefined>;
 }) {
   const id = decodeURIComponent(params?.id ?? "");
-
   if (!id && !(searchParams?.title || searchParams?.date || searchParams?.type)) {
     redirect("/dashboard/profile?error=Seance%20introuvable");
   }
 
   const { base, profile, exercises } = await loadData(id, searchParams);
+  if (!base) redirect("/dashboard/profile?error=Seance%20introuvable");
 
-  if (!base) {
-    redirect("/dashboard/profile?error=Seance%20introuvable");
-  }
-
+  // Tri par bloc + groupement
   const blockOrder = { echauffement: 0, principal: 1, accessoires: 2, fin: 3 } as const;
-  const exs = exercises.slice().sort((a, b) => {
+  const labelByBlock: Record<string, string> = {
+    echauffement: "Échauffement",
+    principal: "Bloc principal",
+    accessoires: "Accessoires",
+    fin: "Fin / retour au calme",
+  };
+  const exsSorted = exercises.slice().sort((a, b) => {
     const A = a.block ? blockOrder[a.block] ?? 99 : 50;
     const B = b.block ? blockOrder[b.block] ?? 99 : 50;
     return A - B;
   });
+  const groups = exsSorted.reduce<Record<string, NormalizedExercise[]>>((acc, ex) => {
+    const k = ex.block || "principal";
+    acc[k] = acc[k] || [];
+    acc[k].push(ex);
+    return acc;
+  }, {});
 
   const plannedMin = base!.plannedMin ?? (profile?.timePerSession ?? 45);
   const intensity = base!.intensity ?? "modérée";
@@ -252,57 +256,57 @@ export default async function Page({
 
   return (
     <main className="mx-auto w-full max-w-3xl px-4 pb-16 pt-6 sm:px-6 lg:px-8">
+      {/* Print styles */}
       <style>{`
         @media print {
           .no-print { display: none !important; }
           .card { box-shadow: none !important; border: 1px solid #e5e7eb !important; }
           main { padding: 0 !important; }
+          h1, h2 { break-after: avoid; }
+          .block-title { background: #f8fafc !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         }
       `}</style>
 
-      <div className="sticky top-0 z-10 mb-4 flex items-center justify-between bg-white/80 py-2 backdrop-blur no-print">
+      {/* Header sticky */}
+      <div className="sticky top-0 z-10 mb-4 flex items-center justify-between bg-white/85 py-2 backdrop-blur no-print">
         <a
           href="/dashboard/seances"
-          className="inline-flex items-center rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm font-medium text-neutral-800 hover:bg-neutral-50"
+          className="inline-flex items-center rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm font-medium text-neutral-800 shadow-sm hover:bg-neutral-50"
         >
           ← Retour
         </a>
-
-        {/* 👇 Bouton d’impression côté client */}
         <PrintButton />
       </div>
 
+      {/* Card */}
       <section className="card rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm sm:p-6">
+        {/* Top */}
         <header className="flex items-start justify-between gap-3">
           <div>
             <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
               {base!.title}
             </h1>
             <p className="mt-1 text-sm text-neutral-500">
-              <b className="font-medium text-neutral-600">{fmtDateYMD(base!.date)}</b>
+              <b className="font-medium text-neutral-700">{fmtDateYMD(base!.date)}</b>
               {plannedMin ? ` · ${plannedMin} min` : ""}
             </p>
           </div>
-          <span
-            className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(
-              base!.type
-            )}`}
-          >
+          <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(base!.type)}`}>
             {base!.type}
           </span>
         </header>
 
-        <div className="mt-4 space-y-2 rounded-xl bg-neutral-50 p-4 text-[13px] leading-6 text-neutral-700">
+        {/* Meta coach */}
+        <div className="mt-4 grid gap-3 rounded-xl bg-neutral-50 p-4 text-[13px] leading-6 text-neutral-700 sm:grid-cols-2">
           <div>🎯 <b>Objectif :</b> {coachIntro}</div>
           <div>⏱️ <b>Durée :</b> {plannedMin} min · <b>Intensité :</b> {intensity}</div>
-          <div>💡 <b>Conseils :</b> {coachTips}</div>
           {profile?.injuries?.length ? (
-            <div className="text-amber-700">
+            <div className="sm:col-span-2 text-amber-700">
               ⚠️ <b>Prudence :</b> {profile.injuries.join(", ")}
             </div>
           ) : null}
           {profile?.equipLevel ? (
-            <div className="text-neutral-600">
+            <div className="sm:col-span-2 text-neutral-600">
               🧰 <b>Matériel :</b>{" "}
               {profile.equipLevel === "full"
                 ? "accès salle (machines/barres)"
@@ -311,126 +315,90 @@ export default async function Page({
                 : "aucun (poids du corps)"}
             </div>
           ) : null}
+          <div className="sm:col-span-2 text-neutral-600">
+            💡 <b>Conseils :</b> {coachTips}
+          </div>
         </div>
 
-        <h2 className="mt-6 text-base font-semibold tracking-tight">Détail des exercices</h2>
-
-        {/* Table (desktop) */}
-        <div className="mt-2 hidden overflow-hidden rounded-xl border border-neutral-200 md:block">
-          <table className="min-w-full divide-y divide-neutral-200">
-            <thead className="bg-neutral-50">
-              <tr>
-                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-600">
-                  Exercice
-                </th>
-                <th scope="col" className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-600">
-                  Séries
-                </th>
-                <th scope="col" className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-600">
-                  Rép./Durée
-                </th>
-                <th scope="col" className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-600">
-                  Repos
-                </th>
-                <th scope="col" className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-600">
-                  Charge
-                </th>
-                <th scope="col" className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-600">
-                  Tempo
-                </th>
-                <th scope="col" className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-600">
-                  Bloc
-                </th>
-                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-600">
-                  Notes
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-neutral-200 bg-white">
-              {exs.map((ex, i) => (
-                <tr key={`row-${i}`} className="align-top">
-                  <td className="px-4 py-3">
-                    <div className="font-medium text-neutral-900">{ex.name}</div>
-                    <div className="mt-0.5 text-xs text-neutral-500 space-x-2">
-                      {ex.target ? <span>{ex.target}</span> : null}
-                      {ex.equipment ? <span>• Matériel: {ex.equipment}</span> : null}
-                      {ex.alt ? <span>• Alt: {ex.alt}</span> : null}
-                      {ex.videoUrl ? (
-                        <span>
-                          •{" "}
-                          <a
-                            className="underline underline-offset-2"
-                            href={ex.videoUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            Vidéo
-                          </a>
-                        </span>
-                      ) : null}
-                    </div>
-                  </td>
-                  <td className="px-3 py-3 text-sm">{typeof ex.sets === "number" ? ex.sets : "—"}</td>
-                  <td className="px-3 py-3 text-sm">
-                    {ex.reps ? String(ex.reps) : ex.durationSec ? `${ex.durationSec}s` : "—"}
-                  </td>
-                  <td className="px-3 py-3 text-sm">{ex.rest || "—"}</td>
-                  <td className="px-3 py-3 text-sm">
-                    {ex.load || (typeof ex.rir === "number" ? `RIR ${ex.rir}` : "—")}
-                  </td>
-                  <td className="px-3 py-3 text-sm">{ex.tempo || "—"}</td>
-                  <td className="px-3 py-3 text-sm">{ex.block || "—"}</td>
-                  <td className="px-4 py-3 text-sm whitespace-pre-wrap">
-                    {ex.notes || "—"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Cartes (mobile) */}
-        <div className="mt-2 space-y-3 md:hidden">
-          {exs.map((ex, i) => (
-            <div key={`mrow-${i}`} className="rounded-xl border border-neutral-200 p-3">
-              <div className="flex items-start justify-between gap-2">
-                <div className="font-medium">{ex.name}</div>
-                <span className="rounded-full bg-neutral-50 px-2 py-0.5 text-[11px] text-neutral-600 ring-1 ring-neutral-200">
-                  {ex.block || "—"}
-                </span>
-              </div>
-              <div className="mt-1 grid grid-cols-2 gap-2 text-[13px] text-neutral-700">
-                <div><span className="text-neutral-500">Séries: </span>{typeof ex.sets === "number" ? ex.sets : "—"}</div>
-                <div>
-                  <span className="text-neutral-500">Rép./Durée: </span>
-                  {ex.reps ? String(ex.reps) : ex.durationSec ? `${ex.durationSec}s` : "—"}
+        {/* Contenu par blocs (pro + lisible) */}
+        <div className="mt-6 space-y-6">
+          {(["echauffement","principal","accessoires","fin"] as const).map((bkey) => {
+            const list = groups[bkey] || [];
+            if (!list.length) return null;
+            return (
+              <section key={bkey}>
+                <div className="block-title sticky top-12 z-[1] -mx-5 mb-2 border-b border-neutral-200 bg-white/80 px-5 py-2 backdrop-blur">
+                  <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-700">
+                    {labelByBlock[bkey]}
+                  </h2>
                 </div>
-                <div><span className="text-neutral-500">Repos: </span>{ex.rest || "—"}</div>
-                <div><span className="text-neutral-500">Charge: </span>{ex.load || (typeof ex.rir === "number" ? `RIR ${ex.rir}` : "—")}</div>
-              </div>
-              {(ex.target || ex.equipment || ex.alt || ex.notes || ex.videoUrl) && (
-                <div className="mt-2 space-y-1 text-[12px] text-neutral-600">
-                  {ex.target ? <div>🎯 {ex.target}</div> : null}
-                  {ex.equipment ? <div>🧰 {ex.equipment}</div> : null}
-                  {ex.alt ? <div>🔁 Alt: {ex.alt}</div> : null}
-                  {ex.notes ? <div>📝 {ex.notes}</div> : null}
-                  {ex.videoUrl ? (
-                    <div>
-                      📺{" "}
-                      <a
-                        className="underline underline-offset-2"
-                        href={ex.videoUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        Vidéo
-                      </a>
-                    </div>
-                  ) : null}
+
+                {/* Table desktop */}
+                <div className="hidden overflow-hidden rounded-xl border border-neutral-200 md:block">
+                  <table className="min-w-full divide-y divide-neutral-200">
+                    <thead className="bg-neutral-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-600">Exercice</th>
+                        <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-600">Séries</th>
+                        <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-600">Rép./Durée</th>
+                        <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-600">Repos</th>
+                        <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-600">Charge</th>
+                        <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-600">Tempo</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-600">Notes</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-neutral-200 bg-white">
+                      {list.map((ex, i) => (
+                        <tr key={`${bkey}-${i}`} className="align-top">
+                          <td className="px-4 py-3">
+                            <div className="font-medium text-neutral-900">{ex.name}</div>
+                            <div className="mt-0.5 text-xs text-neutral-500 space-x-2">
+                              {ex.target ? <span>{ex.target}</span> : null}
+                              {ex.equipment ? <span>• Matériel: {ex.equipment}</span> : null}
+                              {ex.alt ? <span>• Alt: {ex.alt}</span> : null}
+                              {ex.videoUrl ? (
+                                <span>• <a className="underline underline-offset-2" href={ex.videoUrl} target="_blank" rel="noreferrer">Vidéo</a></span>
+                              ) : null}
+                            </div>
+                          </td>
+                          <td className="px-3 py-3 text-sm">{typeof ex.sets === "number" ? ex.sets : "—"}</td>
+                          <td className="px-3 py-3 text-sm">{ex.reps ? String(ex.reps) : ex.durationSec ? `${ex.durationSec}s` : "—"}</td>
+                          <td className="px-3 py-3 text-sm">{ex.rest || "—"}</td>
+                          <td className="px-3 py-3 text-sm">{ex.load || (typeof ex.rir === "number" ? `RIR ${ex.rir}` : "—")}</td>
+                          <td className="px-3 py-3 text-sm">{ex.tempo || "—"}</td>
+                          <td className="px-4 py-3 text-sm whitespace-pre-wrap">{ex.notes || "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-              )}
-            </div>
-          ))}
+
+                {/* Cartes mobile */}
+                <div className="md:hidden space-y-3">
+                  {list.map((ex, i) => (
+                    <div key={`m-${bkey}-${i}`} className="rounded-xl border border-neutral-200 p-3">
+                      <div className="font-medium">{ex.name}</div>
+                      <div className="mt-1 grid grid-cols-2 gap-2 text-[13px] text-neutral-700">
+                        <div><span className="text-neutral-500">Séries: </span>{typeof ex.sets === "number" ? ex.sets : "—"}</div>
+                        <div><span className="text-neutral-500">Rép./Durée: </span>{ex.reps ? String(ex.reps) : ex.durationSec ? `${ex.durationSec}s` : "—"}</div>
+                        <div><span className="text-neutral-500">Repos: </span>{ex.rest || "—"}</div>
+                        <div><span className="text-neutral-500">Charge: </span>{ex.load || (typeof ex.rir === "number" ? `RIR ${ex.rir}` : "—")}</div>
+                      </div>
+                      {(ex.target || ex.equipment || ex.alt || ex.notes || ex.videoUrl) && (
+                        <div className="mt-2 space-y-1 text-[12px] text-neutral-600">
+                          {ex.target ? <div>🎯 {ex.target}</div> : null}
+                          {ex.equipment ? <div>🧰 {ex.equipment}</div> : null}
+                          {ex.alt ? <div>🔁 Alt: {ex.alt}</div> : null}
+                          {ex.notes ? <div>📝 {ex.notes}</div> : null}
+                          {ex.videoUrl ? <div>📺 <a className="underline underline-offset-2" href={ex.videoUrl} target="_blank" rel="noreferrer">Vidéo</a></div> : null}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            );
+          })}
         </div>
       </section>
 
