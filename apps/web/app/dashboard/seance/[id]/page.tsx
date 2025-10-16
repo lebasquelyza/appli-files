@@ -1,9 +1,6 @@
 // apps/web/app/dashboard/seance/[id]/page.tsx
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import React from "react";
-import PrintButton from "./PrintButton";
-
 import {
   getProgrammeForUser,
   getAnswersForEmail,
@@ -14,10 +11,10 @@ import {
   type WorkoutType,
 } from "../../../../lib/coach/ai";
 
-/* -------------------- utils -------------------- */
+/* ======================== Utils ======================== */
 async function getSignedInEmail(): Promise<string> {
   try {
-    // @ts-ignore optional (si next-auth n'est pas configuré)
+    // @ts-ignore optional
     const { getServerSession } = await import("next-auth");
     // @ts-ignore optional
     const { authOptions } = await import("../../../../lib/auth");
@@ -83,7 +80,7 @@ function genericFallback(type: WorkoutType): NormalizedExercise[] {
 
 export const dynamic = "force-dynamic";
 
-/* -------------------- data loader -------------------- */
+/* ====================== Data Loader ====================== */
 async function loadData(
   id: string,
   searchParams?: Record<string, string | string[] | undefined>
@@ -177,7 +174,7 @@ async function loadData(
   return { base, profile, exercises };
 }
 
-/* -------------------- small UI helpers -------------------- */
+/* ======================== Small UI ======================== */
 function Chip({ label, value, title }: { label: string; value: string; title?: string }) {
   if (!value) return null;
   return (
@@ -196,7 +193,7 @@ const blockNames: Record<string, string> = {
   fin: "Fin / retour au calme",
 };
 
-/* -------------------- styles (via string) -------------------- */
+/* ======================== Styles ======================== */
 const styles = String.raw`
   .compact-card { padding: 12px; border-radius: 16px; background:#fff; box-shadow: 0 1px 0 rgba(17,24,39,.05); border:1px solid #e5e7eb; }
   .h1-compact { margin-bottom:2px; font-size: clamp(20px, 2.2vw, 24px); line-height:1.15; font-weight:800; }
@@ -209,7 +206,7 @@ const styles = String.raw`
   @media print { .no-print { display: none !important; } }
 `;
 
-/* -------------------- page -------------------- */
+/* ======================== Page ======================== */
 export default async function Page({
   params,
   searchParams,
@@ -250,7 +247,7 @@ export default async function Page({
   }, {});
 
   return (
-    <React.Fragment>
+    <div>
       <style dangerouslySetInnerHTML={{ __html: styles as string }} />
 
       {/* top bar */}
@@ -261,10 +258,15 @@ export default async function Page({
         >
           ← Retour
         </a>
-        <PrintButton />
+        <a
+          href="javascript:print()"
+          className="inline-flex items-center rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm font-medium text-neutral-800 hover:bg-neutral-50"
+        >
+          Imprimer
+        </a>
       </div>
 
-      {/* WRAPPER PLUS ÉTROIT : toute la page */}
+      {/* wrapper étroit pour mobile */}
       <div className="mx-auto w-full" style={{ maxWidth: 640, paddingInline: 12, paddingBottom: 24 }}>
         {/* header */}
         <div className="page-header">
@@ -372,6 +374,6 @@ export default async function Page({
           );
         })}
       </div>
-    </React.Fragment>
+    </div>
   );
 }
