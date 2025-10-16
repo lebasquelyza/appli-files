@@ -2,7 +2,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
-// Imports relatifs (monorepo/Netlify-safe) vers ton module coach & types
+// Import relatif vers ton module coach (ai.ts est dans apps/web/lib/coach/ai.ts)
 import {
   getProgrammeForUser,
   getAnswersForEmail,
@@ -16,16 +16,17 @@ import {
 /* ======================= Helpers serveur ======================= */
 async function getSignedInEmail(): Promise<string> {
   try {
-    // next-auth facultatif
-    // Chemin relatif vers lib/auth (même niveau que lib/coach)
-    // @ts-ignore
+    // @ts-ignore (next-auth facultatif)
     const { getServerSession } = await import("next-auth");
     // @ts-ignore
     const { authOptions } = await import("../../../../lib/auth");
     const session = await getServerSession(authOptions as any);
     const email = (session as any)?.user?.email as string | undefined;
     if (email) return email;
-  } catch {}
+  } catch (e) {
+    // pas de next-auth en prod, ou import introuvable : on passe au cookie
+    console.error("[session] next-auth import fail (ok):", e);
+  }
   return cookies().get("app_email")?.value || "";
 }
 
@@ -34,7 +35,9 @@ function parseStore(val?: string | null): { sessions: any[] } {
   try {
     const o = JSON.parse(val);
     if (Array.isArray(o?.sessions)) return { sessions: o.sessions as any[] };
-  } catch {}
+  } catch (e) {
+    console.error("[store] parse error:", e);
+  }
   return { sessions: [] };
 }
 
@@ -66,7 +69,7 @@ function typeBadgeClass(t: WorkoutType) {
   }
 }
 
-/** Super-baseline si vraiment rien à afficher */
+/** Baseline si vraiment rien à afficher */
 function genericFallback(type: WorkoutType): NormalizedExercise[] {
   if (type === "cardio") {
     return [
@@ -83,7 +86,6 @@ function genericFallback(type: WorkoutType): NormalizedExercise[] {
       { name: "Down-Dog → Cobra", reps: "6–8", block: "fin" },
     ];
   }
-  // muscu/hiit
   return [
     { name: "Goblet Squat", sets: 3, reps: "8–12", rest: "75s", equipment: "haltères", block: "principal" },
     { name: "Développé haltères", sets: 3, reps: "8–12", rest: "75s", equipment: "haltères", block: "principal" },
@@ -110,9 +112,15 @@ export default async function Page({
     | (AiSession & { exercises?: NormalizedExercise[] })
     | undefined;
 
-  // 2) programme (API → fallback)
-  const programme = await getProgrammeForUser();
-  const fromAi = programme?.sessions.find((s) => s.id === id);
+  // 2) programme (API → fallback) — blindé
+  let programme: { sessions: AiSession[] } | null = null;
+  try {
+    programme = await getProgrammeForUser();
+  } catch (e) {
+    console.error("[ai] getProgrammeForUser() failed:", e);
+    programme = null;
+  }
+  const fromAi = programme?.sessions?.find((s) => s.id === id);
 
   // 3) support lien partagé (querystring)
   const qpTitle = typeof searchParams?.title === "string" ? searchParams!.title : "";
@@ -134,7 +142,11 @@ export default async function Page({
       ? programme.sessions.find((s) => key(s.title, s.date, s.type) === key(qpTitle, qpDate, qpType))
       : undefined;
 
-  let base = (fromStore as AiSession | undefined) || fromAi || (storeByQD as AiSession | undefined) || aiByQD;
+  let base =
+    (fromStore as AiSession | undefined) ||
+    fromAi ||
+    (storeByQD as AiSession | undefined) ||
+    aiByQD;
 
   if (!base && qpTitle && qpDate && qpType) {
     base = { id: "stub", title: qpTitle, date: qpDate, type: qpType, plannedMin: qpPlannedMin } as AiSession;
@@ -144,10 +156,19 @@ export default async function Page({
     redirect("/dashboard/profile?error=Seance%20introuvable");
   }
 
-  // 4) profil utilisateur (pour enrichir/regen)
-  const email = await getSignedInEmail();
-  const answers = email ? await getAnswersForEmail(email) : null;
-  const profile = answers ? buildProfileFromAnswers(answers) : null;
+  // 4) profil utilisateur (peut échouer → on tolère)
+  let profile: ReturnType<typeof buildProfileFromAnswers> | null = null;
+  let profileLoadError = false;
+  try {
+    const email = await getSignedInEmail();
+    if (email) {
+      const answers = await getAnswersForEmail(email);
+      if (answers) profile = buildProfileFromAnswers(answers);
+    }
+  } catch (e) {
+    console.error("[profile] fetch/build failed (continuing without profile):", e);
+    profileLoadError = true;
+  }
 
   // 5) exercices à afficher (store → AI → régénération → fallback)
   let exercises: NormalizedExercise[] =
@@ -155,22 +176,33 @@ export default async function Page({
     ((fromAi as any)?.exercises as NormalizedExercise[] | undefined) ||
     [];
 
-  if (!exercises.length && answers) {
-    const regen = generateProgrammeFromAnswers(answers);
-    const match =
-      regen.find(
-        (s) =>
-          s.title === base!.title && s.type === base!.type && (s.date === base!.date || !base!.date)
-      ) ||
-      regen[0];
-    if (match?.exercises?.length) exercises = match.exercises;
+  if (!exercises.length) {
+    try {
+      const email = await getSignedInEmail();
+      if (email) {
+        const answers = await getAnswersForEmail(email);
+        if (answers) {
+          const regen = generateProgrammeFromAnswers(answers);
+          const match =
+            regen.find(
+              (s) =>
+                s.title === base!.title &&
+                s.type === base!.type &&
+                (s.date === base!.date || !base!.date)
+            ) || regen[0];
+          if (match?.exercises?.length) exercises = match.exercises;
+        }
+      }
+    } catch (e) {
+      console.error("[regen] generateProgrammeFromAnswers failed (using generic):", e);
+    }
   }
 
   if (!exercises.length) {
-    exercises = genericFallback(base.type);
+    exercises = genericFallback(base!.type);
   }
 
-  // Tri par bloc propre
+  // Tri par bloc
   const blockOrder = { echauffement: 0, principal: 1, accessoires: 2, fin: 3 } as const;
   const exs = exercises.slice().sort((a, b) => {
     const A = a.block ? blockOrder[a.block] ?? 99 : 50;
@@ -178,24 +210,24 @@ export default async function Page({
     return A - B;
   });
 
-  const plannedMin = base.plannedMin ?? (profile?.timePerSession ?? 45);
-  const intensity = base.intensity ?? "modérée";
+  const plannedMin = base!.plannedMin ?? (profile?.timePerSession ?? 45);
+  const intensity = base!.intensity ?? "modérée";
 
   const coachIntro =
-    base.type === "muscu"
+    base!.type === "muscu"
       ? "Exécution propre, contrôle du tempo et progression des charges."
-      : base.type === "cardio"
+      : base!.type === "cardio"
       ? "Aérobie maîtrisée, souffle régulier en zone 2–3."
-      : base.type === "hiit"
+      : base!.type === "hiit"
       ? "Pics d’intensité courts, technique impeccable."
       : "Amplitude confortable, respiration calme, zéro douleur nette.";
 
   const coachTips =
-    base.type === "muscu"
+    base!.type === "muscu"
       ? "Laisse 1–2 reps en réserve sur la dernière série."
-      : base.type === "cardio"
+      : base!.type === "cardio"
       ? "Reste en Z2 : tu dois pouvoir parler en phrases courtes."
-      : base.type === "hiit"
+      : base!.type === "hiit"
       ? "Coupe une série si la technique se dégrade."
       : "Mouvement lent et contrôlé, respire profondément.";
 
@@ -232,19 +264,19 @@ export default async function Page({
         <header className="flex items-start justify-between gap-3">
           <div>
             <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
-              {base.title}
+              {base!.title}
             </h1>
             <p className="mt-1 text-sm text-neutral-500">
-              <b className="font-medium text-neutral-600">{fmtDateYMD(base.date)}</b>
+              <b className="font-medium text-neutral-600">{fmtDateYMD(base!.date)}</b>
               {plannedMin ? ` · ${plannedMin} min` : ""}
             </p>
           </div>
           <span
             className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(
-              base.type
+              base!.type
             )}`}
           >
-            {base.type}
+            {base!.type}
           </span>
         </header>
 
@@ -253,6 +285,11 @@ export default async function Page({
           <div>🎯 <b>Objectif :</b> {coachIntro}</div>
           <div>⏱️ <b>Durée :</b> {plannedMin} min · <b>Intensité :</b> {intensity}</div>
           <div>💡 <b>Conseils :</b> {coachTips}</div>
+          {profileLoadError ? (
+            <div className="text-amber-700">
+              ⚠️ <b>Profil non chargé :</b> affichage sans matériel/blessures (problème réseau ou Sheets).
+            </div>
+          ) : null}
           {profile?.injuries?.length ? (
             <div className="text-amber-700">
               ⚠️ <b>Prudence :</b> {profile.injuries.join(", ")}
@@ -398,4 +435,3 @@ export default async function Page({
     </main>
   );
 }
-
