@@ -2,9 +2,8 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import React from "react";
-
-// ✅ on réutilise la même palette/composants que ta page IMC
 import { PageHeader, Section } from "@/components/ui/Page";
+import PrintButton from "./PrintButton";
 
 import {
   getProgrammeForUser,
@@ -16,9 +15,7 @@ import {
   type WorkoutType,
 } from "../../../../lib/coach/ai";
 
-import PrintButton from "./PrintButton";
-
-/* ------------- helpers (inchangés, allégés) ------------- */
+/* -------------------- utils compacts -------------------- */
 async function getSignedInEmail(): Promise<string> {
   try {
     // @ts-ignore optional
@@ -31,10 +28,9 @@ async function getSignedInEmail(): Promise<string> {
   } catch {}
   return cookies().get("app_email")?.value || "";
 }
-
 function parseStore(val?: string | null): { sessions: any[] } {
   if (!val) return { sessions: [] };
-  try { const o = JSON.parse(val); if (Array.isArray(o?.sessions)) return { sessions: o.sessions as any[] }; } catch {}
+  try { const o = JSON.parse(val!); if (Array.isArray(o?.sessions)) return { sessions: o.sessions as any[] }; } catch {}
   return { sessions: [] };
 }
 function fmtDateYMD(ymd?: string) {
@@ -70,7 +66,7 @@ function genericFallback(type: WorkoutType): NormalizedExercise[] {
 
 export const dynamic = "force-dynamic";
 
-/* ------------- data loader ------------- */
+/* -------------------- data loader -------------------- */
 async function loadData(id: string, searchParams?: Record<string,string|string[]|undefined>) {
   const store = parseStore(cookies().get("app_sessions")?.value);
   const fromStore = store.sessions.find((s)=>s.id===id) as (AiSession & {exercises?:NormalizedExercise[]})|undefined;
@@ -98,7 +94,6 @@ async function loadData(id: string, searchParams?: Record<string,string|string[]
     base = { id:"stub", title: qpTitle || "Séance personnalisée", date: qpDate, type: qpType, plannedMin: qpPlannedMin } as AiSession;
   }
 
-  // profil tolérant
   let profile: ReturnType<typeof buildProfileFromAnswers> | null = null;
   try {
     const email = await getSignedInEmail();
@@ -108,7 +103,6 @@ async function loadData(id: string, searchParams?: Record<string,string|string[]
     }
   } catch {}
 
-  // exos
   let exercises: NormalizedExercise[] =
     (fromStore?.exercises as NormalizedExercise[]|undefined) ||
     ((fromAi as any)?.exercises as NormalizedExercise[]|undefined) ||
@@ -132,7 +126,7 @@ async function loadData(id: string, searchParams?: Record<string,string|string[]
   return { base, profile, exercises };
 }
 
-/* ------------- page ------------- */
+/* -------------------- page -------------------- */
 export default async function Page({
   params, searchParams,
 }: { params: { id?: string }, searchParams?: Record<string,string|string[]|undefined> }) {
@@ -154,7 +148,6 @@ export default async function Page({
   : base.type === "hiit"   ? "Pics d’intensité courts, technique impeccable."
   : "Amplitude confortable, respiration calme, zéro douleur nette.";
 
-  // ordonner + grouper
   const blockOrder = { echauffement:0, principal:1, accessoires:2, fin:3 } as const;
   const labels: Record<string,string> = {
     echauffement: "Échauffement",
@@ -173,8 +166,8 @@ export default async function Page({
 
   return (
     <>
-      {/* Barre d’action titrée comme dans ta page IMC */}
-      <div className="mb-3 flex items-center justify-between">
+      {/* top bar compacte comme recipes */}
+      <div className="mb-2 flex items-center justify-between">
         <a
           href="/dashboard/seances"
           className="inline-flex items-center rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm font-medium text-neutral-800 hover:bg-neutral-50"
@@ -184,29 +177,39 @@ export default async function Page({
         <PrintButton />
       </div>
 
-      {/* Même header que l’exemple IMC */}
+      {/* titres avec clamp() ~ recipes */}
       <PageHeader
-        title={base.title}
-        subtitle={`${fmtDateYMD(base.date)} · ${plannedMin} min • ${base.type}`}
+        title={
+          <span style={{ fontSize: "clamp(20px, 2.2vw, 24px)", lineHeight: 1.15 }}>
+            {base.title}
+          </span>
+        }
+        subtitle={
+          <span style={{ fontSize: "clamp(12px, 1.6vw, 14px)", color: "#4b5563" }}>
+            {fmtDateYMD(base.date)} · {plannedMin} min · {base.type}
+          </span>
+        }
       />
 
-      {/* Meta coach dans une card, look UI cohérent */}
-      <Section title="Brief de séance">
-        <div className="card">
-          <ul className="space-y-2 text-[14px] leading-6">
-            <li>🎯 <b>Objectif :</b> {coachIntro}</li>
-            <li>⏱️ <b>Durée :</b> {plannedMin} min · <b>Intensité :</b> {intensity}</li>
+      <Section title={<span style={{ fontSize: "clamp(16px,1.9vw,18px)" }}>Brief de séance</span>}>
+        <div className="card" style={{ padding: 12 }}>
+          <ul className="space-y-1.5" style={{ fontSize: 14, lineHeight: 1.5 }}>
+            <li>🎯 <b>Objectif</b> : {coachIntro}</li>
+            <li>⏱️ <b>Durée</b> : {plannedMin} min · <b>Intensité</b> : {intensity}</li>
             {profile?.equipLevel && (
-              <li>🧰 <b>Matériel :</b>{" "}
-                {profile.equipLevel === "full" ? "accès salle (machines/barres)"
-                  : profile.equipLevel === "limited" ? `limité (${profile.equipItems.join(", ") || "quelques charges"})`
+              <li>
+                🧰 <b>Matériel</b> :{" "}
+                {profile.equipLevel === "full"
+                  ? "accès salle (machines/barres)"
+                  : profile.equipLevel === "limited"
+                  ? `limité (${profile.equipItems.join(", ") || "quelques charges"})`
                   : "aucun (poids du corps)"}
               </li>
             )}
             {profile?.injuries?.length ? (
-              <li className="text-amber-700">⚠️ <b>Prudence :</b> {profile.injuries.join(", ")}</li>
+              <li style={{ color: "#92400e" }}>⚠️ <b>Prudence</b> : {profile.injuries.join(", ")}</li>
             ) : null}
-            <li>💡 <b>Conseils :</b> {
+            <li>💡 <b>Conseils</b> : {
               base.type === "muscu" ? "Laisse 1–2 reps en réserve sur la dernière série."
               : base.type === "cardio" ? "Reste en Z2 : tu dois pouvoir parler en phrases courtes."
               : base.type === "hiit" ? "Coupe une série si la technique se dégrade."
@@ -216,17 +219,19 @@ export default async function Page({
         </div>
       </Section>
 
-      {/* Présentation type “programme” avec les mêmes cards que l’exemple */}
+      {/* blocs — cards compactes, typos 13px */}
       {(["echauffement","principal","accessoires","fin"] as const).map((k) => {
         const list = groups[k] || [];
         if (!list.length) return null;
         return (
-          <Section key={k} title={labels[k]}>
+          <Section key={k} title={<span style={{ fontSize: "clamp(16px,1.9vw,18px)" }}>{labels[k]}</span>}>
             <div className="grid gap-3">
               {list.map((ex, i) => (
-                <div key={`${k}-${i}`} className="card">
+                <div key={`${k}-${i}`} className="card" style={{ padding: 12 }}>
                   <div className="flex items-start justify-between gap-3">
-                    <div className="text-base font-semibold">{ex.name}</div>
+                    <div className="font-semibold" style={{ fontSize: 16, lineHeight: 1.25 }}>
+                      {ex.name}
+                    </div>
                     {ex.block ? (
                       <span className="shrink-0 rounded-full bg-neutral-50 px-2 py-0.5 text-[11px] text-neutral-600 ring-1 ring-neutral-200">
                         {labels[ex.block] || ex.block}
@@ -234,15 +239,30 @@ export default async function Page({
                     ) : null}
                   </div>
 
-                  <div className="mt-2 grid gap-2 sm:grid-cols-4 text-[13px] text-neutral-800">
-                    <div><span className="label !mb-1">Séries</span><div>{typeof ex.sets==="number" ? ex.sets : "—"}</div></div>
-                    <div><span className="label !mb-1">Rép./Durée</span><div>{ex.reps ? String(ex.reps) : ex.durationSec ? `${ex.durationSec}s` : "—"}</div></div>
-                    <div><span className="label !mb-1">Repos</span><div>{ex.rest || "—"}</div></div>
-                    <div><span className="label !mb-1">Charge / Tempo</span><div>{ex.load || (typeof ex.rir==="number" ? `RIR ${ex.rir}` : "—")}{ex.tempo ? ` · ${ex.tempo}` : ""}</div></div>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-4" style={{ fontSize: 13, lineHeight: 1.45 }}>
+                    <div>
+                      <span className="label !mb-1">Séries</span>
+                      <div>{typeof ex.sets==="number" ? ex.sets : "—"}</div>
+                    </div>
+                    <div>
+                      <span className="label !mb-1">Rép./Durée</span>
+                      <div>{ex.reps ? String(ex.reps) : ex.durationSec ? `${ex.durationSec}s` : "—"}</div>
+                    </div>
+                    <div>
+                      <span className="label !mb-1">Repos</span>
+                      <div>{ex.rest || "—"}</div>
+                    </div>
+                    <div>
+                      <span className="label !mb-1">Charge / Tempo</span>
+                      <div>
+                        {ex.load || (typeof ex.rir==="number" ? `RIR ${ex.rir}` : "—")}
+                        {ex.tempo ? ` · ${ex.tempo}` : ""}
+                      </div>
+                    </div>
                   </div>
 
                   {(ex.target || ex.equipment || ex.alt || ex.notes || ex.videoUrl) && (
-                    <div className="mt-2 grid gap-2 text-[12px] text-neutral-600 sm:grid-cols-2">
+                    <div className="mt-2 grid gap-1.5 sm:grid-cols-2" style={{ fontSize: 12.5, color: "#6b7280" }}>
                       {ex.target && <div>🎯 {ex.target}</div>}
                       {ex.equipment && <div>🧰 {ex.equipment}</div>}
                       {ex.alt && <div>🔁 Alt: {ex.alt}</div>}
