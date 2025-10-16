@@ -52,7 +52,7 @@ function normalizeWorkoutType(input?: string): WorkoutType {
   const s = String(input || "").trim().toLowerCase();
   if (["cardio", "endurance"].includes(s)) return "cardio";
   if (["hiit", "metcon", "wod"].includes(s)) return "hiit";
-  if (["mobilite", "mobilité", "mobilité"].includes(s)) return "mobilité";
+  if (["mobilite", "mobilité"].includes(s)) return "mobilité";
   return "muscu";
 }
 
@@ -235,20 +235,23 @@ export default async function Page({
       : "Amplitude confortable, respiration calme, zéro douleur nette.";
 
   const blockOrder = { echauffement: 0, principal: 1, accessoires: 2, fin: 3 } as const;
+
   const exs = exercises.slice().sort((a, b) => {
-    const A = a.block ? blockOrder[a.block] ?? 99 : 50;
-    const B = b.block ? blockOrder[b.block] ?? 99 : 50;
+    const A = a.block ? blockOrder[a.block as keyof typeof blockOrder] ?? 99 : 50;
+    const B = b.block ? blockOrder[b.block as keyof typeof blockOrder] ?? 99 : 50;
     return A - B;
   });
-  const groups = exs.reduce<Record<string, NormalizedExercise[]>>((acc, ex) => {
+
+  // ⬇️ Remplacement du reduce générique par un typage via `as` pour éviter le conflit TSX/JSX
+  const groups = exs.reduce((acc, ex) => {
     const k = ex.block || "principal";
     (acc[k] ||= []).push(ex);
     return acc;
-  }, {});
+  }, {} as Record<string, NormalizedExercise[]>);
 
   return (
     <div>
-      <style dangerouslySetInnerHTML={{ __html: styles as string }} />
+      <style dangerouslySetInnerHTML={{ __html: styles }} />
 
       {/* top bar */}
       <div className="mb-2 flex items-center justify-between no-print" style={{ paddingInline: 12 }}>
