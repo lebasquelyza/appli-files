@@ -12,10 +12,10 @@ import {
   type NormalizedExercise,
   type WorkoutType,
 } from "../../../../lib/coach/ai";
+import PrintButton from "./PrintButton";
 
 /* ======================= Utils ======================= */
 async function getSignedInEmail(): Promise<string> {
-  // essaie next-auth (facultatif), sinon cookie app_email
   try {
     // @ts-ignore optional
     const { getServerSession } = await import("next-auth");
@@ -25,7 +25,7 @@ async function getSignedInEmail(): Promise<string> {
     const email = (session as any)?.user?.email as string | undefined;
     if (email) return email;
   } catch {
-    // ok si next-auth n'est pas présent en prod
+    // ok si next-auth n'est pas présent
   }
   return cookies().get("app_email")?.value || "";
 }
@@ -35,9 +35,7 @@ function parseStore(val?: string | null): { sessions: any[] } {
   try {
     const o = JSON.parse(val);
     if (Array.isArray(o?.sessions)) return { sessions: o.sessions as any[] };
-  } catch {
-    // ignore
-  }
+  } catch {}
   return { sessions: [] };
 }
 
@@ -107,13 +105,11 @@ async function loadData(
   id: string,
   searchParams?: Record<string, string | string[] | undefined>
 ) {
-  // store
   const store = parseStore(cookies().get("app_sessions")?.value);
   const fromStore = store.sessions.find((s) => s.id === id) as
     | (AiSession & { exercises?: NormalizedExercise[] })
     | undefined;
 
-  // programme IA (tolérant)
   let programme: { sessions: AiSession[] } | null = null;
   try {
     programme = await getProgrammeForUser();
@@ -122,7 +118,6 @@ async function loadData(
   }
   const fromAi = programme?.sessions?.find((s) => s.id === id);
 
-  // query params robustifiés
   const qpTitle = typeof searchParams?.title === "string" ? searchParams!.title : "";
   const qpDateRaw = typeof searchParams?.date === "string" ? searchParams!.date : "";
   const qpType = normalizeWorkoutType(
@@ -156,12 +151,16 @@ async function loadData(
     (storeByQD as AiSession | undefined) ||
     aiByQD;
 
-  // stub si au moins un QP présent
   if (!base && (qpTitle || qpDateRaw || (searchParams?.type as string | undefined))) {
-    base = { id: "stub", title: qpTitle || "Séance personnalisée", date: qpDate, type: qpType, plannedMin: qpPlannedMin } as AiSession;
+    base = {
+      id: "stub",
+      title: qpTitle || "Séance personnalisée",
+      date: qpDate,
+      type: qpType,
+      plannedMin: qpPlannedMin,
+    } as AiSession;
   }
 
-  // profil (tolérant)
   let profile: ReturnType<typeof buildProfileFromAnswers> | null = null;
   try {
     const email = await getSignedInEmail();
@@ -169,11 +168,8 @@ async function loadData(
       const answers = await getAnswersForEmail(email);
       if (answers) profile = buildProfileFromAnswers(answers);
     }
-  } catch {
-    // ignore, on continue sans profil
-  }
+  } catch {}
 
-  // exercices (store → AI → régénération → fallback)
   let exercises: NormalizedExercise[] =
     (fromStore?.exercises as NormalizedExercise[] | undefined) ||
     ((fromAi as any)?.exercises as NormalizedExercise[] | undefined) ||
@@ -196,9 +192,7 @@ async function loadData(
           if (match?.exercises?.length) exercises = match.exercises;
         }
       }
-    } catch {
-      // ignore
-    }
+    } catch {}
   }
 
   if (!exercises.length) {
@@ -218,7 +212,6 @@ export default async function Page({
 }) {
   const id = decodeURIComponent(params?.id ?? "");
 
-  // Pas d'id et pas de query → redirige
   if (!id && !(searchParams?.title || searchParams?.date || searchParams?.type)) {
     redirect("/dashboard/profile?error=Seance%20introuvable");
   }
@@ -229,7 +222,6 @@ export default async function Page({
     redirect("/dashboard/profile?error=Seance%20introuvable");
   }
 
-  // Tri par bloc
   const blockOrder = { echauffement: 0, principal: 1, accessoires: 2, fin: 3 } as const;
   const exs = exercises.slice().sort((a, b) => {
     const A = a.block ? blockOrder[a.block] ?? 99 : 50;
@@ -275,12 +267,9 @@ export default async function Page({
         >
           ← Retour
         </a>
-        <button
-          onClick={() => (typeof window !== "undefined" ? window.print() : null)}
-          className="inline-flex items-center rounded-lg bg-neutral-900 px-3 py-2 text-sm font-medium text-white hover:bg-black"
-        >
-          Imprimer
-        </button>
+
+        {/* 👇 Bouton d’impression côté client */}
+        <PrintButton />
       </div>
 
       <section className="card rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm sm:p-6">
