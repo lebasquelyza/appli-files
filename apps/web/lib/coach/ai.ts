@@ -1,5 +1,7 @@
 // app/lib/coach/ai.ts
-"use server";
+
+import "server-only"; // garantit un usage côté serveur sans transformer tout en Server Action
+
 
 /**
  * Module serveur : construit des séances personnalisées à partir de l'API
