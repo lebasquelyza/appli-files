@@ -11,7 +11,7 @@ import {
   type AiSession,
   type NormalizedExercise,
   type WorkoutType,
-} from "../../../lib/coach/ai";
+} from "../../../../lib/coach/ai";
 
 /* ======================= Helpers serveur ======================= */
 async function getSignedInEmail(): Promise<string> {
