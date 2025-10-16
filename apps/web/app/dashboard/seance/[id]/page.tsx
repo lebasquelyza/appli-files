@@ -2,7 +2,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
-// ⬇️ IMPORTANT: import relatif (monorepo/Netlify-safe)
+// Imports relatifs (monorepo/Netlify-safe) vers ton module coach & types
 import {
   getProgrammeForUser,
   getAnswersForEmail,
@@ -16,7 +16,9 @@ import {
 /* ======================= Helpers serveur ======================= */
 async function getSignedInEmail(): Promise<string> {
   try {
-    // @ts-ignore next-auth facultatif
+    // next-auth facultatif
+    // Chemin relatif vers lib/auth (même niveau que lib/coach)
+    // @ts-ignore
     const { getServerSession } = await import("next-auth");
     // @ts-ignore
     const { authOptions } = await import("../../../../lib/auth");
@@ -81,6 +83,7 @@ function genericFallback(type: WorkoutType): NormalizedExercise[] {
       { name: "Down-Dog → Cobra", reps: "6–8", block: "fin" },
     ];
   }
+  // muscu/hiit
   return [
     { name: "Goblet Squat", sets: 3, reps: "8–12", rest: "75s", equipment: "haltères", block: "principal" },
     { name: "Développé haltères", sets: 3, reps: "8–12", rest: "75s", equipment: "haltères", block: "principal" },
@@ -111,7 +114,7 @@ export default async function Page({
   const programme = await getProgrammeForUser();
   const fromAi = programme?.sessions.find((s) => s.id === id);
 
-  // 3) support lien partagé (query)
+  // 3) support lien partagé (querystring)
   const qpTitle = typeof searchParams?.title === "string" ? searchParams!.title : "";
   const qpDate = typeof searchParams?.date === "string" ? searchParams!.date : "";
   const qpType = (typeof searchParams?.type === "string" ? searchParams!.type : "") as WorkoutType;
@@ -134,7 +137,7 @@ export default async function Page({
   let base = (fromStore as AiSession | undefined) || fromAi || (storeByQD as AiSession | undefined) || aiByQD;
 
   if (!base && qpTitle && qpDate && qpType) {
-    base = { id: "stub", title: qpTitle, date: qpDate, type: qpType } as AiSession;
+    base = { id: "stub", title: qpTitle, date: qpDate, type: qpType, plannedMin: qpPlannedMin } as AiSession;
   }
 
   if (!base) {
@@ -167,6 +170,7 @@ export default async function Page({
     exercises = genericFallback(base.type);
   }
 
+  // Tri par bloc propre
   const blockOrder = { echauffement: 0, principal: 1, accessoires: 2, fin: 3 } as const;
   const exs = exercises.slice().sort((a, b) => {
     const A = a.block ? blockOrder[a.block] ?? 99 : 50;
@@ -176,6 +180,7 @@ export default async function Page({
 
   const plannedMin = base.plannedMin ?? (profile?.timePerSession ?? 45);
   const intensity = base.intensity ?? "modérée";
+
   const coachIntro =
     base.type === "muscu"
       ? "Exécution propre, contrôle du tempo et progression des charges."
@@ -184,6 +189,7 @@ export default async function Page({
       : base.type === "hiit"
       ? "Pics d’intensité courts, technique impeccable."
       : "Amplitude confortable, respiration calme, zéro douleur nette.";
+
   const coachTips =
     base.type === "muscu"
       ? "Laisse 1–2 reps en réserve sur la dernière série."
@@ -193,8 +199,10 @@ export default async function Page({
       ? "Coupe une série si la technique se dégrade."
       : "Mouvement lent et contrôlé, respire profondément.";
 
+  /* ======================= Rendu ======================= */
   return (
     <main className="mx-auto w-full max-w-3xl px-4 pb-16 pt-6 sm:px-6 lg:px-8">
+      {/* Styles d’impression + tweaks */}
       <style>{`
         @media print {
           .no-print { display: none !important; }
@@ -203,6 +211,7 @@ export default async function Page({
         }
       `}</style>
 
+      {/* Header sticky actions */}
       <div className="sticky top-0 z-10 mb-4 flex items-center justify-between bg-white/80 py-2 backdrop-blur no-print">
         <a
           href="/dashboard/seances"
@@ -218,6 +227,7 @@ export default async function Page({
         </button>
       </div>
 
+      {/* Carte séance */}
       <section className="card rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm sm:p-6">
         <header className="flex items-start justify-between gap-3">
           <div>
@@ -238,6 +248,7 @@ export default async function Page({
           </span>
         </header>
 
+        {/* Meta coach */}
         <div className="mt-4 space-y-2 rounded-xl bg-neutral-50 p-4 text-[13px] leading-6 text-neutral-700">
           <div>🎯 <b>Objectif :</b> {coachIntro}</div>
           <div>⏱️ <b>Durée :</b> {plannedMin} min · <b>Intensité :</b> {intensity}</div>
@@ -261,19 +272,35 @@ export default async function Page({
 
         <h2 className="mt-6 text-base font-semibold tracking-tight">Détail des exercices</h2>
 
-        {/* Table desktop */}
+        {/* Table (desktop) */}
         <div className="mt-2 hidden overflow-hidden rounded-xl border border-neutral-200 md:block">
           <table className="min-w-full divide-y divide-neutral-200">
             <thead className="bg-neutral-50">
               <tr>
-                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-600">Exercice</th>
-                <th scope="col" className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-600">Séries</th>
-                <th scope="col" className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-600">Rép./Durée</th>
-                <th scope="col" className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-600">Repos</th>
-                <th scope="col" className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-600">Charge</th>
-                <th scope="col" className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-600">Tempo</th>
-                <th scope="col" className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-600">Bloc</th>
-                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-600">Notes</th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-600">
+                  Exercice
+                </th>
+                <th scope="col" className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-600">
+                  Séries
+                </th>
+                <th scope="col" className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-600">
+                  Rép./Durée
+                </th>
+                <th scope="col" className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-600">
+                  Repos
+                </th>
+                <th scope="col" className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-600">
+                  Charge
+                </th>
+                <th scope="col" className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-600">
+                  Tempo
+                </th>
+                <th scope="col" className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-600">
+                  Bloc
+                </th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-600">
+                  Notes
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-200 bg-white">
@@ -281,29 +308,45 @@ export default async function Page({
                 <tr key={`row-${i}`} className="align-top">
                   <td className="px-4 py-3">
                     <div className="font-medium text-neutral-900">{ex.name}</div>
-                    <div className="mt-0.5 space-x-2 text-xs text-neutral-500">
+                    <div className="mt-0.5 text-xs text-neutral-500 space-x-2">
                       {ex.target ? <span>{ex.target}</span> : null}
                       {ex.equipment ? <span>• Matériel: {ex.equipment}</span> : null}
                       {ex.alt ? <span>• Alt: {ex.alt}</span> : null}
                       {ex.videoUrl ? (
-                        <span>• <a className="underline underline-offset-2" href={ex.videoUrl} target="_blank" rel="noreferrer">Vidéo</a></span>
+                        <span>
+                          •{" "}
+                          <a
+                            className="underline underline-offset-2"
+                            href={ex.videoUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Vidéo
+                          </a>
+                        </span>
                       ) : null}
                     </div>
                   </td>
                   <td className="px-3 py-3 text-sm">{typeof ex.sets === "number" ? ex.sets : "—"}</td>
-                  <td className="px-3 py-3 text-sm">{ex.reps ? String(ex.reps) : ex.durationSec ? `${ex.durationSec}s` : "—"}</td>
+                  <td className="px-3 py-3 text-sm">
+                    {ex.reps ? String(ex.reps) : ex.durationSec ? `${ex.durationSec}s` : "—"}
+                  </td>
                   <td className="px-3 py-3 text-sm">{ex.rest || "—"}</td>
-                  <td className="px-3 py-3 text-sm">{ex.load || (typeof ex.rir === "number" ? `RIR ${ex.rir}` : "—")}</td>
+                  <td className="px-3 py-3 text-sm">
+                    {ex.load || (typeof ex.rir === "number" ? `RIR ${ex.rir}` : "—")}
+                  </td>
                   <td className="px-3 py-3 text-sm">{ex.tempo || "—"}</td>
                   <td className="px-3 py-3 text-sm">{ex.block || "—"}</td>
-                  <td className="px-4 py-3 text-sm whitespace-pre-wrap">{ex.notes || "—"}</td>
+                  <td className="px-4 py-3 text-sm whitespace-pre-wrap">
+                    {ex.notes || "—"}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
 
-        {/* Cartes mobile */}
+        {/* Cartes (mobile) */}
         <div className="mt-2 space-y-3 md:hidden">
           {exs.map((ex, i) => (
             <div key={`mrow-${i}`} className="rounded-xl border border-neutral-200 p-3">
@@ -315,7 +358,10 @@ export default async function Page({
               </div>
               <div className="mt-1 grid grid-cols-2 gap-2 text-[13px] text-neutral-700">
                 <div><span className="text-neutral-500">Séries: </span>{typeof ex.sets === "number" ? ex.sets : "—"}</div>
-                <div><span className="text-neutral-500">Rép./Durée: </span>{ex.reps ? String(ex.reps) : ex.durationSec ? `${ex.durationSec}s` : "—"}</div>
+                <div>
+                  <span className="text-neutral-500">Rép./Durée: </span>
+                  {ex.reps ? String(ex.reps) : ex.durationSec ? `${ex.durationSec}s` : "—"}
+                </div>
                 <div><span className="text-neutral-500">Repos: </span>{ex.rest || "—"}</div>
                 <div><span className="text-neutral-500">Charge: </span>{ex.load || (typeof ex.rir === "number" ? `RIR ${ex.rir}` : "—")}</div>
               </div>
@@ -325,7 +371,19 @@ export default async function Page({
                   {ex.equipment ? <div>🧰 {ex.equipment}</div> : null}
                   {ex.alt ? <div>🔁 Alt: {ex.alt}</div> : null}
                   {ex.notes ? <div>📝 {ex.notes}</div> : null}
-                  {ex.videoUrl ? <div>📺 <a className="underline underline-offset-2" href={ex.videoUrl} target="_blank" rel="noreferrer">Vidéo</a></div> : null}
+                  {ex.videoUrl ? (
+                    <div>
+                      📺{" "}
+                      <a
+                        className="underline underline-offset-2"
+                        href={ex.videoUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Vidéo
+                      </a>
+                    </div>
+                  ) : null}
                 </div>
               )}
             </div>
@@ -333,9 +391,11 @@ export default async function Page({
         </div>
       </section>
 
+      {/* Footer discret */}
       <footer className="no-print mx-auto mt-6 text-center text-xs text-neutral-400">
         Files Coaching · {new Date().getFullYear()}
       </footer>
     </main>
   );
 }
+
