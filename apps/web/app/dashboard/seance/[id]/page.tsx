@@ -2,7 +2,6 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
-// Import relatif vers ton module coach (ai.ts est dans apps/web/lib/coach/ai.ts)
 import {
   getProgrammeForUser,
   getAnswersForEmail,
@@ -16,7 +15,7 @@ import {
 /* ======================= Helpers serveur ======================= */
 async function getSignedInEmail(): Promise<string> {
   try {
-    // @ts-ignore (next-auth facultatif)
+    // @ts-ignore
     const { getServerSession } = await import("next-auth");
     // @ts-ignore
     const { authOptions } = await import("../../../../lib/auth");
@@ -24,7 +23,6 @@ async function getSignedInEmail(): Promise<string> {
     const email = (session as any)?.user?.email as string | undefined;
     if (email) return email;
   } catch (e) {
-    // pas de next-auth en prod, ou import introuvable : on passe au cookie
     console.error("[session] next-auth import fail (ok):", e);
   }
   return cookies().get("app_email")?.value || "";
@@ -41,31 +39,37 @@ function parseStore(val?: string | null): { sessions: any[] } {
   return { sessions: [] };
 }
 
+function isValidDate(d: Date) {
+  return d instanceof Date && !Number.isNaN(d.getTime());
+}
+
 function fmtDateYMD(ymd?: string) {
   if (!ymd) return "—";
   try {
-    const [y, m, d] = ymd.split("-").map(Number);
-    const dt = new Date(y, (m || 1) - 1, d || 1);
-    return dt.toLocaleDateString("fr-FR", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
+    const [y, m, d] = ymd.split("-").map((n) => Number(n));
+    const dt = new Date(y || 0, (m || 1) - 1, d || 1);
+    if (!isValidDate(dt)) return "—";
+    return dt.toLocaleDateString("fr-FR", { year: "numeric", month: "long", day: "numeric" });
   } catch {
-    return ymd;
+    return "—";
   }
+}
+
+function normalizeWorkoutType(input?: string): WorkoutType {
+  const s = String(input || "").trim().toLowerCase();
+  if (["muscu", "musculation", "strength"].includes(s)) return "muscu";
+  if (["cardio", "endurance"].includes(s)) return "cardio";
+  if (["hiit", "metcon", "wod"].includes(s)) return "hiit";
+  if (["mobilite", "mobilité", "mobilité"].includes(s)) return "mobilité";
+  return "muscu";
 }
 
 function typeBadgeClass(t: WorkoutType) {
   switch (t) {
-    case "muscu":
-      return "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200";
-    case "cardio":
-      return "bg-sky-50 text-sky-700 ring-1 ring-sky-200";
-    case "hiit":
-      return "bg-amber-50 text-amber-700 ring-1 ring-amber-200";
-    case "mobilité":
-      return "bg-violet-50 text-violet-700 ring-1 ring-violet-200";
+    case "muscu": return "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200";
+    case "cardio": return "bg-sky-50 text-sky-700 ring-1 ring-sky-200";
+    case "hiit":  return "bg-amber-50 text-amber-700 ring-1 ring-amber-200";
+    case "mobilité": return "bg-violet-50 text-violet-700 ring-1 ring-violet-200";
   }
 }
 
@@ -122,34 +126,45 @@ export default async function Page({
   }
   const fromAi = programme?.sessions?.find((s) => s.id === id);
 
-  // 3) support lien partagé (querystring)
+  // 3) support lien partagé (querystring) — robustifié
   const qpTitle = typeof searchParams?.title === "string" ? searchParams!.title : "";
-  const qpDate = typeof searchParams?.date === "string" ? searchParams!.date : "";
-  const qpType = (typeof searchParams?.type === "string" ? searchParams!.type : "") as WorkoutType;
+  const qpDateRaw = typeof searchParams?.date === "string" ? searchParams!.date : "";
+  const qpType = normalizeWorkoutType(
+    typeof searchParams?.type === "string" ? searchParams!.type : ""
+  );
   const qpPlannedMin =
     typeof searchParams?.plannedMin === "string" && searchParams!.plannedMin
       ? Number(searchParams!.plannedMin)
       : undefined;
 
+  // si la date n’est pas fournie / invalide → aujourd’hui
+  const today = new Date();
+  const todayYMD = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(
+    today.getDate()
+  ).padStart(2, "0")}`;
+  const qpDate =
+    qpDateRaw && /^\d{4}-\d{2}-\d{2}$/.test(qpDateRaw) ? qpDateRaw : todayYMD;
+
   const key = (t: string, d: string, ty: string) => `${t}|${d}|${ty}`;
   const storeByQD =
-    !fromStore && qpTitle && qpDate && qpType
+    !fromStore && qpTitle
       ? store.sessions.find((s) => key(s.title, s.date, s.type) === key(qpTitle, qpDate, qpType))
       : undefined;
 
   const aiByQD =
-    !fromAi && qpTitle && qpDate && qpType && programme
+    !fromAi && qpTitle && programme
       ? programme.sessions.find((s) => key(s.title, s.date, s.type) === key(qpTitle, qpDate, qpType))
       : undefined;
 
-  let base =
+  let base: AiSession | undefined =
     (fromStore as AiSession | undefined) ||
     fromAi ||
     (storeByQD as AiSession | undefined) ||
     aiByQD;
 
-  if (!base && qpTitle && qpDate && qpType) {
-    base = { id: "stub", title: qpTitle, date: qpDate, type: qpType, plannedMin: qpPlannedMin } as AiSession;
+  // 👉 Nouveau: si AU MOINS un champ de l’URL est présent, on fabrique un stub safe
+  if (!base && (qpTitle || qpDateRaw || (searchParams?.type as string | undefined))) {
+    base = { id: "stub", title: qpTitle || "Séance personnalisée", date: qpDate, type: qpType, plannedMin: qpPlannedMin } as AiSession;
   }
 
   if (!base) {
@@ -234,7 +249,6 @@ export default async function Page({
   /* ======================= Rendu ======================= */
   return (
     <main className="mx-auto w-full max-w-3xl px-4 pb-16 pt-6 sm:px-6 lg:px-8">
-      {/* Styles d’impression + tweaks */}
       <style>{`
         @media print {
           .no-print { display: none !important; }
@@ -243,7 +257,6 @@ export default async function Page({
         }
       `}</style>
 
-      {/* Header sticky actions */}
       <div className="sticky top-0 z-10 mb-4 flex items-center justify-between bg-white/80 py-2 backdrop-blur no-print">
         <a
           href="/dashboard/seances"
@@ -259,7 +272,6 @@ export default async function Page({
         </button>
       </div>
 
-      {/* Carte séance */}
       <section className="card rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm sm:p-6">
         <header className="flex items-start justify-between gap-3">
           <div>
@@ -271,23 +283,18 @@ export default async function Page({
               {plannedMin ? ` · ${plannedMin} min` : ""}
             </p>
           </div>
-          <span
-            className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(
-              base!.type
-            )}`}
-          >
+          <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(base!.type)}`}>
             {base!.type}
           </span>
         </header>
 
-        {/* Meta coach */}
         <div className="mt-4 space-y-2 rounded-xl bg-neutral-50 p-4 text-[13px] leading-6 text-neutral-700">
           <div>🎯 <b>Objectif :</b> {coachIntro}</div>
           <div>⏱️ <b>Durée :</b> {plannedMin} min · <b>Intensité :</b> {intensity}</div>
           <div>💡 <b>Conseils :</b> {coachTips}</div>
           {profileLoadError ? (
             <div className="text-amber-700">
-              ⚠️ <b>Profil non chargé :</b> affichage sans matériel/blessures (problème réseau ou Sheets).
+              ⚠️ <b>Profil non chargé :</b> affichage sans matériel/blessures (réseau ou Sheets).
             </div>
           ) : null}
           {profile?.injuries?.length ? (
@@ -314,30 +321,14 @@ export default async function Page({
           <table className="min-w-full divide-y divide-neutral-200">
             <thead className="bg-neutral-50">
               <tr>
-                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-600">
-                  Exercice
-                </th>
-                <th scope="col" className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-600">
-                  Séries
-                </th>
-                <th scope="col" className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-600">
-                  Rép./Durée
-                </th>
-                <th scope="col" className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-600">
-                  Repos
-                </th>
-                <th scope="col" className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-600">
-                  Charge
-                </th>
-                <th scope="col" className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-600">
-                  Tempo
-                </th>
-                <th scope="col" className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-600">
-                  Bloc
-                </th>
-                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-600">
-                  Notes
-                </th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-600">Exercice</th>
+                <th scope="col" className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-600">Séries</th>
+                <th scope="col" className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-600">Rép./Durée</th>
+                <th scope="col" className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-600">Repos</th>
+                <th scope="col" className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-600">Charge</th>
+                <th scope="col" className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-600">Tempo</th>
+                <th scope="col" className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-600">Bloc</th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-600">Notes</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-200 bg-white">
@@ -349,34 +340,16 @@ export default async function Page({
                       {ex.target ? <span>{ex.target}</span> : null}
                       {ex.equipment ? <span>• Matériel: {ex.equipment}</span> : null}
                       {ex.alt ? <span>• Alt: {ex.alt}</span> : null}
-                      {ex.videoUrl ? (
-                        <span>
-                          •{" "}
-                          <a
-                            className="underline underline-offset-2"
-                            href={ex.videoUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            Vidéo
-                          </a>
-                        </span>
-                      ) : null}
+                      {ex.videoUrl ? <span>• <a className="underline underline-offset-2" href={ex.videoUrl} target="_blank" rel="noreferrer">Vidéo</a></span> : null}
                     </div>
                   </td>
                   <td className="px-3 py-3 text-sm">{typeof ex.sets === "number" ? ex.sets : "—"}</td>
-                  <td className="px-3 py-3 text-sm">
-                    {ex.reps ? String(ex.reps) : ex.durationSec ? `${ex.durationSec}s` : "—"}
-                  </td>
+                  <td className="px-3 py-3 text-sm">{ex.reps ? String(ex.reps) : ex.durationSec ? `${ex.durationSec}s` : "—"}</td>
                   <td className="px-3 py-3 text-sm">{ex.rest || "—"}</td>
-                  <td className="px-3 py-3 text-sm">
-                    {ex.load || (typeof ex.rir === "number" ? `RIR ${ex.rir}` : "—")}
-                  </td>
+                  <td className="px-3 py-3 text-sm">{ex.load || (typeof ex.rir === "number" ? `RIR ${ex.rir}` : "—")}</td>
                   <td className="px-3 py-3 text-sm">{ex.tempo || "—"}</td>
                   <td className="px-3 py-3 text-sm">{ex.block || "—"}</td>
-                  <td className="px-4 py-3 text-sm whitespace-pre-wrap">
-                    {ex.notes || "—"}
-                  </td>
+                  <td className="px-4 py-3 text-sm whitespace-pre-wrap">{ex.notes || "—"}</td>
                 </tr>
               ))}
             </tbody>
@@ -395,10 +368,7 @@ export default async function Page({
               </div>
               <div className="mt-1 grid grid-cols-2 gap-2 text-[13px] text-neutral-700">
                 <div><span className="text-neutral-500">Séries: </span>{typeof ex.sets === "number" ? ex.sets : "—"}</div>
-                <div>
-                  <span className="text-neutral-500">Rép./Durée: </span>
-                  {ex.reps ? String(ex.reps) : ex.durationSec ? `${ex.durationSec}s` : "—"}
-                </div>
+                <div><span className="text-neutral-500">Rép./Durée: </span>{ex.reps ? String(ex.reps) : ex.durationSec ? `${ex.durationSec}s` : "—"}</div>
                 <div><span className="text-neutral-500">Repos: </span>{ex.rest || "—"}</div>
                 <div><span className="text-neutral-500">Charge: </span>{ex.load || (typeof ex.rir === "number" ? `RIR ${ex.rir}` : "—")}</div>
               </div>
@@ -408,19 +378,7 @@ export default async function Page({
                   {ex.equipment ? <div>🧰 {ex.equipment}</div> : null}
                   {ex.alt ? <div>🔁 Alt: {ex.alt}</div> : null}
                   {ex.notes ? <div>📝 {ex.notes}</div> : null}
-                  {ex.videoUrl ? (
-                    <div>
-                      📺{" "}
-                      <a
-                        className="underline underline-offset-2"
-                        href={ex.videoUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        Vidéo
-                      </a>
-                    </div>
-                  ) : null}
+                  {ex.videoUrl ? <div>📺 <a className="underline underline-offset-2" href={ex.videoUrl} target="_blank" rel="noreferrer">Vidéo</a></div> : null}
                 </div>
               )}
             </div>
@@ -428,7 +386,6 @@ export default async function Page({
         </div>
       </section>
 
-      {/* Footer discret */}
       <footer className="no-print mx-auto mt-6 text-center text-xs text-neutral-400">
         Files Coaching · {new Date().getFullYear()}
       </footer>
