@@ -2,7 +2,6 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import React from "react";
-import { PageHeader, Section } from "@/components/ui/Page";
 import PrintButton from "./PrintButton";
 
 import {
@@ -177,21 +176,29 @@ export default async function Page({
         <PrintButton />
       </div>
 
-      {/* titres avec clamp() ~ recipes */}
-      <PageHeader
-        title={
-          <span style={{ fontSize: "clamp(20px, 2.2vw, 24px)", lineHeight: 1.15 }}>
+      {/* Header identique au pattern de la page recipes (avec clamp) */}
+      <div className="page-header">
+        <div>
+          <h1
+            className="h1"
+            style={{ marginBottom: 2, fontSize: "clamp(20px, 2.2vw, 24px)", lineHeight: 1.15 }}
+          >
             {base.title}
-          </span>
-        }
-        subtitle={
-          <span style={{ fontSize: "clamp(12px, 1.6vw, 14px)", color: "#4b5563" }}>
+          </h1>
+          <p
+            className="lead"
+            style={{ marginTop: 4, fontSize: "clamp(12px, 1.6vw, 14px)", lineHeight: 1.35, color: "#4b5563" }}
+          >
             {fmtDateYMD(base.date)} · {plannedMin} min · {base.type}
-          </span>
-        }
-      />
+          </p>
+        </div>
+      </div>
 
-      <Section title={<span style={{ fontSize: "clamp(16px,1.9vw,18px)" }}>Brief de séance</span>}>
+      {/* Brief */}
+      <section className="section" style={{ marginTop: 12 }}>
+        <div className="section-head" style={{ marginBottom: 8 }}>
+          <h2 style={{ margin:0, fontSize:"clamp(16px,1.9vw,18px)", lineHeight:1.2 }}>Brief de séance</h2>
+        </div>
         <div className="card" style={{ padding: 12 }}>
           <ul className="space-y-1.5" style={{ fontSize: 14, lineHeight: 1.5 }}>
             <li>🎯 <b>Objectif</b> : {coachIntro}</li>
@@ -217,14 +224,17 @@ export default async function Page({
             }</li>
           </ul>
         </div>
-      </Section>
+      </section>
 
-      {/* blocs — cards compactes, typos 13px */}
+      {/* Blocs */}
       {(["echauffement","principal","accessoires","fin"] as const).map((k) => {
         const list = groups[k] || [];
         if (!list.length) return null;
         return (
-          <Section key={k} title={<span style={{ fontSize: "clamp(16px,1.9vw,18px)" }}>{labels[k]}</span>}>
+          <section key={k} className="section" style={{ marginTop: 12 }}>
+            <div className="section-head" style={{ marginBottom: 8 }}>
+              <h2 style={{ margin:0, fontSize:"clamp(16px,1.9vw,18px)", lineHeight:1.2 }}>{labels[k]}</h2>
+            </div>
             <div className="grid gap-3">
               {list.map((ex, i) => (
                 <div key={`${k}-${i}`} className="card" style={{ padding: 12 }}>
@@ -275,7 +285,7 @@ export default async function Page({
                 </div>
               ))}
             </div>
-          </Section>
+          </section>
         );
       })}
     </>
