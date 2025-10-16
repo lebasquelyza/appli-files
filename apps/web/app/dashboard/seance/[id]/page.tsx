@@ -17,7 +17,7 @@ import {
 /* -------------------- utils -------------------- */
 async function getSignedInEmail(): Promise<string> {
   try {
-    // @ts-ignore optional
+    // @ts-ignore optional (si next-auth n'est pas configuré en local)
     const { getServerSession } = await import("next-auth");
     // @ts-ignore optional
     const { authOptions } = await import("../../../../lib/auth");
@@ -88,7 +88,9 @@ async function loadData(id: string, searchParams?: Record<string,string|string[]
   const storeByQD = !fromStore && qpTitle ? store.sessions.find(s=>key(s.title,s.date,s.type)===key(qpTitle,qpDate,qpType)) : undefined;
   const aiByQD    = !fromAi && qpTitle && programme ? programme.sessions.find(s=>key(s.title,s.date,s.type)===key(qpTitle,qpDate,qpType)) : undefined;
 
-  let base: AiSession | undefined = (fromStore as AiSession|undefined) || fromAi || (storeByQD as AiSession|undefined) || aiByQD;
+  let base: AiSession | undefined =
+    (fromStore as AiSession|undefined) || fromAi || (storeByQD as AiSession|undefined) || aiByQD;
+
   if (!base && (qpTitle || qpDateRaw || (searchParams?.type as string|undefined))) {
     base = { id:"stub", title: qpTitle || "Séance personnalisée", date: qpDate, type: qpType, plannedMin: qpPlannedMin } as AiSession;
   }
@@ -179,7 +181,7 @@ export default async function Page({
   return (
     <>
       <style>{`
-        /* mobile-first compact spacing */
+        /* mobile-first compact spacing + wrapper */
         .compact-card { padding: 12px; border-radius: 16px; background:#fff; box-shadow: 0 1px 0 rgba(17,24,39,.05); border:1px solid #e5e7eb; }
         .h1-compact { margin-bottom:2px; font-size: clamp(20px, 2.2vw, 24px); line-height:1.15; font-weight:800; }
         .lead-compact { margin-top:4px; font-size: clamp(12px, 1.6vw, 14px); line-height:1.35; color:#4b5563; }
@@ -188,10 +190,11 @@ export default async function Page({
         .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
         .meta-row { font-size:12.5px; color:#6b7280; margin-top:6px; display:grid; gap:4px; grid-template-columns:1fr; }
         @media(min-width:640px){ .meta-row{ grid-template-columns:1fr 1fr; } }
+        @media print { .no-print { display: none !important; } }
       `}</style>
 
       {/* top bar */}
-      <div className="mb-2 flex items-center justify-between">
+      <div className="mb-2 flex items-center justify-between no-print" style={{ paddingInline: 12 }}>
         <a
           href="/dashboard/seances"
           className="inline-flex items-center rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm font-medium text-neutral-800 hover:bg-neutral-50"
@@ -201,100 +204,104 @@ export default async function Page({
         <PrintButton />
       </div>
 
-      {/* header comme recipes */}
-      <div className="page-header">
-        <div>
-          <h1 className="h1-compact">{base.title}</h1>
-          <p className="lead-compact">
-            {fmtDateYMD(base.date)} · {plannedMin} min · {base.type}
-          </p>
+      {/* WRAPPER PLUS ÉTROIT : toute la page */}
+      <div className="mx-auto w-full" style={{ maxWidth: 640, paddingInline: 12, paddingBottom: 24 }}>
+        {/* header */}
+        <div className="page-header">
+          <div>
+            <h1 className="h1-compact">{base.title}</h1>
+            <p className="lead-compact">
+              {fmtDateYMD(base.date)} · {plannedMin} min · {base.type}
+            </p>
+          </div>
         </div>
-      </div>
 
-      {/* Brief très compact */}
-      <section className="section" style={{ marginTop: 12 }}>
-        <div className="section-head" style={{ marginBottom: 8 }}>
-          <h2 className="section-title">Brief de séance</h2>
-        </div>
-        <div className="compact-card">
-          <ul style={{ fontSize: 14, lineHeight: 1.5 }}>
-            <li>🎯 <b>Objectif</b> : {coachIntro}</li>
-            <li>⏱️ <b>Durée</b> : {plannedMin} min · <b>Intensité</b> : {intensity}</li>
-            {profile?.equipLevel && (
-              <li>
-                🧰 <b>Matériel</b> :{" "}
-                {profile.equipLevel === "full"
-                  ? "accès salle (machines/barres)"
-                  : profile.equipLevel === "limited"
-                  ? `limité (${profile.equipItems.join(", ") || "quelques charges"})`
-                  : "aucun (poids du corps)"}
-              </li>
-            )}
-            {profile?.injuries?.length ? (
-              <li style={{ color: "#92400e" }}>⚠️ <b>Prudence</b> : {profile.injuries.join(", ")}</li>
-            ) : null}
-            <li>💡 <b>Conseils</b> : {
-              base.type === "muscu" ? "Laisse 1–2 reps en réserve sur la dernière série."
-              : base.type === "cardio" ? "Reste en Z2 : tu dois pouvoir parler en phrases courtes."
-              : base.type === "hiit" ? "Coupe une série si la technique se dégrade."
-              : "Mouvement lent et contrôlé, respire profondément."
-            }</li>
-          </ul>
-        </div>
-      </section>
+        {/* Brief */}
+        <section className="section" style={{ marginTop: 12 }}>
+          <div className="section-head" style={{ marginBottom: 8 }}>
+            <h2 className="section-title">Brief de séance</h2>
+          </div>
+          <div className="compact-card">
+            <ul style={{ fontSize: 14, lineHeight: 1.5 }}>
+              <li>🎯 <b>Objectif</b> : {coachIntro}</li>
+              <li>⏱️ <b>Durée</b> : {plannedMin} min · <b>Intensité</b> : {intensity}</li>
+              {profile?.equipLevel && (
+                <li>
+                  🧰 <b>Matériel</b> :{" "}
+                  {profile.equipLevel === "full"
+                    ? "accès salle (machines/barres)"
+                    : profile.equipLevel === "limited"
+                    ? `limité (${profile.equipItems.join(", ") || "quelques charges"})`
+                    : "aucun (poids du corps)`}
+                </li>
+              )}
+              {profile?.injuries?.length ? (
+                <li style={{ color: "#92400e" }}>⚠️ <b>Prudence</b> : {profile.injuries.join(", ")}</li>
+              ) : null}
+              <li>💡 <b>Conseils</b> : {
+                base.type === "muscu" ? "Laisse 1–2 reps en réserve sur la dernière série."
+                : base.type === "cardio" ? "Reste en Z2 : tu dois pouvoir parler en phrases courtes."
+                : base.type === "hiit" ? "Coupe une série si la technique se dégrade."
+                : "Mouvement lent et contrôlé, respire profondément."
+              }</li>
+            </ul>
+          </div>
+        </section>
 
-      {/* Blocs → cartes mobiles avec chips */}
-      {(["echauffement","principal","accessoires","fin"] as const).map((k) => {
-        const list = groups[k] || [];
-        if (!list.length) return null;
-        return (
-          <section key={k} className="section" style={{ marginTop: 12 }}>
-            <div className="section-head" style={{ marginBottom: 8 }}>
-              <h2 className="section-title">{blockNames[k]}</h2>
-            </div>
+        {/* Blocs */}
+        {(["echauffement","principal","accessoires","fin"] as const).map((k) => {
+          const list = groups[k] || [];
+          if (!list.length) return null;
+          return (
+            <section key={k} className="section" style={{ marginTop: 12 }}>
+              <div className="section-head" style={{ marginBottom: 8 }}>
+                <h2 className="section-title">{blockNames[k]}</h2>
+              </div>
 
-            <div className="grid gap-3">
-              {list.map((ex, i) => {
-                const reps = ex.reps ? String(ex.reps) : (ex.durationSec ? `${ex.durationSec}s` : "");
-                const load = ex.load || (typeof ex.rir === "number" ? `RIR ${ex.rir}` : "");
-                return (
-                  <article key={`${k}-${i}`} className="compact-card">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="exoname">{ex.name}</div>
-                      {ex.block ? (
-                        <span className="shrink-0 rounded-full bg-neutral-50 px-2 py-0.5 text-[11px] text-neutral-600 ring-1 ring-neutral-200">
-                          {blockNames[ex.block] || ex.block}
-                        </span>
-                      ) : null}
-                    </div>
-
-                    {/* chips compactes qui wrap sur mobile */}
-                    <div className="chips">
-                      <Chip label="🧱" value={typeof ex.sets === "number" ? `${ex.sets} séries` : "—"} title="Séries" />
-                      <Chip label="🔁" value={reps || "—"} title="Rép./Durée" />
-                      <Chip label="⏲️" value={ex.rest || "—"} title="Repos" />
-                      <Chip label="🏋︎" value={load || "—"} title="Charge / RIR" />
-                      {ex.tempo && <Chip label="🎚" value={ex.tempo} title="Tempo" />}
-                    </div>
-
-                    {(ex.target || ex.equipment || ex.alt || ex.notes || ex.videoUrl) && (
-                      <div className="meta-row">
-                        {ex.target && <div>🎯 {ex.target}</div>}
-                        {ex.equipment && <div>🧰 {ex.equipment}</div>}
-                        {ex.alt && <div>🔁 Alt: {ex.alt}</div>}
-                        {ex.notes && <div>📝 {ex.notes}</div>}
-                        {ex.videoUrl && (
-                          <div>📺 <a className="underline underline-offset-2" href={ex.videoUrl} target="_blank" rel="noreferrer">Vidéo</a></div>
-                        )}
+              <div className="grid gap-3">
+                {list.map((ex, i) => {
+                  const reps = ex.reps ? String(ex.reps) : (ex.durationSec ? `${ex.durationSec}s` : "");
+                  const load = ex.load || (typeof ex.rir === "number" ? `RIR ${ex.rir}` : "");
+                  return (
+                    <article key={`${k}-${i}`} className="compact-card">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="exoname">{ex.name}</div>
+                        {ex.block ? (
+                          <span className="shrink-0 rounded-full bg-neutral-50 px-2 py-0.5 text-[11px] text-neutral-600 ring-1 ring-neutral-200">
+                            {blockNames[ex.block] || ex.block}
+                          </span>
+                        ) : null}
                       </div>
-                    )}
-                  </article>
-                );
-              })}
-            </div>
-          </section>
-        );
-      })}
+
+                      {/* chips compactes */}
+                      <div className="chips">
+                        <Chip label="🧱" value={typeof ex.sets === "number" ? `${ex.sets} séries` : "—"} title="Séries" />
+                        <Chip label="🔁" value={reps || "—"} title="Rép./Durée" />
+                        <Chip label="⏲️" value={ex.rest || "—"} title="Repos" />
+                        <Chip label="🏋︎" value={load || "—"} title="Charge / RIR" />
+                        {ex.tempo && <Chip label="🎚" value={ex.tempo} title="Tempo" />}
+                      </div>
+
+                      {(ex.target || ex.equipment || ex.alt || ex.notes || ex.videoUrl) && (
+                        <div className="meta-row">
+                          {ex.target && <div>🎯 {ex.target}</div>}
+                          {ex.equipment && <div>🧰 {ex.equipment}</div>}
+                          {ex.alt && <div>🔁 Alt: {ex.alt}</div>}
+                          {ex.notes && <div>📝 {ex.notes}</div>}
+                          {ex.videoUrl && (
+                            <div>📺 <a className="underline underline-offset-2" href={ex.videoUrl} target="_blank" rel="noreferrer">Vidéo</a></div>
+                          )}
+                        </div>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
+          );
+        })}
+      </div>
     </>
   );
 }
+
