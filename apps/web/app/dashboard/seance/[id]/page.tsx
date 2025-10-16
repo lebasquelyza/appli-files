@@ -17,7 +17,7 @@ import {
 /* -------------------- utils -------------------- */
 async function getSignedInEmail(): Promise<string> {
   try {
-    // @ts-ignore optional (si next-auth n'est pas configuré en local)
+    // @ts-ignore optional (si next-auth n'est pas configuré)
     const { getServerSession } = await import("next-auth");
     // @ts-ignore optional
     const { authOptions } = await import("../../../../lib/auth");
@@ -27,72 +27,119 @@ async function getSignedInEmail(): Promise<string> {
   } catch {}
   return cookies().get("app_email")?.value || "";
 }
+
 function parseStore(val?: string | null): { sessions: any[] } {
   if (!val) return { sessions: [] };
-  try { const o = JSON.parse(val!); if (Array.isArray(o?.sessions)) return { sessions: o.sessions as any[] }; } catch {}
+  try {
+    const o = JSON.parse(val!);
+    if (Array.isArray(o?.sessions)) return { sessions: o.sessions as any[] };
+  } catch {}
   return { sessions: [] };
 }
+
 function fmtDateYMD(ymd?: string) {
   if (!ymd) return "—";
-  try { const [y,m,d]=ymd.split("-").map(Number); return new Date(y,(m||1)-1,d||1).toLocaleDateString("fr-FR",{year:"numeric",month:"long",day:"numeric"}); } catch { return "—"; }
+  try {
+    const [y, m, d] = ymd.split("-").map(Number);
+    return new Date(y, (m || 1) - 1, d || 1).toLocaleDateString("fr-FR", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+  } catch {
+    return "—";
+  }
 }
+
 function normalizeWorkoutType(input?: string): WorkoutType {
   const s = String(input || "").trim().toLowerCase();
-  if (["cardio","endurance"].includes(s)) return "cardio";
-  if (["hiit","metcon","wod"].includes(s)) return "hiit";
-  if (["mobilite","mobilité","mobilité"].includes(s)) return "mobilité";
+  if (["cardio", "endurance"].includes(s)) return "cardio";
+  if (["hiit", "metcon", "wod"].includes(s)) return "hiit";
+  if (["mobilite", "mobilité", "mobilité"].includes(s)) return "mobilité";
   return "muscu";
 }
+
 function genericFallback(type: WorkoutType): NormalizedExercise[] {
-  if (type === "cardio") return [
-    { name:"Échauffement Z1", reps:"8–10 min", block:"echauffement" },
-    { name:"Cardio continu Z2", reps:"25–35 min", block:"principal" },
-    { name:"Retour au calme + mobilité", reps:"5–8 min", block:"fin" },
-  ];
-  if (type === "mobilité") return [
-    { name:"Respiration diaphragmatique", reps:"2–3 min", block:"echauffement" },
-    { name:"90/90 hanches", reps:"8–10/ côté", block:"principal" },
-    { name:"T-spine rotations", reps:"8–10/ côté", block:"principal" },
-    { name:"Down-Dog → Cobra", reps:"6–8", block:"fin" },
-  ];
+  if (type === "cardio")
+    return [
+      { name: "Échauffement Z1", reps: "8–10 min", block: "echauffement" },
+      { name: "Cardio continu Z2", reps: "25–35 min", block: "principal" },
+      { name: "Retour au calme + mobilité", reps: "5–8 min", block: "fin" },
+    ];
+  if (type === "mobilité")
+    return [
+      { name: "Respiration diaphragmatique", reps: "2–3 min", block: "echauffement" },
+      { name: "90/90 hanches", reps: "8–10/ côté", block: "principal" },
+      { name: "T-spine rotations", reps: "8–10/ côté", block: "principal" },
+      { name: "Down-Dog → Cobra", reps: "6–8", block: "fin" },
+    ];
   return [
-    { name:"Goblet Squat", sets:3, reps:"8–12", rest:"75s", equipment:"haltères", block:"principal" },
-    { name:"Développé haltères", sets:3, reps:"8–12", rest:"75s", equipment:"haltères", block:"principal" },
-    { name:"Rowing unilatéral", sets:3, reps:"10–12/ côté", rest:"75s", equipment:"haltères", block:"principal" },
-    { name:"Planche", sets:2, reps:"30–45s", rest:"45s", equipment:"poids du corps", block:"fin" },
+    { name: "Goblet Squat", sets: 3, reps: "8–12", rest: "75s", equipment: "haltères", block: "principal" },
+    { name: "Développé haltères", sets: 3, reps: "8–12", rest: "75s", equipment: "haltères", block: "principal" },
+    { name: "Rowing unilatéral", sets: 3, reps: "10–12/ côté", rest: "75s", equipment: "haltères", block: "principal" },
+    { name: "Planche", sets: 2, reps: "30–45s", rest: "45s", equipment: "poids du corps", block: "fin" },
   ];
 }
 
 export const dynamic = "force-dynamic";
 
 /* -------------------- data loader -------------------- */
-async function loadData(id: string, searchParams?: Record<string,string|string[]|undefined>) {
+async function loadData(
+  id: string,
+  searchParams?: Record<string, string | string[] | undefined>
+) {
   const store = parseStore(cookies().get("app_sessions")?.value);
-  const fromStore = store.sessions.find((s)=>s.id===id) as (AiSession & {exercises?:NormalizedExercise[]})|undefined;
+  const fromStore = store.sessions.find((s) => s.id === id) as
+    | (AiSession & { exercises?: NormalizedExercise[] })
+    | undefined;
 
   let programme: { sessions: AiSession[] } | null = null;
-  try { programme = await getProgrammeForUser(); } catch { programme = null; }
-  const fromAi = programme?.sessions?.find((s)=>s.id===id);
+  try {
+    programme = await getProgrammeForUser();
+  } catch {
+    programme = null;
+  }
+  const fromAi = programme?.sessions?.find((s) => s.id === id);
 
   const qpTitle = typeof searchParams?.title === "string" ? searchParams!.title : "";
-  const qpDateRaw = typeof searchParams?.date  === "string" ? searchParams!.date  : "";
-  const qpType = normalizeWorkoutType(typeof searchParams?.type === "string" ? searchParams!.type : "");
-  const qpPlannedMin = typeof searchParams?.plannedMin === "string" && searchParams!.plannedMin ? Number(searchParams!.plannedMin) : undefined;
+  const qpDateRaw = typeof searchParams?.date === "string" ? searchParams!.date : "";
+  const qpType = normalizeWorkoutType(
+    typeof searchParams?.type === "string" ? searchParams!.type : ""
+  );
+  const qpPlannedMin =
+    typeof searchParams?.plannedMin === "string" && searchParams!.plannedMin
+      ? Number(searchParams!.plannedMin)
+      : undefined;
 
   const today = new Date();
-  const qpDate = qpDateRaw && /^\d{4}-\d{2}-\d{2}$/.test(qpDateRaw)
-    ? qpDateRaw
-    : `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`;
+  const qpDate =
+    qpDateRaw && /^\d{4}-\d{2}-\d{2}$/.test(qpDateRaw)
+      ? qpDateRaw
+      : `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(
+          today.getDate()
+        ).padStart(2, "0")}`;
 
-  const key = (t:string,d:string,ty:string)=>`${t}|${d}|${ty}`;
-  const storeByQD = !fromStore && qpTitle ? store.sessions.find(s=>key(s.title,s.date,s.type)===key(qpTitle,qpDate,qpType)) : undefined;
-  const aiByQD    = !fromAi && qpTitle && programme ? programme.sessions.find(s=>key(s.title,s.date,s.type)===key(qpTitle,qpDate,qpType)) : undefined;
+  const key = (t: string, d: string, ty: string) => `${t}|${d}|${ty}`;
+  const storeByQD =
+    !fromStore && qpTitle
+      ? store.sessions.find((s) => key(s.title, s.date, s.type) === key(qpTitle, qpDate, qpType))
+      : undefined;
+  const aiByQD =
+    !fromAi && qpTitle && programme
+      ? programme.sessions.find((s) => key(s.title, s.date, s.type) === key(qpTitle, qpDate, qpType))
+      : undefined;
 
   let base: AiSession | undefined =
-    (fromStore as AiSession|undefined) || fromAi || (storeByQD as AiSession|undefined) || aiByQD;
+    (fromStore as AiSession | undefined) || fromAi || (storeByQD as AiSession | undefined) || aiByQD;
 
-  if (!base && (qpTitle || qpDateRaw || (searchParams?.type as string|undefined))) {
-    base = { id:"stub", title: qpTitle || "Séance personnalisée", date: qpDate, type: qpType, plannedMin: qpPlannedMin } as AiSession;
+  if (!base && (qpTitle || qpDateRaw || (searchParams?.type as string | undefined))) {
+    base = {
+      id: "stub",
+      title: qpTitle || "Séance personnalisée",
+      date: qpDate,
+      type: qpType,
+      plannedMin: qpPlannedMin,
+    } as AiSession;
   }
 
   let profile: ReturnType<typeof buildProfileFromAnswers> | null = null;
@@ -105,8 +152,8 @@ async function loadData(id: string, searchParams?: Record<string,string|string[]
   } catch {}
 
   let exercises: NormalizedExercise[] =
-    (fromStore?.exercises as NormalizedExercise[]|undefined) ||
-    ((fromAi as any)?.exercises as NormalizedExercise[]|undefined) ||
+    (fromStore?.exercises as NormalizedExercise[] | undefined) ||
+    ((fromAi as any)?.exercises as NormalizedExercise[] | undefined) ||
     [];
 
   if (!exercises.length) {
@@ -116,7 +163,10 @@ async function loadData(id: string, searchParams?: Record<string,string|string[]
         const answers = await getAnswersForEmail(email);
         if (answers) {
           const regen = generateProgrammeFromAnswers(answers);
-          const match = regen.find(s=>s.title===base?.title && s.type===base?.type && (s.date===base?.date || !base?.date)) || regen[0];
+          const match =
+            regen.find(
+              (s) => s.title === base?.title && s.type === base?.type && (s.date === base?.date || !base?.date)
+            ) || regen[0];
           if (match?.exercises?.length) exercises = match.exercises;
         }
       }
@@ -139,14 +189,14 @@ function Chip({ label, value, title }: { label: string; value: string; title?: s
     </span>
   );
 }
-const blockNames: Record<string,string> = {
+const blockNames: Record<string, string> = {
   echauffement: "Échauffement",
   principal: "Bloc principal",
   accessoires: "Accessoires",
   fin: "Fin / retour au calme",
 };
 
-/* -------------------- styles (fix parser) -------------------- */
+/* -------------------- styles (via string) -------------------- */
 const styles = String.raw`
   .compact-card { padding: 12px; border-radius: 16px; background:#fff; box-shadow: 0 1px 0 rgba(17,24,39,.05); border:1px solid #e5e7eb; }
   .h1-compact { margin-bottom:2px; font-size: clamp(20px, 2.2vw, 24px); line-height:1.15; font-weight:800; }
@@ -161,9 +211,12 @@ const styles = String.raw`
 
 /* -------------------- page -------------------- */
 export default async function Page({
-  params, searchParams,
-}: { params: { id?: string }, searchParams?: Record<string,string|string[]|undefined> }) {
-
+  params,
+  searchParams,
+}: {
+  params: { id?: string };
+  searchParams?: Record<string, string | string[] | undefined>;
+}) {
   const id = decodeURIComponent(params?.id ?? "");
   if (!id && !(searchParams?.title || searchParams?.date || searchParams?.type)) {
     redirect("/dashboard/profile?error=Seance%20introuvable");
@@ -173,27 +226,32 @@ export default async function Page({
   if (!base) redirect("/dashboard/profile?error=Seance%20introuvable");
 
   const plannedMin = base.plannedMin ?? (profile?.timePerSession ?? 45);
-  const intensity  = base.intensity ?? "modérée";
+  const intensity = base.intensity ?? "modérée";
 
   const coachIntro =
-    base.type === "muscu" ? "Exécution propre, contrôle du tempo et progression des charges."
-  : base.type === "cardio" ? "Aérobie maîtrisée, souffle régulier en zone 2–3."
-  : base.type === "hiit"   ? "Pics d’intensité courts, technique impeccable."
-  : "Amplitude confortable, respiration calme, zéro douleur nette.";
+    base.type === "muscu"
+      ? "Exécution propre, contrôle du tempo et progression des charges."
+      : base.type === "cardio"
+      ? "Aérobie maîtrisée, souffle régulier en zone 2–3."
+      : base.type === "hiit"
+      ? "Pics d’intensité courts, technique impeccable."
+      : "Amplitude confortable, respiration calme, zéro douleur nette.";
 
-  const blockOrder = { echauffement:0, principal:1, accessoires:2, fin:3 } as const;
-  const exs = exercises.slice().sort((a,b)=>{
+  const blockOrder = { echauffement: 0, principal: 1, accessoires: 2, fin: 3 } as const;
+  const exs = exercises.slice().sort((a, b) => {
     const A = a.block ? blockOrder[a.block] ?? 99 : 50;
     const B = b.block ? blockOrder[b.block] ?? 99 : 50;
     return A - B;
   });
-  const groups = exs.reduce<Record<string, NormalizedExercise[]>>((acc,ex)=>{
-    const k = ex.block || "principal"; (acc[k] ||= []).push(ex); return acc;
+  const groups = exs.reduce<Record<string, NormalizedExercise[]>>((acc, ex) => {
+    const k = ex.block || "principal";
+    (acc[k] ||= []).push(ex);
+    return acc;
   }, {});
 
   return (
-    <>
-      <style dangerouslySetInnerHTML={{ __html: styles }} />
+    <React.Fragment>
+      <style dangerouslySetInnerHTML={{ __html: styles as string }} />
 
       {/* top bar */}
       <div className="mb-2 flex items-center justify-between no-print" style={{ paddingInline: 12 }}>
@@ -238,20 +296,26 @@ export default async function Page({
                 </li>
               )}
               {profile?.injuries?.length ? (
-                <li style={{ color: "#92400e" }}>⚠️ <b>Prudence</b> : {profile.injuries.join(", ")}</li>
+                <li style={{ color: "#92400e" }}>
+                  ⚠️ <b>Prudence</b> : {profile.injuries.join(", ")}
+                </li>
               ) : null}
-              <li>💡 <b>Conseils</b> : {
-                base.type === "muscu" ? "Laisse 1–2 reps en réserve sur la dernière série."
-                : base.type === "cardio" ? "Reste en Z2 : tu dois pouvoir parler en phrases courtes."
-                : base.type === "hiit" ? "Coupe une série si la technique se dégrade."
-                : "Mouvement lent et contrôlé, respire profondément."
-              }</li>
+              <li>
+                💡 <b>Conseils</b> :{" "}
+                {base.type === "muscu"
+                  ? "Laisse 1–2 reps en réserve sur la dernière série."
+                  : base.type === "cardio"
+                  ? "Reste en Z2 : tu dois pouvoir parler en phrases courtes."
+                  : base.type === "hiit"
+                  ? "Coupe une série si la technique se dégrade."
+                  : "Mouvement lent et contrôlé, respire profondément."}
+              </li>
             </ul>
           </div>
         </section>
 
         {/* Blocs */}
-        {(["echauffement","principal","accessoires","fin"] as const).map((k) => {
+        {(["echauffement", "principal", "accessoires", "fin"] as const).map((k) => {
           const list = groups[k] || [];
           if (!list.length) return null;
           return (
@@ -262,7 +326,7 @@ export default async function Page({
 
               <div className="grid gap-3">
                 {list.map((ex, i) => {
-                  const reps = ex.reps ? String(ex.reps) : (ex.durationSec ? `${ex.durationSec}s` : "");
+                  const reps = ex.reps ? String(ex.reps) : ex.durationSec ? `${ex.durationSec}s` : "";
                   const load = ex.load || (typeof ex.rir === "number" ? `RIR ${ex.rir}` : "");
                   return (
                     <article key={`${k}-${i}`} className="compact-card">
@@ -291,7 +355,12 @@ export default async function Page({
                           {ex.alt && <div>🔁 Alt: {ex.alt}</div>}
                           {ex.notes && <div>📝 {ex.notes}</div>}
                           {ex.videoUrl && (
-                            <div>📺 <a className="underline underline-offset-2" href={ex.videoUrl} target="_blank" rel="noreferrer">Vidéo</a></div>
+                            <div>
+                              📺{" "}
+                              <a className="underline underline-offset-2" href={ex.videoUrl} target="_blank" rel="noreferrer">
+                                Vidéo
+                              </a>
+                            </div>
                           )}
                         </div>
                       )}
@@ -303,7 +372,6 @@ export default async function Page({
           );
         })}
       </div>
-    </>
+    </React.Fragment>
   );
 }
-
