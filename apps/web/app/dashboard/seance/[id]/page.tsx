@@ -79,6 +79,8 @@ function genericFallback(type: WorkoutType): NormalizedExercise[] {
   ];
 }
 
+type ProfileT = ReturnType<typeof buildProfileFromAnswers>;
+
 export const dynamic = "force-dynamic";
 
 /* ====================== Data Loader ====================== */
@@ -99,10 +101,10 @@ async function loadData(
   }
   const fromAi = programme?.sessions?.find((s) => s.id === id);
 
-  const qpTitle = typeof searchParams?.title === "string" ? searchParams!.title : "";
-  const qpDateRaw = typeof searchParams?.date === "string" ? searchParams!.date : "";
+  const qpTitle = typeof searchParams?.title === "string" ? (searchParams!.title as string) : "";
+  const qpDateRaw = typeof searchParams?.date === "string" ? (searchParams!.date as string) : "";
   const qpType = normalizeWorkoutType(
-    typeof searchParams?.type === "string" ? searchParams!.type : ""
+    typeof searchParams?.type === "string" ? (searchParams!.type as string) : ""
   );
   const qpPlannedMin =
     typeof searchParams?.plannedMin === "string" && searchParams!.plannedMin
@@ -140,7 +142,7 @@ async function loadData(
     } as AiSession;
   }
 
-  let profile: ReturnType<typeof buildProfileFromAnswers> | null = null;
+  let profile: ProfileT | null = null;
   try {
     const email = await getSignedInEmail();
     if (email) {
@@ -207,22 +209,20 @@ const styles = String.raw`
   @media print { .no-print { display: none !important; } }
 `;
 
-/* ======================== View (JSX déplacé) ======================== */
-function PageView({
-  base,
-  profile,
-  groups,
-  plannedMin,
-  intensity,
-  coachIntro,
-}: {
+/* ======================== Types sans chevrons inlines ======================== */
+type PageViewProps = {
   base: AiSession;
-  profile: ReturnType<typeof buildProfileFromAnswers> | null;
+  profile: ProfileT | null;
   groups: Record<string, NormalizedExercise[]>;
   plannedMin: number;
   intensity: string;
   coachIntro: string;
-}) {
+};
+
+/* ======================== View (JSX) ======================== */
+function PageView(props: PageViewProps) {
+  const { base, profile, groups, plannedMin, intensity, coachIntro } = props;
+
   return (
     <div>
       <style dangerouslySetInnerHTML={{ __html: styles }} />
@@ -269,7 +269,7 @@ function PageView({
                   {profile.equipLevel === "full"
                     ? "accès salle (machines/barres)"
                     : profile.equipLevel === "limited"
-                    ? `limité (${profile.equipItems.join(", ") || "quelques charges"})`
+                    ? `limité (${profile.equipItems?.join(", ") || "quelques charges"})`
                     : "aucun (poids du corps)`}
                 </li>
               )}
@@ -293,7 +293,7 @@ function PageView({
         </section>
 
         {/* Blocs */}
-        {(["echauffement", "principal", "accessoires", "fin"] as const).map((k) => {
+        {["echauffement", "principal", "accessoires", "fin"].map((k) => {
           const list = groups[k] || [];
           if (!list.length) return null;
           return (
@@ -385,12 +385,12 @@ export default async function Page({
   const blockOrder = { echauffement: 0, principal: 1, accessoires: 2, fin: 3 } as const;
 
   const exs = exercises.slice().sort((a, b) => {
-    const A = a.block ? blockOrder[a.block as keyof typeof blockOrder] ?? 99 : 50;
-    const B = b.block ? blockOrder[b.block as keyof typeof blockOrder] ?? 99 : 50;
+    const A = a.block ? (blockOrder as any)[a.block] ?? 99 : 50;
+    const B = b.block ? (blockOrder as any)[b.block] ?? 99 : 50;
     return A - B;
   });
 
-  // groupement sans generics/casts près du return
+  // groupement safe (pas de generics/casts près du JSX)
   const groups: Record<string, NormalizedExercise[]> = {};
   for (const ex of exs) {
     const k = ex.block || "principal";
