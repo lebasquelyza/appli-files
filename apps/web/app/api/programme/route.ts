@@ -5,7 +5,7 @@ import {
   getAnswersForEmail,
   generateProgrammeFromAnswers,
   type AiProgramme,
-} from "@/app/lib/coach/ai"; // adapte le chemin si nécessaire
+} from "@/app/lib/coach/ai";
 
 export const runtime = "nodejs";
 
@@ -47,8 +47,23 @@ async function redisSetJSON(key: string, value: any, ttlSeconds?: number) {
   return await redisCmd(["SET", key, payload]);
 }
 
-/** Clé Redis */
+async function redisGet(key: string): Promise<string | null> {
+  const v = await redisCmd(["GET", key]);
+  return typeof v === "string" ? v : null;
+}
+async function redisSet(key: string, value: string, ttlSeconds?: number) {
+  if (typeof ttlSeconds === "number" && ttlSeconds > 0) {
+    return await redisCmd(["SET", key, value, "EX", ttlSeconds]);
+  }
+  return await redisCmd(["SET", key, value]);
+}
+
+/** Clés Redis */
 const keyForUser = (user: string) => `fc:program:${user}`;
+const keyAutogenAt = (user: string) => `fc:autogen_at:${user}`;
+
+/** 30 jours en secondes */
+const THIRTY_DAYS_S = 30 * 24 * 60 * 60;
 
 /* ===================== GET ===================== */
 export async function GET(req: Request) {
@@ -56,33 +71,67 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const user = searchParams.get("user") || cookies().get("fc_uid")?.value || "me";
     const autogen = searchParams.get("autogen") === "1";
-    const ttl = Number(searchParams.get("ttl")) || 0; // optionnel: TTL en secondes lors de l'autogen
+    const ttl = Number(searchParams.get("ttl")) || 0; // TTL optionnel pour la persistance du programme
+    const emailQP = searchParams.get("email") || "";
+    const emailCookie = cookies().get("app_email")?.value || "";
+    const email = emailQP || emailCookie;
 
-    // 1) Lecture Redis
+    // 1) Lecture programme existant
     let programme = await redisGetJSON<AiProgramme>(keyForUser(user));
 
-    // 2) Autogen si demandé ET vide
+    // 2) Autogen conditionnel (et limité à 1/mois)
     if ((!programme || !Array.isArray(programme.sessions) || programme.sessions.length === 0) && autogen) {
-      // email : query > cookie > rien
-      const emailQP = searchParams.get("email") || "";
-      const emailCookie = cookies().get("app_email")?.value || "";
-      const email = emailQP || emailCookie;
-
-      if (email) {
-        try {
-          const answers = await getAnswersForEmail(email);
-          if (answers) {
-            const sessions = generateProgrammeFromAnswers(answers);
-            programme = { sessions };
-            await redisSetJSON(keyForUser(user), programme, ttl > 0 ? ttl : undefined);
+      // Check rate-limit (1 par 30 jours par user)
+      const last = await redisGet(keyAutogenAt(user));
+      if (last) {
+        const lastMs = Date.parse(last);
+        if (!Number.isNaN(lastMs)) {
+          const diffMs = Date.now() - lastMs;
+          if (diffMs < THIRTY_DAYS_S * 1000) {
+            const retryAt = new Date(lastMs + THIRTY_DAYS_S * 1000);
+            return NextResponse.json(
+              {
+                ok: false,
+                error: "RATE_LIMITED",
+                message: "Limite: 1 génération par mois.",
+                retryAt: retryAt.toISOString(),
+              },
+              { status: 429 }
+            );
           }
-        } catch (e) {
-          // pas bloquant
-          console.warn("GET /api/programme autogen failed", e);
         }
+      }
+
+      // On a le droit de (re)générer
+      if (!email) {
+        return NextResponse.json(
+          { ok: false, error: "NO_EMAIL", message: "Email requis pour générer le programme." },
+          { status: 400 }
+        );
+      }
+
+      try {
+        const answers = await getAnswersForEmail(email);
+        if (!answers) {
+          return NextResponse.json(
+            { ok: false, error: "NO_SHEETS_ANSWERS", message: "Aucune réponse de questionnaire trouvée." },
+            { status: 404 }
+          );
+        }
+        const sessions = generateProgrammeFromAnswers(answers);
+        programme = { sessions };
+        await redisSetJSON(keyForUser(user), programme, ttl > 0 ? ttl : undefined);
+        // tamponne la date de génération (pas d’expiration pour conserver l’historique)
+        await redisSet(keyAutogenAt(user), new Date().toISOString());
+      } catch (e: any) {
+        return NextResponse.json(
+          { ok: false, error: "AUTOGEN_FAILED", message: String(e?.message || e) },
+          { status: 500 }
+        );
       }
     }
 
+    // 3) Réponse
     return NextResponse.json(programme ?? { sessions: [] }, { status: 200 });
   } catch (e: any) {
     return NextResponse.json(
@@ -99,6 +148,7 @@ export async function GET(req: Request) {
     "user": "user-id-opaque",
     "sessions": [ ... ] // même forme que AiProgramme.sessions
   }
+  ⚠️ Pas de rate-limit ici : c’est pour une écriture explicite depuis ton back-office/admin.
 =================================================== */
 export async function POST(req: Request) {
   try {
