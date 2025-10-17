@@ -9,7 +9,7 @@ import {
   getAnswersForEmail,
   buildProfileFromAnswers,
   type AiSession as AiSessionT,
-} from "../../lib/coach/ai";
+} from "../../../lib/coach/ai";
 
 /** ================= Constantes ================= */
 const QUESTIONNAIRE_BASE = "https://questionnaire.files-coaching.com";
