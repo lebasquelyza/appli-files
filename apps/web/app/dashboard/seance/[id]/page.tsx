@@ -290,7 +290,7 @@ async function loadData(
     | (AiSession & { exercises?: NormalizedExercise[] })
     | undefined;
 
-  // ⬇️ Remplace l'ancien getProgrammeForUser() par getAiSessions()
+  // ⬇️ lire les séances IA via la lib (email depuis cookie app_email)
   let aiSessions: AiSession[] = [];
   try {
     aiSessions = await getAiSessions();
@@ -390,8 +390,7 @@ async function loadData(
       if (email) {
         const answers = await getAnswersForEmail(email);
         if (answers) {
-          // ⬇️ generateProgrammeFromAnswers renvoie { sessions }
-          const regenProg = generateProgrammeFromAnswers(answers);
+          const regenProg = generateProgrammeFromAnswers(answers); // { sessions }
           const regen = regenProg.sessions || [];
           const match =
             regen.find(
