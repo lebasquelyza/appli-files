@@ -3,7 +3,7 @@ import React from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import {
-  getProgrammeForUser,
+  getAiSessions,
   getAnswersForEmail,
   buildProfileFromAnswers,
   generateProgrammeFromAnswers,
@@ -229,7 +229,7 @@ const PageView: React.FC<PageViewProps> = (props) => {
                       <div className="flex items-start justify-between gap-3">
                         <div className="exoname">{ex.name}</div>
                         {ex.block ? (
-                          <span className="shrink-0 rounded-full bg-neutral-50 px-2 py-0.5 text-[11px] text-neutral-600 ring-1 ring-neutral-200">
+                          <span className="shrink-0 rounded-full bg-neutral-50 px-2 py-0.5 text-[11px] text-neutral-600">
                             {blockNames[ex.block] || ex.block}
                           </span>
                         ) : null}
@@ -290,14 +290,15 @@ async function loadData(
     | (AiSession & { exercises?: NormalizedExercise[] })
     | undefined;
 
-  let programme: { sessions: AiSession[] } | null = null;
+  // ⬇️ Remplace l'ancien getProgrammeForUser() par getAiSessions()
+  let aiSessions: AiSession[] = [];
   try {
-    programme = await getProgrammeForUser();
+    aiSessions = await getAiSessions();
   } catch (e) {
-    console.warn("getProgrammeForUser failed", e);
-    programme = null;
+    console.warn("getAiSessions failed", e);
+    aiSessions = [];
   }
-  const fromAi = programme?.sessions?.find((s) => s.id === id);
+  const fromAi = aiSessions.find((s) => s.id === id);
 
   const qpTitle = typeof searchParams?.title === "string" ? (searchParams!.title as string) : "";
   const qpDateRaw = typeof searchParams?.date === "string" ? (searchParams!.date as string) : "";
@@ -323,8 +324,8 @@ async function loadData(
       ? store.sessions.find((s) => key(s.title, s.date, s.type) === key(qpTitle, qpDate, qpType))
       : undefined;
   const aiByQD =
-    !fromAi && qpTitle && programme
-      ? programme.sessions.find((s) => key(s.title, s.date, s.type) === key(qpTitle, qpDate, qpType))
+    !fromAi && qpTitle && aiSessions.length
+      ? aiSessions.find((s) => key(s.title, s.date, s.type) === key(qpTitle, qpDate, qpType))
       : undefined;
 
   let dataSource = "unknown";
@@ -379,7 +380,7 @@ async function loadData(
   // Exercices
   let exercises: NormalizedExercise[] =
     (fromStore?.exercises as NormalizedExercise[] | undefined) ||
-    ((fromAi as any)?.exercises as NormalizedExercise[] | undefined) ||
+    (fromAi?.exercises as NormalizedExercise[] | undefined) ||
     [];
 
   // Régénération si demandée OU si on n'a rien
@@ -389,10 +390,15 @@ async function loadData(
       if (email) {
         const answers = await getAnswersForEmail(email);
         if (answers) {
-          const regen = generateProgrammeFromAnswers(answers);
+          // ⬇️ generateProgrammeFromAnswers renvoie { sessions }
+          const regenProg = generateProgrammeFromAnswers(answers);
+          const regen = regenProg.sessions || [];
           const match =
             regen.find(
-              (s) => s.title === base?.title && s.type === base?.type && (s.date === base?.date || !base?.date)
+              (s) =>
+                s.title === base?.title &&
+                s.type === base?.type &&
+                (s.date === base?.date || !base?.date)
             ) || regen[0];
           if (match?.exercises?.length) {
             exercises = match.exercises;
@@ -416,7 +422,7 @@ async function loadData(
       foundStore: !!fromStore,
       foundAi: !!fromAi,
       storeLen: store.sessions.length,
-      programmeLen: programme?.sessions?.length,
+      programmeLen: aiSessions.length,
     });
   }
 
@@ -503,3 +509,4 @@ export default async function Page({
     />
   );
 }
+
