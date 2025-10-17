@@ -2,13 +2,18 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { getProgrammeForUser, getAnswersForEmail, buildProfileFromAnswers, type AiSession as AiSessionT } from "../../../lib/coach/ai";
 
+// ⚠️ Import RELATIF vers la lib AI
+import {
+  getProgrammeForUser,
+  getAnswersForEmail,
+  buildProfileFromAnswers,
+  type AiSession as AiSessionT,
+} from "../../lib/coach/ai";
 
-/** ================= ENV ================= */
+/** ================= Constantes ================= */
 const QUESTIONNAIRE_BASE = "https://questionnaire.files-coaching.com";
 
-/** ================= Types locaux (affichage) ================= */
 type WorkoutType = "muscu" | "cardio" | "hiit" | "mobilité";
 
 type Workout = {
@@ -29,7 +34,7 @@ type Store = { sessions: Workout[] };
 const norm = (s: string) =>
   s.toString().trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
-/** ================= Utils rendu ================= */
+/** ================= Utils ================= */
 function parseStore(val?: string | null): Store {
   if (!val) return { sessions: [] };
   try {
@@ -69,58 +74,34 @@ function typeBadgeClass(t: WorkoutType) {
   }
 }
 
-/** ================= Server Action : Générer programme (1/mois) ================= */
+/** =============== Server Action: (Re)générer le programme (SANS limite) =============== */
 async function doAutogenAction(formData: FormData) {
   "use server";
 
   const c = cookies();
-  const last = c.get("fc_autogen_at")?.value || "";
-  const now = new Date();
-
-  // Limite à 1/mois (30 jours glissants)
-  if (last) {
-    const lastDt = new Date(last);
-    const diffMs = now.getTime() - lastDt.getTime();
-    const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
-    if (isFinite(diffMs) && diffMs < THIRTY_DAYS) {
-      // déjà fait dans les 30j
-      redirect("/dashboard/profile?error=Limite%201%20g%C3%A9n%C3%A9ration%20par%20mois.%20R%C3%A9essayez%20plus%20tard.");
-    }
-  }
-
-  // email pour l'autogen : cookie app_email si dispo
-  const email = c.get("app_email")?.value || "";
-  // user id opaque pour Redis (si cookie fc_uid est posé, sinon "me")
   const user = c.get("fc_uid")?.value || "me";
+  const email = c.get("app_email")?.value || "";
 
-  // Appelle l’API interne (qui remplit Redis si vide) — voir apps/web/app/api/programme/route.ts
   const qp = new URLSearchParams({ user, autogen: "1" });
   if (email) qp.set("email", email);
-  const url = `${process.env.APP_BASE_URL || ""}/api/programme?${qp.toString()}` || `/api/programme?${qp.toString()}`;
+
+  // Utilise une URL relative (Netlify fonctions) ; si tu préfères absolue, ajoute APP_BASE_URL
+  const url = `/api/programme?${qp.toString()}`;
 
   try {
     const res = await fetch(url, { cache: "no-store" });
     if (!res.ok) {
       redirect("/dashboard/profile?error=%C3%89chec%20de%20la%20g%C3%A9n%C3%A9ration%20du%20programme.");
     }
-    // pose le cookie de rate-limit (visible côté serveur) — 400 jours de durée
-    c.set("fc_autogen_at", now.toISOString(), {
-      path: "/",
-      sameSite: "lax",
-      httpOnly: false,
-      // @ts-ignore — Next n'expose pas maxAge dans types cookies().set, mais fonctionne à l'exécution
-      maxAge: 60 * 60 * 24 * 400,
-    });
   } catch {
     redirect("/dashboard/profile?error=Serveur%20indisponible%20pour%20g%C3%A9n%C3%A9rer%20le%20programme.");
   }
 
-  // rafraîchit la page
   revalidatePath("/dashboard/profile");
   redirect("/dashboard/profile?success=programme");
 }
 
-/** ================= Page (Server Component) ================= */
+/** ================= Page ================= */
 export default async function Page({
   searchParams,
 }: {
@@ -128,13 +109,13 @@ export default async function Page({
 }) {
   const c = cookies();
 
-  // Store local (cookie) → séances passées
+  // Séances "faites" stockées en local (cookie)
   const store = parseStore(c.get("app_sessions")?.value);
   const past = store.sessions
     .filter((s) => s.status === "done")
     .sort((a, b) => (b.endedAt || "").localeCompare(a.endedAt || ""));
 
-  // Infos client depuis questionnaire (affichage en-tête)
+  // Infos client depuis questionnaire
   const emailForLink = c.get("app_email")?.value || "";
   let clientPrenom = "",
     clientAge: number | undefined,
@@ -143,7 +124,7 @@ export default async function Page({
 
   try {
     if (emailForLink) {
-      // On lit la dernière ligne correspondante et on construit le profil (afin d’afficher l’objectif)
+      // Récupère la dernière ligne de réponses et construit le profil
       const ans = await getAnswersForEmail(emailForLink);
       if (ans) {
         const get = (k: string) => ans[norm(k)] || ans[k] || "";
@@ -154,7 +135,6 @@ export default async function Page({
         const emailSheet = get("email") || get("adresse mail") || get("e-mail") || get("mail");
         if (!clientEmailDisplay && emailSheet) clientEmailDisplay = emailSheet;
 
-        // Objectif actuel
         const profile = buildProfileFromAnswers(ans);
         const goalMap: Record<string, string> = {
           hypertrophy: "Hypertrophie / Esthétique",
@@ -167,9 +147,11 @@ export default async function Page({
         goalLabel = goalMap[profile.goal] || "Non défini";
       }
     }
-  } catch {}
+  } catch {
+    // silencieux
+  }
 
-  // Propositions IA (utilise la même logique que la page séance)
+  // Propositions IA (même pipeline que page séance)
   const programme = await getProgrammeForUser();
   const aiSessions: AiSessionT[] = programme?.sessions ?? [];
 
@@ -181,25 +163,6 @@ export default async function Page({
     const qs = qp.toString();
     return qs ? `${QUESTIONNAIRE_BASE}?${qs}` : QUESTIONNAIRE_BASE;
   })();
-
-  // Témoin rate-limit côté UI
-  const lastAuto = c.get("fc_autogen_at")?.value || "";
-  let rateLimitText = "";
-  let canAutogen = true;
-  if (lastAuto) {
-    const lastDt = new Date(lastAuto);
-    const diffMs = Date.now() - lastDt.getTime();
-    const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
-    if (isFinite(diffMs) && diffMs < THIRTY_DAYS) {
-      canAutogen = false;
-      const nextDate = new Date(lastDt.getTime() + THIRTY_DAYS);
-      rateLimitText = `Tu pourras regénérer le ${nextDate.toLocaleDateString("fr-FR", {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      })}.`;
-    }
-  }
 
   const displayedError = searchParams?.error || "";
   const displayedSuccess = searchParams?.success || "";
@@ -231,45 +194,28 @@ export default async function Page({
       {/* Alerts */}
       <div className="space-y-3">
         {!!displayedSuccess && (
-          <div
-            className="card"
-            style={{ border: "1px solid rgba(16,185,129,.35)", background: "rgba(16,185,129,.08)", fontWeight: 600 }}
-          >
+          <div className="card" style={{ border: "1px solid rgba(16,185,129,.35)", background: "rgba(16,185,129,.08)", fontWeight: 600 }}>
             {displayedSuccess === "programme" ? "✓ Programme IA mis à jour." : "✓ Opération réussie."}
           </div>
         )}
         {!!searchParams?.done && (
-          <div
-            className="card"
-            style={{ border: "1px solid rgba(59,130,246,.35)", background: "rgba(59,130,246,.08)", fontWeight: 600 }}
-          >
+          <div className="card" style={{ border: "1px solid rgba(59,130,246,.35)", background: "rgba(59,130,246,.08)", fontWeight: 600 }}>
             ✓ Séance terminée.
           </div>
         )}
         {!!searchParams?.deleted && (
-          <div
-            className="card"
-            style={{ border: "1px solid rgba(239,68,68,.35)", background: "rgba(239,68,68,.08)", fontWeight: 600 }}
-          >
+          <div className="card" style={{ border: "1px solid rgba(239,68,68,.35)", background: "rgba(239,68,68,.08)", fontWeight: 600 }}>
             Séance supprimée.
           </div>
         )}
         {!!displayedError && (
-          <div
-            className="card"
-            style={{
-              border: "1px solid rgba(239,68,68,.35)",
-              background: "rgba(239,68,68,.08)",
-              fontWeight: 600,
-              whiteSpace: "pre-wrap",
-            }}
-          >
+          <div className="card" style={{ border: "1px solid rgba(239,68,68,.35)", background: "rgba(239,68,68,.08)", fontWeight: 600, whiteSpace: "pre-wrap" }}>
             ⚠️ {displayedError}
           </div>
         )}
       </div>
 
-      {/* ===== Mes infos + Objectif actuel + actions ===== */}
+      {/* ===== Mes infos + Objectif + Actions ===== */}
       <section className="section" style={{ marginTop: 12 }}>
         <div
           className="section-head"
@@ -277,22 +223,21 @@ export default async function Page({
         >
           <h2>Mes infos</h2>
 
-          {/* Bouton : Générer mon programme (1/mois) */}
+          {/* Bouton : Générer mon programme (pas de limite) */}
           <form action={doAutogenAction}>
             <button
               type="submit"
-              disabled={!canAutogen}
               className="btn"
               style={{
-                background: canAutogen ? "#111827" : "#e5e7eb",
-                color: canAutogen ? "#ffffff" : "#9ca3af",
+                background: "#111827",
+                color: "#ffffff",
                 border: "1px solid #d1d5db",
                 fontWeight: 600,
                 padding: "6px 10px",
                 lineHeight: 1.2,
                 borderRadius: 8,
               }}
-              title={canAutogen ? "Génère/Met à jour ton programme personnalisé" : "Limite 1 fois par mois"}
+              title="Génère/Met à jour ton programme personnalisé"
             >
               ⚙️ Générer mon programme
             </button>
@@ -315,12 +260,7 @@ export default async function Page({
 
           <div
             className="text-sm"
-            style={{
-              marginTop: 6,
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
+            style={{ marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
             title={clientEmailDisplay || "Non renseigné"}
           >
             <b>Mail :</b>{" "}
@@ -332,13 +272,6 @@ export default async function Page({
               <span className="text-gray-400">Non renseigné</span>
             )}
           </div>
-
-          {/* Rappel limite génération */}
-          {!canAutogen && rateLimitText && (
-            <div className="text-xs" style={{ marginTop: 8, color: "#92400e" }}>
-              ⏳ {rateLimitText}
-            </div>
-          )}
 
           {/* Lien vers questionnaire */}
           <div className="text-sm" style={{ marginTop: 10 }}>
@@ -357,9 +290,7 @@ export default async function Page({
         >
           <div>
             <h2 style={{ marginBottom: 6 }}>Séances proposées</h2>
-            <p className="text-sm" style={{ color: "#6b7280" }}>
-              Personnalisées via l’analyse de vos réponses.
-            </p>
+            <p className="text-sm" style={{ color: "#6b7280" }}>Personnalisées via l’analyse de vos réponses.</p>
           </div>
           <a href={questionnaireUrl} className="btn btn-dash">
             Je mets à jour
@@ -387,9 +318,6 @@ export default async function Page({
                 date: s.date,
                 type: s.type,
                 plannedMin: s.plannedMin ? String(s.plannedMin) : "",
-                // Debug pratique côté page séance
-                regen: "1",
-                debug: "1",
               });
               const href = `/dashboard/seance/${encodeURIComponent(s.id)}?${qp.toString()}`;
               return (
@@ -447,8 +375,6 @@ export default async function Page({
                 date: s.date,
                 type: s.type,
                 plannedMin: s.plannedMin ? String(s.plannedMin) : "",
-                regen: "0",
-                debug: "1",
               });
               const href = `/dashboard/seance/${encodeURIComponent(s.id)}?${qp.toString()}`;
 
