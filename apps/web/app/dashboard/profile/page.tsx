@@ -1,13 +1,14 @@
 // apps/web/app/dashboard/profile/page.tsx
 import { cookies } from "next/headers";
 
-// ENV (avec valeurs de secours pour éviter les crashs en build)
+/** ================= ENV (avec valeurs de secours) ================= */
 const SHEET_ID = process.env.SHEET_ID || "";
 const SHEET_RANGE = process.env.SHEET_RANGE || "A1:Z9999";
 const SHEET_GID = process.env.SHEET_GID || "";
 const API_BASE = process.env.FILES_COACHING_API_BASE || process.env.APP_BASE_URL || "";
 const API_KEY = process.env.OPEN_API_KEY || process.env.OPENAI_API_KEY || "";
 const QUESTIONNAIRE_BASE = process.env.FILES_COACHING_QUESTIONNAIRE_BASE || "/questionnaire";
+
 type WorkoutType = "muscu" | "cardio" | "hiit" | "mobilité";
 
 type Workout = {
@@ -31,7 +32,7 @@ type AiExercise = {
   sets?: number;
   durationSec?: number;
   rest?: string;
-  rir?: string;
+  rir?: string | number;
   tempo?: string;
   notes?: string;
   alt?: string;
@@ -60,12 +61,18 @@ type AiSession = {
 type AiProgramme = { sessions: AiSession[] };
 type Answers = Record<string, string>;
 
+/** ================= Helpers ================= */
+const norm = (s: string) =>
+  s.toString().trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
 function parseStore(val?: string | null): Store {
   if (!val) return { sessions: [] };
   try {
     const o = JSON.parse(val!);
     if (Array.isArray(o?.sessions)) return { sessions: o.sessions as Workout[] };
-  } catch {}
+  } catch (e) {
+    console.warn("profile/parseStore: invalid cookie JSON", e);
+  }
   return { sessions: [] };
 }
 
@@ -86,16 +93,6 @@ function fmtDateISO(iso?: string) {
   return iso || "—";
 }
 
-function fmtDateYMD(ymd?: string) {
-  if (!ymd) return "—";
-  try {
-    const [y, m, d] = ymd.split("-").map(Number);
-    const dt = new Date(y, (m || 1) - 1, d || 1);
-    return dt.toLocaleDateString("fr-FR", { year: "numeric", month: "long", day: "numeric" });
-  } catch {}
-  return ymd || "—";
-}
-
 function typeBadgeClass(t: WorkoutType) {
   switch (t) {
     case "muscu":
@@ -109,8 +106,7 @@ function typeBadgeClass(t: WorkoutType) {
   }
 }
 
-const norm = (s: string) =>
-  s.toString().trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+/** ================= Google Sheets ================= */
 async function fetchValues(sheetId: string, range: string) {
   const sheetName = (range.split("!")[0] || "").replace(/^'+|'+$/g, "");
   if (!sheetId) throw new Error("SHEETS_CONFIG_MISSING");
@@ -147,23 +143,14 @@ async function fetchValues(sheetId: string, range: string) {
       const lines = text.split(/\r?\n/).filter((l) => l.trim() !== "");
       for (const line of lines) {
         const cells: string[] = [];
-        let cur = "",
-          inQuotes = false;
+        let cur = "", inQuotes = false;
         for (let i = 0; i < line.length; i++) {
           const ch = line[i];
           if (ch === '"') {
-            if (inQuotes && line[i + 1] === '"') {
-              cur += '"';
-              i++;
-            } else {
-              inQuotes = !inQuotes;
-            }
+            if (inQuotes && line[i + 1] === '"') { cur += '"'; i++; } else { inQuotes = !inQuotes; }
           } else if (ch === "," && !inQuotes) {
-            cells.push(cur.trim());
-            cur = "";
-          } else {
-            cur += ch;
-          }
+            cells.push(cur.trim()); cur = "";
+          } else { cur += ch; }
         }
         cells.push(cur.trim());
         rows.push(cells.map((c) => c.replace(/^"|"$/g, "")));
@@ -223,22 +210,39 @@ async function getAnswersForEmail(email: string, sheetId: string, range: string)
   }
   return null;
 }
+
 async function getSignedInEmail(): Promise<string | null> {
-  // simplifié : on lit un cookie "app_email" si présent
+  // ici on lit uniquement le cookie, c'est ce que ta page seance sait déjà faire aussi
   return cookies().get("app_email")?.value || null;
 }
 
+/** ================= Fetch IA Programme =================
+ * - Utilise API_BASE si présent (absolu)
+ * - Ajoute des endpoints **relatifs** si API_BASE est vide
+ * - Mappe souplement les champs côté API
+ */
 async function fetchAiProgramme(userId?: string): Promise<AiProgramme | null> {
   const uidFromCookie = cookies().get("fc_uid")?.value;
   const uid = userId || uidFromCookie || "me";
 
-  const endpoints = [
-    `${API_BASE}/api/programme?user=${encodeURIComponent(uid)}`,
-    `${API_BASE}/api/program?user=${encodeURIComponent(uid)}`,
-    `${API_BASE}/api/sessions?source=ai&user=${encodeURIComponent(uid)}`,
+  const abs = (p: string) => (API_BASE ? `${API_BASE.replace(/\/$/, "")}${p}` : "");
+  const rel = (p: string) => `${p}`;
+
+  const candidateUrls = [
+    abs(`/api/programme?user=${encodeURIComponent(uid)}`),
+    abs(`/api/program?user=${encodeURIComponent(uid)}`),
+    abs(`/api/sessions?source=ai&user=${encodeURIComponent(uid)}`),
+    abs(`/api/ai/programme?user=${encodeURIComponent(uid)}`),
+    abs(`/api/ai/sessions?user=${encodeURIComponent(uid)}`),
+    // relatifs
+    rel(`/api/programme?user=${encodeURIComponent(uid)}`),
+    rel(`/api/program?user=${encodeURIComponent(uid)}`),
+    rel(`/api/sessions?source=ai&user=${encodeURIComponent(uid)}`),
+    rel(`/api/ai/programme?user=${encodeURIComponent(uid)}`),
+    rel(`/api/ai/sessions?user=${encodeURIComponent(uid)}`),
   ].filter(Boolean);
 
-  for (const url of endpoints) {
+  for (const url of candidateUrls) {
     try {
       const res = await fetch(url, {
         headers: { Accept: "application/json", ...(API_KEY ? { Authorization: `Bearer ${API_KEY}` } : {}) },
@@ -251,9 +255,9 @@ async function fetchAiProgramme(userId?: string): Promise<AiProgramme | null> {
       if (!raw.length) continue;
 
       const sessions: AiSession[] = raw.map((r: any, i: number) => ({
-        id: String(r.id ?? `ai-${i}`),
+        id: String(r.id ?? r._id ?? `ai-${i}`),
         title: String(r.title ?? r.name ?? "Séance personnalisée"),
-        type: (r.type ?? r.category ?? "muscu") as WorkoutType,
+        type: (String(r.type ?? r.category ?? "muscu").toLowerCase() as WorkoutType),
         date: String(r.date ?? r.day ?? r.when ?? new Date().toISOString().slice(0, 10)),
         plannedMin:
           typeof r.plannedMin === "number" ? r.plannedMin : typeof r.duration === "number" ? r.duration : undefined,
@@ -266,16 +270,17 @@ async function fetchAiProgramme(userId?: string): Promise<AiProgramme | null> {
         content: r.content,
       }));
       return { sessions };
-    } catch {}
+    } catch (e) {
+      console.warn("fetchAiProgramme failed for", url, e);
+    }
   }
 
-  // Fallback : moteur de règles local (questionnaire)
+  // Fallback questionnaire ⇒ séance unique (même logique qu'avant)
   try {
     const email = (await getSignedInEmail()) || cookies().get("app_email")?.value || "";
-    if (email) {
+    if (email && SHEET_ID) {
       const ans = await getAnswersForEmail(email, SHEET_ID, SHEET_RANGE);
       if (ans) {
-        // mini-générateur très simple si pas d’API : 1 séance générique
         const sessions: AiSession[] = [
           {
             id: "ai-fallback-1",
@@ -283,17 +288,20 @@ async function fetchAiProgramme(userId?: string): Promise<AiProgramme | null> {
             type: "muscu",
             date: new Date().toISOString().slice(0, 10),
             plannedMin: 45,
-            note: "Générée depuis le questionnaire",
+            note: "Générée depuis le questionnaire (fallback)",
           },
         ];
         return { sessions };
       }
     }
-  } catch {}
+  } catch (e) {
+    console.warn("fallback-from-questionnaire failed", e);
+  }
 
   return null;
 }
 
+/** ================= Page ================= */
 export default async function Page({
   searchParams,
 }: {
@@ -316,7 +324,7 @@ export default async function Page({
     clientEmailDisplay = emailForLink;
 
   try {
-    if (emailForLink) {
+    if (emailForLink && SHEET_ID) {
       const ans = await getAnswersForEmail(emailForLink, SHEET_ID, SHEET_RANGE);
       if (ans) {
         const get = (k: string) => ans[norm(k)] || ans[k] || "";
@@ -328,7 +336,9 @@ export default async function Page({
         if (!clientEmailDisplay && emailSheet) clientEmailDisplay = emailSheet;
       }
     }
-  } catch {}
+  } catch (e) {
+    console.warn("Sheets answers fetch failed", e);
+  }
 
   // Propositions IA (sans pagination)
   const programme = await fetchAiProgramme();
@@ -392,7 +402,7 @@ export default async function Page({
         )}
       </div>
 
-      {/* ===== Mes infos (Prénom + Âge + Mail) ===== */}
+      {/* ===== Mes infos ===== */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
           <h2>Mes infos</h2>
@@ -419,7 +429,7 @@ export default async function Page({
         </div>
       </section>
 
-      {/* Séances proposées — titres cliquables uniquement (sans pagination) */}
+      {/* ===== Séances proposées (IA) ===== */}
       <section className="section" style={{ marginTop: 12 }}>
         <div
           className="section-head"
@@ -427,7 +437,7 @@ export default async function Page({
         >
           <div>
             <h2 style={{ marginBottom: 6 }}>Séances proposées</h2>
-            <p className="text-sm" style={{ color: "#6b7280" }}>Personnalisées via l’analyse complète de vos réponses.</p>
+            <p className="text-sm" style={{ color: "#6b7280" }}>Personnalisées via l’analyse de vos réponses.</p>
           </div>
           <a href={questionnaireUrl} className="btn btn-dash">
             Je mets à jour
@@ -451,9 +461,11 @@ export default async function Page({
                 date: s.date,
                 type: s.type,
                 plannedMin: s.plannedMin ? String(s.plannedMin) : "",
+                // Force la régénération IA + badge debug côté page séance :
+                regen: "1",
+                debug: "1",
               });
               const href = `/dashboard/seance/${encodeURIComponent(s.id)}?${qp.toString()}`;
-
               return (
                 <li key={s.id} className="card p-3">
                   <div className="flex items-center justify-between gap-3">
@@ -476,7 +488,7 @@ export default async function Page({
         )}
       </section>
 
-      {/* Séances enregistrées — compacte */}
+      {/* ===== Séances enregistrées ===== */}
       <section className="section" style={{ marginTop: 12 }}>
         <div
           className="section-head"
@@ -505,6 +517,8 @@ export default async function Page({
                 date: s.date,
                 type: s.type,
                 plannedMin: s.plannedMin ? String(s.plannedMin) : "",
+                regen: "0",
+                debug: "1",
               });
               const href = `/dashboard/seance/${encodeURIComponent(s.id)}?${qp.toString()}`;
 
