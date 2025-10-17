@@ -114,7 +114,7 @@ type PageViewProps = {
 };
 
 /* ======================== View (JSX) ======================== */
-const PageView: React.FC<PageViewProps> = (props): JSX.Element => {
+const PageView: React.FC<PageViewProps> = (props) => {
   const { base, profile, groups, plannedMin, intensity, coachIntro } = props;
 
   return (
