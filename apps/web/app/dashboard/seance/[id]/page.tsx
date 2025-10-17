@@ -83,6 +83,171 @@ type ProfileT = ReturnType<typeof buildProfileFromAnswers>;
 
 export const dynamic = "force-dynamic";
 
+/* ======================== Styles & Const ======================== */
+const blockNames: Record<string, string> = {
+  echauffement: "Échauffement",
+  principal: "Bloc principal",
+  accessoires: "Accessoires",
+  fin: "Fin / retour au calme",
+};
+
+const styles = String.raw`
+  .compact-card { padding: 12px; border-radius: 16px; background:#fff; box-shadow: 0 1px 0 rgba(17,24,39,.05); border:1px solid #e5e7eb; }
+  .h1-compact { margin-bottom:2px; font-size: clamp(20px, 2.2vw, 24px); line-height:1.15; font-weight:800; }
+  .lead-compact { margin-top:4px; font-size: clamp(12px, 1.6vw, 14px); line-height:1.35; color:#4b5563; }
+  .section-title { font-size: clamp(16px,1.9vw,18px); line-height:1.2; margin:0; font-weight:800; }
+  .exoname { font-size: 15.5px; line-height:1.25; font-weight:700; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .meta-row { font-size:12.5px; color:#6b7280; margin-top:6px; display:grid; gap:4px; grid-template-columns:1fr; }
+  @media(min-width:640px){ .meta-row{ grid-template-columns:1fr 1fr; } }
+  @media print { .no-print { display: none !important; } }
+`;
+
+/* ======================== Types ======================== */
+type PageViewProps = {
+  base: AiSession;
+  profile: ProfileT | null;
+  groups: Record<string, NormalizedExercise[]>;
+  plannedMin: number;
+  intensity: string;
+  coachIntro: string;
+};
+
+/* ======================== View (JSX) ======================== */
+const PageView: React.FC<PageViewProps> = (props): JSX.Element => {
+  const { base, profile, groups, plannedMin, intensity, coachIntro } = props;
+
+  return (
+    <div>
+      <style dangerouslySetInnerHTML={{ __html: styles }} />
+      {/* top bar */}
+      <div className="mb-2 flex items-center justify-between no-print" style={{ paddingInline: 12 }}>
+        <a
+          href="/dashboard/seances"
+          className="inline-flex items-center rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm font-medium text-neutral-800 hover:bg-neutral-50"
+        >
+          ← Retour
+        </a>
+        <a
+          href="javascript:print()"
+          className="inline-flex items-center rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm font-medium text-neutral-800 hover:bg-neutral-50"
+        >
+          Imprimer
+        </a>
+      </div>
+
+      {/* wrapper étroit pour mobile */}
+      <div className="mx-auto w-full" style={{ maxWidth: 640, paddingInline: 12, paddingBottom: 24 }}>
+        {/* header */}
+        <div className="page-header">
+          <div>
+            <h1 className="h1-compact">{base.title}</h1>
+            <p className="lead-compact">
+              {fmtDateYMD(base.date)} · {plannedMin} min · {base.type}
+            </p>
+          </div>
+        </div>
+
+        {/* Brief */}
+        <section className="section" style={{ marginTop: 12 }}>
+          <div className="section-head" style={{ marginBottom: 8 }}>
+            <h2 className="section-title">Brief de séance</h2>
+          </div>
+          <div className="compact-card">
+            <ul style={{ fontSize: 14, lineHeight: 1.5 }}>
+              <li>🎯 <b>Objectif</b> : {coachIntro}</li>
+              <li>⏱️ <b>Durée</b> : {plannedMin} min · <b>Intensité</b> : {intensity}</li>
+              {profile?.equipLevel && (
+                <li>
+                  🧰 <b>Matériel</b> :{" "}
+                  {profile.equipLevel === "full"
+                    ? "accès salle (machines/barres)"
+                    : profile.equipLevel === "limited"
+                    ? `limité (${profile.equipItems?.join(", ") || "quelques charges"})`
+                    : "aucun (poids du corps)"}
+                </li>
+              )}
+              {profile?.injuries?.length ? (
+                <li style={{ color: "#92400e" }}>
+                  ⚠️ <b>Prudence</b> : {profile.injuries.join(", ")}
+                </li>
+              ) : null}
+              <li>
+                💡 <b>Conseils</b> :{" "}
+                {base.type === "muscu"
+                  ? "Laisse 1–2 reps en réserve sur la dernière série."
+                  : base.type === "cardio"
+                  ? "Reste en Z2 : tu dois pouvoir parler en phrases courtes."
+                  : base.type === "hiit"
+                  ? "Coupe une série si la technique se dégrade."
+                  : "Mouvement lent et contrôlé, respire profondément."}
+              </li>
+            </ul>
+          </div>
+        </section>
+
+        {/* Blocs */}
+        {["echauffement", "principal", "accessoires", "fin"].map((k) => {
+          const list = groups[k] || [];
+          if (!list.length) return null;
+          return (
+            <section key={k} className="section" style={{ marginTop: 12 }}>
+              <div className="section-head" style={{ marginBottom: 8 }}>
+                <h2 className="section-title">{blockNames[k]}</h2>
+              </div>
+
+              <div className="grid gap-3">
+                {list.map((ex, i) => {
+                  const reps = ex.reps ? String(ex.reps) : ex.durationSec ? `${ex.durationSec}s` : "";
+                  const load = ex.load || (typeof ex.rir === "number" ? `RIR ${ex.rir}` : "");
+                  return (
+                    <article key={`${k}-${i}`} className="compact-card">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="exoname">{ex.name}</div>
+                        {ex.block ? (
+                          <span className="shrink-0 rounded-full bg-neutral-50 px-2 py-0.5 text-[11px] text-neutral-600 ring-1 ring-neutral-200">
+                            {blockNames[ex.block] || ex.block}
+                          </span>
+                        ) : null}
+                      </div>
+
+                      {/* chips compactes */}
+                      <div className="chips">
+                        <Chip label="🧱" value={typeof ex.sets === "number" ? `${ex.sets} séries` : "—"} title="Séries" />
+                        <Chip label="🔁" value={reps || "—"} title="Rép./Durée" />
+                        <Chip label="⏲️" value={ex.rest || "—"} title="Repos" />
+                        <Chip label="🏋︎" value={load || "—"} title="Charge / RIR" />
+                        {ex.tempo && <Chip label="🎚" value={ex.tempo} title="Tempo" />}
+                      </div>
+
+                      {(ex.target || ex.equipment || ex.alt || ex.notes || ex.videoUrl) && (
+                        <div className="meta-row">
+                          {ex.target && <div>🎯 {ex.target}</div>}
+                          {ex.equipment && <div>🧰 {ex.equipment}</div>}
+                          {ex.alt && <div>🔁 Alt: {ex.alt}</div>}
+                          {ex.notes && <div>📝 {ex.notes}</div>}
+                          {ex.videoUrl && (
+                            <div>
+                              📺{" "}
+                              <a className="underline underline-offset-2" href={ex.videoUrl} target="_blank" rel="noreferrer">
+                                Vidéo
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 /* ====================== Data Loader ====================== */
 async function loadData(
   id: string,
@@ -189,170 +354,6 @@ function Chip({ label, value, title }: { label: string; value: string; title?: s
     </span>
   );
 }
-const blockNames: Record<string, string> = {
-  echauffement: "Échauffement",
-  principal: "Bloc principal",
-  accessoires: "Accessoires",
-  fin: "Fin / retour au calme",
-};
-
-/* ======================== Styles ======================== */
-const styles = String.raw`
-  .compact-card { padding: 12px; border-radius: 16px; background:#fff; box-shadow: 0 1px 0 rgba(17,24,39,.05); border:1px solid #e5e7eb; }
-  .h1-compact { margin-bottom:2px; font-size: clamp(20px, 2.2vw, 24px); line-height:1.15; font-weight:800; }
-  .lead-compact { margin-top:4px; font-size: clamp(12px, 1.6vw, 14px); line-height:1.35; color:#4b5563; }
-  .section-title { font-size: clamp(16px,1.9vw,18px); line-height:1.2; margin:0; font-weight:800; }
-  .exoname { font-size: 15.5px; line-height:1.25; font-weight:700; }
-  .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
-  .meta-row { font-size:12.5px; color:#6b7280; margin-top:6px; display:grid; gap:4px; grid-template-columns:1fr; }
-  @media(min-width:640px){ .meta-row{ grid-template-columns:1fr 1fr; } }
-  @media print { .no-print { display: none !important; } }
-`;
-
-/* ======================== Types sans chevrons inlines ======================== */
-type PageViewProps = {
-  base: AiSession;
-  profile: ProfileT | null;
-  groups: Record<string, NormalizedExercise[]>;
-  plannedMin: number;
-  intensity: string;
-  coachIntro: string;
-};
-
-/* ======================== View (JSX) ======================== */
-function PageView(props: PageViewProps) {
-  const { base, profile, groups, plannedMin, intensity, coachIntro } = props;
-
-  return (
-    <div>
-      <style dangerouslySetInnerHTML={{ __html: styles }} />
-      {/* top bar */}
-      <div className="mb-2 flex items-center justify-between no-print" style={{ paddingInline: 12 }}>
-        <a
-          href="/dashboard/seances"
-          className="inline-flex items-center rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm font-medium text-neutral-800 hover:bg-neutral-50"
-        >
-          ← Retour
-        </a>
-        <a
-          href="javascript:print()"
-          className="inline-flex items-center rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm font-medium text-neutral-800 hover:bg-neutral-50"
-        >
-          Imprimer
-        </a>
-      </div>
-
-      {/* wrapper étroit pour mobile */}
-      <div className="mx-auto w-full" style={{ maxWidth: 640, paddingInline: 12, paddingBottom: 24 }}>
-        {/* header */}
-        <div className="page-header">
-          <div>
-            <h1 className="h1-compact">{base.title}</h1>
-            <p className="lead-compact">
-              {fmtDateYMD(base.date)} · {plannedMin} min · {base.type}
-            </p>
-          </div>
-        </div>
-
-        {/* Brief */}
-        <section className="section" style={{ marginTop: 12 }}>
-          <div className="section-head" style={{ marginBottom: 8 }}>
-            <h2 className="section-title">Brief de séance</h2>
-          </div>
-          <div className="compact-card">
-            <ul style={{ fontSize: 14, lineHeight: 1.5 }}>
-              <li>🎯 <b>Objectif</b> : {coachIntro}</li>
-              <li>⏱️ <b>Durée</b> : {plannedMin} min · <b>Intensité</b> : {intensity}</li>
-              {profile?.equipLevel && (
-                <li>
-                  🧰 <b>Matériel</b> :{" "}
-                  {profile.equipLevel === "full"
-                    ? "accès salle (machines/barres)"
-                    : profile.equipLevel === "limited"
-                    ? `limité (${profile.equipItems?.join(", ") || "quelques charges"})`
-                    : "aucun (poids du corps)`}
-                </li>
-              )}
-              {profile?.injuries?.length ? (
-                <li style={{ color: "#92400e" }}>
-                  ⚠️ <b>Prudence</b> : {profile.injuries.join(", ")}
-                </li>
-              ) : null}
-              <li>
-                💡 <b>Conseils</b> :{" "}
-                {base.type === "muscu"
-                  ? "Laisse 1–2 reps en réserve sur la dernière série."
-                  : base.type === "cardio"
-                  ? "Reste en Z2 : tu dois pouvoir parler en phrases courtes."
-                  : base.type === "hiit"
-                  ? "Coupe une série si la technique se dégrade."
-                  : "Mouvement lent et contrôlé, respire profondément."}
-              </li>
-            </ul>
-          </div>
-        </section>
-
-        {/* Blocs */}
-        {["echauffement", "principal", "accessoires", "fin"].map((k) => {
-          const list = groups[k] || [];
-          if (!list.length) return null;
-          return (
-            <section key={k} className="section" style={{ marginTop: 12 }}>
-              <div className="section-head" style={{ marginBottom: 8 }}>
-                <h2 className="section-title">{blockNames[k]}</h2>
-              </div>
-
-              <div className="grid gap-3">
-                {list.map((ex, i) => {
-                  const reps = ex.reps ? String(ex.reps) : ex.durationSec ? `${ex.durationSec}s` : "";
-                  const load = ex.load || (typeof ex.rir === "number" ? `RIR ${ex.rir}` : "");
-                  return (
-                    <article key={`${k}-${i}`} className="compact-card">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="exoname">{ex.name}</div>
-                        {ex.block ? (
-                          <span className="shrink-0 rounded-full bg-neutral-50 px-2 py-0.5 text-[11px] text-neutral-600 ring-1 ring-neutral-200">
-                            {blockNames[ex.block] || ex.block}
-                          </span>
-                        ) : null}
-                      </div>
-
-                      {/* chips compactes */}
-                      <div className="chips">
-                        <Chip label="🧱" value={typeof ex.sets === "number" ? `${ex.sets} séries` : "—"} title="Séries" />
-                        <Chip label="🔁" value={reps || "—"} title="Rép./Durée" />
-                        <Chip label="⏲️" value={ex.rest || "—"} title="Repos" />
-                        <Chip label="🏋︎" value={load || "—"} title="Charge / RIR" />
-                        {ex.tempo && <Chip label="🎚" value={ex.tempo} title="Tempo" />}
-                      </div>
-
-                      {(ex.target || ex.equipment || ex.alt || ex.notes || ex.videoUrl) && (
-                        <div className="meta-row">
-                          {ex.target && <div>🎯 {ex.target}</div>}
-                          {ex.equipment && <div>🧰 {ex.equipment}</div>}
-                          {ex.alt && <div>🔁 Alt: {ex.alt}</div>}
-                          {ex.notes && <div>📝 {ex.notes}</div>}
-                          {ex.videoUrl && (
-                            <div>
-                              📺{" "}
-                              <a className="underline underline-offset-2" href={ex.videoUrl} target="_blank" rel="noreferrer">
-                                Vidéo
-                              </a>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </article>
-                  );
-                })}
-              </div>
-            </section>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 
 /* ======================== Page (server) ======================== */
 export default async function Page({
@@ -390,7 +391,6 @@ export default async function Page({
     return A - B;
   });
 
-  // groupement safe (pas de generics/casts près du JSX)
   const groups: Record<string, NormalizedExercise[]> = {};
   for (const ex of exs) {
     const k = ex.block || "principal";
