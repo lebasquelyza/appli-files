@@ -1,12 +1,12 @@
 // apps/web/app/api/programme/route.ts
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-
-// Import vers la lib AI (sans .ts)
 import {
   getAnswersForEmail,
   generateProgrammeFromAnswers,
+  buildProfileFromAnswers,
   type AiProgramme,
+  type Profile,
 } from "../../../lib/coach/ai";
 
 export const runtime = "nodejs";
@@ -56,8 +56,7 @@ const keyForUser = (user: string) => `fc:program:${user}`;
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const user =
-      searchParams.get("user") || cookies().get("fc_uid")?.value || "me";
+    const user = searchParams.get("user") || cookies().get("fc_uid")?.value || "me";
     const autogen = searchParams.get("autogen") === "1";
     const ttl = Number(searchParams.get("ttl")) || 0;
     const emailQP = searchParams.get("email") || "";
@@ -69,18 +68,12 @@ export async function GET(req: Request) {
 
     // 2) Autogen si demandé et vide
     if (
-      (!programme ||
-        !Array.isArray(programme.sessions) ||
-        programme.sessions.length === 0) &&
-      autogen
+      autogen &&
+      (!programme || !Array.isArray(programme.sessions) || programme.sessions.length === 0)
     ) {
       if (!email) {
         return NextResponse.json(
-          {
-            ok: false,
-            error: "NO_EMAIL",
-            message: "Email requis pour générer le programme.",
-          },
+          { ok: false, error: "NO_EMAIL", message: "Email requis pour générer le programme." },
           { status: 400 }
         );
       }
@@ -88,24 +81,17 @@ export async function GET(req: Request) {
         const answers = await getAnswersForEmail(email);
         if (!answers) {
           return NextResponse.json(
-            {
-              ok: false,
-              error: "NO_SHEETS_ANSWERS",
-              message: "Aucune réponse de questionnaire trouvée.",
-            },
+            { ok: false, error: "NO_SHEETS_ANSWERS", message: "Aucune réponse de questionnaire trouvée." },
             { status: 404 }
           );
         }
 
-        // ⬇️ Ici on récupère un AiProgramme complet (pas un tableau simple)
-        const prog = generateProgrammeFromAnswers(answers);
-        programme = prog;
+        // ✅ construit le profil + programme
+        const profile: Profile = buildProfileFromAnswers(answers);
+        const prog = generateProgrammeFromAnswers(answers); // { sessions }
+        programme = { sessions: prog.sessions, profile };
 
-        await redisSetJSON(
-          keyForUser(user),
-          programme,
-          ttl > 0 ? ttl : undefined
-        );
+        await redisSetJSON(keyForUser(user), programme, ttl > 0 ? ttl : undefined);
       } catch (e: any) {
         return NextResponse.json(
           { ok: false, error: "AUTOGEN_FAILED", message: String(e?.message || e) },
@@ -129,21 +115,16 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => ({}));
     const user = String(body.user || cookies().get("fc_uid")?.value || "me");
     const sessions = Array.isArray(body.sessions) ? body.sessions : [];
+    const profile = (body.profile || null) as Profile | null;
 
     if (!sessions.length) {
-      return NextResponse.json(
-        { ok: false, error: "NO_SESSIONS" },
-        { status: 400 }
-      );
+      return NextResponse.json({ ok: false, error: "NO_SESSIONS" }, { status: 400 });
     }
 
-    const programme: AiProgramme = { sessions };
+    const programme: AiProgramme = profile ? { sessions, profile } : { sessions };
     await redisSetJSON(keyForUser(user), programme);
 
-    return NextResponse.json(
-      { ok: true, user, count: sessions.length },
-      { status: 200 }
-    );
+    return NextResponse.json({ ok: true, user, count: sessions.length }, { status: 200 });
   } catch (e: any) {
     return NextResponse.json(
       { ok: false, error: "WRITE_FAILED", message: String(e?.message || e) },
