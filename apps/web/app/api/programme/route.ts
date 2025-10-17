@@ -6,7 +6,7 @@ import {
   getAnswersForEmail,
   generateProgrammeFromAnswers,
   type AiProgramme,
-} from "../../lib/coach/ai";
+} from "../../../lib/coach/ai";
 
 export const runtime = "nodejs";
 
