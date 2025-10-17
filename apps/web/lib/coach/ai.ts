@@ -1,13 +1,5 @@
-// app/lib/coach/ai.ts
-
-import "server-only"; // garantit un usage côté serveur sans transformer tout en Server Action
-
-
-/**
- * Module serveur : construit des séances personnalisées à partir de l'API
- * (si dispo) ou, à défaut, à partir des réponses Google Sheets + règles.
- * ❗ API de surface inchangée pour ne rien casser côté app.
- */
+// apps/web/lib/coach/ai.ts
+import "server-only";
 
 import { cookies } from "next/headers";
 
@@ -63,8 +55,8 @@ export type Profile = {
   goal: Goal;
   subGoals: SubGoal[];
   level: "debutant" | "intermediaire" | "avance";
-  freq: number;                // séances / semaine
-  timePerSession: number;      // minutes
+  freq: number;
+  timePerSession: number;
   equipLevel: EquipLevel;
   equipItems: string[];
   gym: boolean;
@@ -77,7 +69,8 @@ export type Profile = {
 };
 
 /* ===================== Config ===================== */
-const API_BASE = process.env.FILES_COACHING_API_BASE || "https://files-coaching.com";
+// ⚠️ Ne PAS mettre une URL par défaut externe ici : on veut essayer les endpoints relatifs d’abord.
+const API_BASE = process.env.FILES_COACHING_API_BASE || ""; // vide par défaut
 const API_KEY  = process.env.FILES_COACHING_API_KEY || "";
 const SHEET_ID    = process.env.SHEET_ID    || "1XH-BOUj4tXAVy49ONBIdLiWM97hQ-Fg8h5-OTRGvHC4";
 const SHEET_RANGE = process.env.SHEET_RANGE || "Réponses!A1:K";
@@ -85,10 +78,9 @@ const SHEET_GID   = process.env.SHEET_GID   || "1160551014";
 
 /* ===================== Utils ===================== */
 export function norm(s: string) {
-  // Normalise accents/ponctuation/espaces et rend en minuscule
   return s
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "") // diacritiques
+    .replace(/[\u0300-\u036f]/g, "")
     .replace(/œ/g, "oe")
     .replace(/ç/g, "c")
     .replace(/[’']/g, "'")
@@ -97,7 +89,6 @@ export function norm(s: string) {
     .toLowerCase();
 }
 function readNum(s: string): number | undefined {
-  // Gère "1,75", "1.75", "1,75 m", "75kg"
   const cleaned = String(s).replace(/[^\d.,-]/g, "").replace(",", ".");
   const n = Number(cleaned);
   return Number.isFinite(n) ? n : undefined;
@@ -124,11 +115,9 @@ async function fetchValues(sheetId: string, range: string) {
     const text = await res.text().catch(() => "");
     if (!res.ok) continue;
 
-    // Évite les pages HTML d’erreur/consentement
     const looksHtml = text.trim().startsWith("<") || lastCT.includes("text/html");
     if (looksHtml) continue;
 
-    // Parser CSV minimaliste (gère guillemets et virgules dans les champs)
     const rows: string[][] = [];
     const lines = text.split(/\r?\n/).filter(l => l.trim() !== "");
     for (const line of lines) {
@@ -197,7 +186,6 @@ export async function getAnswersForEmail(
         const key = headers[j] || `col${j}`;
         rec[key] = (row[j] ?? "").trim();
       }
-      // Champs minimaux
       rec["nom"]    = rec["nom"]    || rec[`col${NO_HEADER_COLS.nom}`]    || "";
       rec["prenom"] = rec["prenom"] || rec[`col${NO_HEADER_COLS.prenom}`] || "";
       rec["age"]    = rec["age"]    || rec[`col${NO_HEADER_COLS.age}`]    || "";
@@ -212,12 +200,11 @@ export async function getAnswersForEmail(
 function classifyGoal(raw: string): Goal {
   const s = norm(raw);
   if (/(prise|hypertroph|volume|masse|muscle|bodybuild|construction)/.test(s)) return "hypertrophy";
-  if (/(tonifi|galb|se dessiner|shape|esthetique|esthetique)/.test(s)) return "hypertrophy";
-  if (/(perte|mince|sech|seche|gras|poids|cut|dry|recomp|affiner|affinage)/.test(s)) return "fatloss";
+  if (/(tonifi|galb|dessiner|shape|esthetique)/.test(s)) return "hypertrophy";
+  if (/(perte|mince|sech|gras|poids|cut|dry|recomp|affiner)/.test(s)) return "fatloss";
   if (/(force|1rm|5x5|3x5|power|puissance|max strength|halterophil|weightlifting)/.test(s)) return "strength";
   if (/(endurance|cardio|marathon|semi|trail|tri|velo|cycl|rameur|row|course|running|footing|z2|intervalles)/.test(s)) return "endurance";
-  if (/(endurance musculaire|metcon|wod|crossfit)/.test(s)) return "endurance";
-  if (/(mobilit|souplesse|etirement|etire|douleur|rehab|reeduc|posture)/.test(s)) return "mobility";
+  if (/(mobilit|souplesse|etirement|rehab|reeduc|posture)/.test(s)) return "mobility";
   return "general";
 }
 function detectSubGoals(raw: string): SubGoal[] {
@@ -225,7 +212,7 @@ function detectSubGoals(raw: string): SubGoal[] {
   if (/(fessier|glute|booty)/.test(s)) out.push("glutes");
   if (/(cuisse|jambe|quadri|ischio)/.test(s)) out.push("legs");
   if (/(pec|poitrine|chest)/.test(s)) out.push("chest");
-  if (/(dos|lats|trap|rowing)/.test(s)) out.push("back");
+  if (/(dos|lats|trap)/.test(s)) out.push("back");
   if (/(bras|biceps|triceps)/.test(s)) out.push("arms");
   if (/(epaul|delto)/.test(s)) out.push("shoulders");
   if (/(posture|mobilite|souplesse)/.test(s)) out.push("posture");
@@ -252,8 +239,8 @@ function parseFreq(raw: string): number {
 }
 function parseTimePerSession(raw: string): number {
   const s = norm(raw);
-  const hMatch = s.match(/(\d+)\s*h(?:\s*(\d+))?/);           // "1h" ou "1h 15"
-  const minMatch = s.match(/(\d{2,3})\s*(?:min|m)\b/);       // "45min"
+  const hMatch = s.match(/(\d+)\s*h(?:\s*(\d+))?/);
+  const minMatch = s.match(/(\d{2,3})\s*(?:min|m)\b/);
   if (hMatch) {
     const h = parseInt(hMatch[1], 10);
     const m = hMatch[2] ? parseInt(hMatch[2], 10) : 0;
@@ -311,14 +298,8 @@ export function buildProfileFromAnswers(ans: Answers): Profile {
   const imc = poids && taille ? Math.round((poids / Math.pow(taille/100, 2)) * 10) / 10 : undefined;
 
   const objectif =
-    get("objectif") ||
-    get("objectif principal") ||
-    get("ton objectif") ||
-    get("ton objectif principal") ||
-    get("objectif sportif") ||
-    get("but") ||
-    get("but principal") ||
-    "";
+    get("objectif") || get("objectif principal") || get("ton objectif") || get("ton objectif principal") ||
+    get("objectif sportif") || get("but") || get("but principal") || "";
 
   const sousObj  = get("zones a travailler") || get("zones à travailler") || "";
   const niveau   = get("niveau") || "";
@@ -358,7 +339,7 @@ export function buildProfileFromAnswers(ans: Answers): Profile {
     equipLevel: equip.level, equipItems: equip.items, gym: equip.gym, location: equip.location as any,
     cardioPref, injuries,
     sleepOk: /(bien|ok|correct)/.test(norm(sommeil)) || undefined,
-    stressHigh: /(eleve|eleve|haut)/.test(norm(stress)) || undefined,
+    stressHigh: /(eleve|haut)/.test(norm(stress)) || undefined,
     likesWOD: (equip as any).likesWOD || false,
   };
 }
@@ -438,7 +419,7 @@ function durationFor(p: Profile): number {
   return Math.max(25, Math.min(90, d));
 }
 
-/* ===================== Bibliothèque d’exos & sécurité ===================== */
+/* ===================== Bibliothèque d’exos ===================== */
 const EXOS = {
   pb: {
     squat:      { name:"Squat au poids du corps", reps:"12-15", sets:3, rest:"60s",  equipment:"PB",     target:"cuisses/fessiers" },
@@ -488,20 +469,18 @@ function safe(ex: NormalizedExercise, injuries: string[]): NormalizedExercise | 
   return ex;
 }
 
-/* ===================== Construction des blocs ===================== */
+/* ===================== Construction blocs ===================== */
 function buildSessionBlocks(profile: Profile, kind: { title: string; type: WorkoutType }, plannedMin: number) {
   const warmup: NormalizedExercise[] = [];
   const main: NormalizedExercise[] = [];
   const fin: NormalizedExercise[] = [];
   const acc: NormalizedExercise[] = [];
 
-  // 1) Échauffement
   warmup.push({ name:"Mobilité dynamique bas/haut", durationSec:300, rest:"—", block:"echauffement", notes:"chevilles, hanches, T-spine" });
   if (profile.goal !== "mobility") {
     warmup.push({ name:"Activation core (Deadbug)", durationSec:120, rest:"30s", block:"echauffement" });
   }
 
-  // 2) Principal
   const addSafe = (e?: NormalizedExercise | null) => { if (e) main.push({ ...e, block:"principal" }); };
   const addSafeAcc = (e?: NormalizedExercise | null) => { if (e) acc.push({ ...e, block:"accessoires" }); };
   const I = profile.injuries;
@@ -526,7 +505,6 @@ function buildSessionBlocks(profile: Profile, kind: { title: string; type: Worko
     addSafeAcc(safe(EXOS.db.rdl as any, I));
     addSafeAcc(safe(EXOS.db.bandFacePull as any, I));
   } else {
-    // Sans matériel
     if (kind.type === "hiit" || /HIIT|Circuit/i.test(kind.title)) {
       addSafe(safe(EXOS.pb.burpee, I)); addSafe(safe(EXOS.pb.rowInverted, I)); addSafe(safe(EXOS.pb.lunge, I)); addSafe(safe(EXOS.pb.pushup, I));
       fin.push({ name:"Sprint 6×20\" (récup 100\")", sets:6, durationSec:20, rest:"100s", block:"fin", target:"cardio" });
@@ -536,11 +514,9 @@ function buildSessionBlocks(profile: Profile, kind: { title: string; type: Worko
     }
   }
 
-  // 3) Fin si rien ajouté
   if (fin.length === 0) {
     if (profile.goal === "mobility") {
-      const a = EXOS.mobility["90_90"];
-      const b = EXOS.mobility.doorway;
+      const a = EXOS.mobility["90_90"]; const b = EXOS.mobility.doorway;
       if (a) fin.push({ ...a, block: "fin" });
       if (b) fin.push({ ...b, block: "fin" });
     } else {
@@ -548,24 +524,20 @@ function buildSessionBlocks(profile: Profile, kind: { title: string; type: Worko
     }
   }
 
-  // 4) Ajustement durée (on coupe les accessoires si trop long,
-  //    puis on ajoute du temps de cardio facile si trop court)
   const approxTime = (arr: NormalizedExercise[]) =>
     arr.reduce((t, e) => t + (e.durationSec ? e.durationSec * (e.sets || 1) : (e.sets || 3) * 60), 0);
 
   const targetSec = plannedMin * 60;
   let totalSec = approxTime(warmup) + approxTime(main) + approxTime(fin) + approxTime(acc);
 
-  // Trop long → retirer accessoires
   while (totalSec > targetSec && acc.length) {
     acc.pop();
     totalSec = approxTime(warmup) + approxTime(main) + approxTime(fin) + approxTime(acc);
   }
 
-  // Trop court → ajouter marche Z2 (cooldown actif)
   if (totalSec < targetSec - 120 && profile.goal !== "mobility") {
     const missing = targetSec - totalSec;
-    const addMin = Math.min(10 * 60, Math.max(180, missing)); // 3' à 10'
+    const addMin = Math.min(10 * 60, Math.max(180, missing));
     fin.push({ name:"Marche Z2 / Récup active", durationSec:addMin, rest:"—", block:"fin", target:"cardio" });
   }
 
@@ -623,11 +595,23 @@ export async function fetchAiProgramme(getSignedInEmail: () => Promise<string>):
   const uidFromCookie = cookies().get("fc_uid")?.value;
   const uid = uidFromCookie || "me";
 
+  const abs = (p: string) => (API_BASE ? `${API_BASE.replace(/\/$/, "")}${p}` : "");
+  const rel = (p: string) => `${p}`;
+
   const endpoints = [
-    `${API_BASE}/api/programme?user=${encodeURIComponent(uid)}`,
-    `${API_BASE}/api/program?user=${encodeURIComponent(uid)}`,
-    `${API_BASE}/api/sessions?source=ai&user=${encodeURIComponent(uid)}`,
-  ];
+    // relatifs (même domaine/functions)
+    rel(`/api/programme?user=${encodeURIComponent(uid)}`),
+    rel(`/api/program?user=${encodeURIComponent(uid)}`),
+    rel(`/api/sessions?source=ai&user=${encodeURIComponent(uid)}`),
+    rel(`/api/ai/programme?user=${encodeURIComponent(uid)}`),
+    rel(`/api/ai/sessions?user=${encodeURIComponent(uid)}`),
+    // absolus si API_BASE fourni
+    abs(`/api/programme?user=${encodeURIComponent(uid)}`),
+    abs(`/api/program?user=${encodeURIComponent(uid)}`),
+    abs(`/api/sessions?source=ai&user=${encodeURIComponent(uid)}`),
+    abs(`/api/ai/programme?user=${encodeURIComponent(uid)}`),
+    abs(`/api/ai/sessions?user=${encodeURIComponent(uid)}`),
+  ].filter(Boolean);
 
   for (const url of endpoints) {
     try {
@@ -642,9 +626,9 @@ export async function fetchAiProgramme(getSignedInEmail: () => Promise<string>):
       if (!raw.length) continue;
 
       const sessions: AiSession[] = raw.map((r: any, i: number) => ({
-        id: String(r.id ?? `ai-${i}`),
+        id: String(r.id ?? r._id ?? `ai-${i}`),
         title: String(r.title ?? r.name ?? "Séance personnalisée"),
-        type: (r.type ?? r.category ?? "muscu") as WorkoutType,
+        type: (String(r.type ?? r.category ?? "muscu").toLowerCase() as WorkoutType),
         date: String(r.date ?? r.day ?? r.when ?? new Date().toISOString().slice(0, 10)),
         plannedMin: typeof r.plannedMin === "number" ? r.plannedMin : typeof r.duration === "number" ? r.duration : undefined,
         note: typeof r.note === "string" ? r.note : typeof r.notes === "string" ? r.notes : undefined,
@@ -654,28 +638,48 @@ export async function fetchAiProgramme(getSignedInEmail: () => Promise<string>):
         blocks: Array.isArray(r.blocks) ? r.blocks : undefined,
         plan: r.plan, content: r.content,
       }));
+      console.log("[ai] fetchAiProgramme OK from", url, "count=", sessions.length);
       return { sessions };
-    } catch {
-      // on tente l’endpoint suivant
+    } catch (e) {
+      console.warn("[ai] fetchAiProgramme failed", url, e);
     }
   }
 
-  // Fallback : moteur de règles via questionnaire Sheets
+  // Fallback : règles (Sheets)
   try {
-    const detectedEmail = await getSignedInEmail();
-    const emailFromCookie = cookies().get("app_email")?.value || "";
-    const email = detectedEmail || emailFromCookie;
-    if (email) {
-      const ans = await getAnswersForEmail(email, SHEET_ID, SHEET_RANGE);
-      if (ans) return { sessions: generateProgrammeFromAnswers(ans) };
+    const email = await getSignedInEmail();
+    if (!email) {
+      console.warn("[ai] fallback rules: no email (cookie/session) — cannot pull Sheets");
+      return null;
     }
-  } catch {}
+    const ans = await getAnswersForEmail(email, SHEET_ID, SHEET_RANGE);
+    if (ans) {
+      const sessions = generateProgrammeFromAnswers(ans);
+      console.log("[ai] fallback rules generated", sessions.length, "sessions for", email);
+      return { sessions };
+    }
+  } catch (e) {
+    console.warn("[ai] fallback rules failed", e);
+  }
   return null;
 }
 
-/* ===================== WRAPPERS DE CONFORT (compat) ===================== */
-// Source d’email par défaut (cookie "app_email")
+/* ===================== WRAPPERS DE CONFORT ===================== */
+// Email par défaut : essaye NextAuth puis cookie "app_email"
 async function getSignedInEmailDefault(): Promise<string> {
+  try {
+    // @ts-ignore optional deps
+    const { getServerSession } = await import("next-auth");
+    // @ts-ignore optional deps
+    const { authOptions } = await import("../auth").catch(() => ({ authOptions: undefined as any }));
+    if (getServerSession && authOptions) {
+      const session = await getServerSession(authOptions as any);
+      const email = (session as any)?.user?.email as string | undefined;
+      if (email) return email;
+    }
+  } catch (e) {
+    // pas bloquant
+  }
   return cookies().get("app_email")?.value || "";
 }
 
@@ -688,10 +692,11 @@ export async function getAiSessions(): Promise<AiSession[]> {
 /** Renvoie { sessions } — pratique pour l’import default */
 export async function getProgrammeForUser(): Promise<AiProgramme | null> {
   const prog = await fetchAiProgramme(getSignedInEmailDefault);
-  return prog ?? { sessions: [] };
+  // ne masque pas tout : si null, on renvoie null (les pages gèrent déjà les fallbacks visuels)
+  return prog ?? null;
 }
 
-// Alias compat pour pages qui utiliseraient d’autres noms :
+// Alias compat
 export const generateProgrammeForUser = getProgrammeForUser;
 export const buildProgrammeForUser = getProgrammeForUser;
 export const generateProgramme = getProgrammeForUser;
