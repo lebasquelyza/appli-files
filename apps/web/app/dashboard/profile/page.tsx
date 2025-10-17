@@ -110,7 +110,7 @@ type ProgrammeFromApi = {
     email: string;
     prenom?: string;
     age?: number;
-    goal?: string; // on l'affiche via map
+    goal?: string;
     timePerSession?: number;
   } & Record<string, any>;
 };
@@ -155,14 +155,23 @@ export default async function Page({
 
   // ✅ Charge le programme + profil depuis l'API (=> Redis)
   const prog = await fetchProgrammeFromApi();
+
+  // Typage sûr du profil (évite l'erreur "Property 'prenom' does not exist on type '{}'")
+  const p: {
+    email?: string;
+    prenom?: string;
+    age?: number;
+    goal?: string;
+    timePerSession?: number;
+  } = (prog?.profile ?? {}) as any;
+
   const aiSessions: AiSessionT[] = Array.isArray(prog?.sessions) ? prog!.sessions : [];
 
   // Infos profil persistantes (affichées même si Sheets n'est pas dispo)
-  const p = prog?.profile || {};
   const clientPrenom = (typeof p.prenom === "string" && p.prenom && !/\d/.test(p.prenom)) ? p.prenom : "";
   const clientAge = (typeof p.age === "number" && p.age > 0) ? p.age : undefined;
   const clientEmailDisplay = (typeof p.email === "string" && p.email) ? p.email : (c.get("app_email")?.value || "");
-  const goalLabel = goalLabelFromKey((p as any).goal);
+  const goalLabel = goalLabelFromKey(p.goal);
 
   // URL questionnaire pré-rempli
   const questionnaireUrl = (() => {
