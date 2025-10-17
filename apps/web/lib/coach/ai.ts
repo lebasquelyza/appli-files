@@ -249,10 +249,137 @@ export async function getAnswersForEmail(
   return null;
 }
 
-/* ===================== Exports génération & programme ===================== */
-export {
-  buildProfileFromAnswers,
-  generateProgrammeFromAnswers,
-  getProgrammeForUser,
-  getAiSessions,
-} from "./ai-old";
+/* ===================== Implémentations locales (remplacent ./ai-old) ===================== */
+
+// mapping simple de string objectif -> Goal
+function mapGoal(s?: string): Goal {
+  const g = norm(s || "");
+  if (g.includes("force")) return "strength";
+  if (g.includes("hypert")) return "hypertrophy";
+  if (g.includes("gras") || g.includes("perte")) return "fatloss";
+  if (g.includes("endurance") || g.includes("cardio")) return "endurance";
+  if (g.includes("mobil")) return "mobility";
+  return "general";
+}
+
+function mapLevel(s?: string): Profile["level"] {
+  const l = norm(s || "");
+  if (l.startsWith("deb")) return "debutant";
+  if (l.startsWith("inter")) return "intermediaire";
+  if (l.startsWith("av")) return "avance";
+  return "debutant";
+}
+
+function mapEquipLevel(s?: string): EquipLevel {
+  const t = norm(s || "");
+  if (!t) return "none";
+  if (t.includes("barre") || t.includes("rack") || t.includes("complet"))
+    return "full";
+  if (t.includes("halter") || t.includes("kettle") || t.includes("elasti"))
+    return "limited";
+  return "none";
+}
+
+export function buildProfileFromAnswers(answers: Answers): Profile {
+  const weight = readNum(answers["poids"] || answers["weight"] || "");
+  const height = readNum(answers["taille"] || answers["height"] || "");
+  const imc =
+    weight && height ? +(weight / Math.pow((height ?? 0) / 100, 2)).toFixed(1) : undefined;
+
+  const freq =
+    readNum(answers["disponibilite"] || answers["fréquence"] || "") ?? 3;
+
+  const timePerSession = readNum(
+    answers["temps par séance"] ||
+      answers["durée séance"] ||
+      answers["duree seance"] ||
+      ""
+  ) ?? 45;
+
+  const locationStr = norm(answers["lieu"] || "");
+  const location: Profile["location"] =
+    locationStr.includes("maison") || locationStr.includes("home")
+      ? "home"
+      : locationStr.includes("salle") || locationStr.includes("gym")
+      ? "gym"
+      : locationStr.includes("extérieur") || locationStr.includes("exterieur")
+      ? "outdoor"
+      : "mixed";
+
+  const equipItems = (answers["as tu du materiel a ta disposition"] || "")
+    .split(/[;,]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  return {
+    email: (answers["email"] || "").trim().toLowerCase(),
+    prenom: answers["prenom"] || answers["prénom"],
+    age: readNum(answers["age"] || "") ?? undefined,
+    height: height ?? undefined,
+    weight: weight ?? undefined,
+    imc,
+    goal: mapGoal(answers["objectif"]),
+    subGoals: [],
+    level: mapLevel(answers["niveau"]),
+    freq,
+    timePerSession,
+    equipLevel: mapEquipLevel(
+      answers["as tu du materiel a ta disposition"] || ""
+    ),
+    equipItems,
+    gym: location === "gym",
+    location,
+    injuries: (answers["blessures"] || "").split(/[;,]/).map((s) => s.trim()).filter(Boolean),
+  };
+}
+
+export function generateProgrammeFromAnswers(answers: Answers): AiProgramme {
+  const p = buildProfileFromAnswers(answers);
+  const today = new Date();
+  const sessions: AiSession[] = Array.from({ length: p.freq }).map((_, i) => {
+    const d = new Date(today);
+    d.setDate(today.getDate() + i);
+    const type: WorkoutType =
+      p.goal === "endurance"
+        ? "cardio"
+        : p.goal === "mobility"
+        ? "mobilité"
+        : "muscu";
+    return {
+      id: `${p.email}-${d.toISOString().slice(0, 10)}`,
+      title: type === "muscu" ? "Full body" : type === "cardio" ? "Cardio structuré" : "Mobilité",
+      type,
+      date: d.toISOString(),
+      plannedMin: p.timePerSession,
+      intensity: p.goal === "fatloss" || p.goal === "strength" ? "modérée" : "faible",
+      exercises:
+        type === "muscu"
+          ? [
+              { name: "Squat goblet", sets: 3, reps: "10-12", rest: "60-90s", block: "principal" },
+              { name: "Rowing haltère", sets: 3, reps: "8-10", rest: "60-90s", block: "principal" },
+              { name: "Pompes", sets: 3, reps: "max-2", rest: "60s", block: "principal" },
+            ]
+          : type === "cardio"
+          ? [{ name: "Intervals 4x4", durationSec: 4 * 60 * 4, notes: "RPE 7-8", block: "principal" }]
+          : [{ name: "Flow hanches/chevilles", durationSec: 10 * 60, block: "principal" }],
+    };
+  });
+  return { sessions };
+}
+
+export async function getProgrammeForUser(email: string): Promise<AiProgramme | null> {
+  const ans = await getAnswersForEmail(email);
+  if (!ans) return null;
+  return generateProgrammeFromAnswers(ans);
+}
+
+export async function getAiSessions(email?: string): Promise<AiSession[]> {
+  const e =
+    email ||
+    cookies().get("user_email")?.value ||
+    cookies().get("next-auth.session-token")?.value || // fallback improbable, mais on garde
+    "";
+  if (!e) return [];
+  const prog = await getProgrammeForUser(e);
+  return prog?.sessions ?? [];
+}
