@@ -85,16 +85,31 @@ async function doAutogenAction(formData: FormData) {
   const qp = new URLSearchParams({ user, autogen: "1" });
   if (email) qp.set("email", email);
 
-  // Utilise une URL relative (Netlify fonctions) ; si tu préfères absolue, ajoute APP_BASE_URL
-  const url = `/api/programme?${qp.toString()}`;
+  // ✅ URL ABSOLUE pour Netlify (évite "Serveur indisponible")
+  const base =
+    process.env.APP_BASE_URL?.replace(/\/+$/, "") ||
+    process.env.NEXTAUTH_URL?.replace(/\/+$/, "") ||
+    "http://localhost:3000";
+
+  const url = `${base}/api/programme?${qp.toString()}`;
 
   try {
     const res = await fetch(url, { cache: "no-store" });
     if (!res.ok) {
-      redirect("/dashboard/profile?error=%C3%89chec%20de%20la%20g%C3%A9n%C3%A9ration%20du%20programme.");
+      let msg = "Échec de la génération du programme.";
+      try {
+        const j = await res.json();
+        if (j?.message) msg = j.message;
+        if (j?.error === "NO_EMAIL") msg = "Email requis pour générer le programme.";
+        if (j?.error === "NO_SHEETS_ANSWERS") msg = "Aucune réponse de questionnaire trouvée.";
+      } catch {}
+      redirect(`/dashboard/profile?error=${encodeURIComponent(msg)}`);
     }
   } catch {
-    redirect("/dashboard/profile?error=Serveur%20indisponible%20pour%20g%C3%A9n%C3%A9rer%20le%20programme.");
+    redirect(
+      "/dashboard/profile?error=" +
+        encodeURIComponent("Serveur indisponible pour générer le programme.")
+    );
   }
 
   revalidatePath("/dashboard/profile");
@@ -117,10 +132,10 @@ export default async function Page({
 
   // Infos client depuis questionnaire
   const emailForLink = c.get("app_email")?.value || "";
-  let clientPrenom = "",
-    clientAge: number | undefined,
-    clientEmailDisplay = emailForLink,
-    goalLabel = "";
+  let clientPrenom = "";
+  let clientAge: number | undefined;
+  let clientEmailDisplay = emailForLink;
+  let goalLabel = "";
 
   try {
     if (emailForLink) {
@@ -128,14 +143,25 @@ export default async function Page({
       const ans = await getAnswersForEmail(emailForLink);
       if (ans) {
         const get = (k: string) => ans[norm(k)] || ans[k] || "";
-        clientPrenom = get("prénom") || get("prenom") || "";
+
+        // Profil (sert de fallback fiable pour prénom/âge/objectif)
+        const profile = buildProfileFromAnswers(ans);
+
+        // Prénom prioritaire: réponses brutes -> fallback profil
+        clientPrenom = get("prénom") || get("prenom") || profile.prenom || "";
+
+        // Âge: parse brut -> fallback profil.age
         const ageStr = get("age");
         const num = Number((ageStr || "").toString().replace(",", "."));
-        clientAge = Number.isFinite(num) && num > 0 ? Math.floor(num) : undefined;
+        clientAge =
+          (Number.isFinite(num) && num > 0 ? Math.floor(num) : undefined) ??
+          (typeof profile.age === "number" ? profile.age : undefined);
+
+        // Email d’affichage
         const emailSheet = get("email") || get("adresse mail") || get("e-mail") || get("mail");
         if (!clientEmailDisplay && emailSheet) clientEmailDisplay = emailSheet;
 
-        const profile = buildProfileFromAnswers(ans);
+        // Objectif lisible
         const goalMap: Record<string, string> = {
           hypertrophy: "Hypertrophie / Esthétique",
           fatloss: "Perte de gras",
@@ -246,7 +272,8 @@ export default async function Page({
         <div className="card">
           <div className="text-sm" style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
             <span>
-              <b>Prénom :</b> {clientPrenom || <i className="text-gray-400">Non renseigné</i>}
+              <b>Prénom :</b>{" "}
+              {clientPrenom ? clientPrenom : <i className="text-gray-400">Non renseigné</i>}
             </span>
             <span>
               <b>Âge :</b>{" "}
