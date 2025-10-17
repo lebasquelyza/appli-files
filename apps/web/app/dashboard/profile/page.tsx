@@ -1,14 +1,18 @@
 // apps/web/app/dashboard/profile/page.tsx
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
+import {
+  getProgrammeForUser,
+  getAnswersForEmail,
+  buildProfileFromAnswers,
+  type AiSession as AiSessionT,
+} from "@/app/lib/coach/ai";
 
-/** ================= ENV (avec valeurs de secours) ================= */
-const SHEET_ID = process.env.SHEET_ID || "";
-const SHEET_RANGE = process.env.SHEET_RANGE || "A1:Z9999";
-const SHEET_GID = process.env.SHEET_GID || "";
-const API_BASE = process.env.FILES_COACHING_API_BASE || process.env.APP_BASE_URL || "";
-const API_KEY = process.env.OPEN_API_KEY || process.env.OPENAI_API_KEY || "";
-const QUESTIONNAIRE_BASE = process.env.FILES_COACHING_QUESTIONNAIRE_BASE || "/questionnaire";
+/** ================= ENV ================= */
+const QUESTIONNAIRE_BASE = "https://questionnaire.files-coaching.com";
 
+/** ================= Types locaux (affichage) ================= */
 type WorkoutType = "muscu" | "cardio" | "hiit" | "mobilité";
 
 type Workout = {
@@ -26,53 +30,16 @@ type Workout = {
 
 type Store = { sessions: Workout[] };
 
-type AiExercise = {
-  name: string;
-  reps?: string;
-  sets?: number;
-  durationSec?: number;
-  rest?: string;
-  rir?: string | number;
-  tempo?: string;
-  notes?: string;
-  alt?: string;
-};
-
-type AiBlock = {
-  name: "echauffement" | "principal" | "accessoires" | "fin";
-  items: AiExercise[];
-};
-
-type AiSession = {
-  id: string;
-  title: string;
-  type: WorkoutType;
-  date: string;
-  plannedMin?: number;
-  note?: string;
-  intensity?: string | number;
-  recommendedBy?: string;
-  exercises?: AiExercise[];
-  blocks?: AiBlock[];
-  plan?: any;
-  content?: any;
-};
-
-type AiProgramme = { sessions: AiSession[] };
-type Answers = Record<string, string>;
-
-/** ================= Helpers ================= */
 const norm = (s: string) =>
   s.toString().trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
+/** ================= Utils rendu ================= */
 function parseStore(val?: string | null): Store {
   if (!val) return { sessions: [] };
   try {
     const o = JSON.parse(val!);
     if (Array.isArray(o?.sessions)) return { sessions: o.sessions as Workout[] };
-  } catch (e) {
-    console.warn("profile/parseStore: invalid cookie JSON", e);
-  }
+  } catch {}
   return { sessions: [] };
 }
 
@@ -106,226 +73,82 @@ function typeBadgeClass(t: WorkoutType) {
   }
 }
 
-/** ================= Google Sheets ================= */
-async function fetchValues(sheetId: string, range: string) {
-  const sheetName = (range.split("!")[0] || "").replace(/^'+|'+$/g, "");
-  if (!sheetId) throw new Error("SHEETS_CONFIG_MISSING");
+/** ================= Server Action : Générer programme (1/mois) ================= */
+async function doAutogenAction(formData: FormData) {
+  "use server";
 
-  const tries: string[] = [];
-  if (SHEET_GID) {
-    tries.push(
-      `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&id=${sheetId}&gid=${encodeURIComponent(
-        SHEET_GID
-      )}`
-    );
-    tries.push(
-      `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&gid=${encodeURIComponent(SHEET_GID)}`
-    );
-    tries.push(
-      `https://docs.google.com/spreadsheets/d/${sheetId}/pub?output=csv&gid=${encodeURIComponent(SHEET_GID)}`
-    );
-  }
-  if (sheetName) {
-    tries.push(
-      `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`
-    );
-  }
+  const c = cookies();
+  const last = c.get("fc_autogen_at")?.value || "";
+  const now = new Date();
 
-  for (const url of tries) {
-    const res = await fetch(url, { cache: "no-store" });
-    const lastCT = res.headers.get("content-type") || "";
-    const text = await res.text().catch(() => "");
-    if (res.ok) {
-      const looksHtml = text.trim().startsWith("<") || lastCT.includes("text/html");
-      if (looksHtml) continue;
-
-      const rows: string[][] = [];
-      const lines = text.split(/\r?\n/).filter((l) => l.trim() !== "");
-      for (const line of lines) {
-        const cells: string[] = [];
-        let cur = "", inQuotes = false;
-        for (let i = 0; i < line.length; i++) {
-          const ch = line[i];
-          if (ch === '"') {
-            if (inQuotes && line[i + 1] === '"') { cur += '"'; i++; } else { inQuotes = !inQuotes; }
-          } else if (ch === "," && !inQuotes) {
-            cells.push(cur.trim()); cur = "";
-          } else { cur += ch; }
-        }
-        cells.push(cur.trim());
-        rows.push(cells.map((c) => c.replace(/^"|"$/g, "")));
-      }
-      return { values: rows };
-    }
-  }
-  throw new Error("SHEETS_FETCH_FAILED");
-}
-
-const NO_HEADER_COLS = { nom: 0, prenom: 1, age: 2, email: 10 };
-
-async function getAnswersForEmail(email: string, sheetId: string, range: string): Promise<Answers | null> {
-  const data = await fetchValues(sheetId, range);
-  const values: string[][] = data.values || [];
-  if (values.length === 0) return null;
-
-  const firstRowNorm = values[0].map(norm);
-  const headerCandidates = ["adresse mail", "email", "e-mail", "mail"];
-  const hasHeader = firstRowNorm.some((h) => headerCandidates.includes(h));
-
-  let headers: string[] = [];
-  let idxEmail = -1;
-
-  if (hasHeader) {
-    headers = firstRowNorm;
-    idxEmail = headers.findIndex((h) => headerCandidates.includes(h));
-  } else {
-    const width = Math.max(values[0]?.length || 0, NO_HEADER_COLS.email + 1);
-    headers = Array.from({ length: width }, (_, i) => `col${i}`);
-    headers[NO_HEADER_COLS.nom] = "nom";
-    headers[NO_HEADER_COLS.prenom] = "prenom";
-    headers[NO_HEADER_COLS.age] = "age";
-    headers[NO_HEADER_COLS.email] = "email";
-    idxEmail = NO_HEADER_COLS.email;
-  }
-
-  if (idxEmail === -1) return null;
-
-  const start = hasHeader ? 1 : 0;
-  for (let i = values.length - 1; i >= start; i--) {
-    const row = values[i] || [];
-    const cell = (row[idxEmail] || "").trim().toLowerCase();
-    if (!cell) continue;
-    if (cell === email.trim().toLowerCase()) {
-      const rec: Answers = {};
-      for (let j = 0; j < row.length; j++) {
-        const key = headers[j] || `col${j}`;
-        rec[key] = (row[j] ?? "").trim();
-      }
-      rec["nom"] = rec["nom"] || rec[`col${NO_HEADER_COLS.nom}`] || "";
-      rec["prenom"] = rec["prenom"] || rec[`col${NO_HEADER_COLS.prenom}`] || "";
-      rec["age"] = rec["age"] || rec[`col${NO_HEADER_COLS.age}`] || "";
-      rec["email"] = rec["email"] || rec[`col${NO_HEADER_COLS.email}`] || "";
-      return rec;
-    }
-  }
-  return null;
-}
-
-async function getSignedInEmail(): Promise<string | null> {
-  // ici on lit uniquement le cookie, c'est ce que ta page seance sait déjà faire aussi
-  return cookies().get("app_email")?.value || null;
-}
-
-/** ================= Fetch IA Programme =================
- * - Utilise API_BASE si présent (absolu)
- * - Ajoute des endpoints **relatifs** si API_BASE est vide
- * - Mappe souplement les champs côté API
- */
-async function fetchAiProgramme(userId?: string): Promise<AiProgramme | null> {
-  const uidFromCookie = cookies().get("fc_uid")?.value;
-  const uid = userId || uidFromCookie || "me";
-
-  const abs = (p: string) => (API_BASE ? `${API_BASE.replace(/\/$/, "")}${p}` : "");
-  const rel = (p: string) => `${p}`;
-
-  const candidateUrls = [
-    abs(`/api/programme?user=${encodeURIComponent(uid)}`),
-    abs(`/api/program?user=${encodeURIComponent(uid)}`),
-    abs(`/api/sessions?source=ai&user=${encodeURIComponent(uid)}`),
-    abs(`/api/ai/programme?user=${encodeURIComponent(uid)}`),
-    abs(`/api/ai/sessions?user=${encodeURIComponent(uid)}`),
-    // relatifs
-    rel(`/api/programme?user=${encodeURIComponent(uid)}`),
-    rel(`/api/program?user=${encodeURIComponent(uid)}`),
-    rel(`/api/sessions?source=ai&user=${encodeURIComponent(uid)}`),
-    rel(`/api/ai/programme?user=${encodeURIComponent(uid)}`),
-    rel(`/api/ai/sessions?user=${encodeURIComponent(uid)}`),
-  ].filter(Boolean);
-
-  for (const url of candidateUrls) {
-    try {
-      const res = await fetch(url, {
-        headers: { Accept: "application/json", ...(API_KEY ? { Authorization: `Bearer ${API_KEY}` } : {}) },
-        cache: "no-store",
-      });
-      if (!res.ok) continue;
-
-      const data = (await res.json()) as any;
-      const raw = Array.isArray(data?.sessions) ? data.sessions : Array.isArray(data) ? data : [];
-      if (!raw.length) continue;
-
-      const sessions: AiSession[] = raw.map((r: any, i: number) => ({
-        id: String(r.id ?? r._id ?? `ai-${i}`),
-        title: String(r.title ?? r.name ?? "Séance personnalisée"),
-        type: (String(r.type ?? r.category ?? "muscu").toLowerCase() as WorkoutType),
-        date: String(r.date ?? r.day ?? r.when ?? new Date().toISOString().slice(0, 10)),
-        plannedMin:
-          typeof r.plannedMin === "number" ? r.plannedMin : typeof r.duration === "number" ? r.duration : undefined,
-        note: typeof r.note === "string" ? r.note : typeof r.notes === "string" ? r.notes : undefined,
-        intensity: r.intensity as any,
-        recommendedBy: r.recommendedBy ?? r.model ?? "Coach Files",
-        exercises: Array.isArray(r.exercises) ? r.exercises : undefined,
-        blocks: Array.isArray(r.blocks) ? r.blocks : undefined,
-        plan: r.plan,
-        content: r.content,
-      }));
-      return { sessions };
-    } catch (e) {
-      console.warn("fetchAiProgramme failed for", url, e);
+  // Limite à 1/mois (30 jours glissants)
+  if (last) {
+    const lastDt = new Date(last);
+    const diffMs = now.getTime() - lastDt.getTime();
+    const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
+    if (isFinite(diffMs) && diffMs < THIRTY_DAYS) {
+      // déjà fait dans les 30j
+      redirect("/dashboard/profile?error=Limite%201%20g%C3%A9n%C3%A9ration%20par%20mois.%20R%C3%A9essayez%20plus%20tard.");
     }
   }
 
-  // Fallback questionnaire ⇒ séance unique (même logique qu'avant)
+  // email pour l'autogen : cookie app_email si dispo
+  const email = c.get("app_email")?.value || "";
+  // user id opaque pour Redis (si cookie fc_uid est posé, sinon "me")
+  const user = c.get("fc_uid")?.value || "me";
+
+  // Appelle l’API interne (qui remplit Redis si vide) — voir apps/web/app/api/programme/route.ts
+  const qp = new URLSearchParams({ user, autogen: "1" });
+  if (email) qp.set("email", email);
+  const url = `${process.env.APP_BASE_URL || ""}/api/programme?${qp.toString()}` || `/api/programme?${qp.toString()}`;
+
   try {
-    const email = (await getSignedInEmail()) || cookies().get("app_email")?.value || "";
-    if (email && SHEET_ID) {
-      const ans = await getAnswersForEmail(email, SHEET_ID, SHEET_RANGE);
-      if (ans) {
-        const sessions: AiSession[] = [
-          {
-            id: "ai-fallback-1",
-            title: "Séance perso (fallback)",
-            type: "muscu",
-            date: new Date().toISOString().slice(0, 10),
-            plannedMin: 45,
-            note: "Générée depuis le questionnaire (fallback)",
-          },
-        ];
-        return { sessions };
-      }
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) {
+      redirect("/dashboard/profile?error=%C3%89chec%20de%20la%20g%C3%A9n%C3%A9ration%20du%20programme.");
     }
-  } catch (e) {
-    console.warn("fallback-from-questionnaire failed", e);
+    // pose le cookie de rate-limit (visible côté serveur) — 400 jours de durée
+    c.set("fc_autogen_at", now.toISOString(), {
+      path: "/",
+      sameSite: "lax",
+      httpOnly: false,
+      // @ts-ignore — Next n'expose pas maxAge dans types cookies().set, mais fonctionne à l'exécution
+      maxAge: 60 * 60 * 24 * 400,
+    });
+  } catch {
+    redirect("/dashboard/profile?error=Serveur%20indisponible%20pour%20g%C3%A9n%C3%A9rer%20le%20programme.");
   }
 
-  return null;
+  // rafraîchit la page
+  revalidatePath("/dashboard/profile");
+  redirect("/dashboard/profile?success=programme");
 }
 
-/** ================= Page ================= */
+/** ================= Page (Server Component) ================= */
 export default async function Page({
   searchParams,
 }: {
   searchParams?: { success?: string; error?: string; done?: string; deleted?: string };
 }) {
-  // Store local (cookie)
-  const store = parseStore(cookies().get("app_sessions")?.value);
+  const c = cookies();
 
+  // Store local (cookie) → séances passées
+  const store = parseStore(c.get("app_sessions")?.value);
   const past = store.sessions
     .filter((s) => s.status === "done")
     .sort((a, b) => (b.endedAt || "").localeCompare(a.endedAt || ""));
 
-  // Mes infos (depuis la dernière réponse Sheets)
-  const detectedEmail = await getSignedInEmail();
-  const emailFromCookie = cookies().get("app_email")?.value || "";
-  const emailForLink = detectedEmail || emailFromCookie;
-
+  // Infos client depuis questionnaire (affichage en-tête)
+  const emailForLink = c.get("app_email")?.value || "";
   let clientPrenom = "",
     clientAge: number | undefined,
-    clientEmailDisplay = emailForLink;
+    clientEmailDisplay = emailForLink,
+    goalLabel = "";
 
   try {
-    if (emailForLink && SHEET_ID) {
-      const ans = await getAnswersForEmail(emailForLink, SHEET_ID, SHEET_RANGE);
+    if (emailForLink) {
+      // On lit la dernière ligne correspondante et on construit le profil (afin d’afficher l’objectif)
+      const ans = await getAnswersForEmail(emailForLink);
       if (ans) {
         const get = (k: string) => ans[norm(k)] || ans[k] || "";
         clientPrenom = get("prénom") || get("prenom") || "";
@@ -334,26 +157,56 @@ export default async function Page({
         clientAge = Number.isFinite(num) && num > 0 ? Math.floor(num) : undefined;
         const emailSheet = get("email") || get("adresse mail") || get("e-mail") || get("mail");
         if (!clientEmailDisplay && emailSheet) clientEmailDisplay = emailSheet;
+
+        // Objectif actuel
+        const profile = buildProfileFromAnswers(ans);
+        const goalMap: Record<string, string> = {
+          hypertrophy: "Hypertrophie / Esthétique",
+          fatloss: "Perte de gras",
+          strength: "Force",
+          endurance: "Endurance / Cardio",
+          mobility: "Mobilité / Souplesse",
+          general: "Forme générale",
+        };
+        goalLabel = goalMap[profile.goal] || "Non défini";
       }
     }
-  } catch (e) {
-    console.warn("Sheets answers fetch failed", e);
-  }
+  } catch {}
 
-  // Propositions IA (sans pagination)
-  const programme = await fetchAiProgramme();
-  const aiSessions = programme?.sessions ?? [];
+  // Propositions IA (utilise la même logique que la page séance)
+  const programme = await getProgrammeForUser();
+  const aiSessions: AiSessionT[] = programme?.sessions ?? [];
 
+  // URL questionnaire pré-rempli
   const questionnaireUrl = (() => {
     const qp = new URLSearchParams();
     if (clientEmailDisplay) qp.set("email", clientEmailDisplay);
     if (clientPrenom) qp.set("prenom", clientPrenom);
-    const base = QUESTIONNAIRE_BASE.replace(/\/?$/, "");
     const qs = qp.toString();
-    return qs ? `${base}?${qs}` : base;
+    return qs ? `${QUESTIONNAIRE_BASE}?${qs}` : QUESTIONNAIRE_BASE;
   })();
 
+  // Témoin rate-limit côté UI
+  const lastAuto = c.get("fc_autogen_at")?.value || "";
+  let rateLimitText = "";
+  let canAutogen = true;
+  if (lastAuto) {
+    const lastDt = new Date(lastAuto);
+    const diffMs = Date.now() - lastDt.getTime();
+    const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
+    if (isFinite(diffMs) && diffMs < THIRTY_DAYS) {
+      canAutogen = false;
+      const nextDate = new Date(lastDt.getTime() + THIRTY_DAYS);
+      rateLimitText = `Tu pourras regénérer le ${nextDate.toLocaleDateString("fr-FR", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })}.`;
+    }
+  }
+
   const displayedError = searchParams?.error || "";
+  const displayedSuccess = searchParams?.success || "";
 
   return (
     <div className="container" style={{ paddingTop: 24, paddingBottom: 32, fontSize: "var(--settings-fs, 12px)" }}>
@@ -366,7 +219,14 @@ export default async function Page({
         <a
           href="/dashboard"
           className="btn"
-          style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500, padding: "6px 10px", lineHeight: 1.2 }}
+          style={{
+            background: "#ffffff",
+            color: "#111827",
+            border: "1px solid #d1d5db",
+            fontWeight: 500,
+            padding: "6px 10px",
+            lineHeight: 1.2,
+          }}
         >
           ← Retour
         </a>
@@ -374,49 +234,99 @@ export default async function Page({
 
       {/* Alerts */}
       <div className="space-y-3">
-        {!!searchParams?.success && (
-          <div className="card" style={{ border: "1px solid rgba(16,185,129,.35)", background: "rgba(16,185,129,.08)", fontWeight: 600 }}>
-            {searchParams.success === "programme"
-              ? "✓ Programme IA mis à jour."
-              : searchParams.success === "programme:dejainclus"
-              ? "ℹ️ Déjà enregistrée."
-              : searchParams.success === "programme:seance:enregistree"
-              ? "✓ Séance enregistrée."
-              : "✓ Séance ajoutée."}
+        {!!displayedSuccess && (
+          <div
+            className="card"
+            style={{ border: "1px solid rgba(16,185,129,.35)", background: "rgba(16,185,129,.08)", fontWeight: 600 }}
+          >
+            {displayedSuccess === "programme" ? "✓ Programme IA mis à jour." : "✓ Opération réussie."}
           </div>
         )}
         {!!searchParams?.done && (
-          <div className="card" style={{ border: "1px solid rgba(59,130,246,.35)", background: "rgba(59,130,246,.08)", fontWeight: 600 }}>
+          <div
+            className="card"
+            style={{ border: "1px solid rgba(59,130,246,.35)", background: "rgba(59,130,246,.08)", fontWeight: 600 }}
+          >
             ✓ Séance terminée.
           </div>
         )}
         {!!searchParams?.deleted && (
-          <div className="card" style={{ border: "1px solid rgba(239,68,68,.35)", background: "rgba(239,68,68,.08)", fontWeight: 600 }}>
+          <div
+            className="card"
+            style={{ border: "1px solid rgba(239,68,68,.35)", background: "rgba(239,68,68,.08)", fontWeight: 600 }}
+          >
             Séance supprimée.
           </div>
         )}
         {!!displayedError && (
-          <div className="card" style={{ border: "1px solid rgba(239,68,68,.35)", background: "rgba(239,68,68,.08)", fontWeight: 600, whiteSpace: "pre-wrap" }}>
+          <div
+            className="card"
+            style={{
+              border: "1px solid rgba(239,68,68,.35)",
+              background: "rgba(239,68,68,.08)",
+              fontWeight: 600,
+              whiteSpace: "pre-wrap",
+            }}
+          >
             ⚠️ {displayedError}
           </div>
         )}
       </div>
 
-      {/* ===== Mes infos ===== */}
+      {/* ===== Mes infos + Objectif actuel + actions ===== */}
       <section className="section" style={{ marginTop: 12 }}>
-        <div className="section-head" style={{ marginBottom: 8 }}>
+        <div
+          className="section-head"
+          style={{ marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}
+        >
           <h2>Mes infos</h2>
+
+          {/* Bouton : Générer mon programme (1/mois) */}
+          <form action={doAutogenAction}>
+            <button
+              type="submit"
+              disabled={!canAutogen}
+              className="btn"
+              style={{
+                background: canAutogen ? "#111827" : "#e5e7eb",
+                color: canAutogen ? "#ffffff" : "#9ca3af",
+                border: "1px solid #d1d5db",
+                fontWeight: 600,
+                padding: "6px 10px",
+                lineHeight: 1.2,
+                borderRadius: 8,
+              }}
+              title={canAutogen ? "Génère/Met à jour ton programme personnalisé" : "Limite 1 fois par mois"}
+            >
+              ⚙️ Générer mon programme
+            </button>
+          </form>
         </div>
+
         <div className="card">
           <div className="text-sm" style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
             <span>
               <b>Prénom :</b> {clientPrenom || <i className="text-gray-400">Non renseigné</i>}
             </span>
             <span>
-              <b>Âge :</b> {typeof clientAge === "number" ? `${clientAge} ans` : <i className="text-gray-400">Non renseigné</i>}
+              <b>Âge :</b>{" "}
+              {typeof clientAge === "number" ? `${clientAge} ans` : <i className="text-gray-400">Non renseigné</i>}
+            </span>
+            <span>
+              <b>Objectif actuel :</b> {goalLabel || <i className="text-gray-400">Non défini</i>}
             </span>
           </div>
-          <div className="text-sm" style={{ marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={clientEmailDisplay || "Non renseigné"}>
+
+          <div
+            className="text-sm"
+            style={{
+              marginTop: 6,
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+            title={clientEmailDisplay || "Non renseigné"}
+          >
             <b>Mail :</b>{" "}
             {clientEmailDisplay ? (
               <a href={`mailto:${clientEmailDisplay}`} className="underline">
@@ -425,6 +335,20 @@ export default async function Page({
             ) : (
               <span className="text-gray-400">Non renseigné</span>
             )}
+          </div>
+
+          {/* Rappel limite génération */}
+          {!canAutogen && rateLimitText && (
+            <div className="text-xs" style={{ marginTop: 8, color: "#92400e" }}>
+              ⏳ {rateLimitText}
+            </div>
+          )}
+
+          {/* Lien vers questionnaire */}
+          <div className="text-sm" style={{ marginTop: 10 }}>
+            <a href={questionnaireUrl} className="underline">
+              Mettre à jour mes réponses au questionnaire
+            </a>
           </div>
         </div>
       </section>
@@ -437,7 +361,9 @@ export default async function Page({
         >
           <div>
             <h2 style={{ marginBottom: 6 }}>Séances proposées</h2>
-            <p className="text-sm" style={{ color: "#6b7280" }}>Personnalisées via l’analyse de vos réponses.</p>
+            <p className="text-sm" style={{ color: "#6b7280" }}>
+              Personnalisées via l’analyse de vos réponses.
+            </p>
           </div>
           <a href={questionnaireUrl} className="btn btn-dash">
             Je mets à jour
@@ -449,7 +375,11 @@ export default async function Page({
             <div className="flex items-center gap-3">
               <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted">🤖</span>
               <span>
-                Pas encore de séances. <a className="link" href={questionnaireUrl}>Remplissez le questionnaire</a>.
+                Pas encore de séances.{" "}
+                <a className="link underline" href={questionnaireUrl}>
+                  Remplissez le questionnaire
+                </a>{" "}
+                puis cliquez sur « Générer mon programme ».
               </span>
             </div>
           </div>
@@ -461,7 +391,7 @@ export default async function Page({
                 date: s.date,
                 type: s.type,
                 plannedMin: s.plannedMin ? String(s.plannedMin) : "",
-                // Force la régénération IA + badge debug côté page séance :
+                // Debug pratique côté page séance
                 regen: "1",
                 debug: "1",
               });
@@ -477,7 +407,11 @@ export default async function Page({
                     >
                       {s.title}
                     </a>
-                    <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>
+                    <span
+                      className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(
+                        s.type as WorkoutType
+                      )}`}
+                    >
                       {s.type}
                     </span>
                   </div>
@@ -534,7 +468,11 @@ export default async function Page({
                         {s.plannedMin ? ` (prévu ${s.plannedMin} min)` : ""}
                       </div>
                     </div>
-                    <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type)}`}>
+                    <span
+                      className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(
+                        s.type
+                      )}`}
+                    >
                       {s.type}
                     </span>
                   </div>
