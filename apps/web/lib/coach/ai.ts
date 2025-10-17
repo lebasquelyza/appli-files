@@ -95,7 +95,7 @@ const SHEET_GID = process.env.SHEET_GID || "";
 
 /* ===================== Utils ===================== */
 export function norm(s: string) {
-  return s
+  return String(s)
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/œ/g, "oe")
@@ -110,6 +110,10 @@ function readNum(s: string): number | undefined {
   const cleaned = String(s).replace(/[^\d.,-]/g, "").replace(",", ".");
   const n = Number(cleaned);
   return Number.isFinite(n) ? n : undefined;
+}
+
+function isEmail(v: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v).trim());
 }
 
 /* ===================== Google Sheets ===================== */
@@ -169,10 +173,12 @@ async function fetchValues(sheetId: string, range: string) {
   throw new Error("SHEETS_FETCH_FAILED");
 }
 
-// ✅ Mapping sans entête (basé sur ton Excel)
+/* ========= Mapping par défaut (sans en-tête explicite) =========
+   NB: si ta feuille n’a PAS d’en-tête, ces index sont des garde-fous.
+   On a en plus des heuristiques de secours si ces index ne conviennent pas. */
 const NO_HEADER_COLS = {
-  nom: 1,
-  prenom: 1,
+  prenom: 0,        // <-- ajuste si besoin
+  nom: 1,           // (non utilisé mais laissé pour trace)
   age: 2,
   poids: 3,
   taille: 4,
@@ -183,6 +189,53 @@ const NO_HEADER_COLS = {
   lieu: 9,
   email: 10,
 };
+
+function guessEmailColumn(values: string[][]): number {
+  const start = 0;
+  const width = Math.max(...values.map((r) => r.length));
+  let bestIdx = -1;
+  let bestScore = -1;
+  for (let j = 0; j < width; j++) {
+    let score = 0;
+    for (let i = start; i < values.length; i++) {
+      const cell = (values[i]?.[j] || "").trim();
+      if (isEmail(cell)) score++;
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      bestIdx = j;
+    }
+  }
+  return bestIdx;
+}
+
+function guessAgeFromRow(row: string[]): number | undefined {
+  // cherche un nombre entier plausible 10..100 dans la ligne
+  for (const cell of row) {
+    const n = readNum(cell);
+    if (typeof n === "number" && n >= 10 && n <= 100 && Number.isInteger(n)) {
+      return n;
+    }
+  }
+  return undefined;
+}
+
+function guessFirstnameFromRow(row: string[], preferIdx?: number): string | undefined {
+  // priorité: colonne "prenom" par défaut si remplie
+  if (typeof preferIdx === "number" && row[preferIdx]) {
+    const v = row[preferIdx].trim();
+    if (v && !isEmail(v) && !/\d/.test(v)) return v;
+  }
+  // sinon, première cellule textuelle simple, non email, courte
+  for (let j = 0; j < row.length; j++) {
+    const v = (row[j] || "").trim();
+    if (!v) continue;
+    if (isEmail(v)) continue;
+    if (/\d/.test(v)) continue;
+    if (v.length >= 2 && v.length <= 30) return v;
+  }
+  return undefined;
+}
 
 export async function getAnswersForEmail(
   email: string,
@@ -204,10 +257,30 @@ export async function getAnswersForEmail(
     headers = firstRowNorm;
     idxEmail = headers.findIndex((h) => headerCandidates.includes(h));
   } else {
+    // Sans en-tête, on construit des clés col0..colN
     const width = Math.max(values[0]?.length || 0, NO_HEADER_COLS.email + 1);
     headers = Array.from({ length: width }, (_, i) => `col${i}`);
-    headers[NO_HEADER_COLS.email] = "email";
+    // on tente l'index par défaut, sinon on devine la colonne e-mail
     idxEmail = NO_HEADER_COLS.email;
+    if (idxEmail >= width) idxEmail = -1;
+    if (idxEmail === -1) {
+      idxEmail = guessEmailColumn(values);
+    }
+  }
+
+  // Si après tout ça, on n'a pas d'index email, on scanne chaque ligne pour matcher l'email
+  if (idxEmail === -1) {
+    const start = hasHeader ? 1 : 0;
+    for (let i = values.length - 1; i >= start; i--) {
+      const row = values[i] || [];
+      for (let j = 0; j < row.length; j++) {
+        if ((row[j] || "").trim().toLowerCase() === email.trim().toLowerCase()) {
+          idxEmail = j;
+          break;
+        }
+      }
+      if (idxEmail !== -1) break;
+    }
   }
 
   if (idxEmail === -1) return null;
@@ -215,43 +288,84 @@ export async function getAnswersForEmail(
   const start = hasHeader ? 1 : 0;
   for (let i = values.length - 1; i >= start; i--) {
     const row = values[i] || [];
-    const cell = (row[idxEmail] || "").trim().toLowerCase();
-    if (!cell) continue;
-    if (cell === email.trim().toLowerCase()) {
-      const rec: Answers = {};
-      for (let j = 0; j < row.length; j++) {
-        const key = headers[j] || `col${j}`;
-        rec[key] = (row[j] ?? "").trim();
+    // match exact sur la colonne email détectée
+    const cellAtEmailCol = (row[idxEmail] || "").trim().toLowerCase();
+    if (cellAtEmailCol !== email.trim().toLowerCase()) {
+      // tolérance: si pas de header, on accepte aussi un match sur n'importe quelle colonne
+      if (!hasHeader) {
+        const anyCell = row.find(
+          (c) => (c || "").trim().toLowerCase() === email.trim().toLowerCase()
+        );
+        if (!anyCell) continue;
+      } else {
+        continue;
       }
-      // Champs clés ajoutés pour correspondre à ton Excel
-      rec["objectif"] =
-        rec["objectif"] || rec[`col${NO_HEADER_COLS.objectif}`] || "";
-      rec["niveau"] =
-        rec["niveau"] || rec[`col${NO_HEADER_COLS.niveau}`] || "";
-      rec["lieu"] = rec["lieu"] || rec[`col${NO_HEADER_COLS.lieu}`] || "";
-      rec["as tu du materiel a ta disposition"] =
-        rec["as tu du materiel a ta disposition"] ||
-        rec[`col${NO_HEADER_COLS.materiel}`] ||
-        "";
-      rec["disponibilite"] =
-        rec["disponibilite"] ||
-        rec[`col${NO_HEADER_COLS.disponibilite}`] ||
-        "";
-      rec["poids"] =
-        rec["poids"] || rec[`col${NO_HEADER_COLS.poids}`] || "";
-      rec["taille"] =
-        rec["taille"] || rec[`col${NO_HEADER_COLS.taille}`] || "";
-      rec["email"] =
-        rec["email"] || rec[`col${NO_HEADER_COLS.email}`] || "";
-      return rec;
     }
+
+    const rec: Answers = {};
+    for (let j = 0; j < row.length; j++) {
+      const key = hasHeader ? (headers[j] || `col${j}`) : `col${j}`;
+      rec[key] = (row[j] ?? "").trim();
+    }
+
+    // Normalisation des champs clés (compat Excel FR, avec et sans en-tête)
+    rec["email"] =
+      rec["email"] ||
+      rec["adresse mail"] ||
+      rec["e-mail"] ||
+      rec["mail"] ||
+      rec[`col${idxEmail}`] ||
+      rec[`col${NO_HEADER_COLS.email}`] ||
+      "";
+
+    rec["objectif"] =
+      rec["objectif"] || rec[`col${NO_HEADER_COLS.objectif}`] || "";
+
+    rec["niveau"] =
+      rec["niveau"] || rec[`col${NO_HEADER_COLS.niveau}`] || "";
+
+    rec["lieu"] =
+      rec["lieu"] || rec[`col${NO_HEADER_COLS.lieu}`] || "";
+
+    rec["as tu du materiel a ta disposition"] =
+      rec["as tu du materiel a ta disposition"] ||
+      rec["as-tu du materiel a ta disposition"] ||
+      rec["as-tu du matériel à ta disposition"] ||
+      rec[`col${NO_HEADER_COLS.materiel}`] ||
+      "";
+
+    rec["disponibilite"] =
+      rec["disponibilite"] ||
+      rec["disponibilité"] ||
+      rec[`col${NO_HEADER_COLS.disponibilite}`] ||
+      "";
+
+    rec["poids"] =
+      rec["poids"] || rec["weight"] || rec[`col${NO_HEADER_COLS.poids}`] || "";
+
+    rec["taille"] =
+      rec["taille"] || rec["height"] || rec[`col${NO_HEADER_COLS.taille}`] || "";
+
+    // ✅ Ajouts demandés : prénom + âge, même sans en-tête
+    rec["prenom"] =
+      rec["prenom"] ||
+      rec["prénom"] ||
+      rec[`col${NO_HEADER_COLS.prenom}`] ||
+      guessFirstnameFromRow(row, NO_HEADER_COLS.prenom) ||
+      "";
+
+    rec["age"] =
+      rec["age"] ||
+      rec[`col${NO_HEADER_COLS.age}`] ||
+      (guessAgeFromRow(row)?.toString() ?? "");
+
+    return rec;
   }
   return null;
 }
 
-/* ===================== Implémentations locales (remplacent ./ai-old) ===================== */
+/* ===================== Implémentations locales ===================== */
 
-// mapping simple de string objectif -> Goal
 function mapGoal(s?: string): Goal {
   const g = norm(s || "");
   if (g.includes("force")) return "strength";
@@ -311,10 +425,14 @@ export function buildProfileFromAnswers(answers: Answers): Profile {
     .map((s) => s.trim())
     .filter(Boolean);
 
+  const ageParsed = readNum(answers["age"] || "");
+  const age =
+    typeof ageParsed === "number" && ageParsed > 0 ? Math.floor(ageParsed) : undefined;
+
   return {
     email: (answers["email"] || "").trim().toLowerCase(),
     prenom: answers["prenom"] || answers["prénom"],
-    age: readNum(answers["age"] || "") ?? undefined,
+    age,
     height: height ?? undefined,
     weight: weight ?? undefined,
     imc,
@@ -329,7 +447,10 @@ export function buildProfileFromAnswers(answers: Answers): Profile {
     equipItems,
     gym: location === "gym",
     location,
-    injuries: (answers["blessures"] || "").split(/[;,]/).map((s) => s.trim()).filter(Boolean),
+    injuries: (answers["blessures"] || "")
+      .split(/[;,]/)
+      .map((s) => s.trim())
+      .filter(Boolean),
   };
 }
 
@@ -347,21 +468,52 @@ export function generateProgrammeFromAnswers(answers: Answers): AiProgramme {
         : "muscu";
     return {
       id: `${p.email}-${d.toISOString().slice(0, 10)}`,
-      title: type === "muscu" ? "Full body" : type === "cardio" ? "Cardio structuré" : "Mobilité",
+      title:
+        type === "muscu"
+          ? "Full body"
+          : type === "cardio"
+          ? "Cardio structuré"
+          : "Mobilité",
       type,
-      date: d.toISOString(),
+      date: d.toISOString().slice(0, 10),
       plannedMin: p.timePerSession,
-      intensity: p.goal === "fatloss" || p.goal === "strength" ? "modérée" : "faible",
+      intensity:
+        p.goal === "fatloss" || p.goal === "strength" ? "modérée" : "faible",
       exercises:
         type === "muscu"
           ? [
-              { name: "Squat goblet", sets: 3, reps: "10-12", rest: "60-90s", block: "principal" },
-              { name: "Rowing haltère", sets: 3, reps: "8-10", rest: "60-90s", block: "principal" },
+              {
+                name: "Squat goblet",
+                sets: 3,
+                reps: "10-12",
+                rest: "60-90s",
+                block: "principal",
+              },
+              {
+                name: "Rowing haltère",
+                sets: 3,
+                reps: "8-10",
+                rest: "60-90s",
+                block: "principal",
+              },
               { name: "Pompes", sets: 3, reps: "max-2", rest: "60s", block: "principal" },
             ]
           : type === "cardio"
-          ? [{ name: "Intervals 4x4", durationSec: 4 * 60 * 4, notes: "RPE 7-8", block: "principal" }]
-          : [{ name: "Flow hanches/chevilles", durationSec: 10 * 60, block: "principal" }],
+          ? [
+              {
+                name: "Intervals 4x4",
+                durationSec: 4 * 60 * 4,
+                notes: "RPE 7-8",
+                block: "principal",
+              },
+            ]
+          : [
+              {
+                name: "Flow hanches/chevilles",
+                durationSec: 10 * 60,
+                block: "principal",
+              },
+            ],
     };
   });
   return { sessions };
@@ -376,10 +528,11 @@ export async function getProgrammeForUser(email: string): Promise<AiProgramme | 
 export async function getAiSessions(email?: string): Promise<AiSession[]> {
   const e =
     email ||
-    cookies().get("user_email")?.value ||
-    cookies().get("next-auth.session-token")?.value || // fallback improbable, mais on garde
+    cookies().get("app_email")?.value || // ✅ cookie correct
     "";
+
   if (!e) return [];
   const prog = await getProgrammeForUser(e);
   return prog?.sessions ?? [];
 }
+
