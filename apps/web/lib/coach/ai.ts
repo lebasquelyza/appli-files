@@ -1,6 +1,5 @@
 // apps/web/lib/coach/ai.ts
 import "server-only";
-
 import { cookies } from "next/headers";
 
 /* ===================== Types partagés ===================== */
@@ -69,17 +68,15 @@ export type Profile = {
 };
 
 /* ===================== Config ===================== */
-// ⚠️ Ne PAS mettre une URL par défaut externe ici : on veut essayer les endpoints relatifs d’abord.
-const API_BASE = process.env.FILES_COACHING_API_BASE || ""; // vide par défaut
+const API_BASE = process.env.FILES_COACHING_API_BASE || "https://files-coaching.com";
 const API_KEY  = process.env.FILES_COACHING_API_KEY || "";
-const SHEET_ID    = process.env.SHEET_ID    || "1XH-BOUj4tXAVy49ONBIdLiWM97hQ-Fg8h5-OTRGvHC4";
+const SHEET_ID    = process.env.SHEET_ID    || "";
 const SHEET_RANGE = process.env.SHEET_RANGE || "Réponses!A1:K";
-const SHEET_GID   = process.env.SHEET_GID   || "1160551014";
+const SHEET_GID   = process.env.SHEET_GID   || "";
 
 /* ===================== Utils ===================== */
 export function norm(s: string) {
-  return s
-    .normalize("NFD")
+  return s.normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/œ/g, "oe")
     .replace(/ç/g, "c")
@@ -94,7 +91,7 @@ function readNum(s: string): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
-/* ===================== Google Sheets (CSV public) ===================== */
+/* ===================== Google Sheets ===================== */
 async function fetchValues(sheetId: string, range: string) {
   const sheetName = (range.split("!")[0] || "").replace(/^'+|'+$/g, "");
   if (!sheetId) throw new Error("SHEETS_CONFIG_MISSING");
@@ -102,8 +99,6 @@ async function fetchValues(sheetId: string, range: string) {
   const tries: string[] = [];
   if (SHEET_GID) {
     tries.push(`https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&id=${sheetId}&gid=${encodeURIComponent(SHEET_GID)}`);
-    tries.push(`https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&gid=${encodeURIComponent(SHEET_GID)}`);
-    tries.push(`https://docs.google.com/spreadsheets/d/${sheetId}/pub?output=csv&gid=${encodeURIComponent(SHEET_GID)}`);
   }
   if (sheetName) {
     tries.push(`https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`);
@@ -111,12 +106,9 @@ async function fetchValues(sheetId: string, range: string) {
 
   for (const url of tries) {
     const res = await fetch(url, { cache: "no-store" });
-    const lastCT = res.headers.get("content-type") || "";
     const text = await res.text().catch(() => "");
     if (!res.ok) continue;
-
-    const looksHtml = text.trim().startsWith("<") || lastCT.includes("text/html");
-    if (looksHtml) continue;
+    if (text.trim().startsWith("<")) continue;
 
     const rows: string[][] = [];
     const lines = text.split(/\r?\n/).filter(l => l.trim() !== "");
@@ -142,7 +134,20 @@ async function fetchValues(sheetId: string, range: string) {
   throw new Error("SHEETS_FETCH_FAILED");
 }
 
-const NO_HEADER_COLS = { nom: 0, prenom: 1, age: 2, email: 10 };
+// ✅ Mapping sans entête (basé sur ton Excel)
+const NO_HEADER_COLS = {
+  nom: 1,
+  prenom: 1,
+  age: 2,
+  poids: 3,
+  taille: 4,
+  niveau: 5,
+  objectif: 6,
+  disponibilite: 7,
+  materiel: 8,
+  lieu: 9,
+  email: 10,
+};
 
 export async function getAnswersForEmail(
   email: string,
@@ -166,10 +171,7 @@ export async function getAnswersForEmail(
   } else {
     const width = Math.max(values[0]?.length || 0, NO_HEADER_COLS.email + 1);
     headers = Array.from({ length: width }, (_, i) => `col${i}`);
-    headers[NO_HEADER_COLS.nom]    = "nom";
-    headers[NO_HEADER_COLS.prenom] = "prenom";
-    headers[NO_HEADER_COLS.age]    = "age";
-    headers[NO_HEADER_COLS.email]  = "email";
+    headers[NO_HEADER_COLS.email] = "email";
     idxEmail = NO_HEADER_COLS.email;
   }
 
@@ -186,15 +188,24 @@ export async function getAnswersForEmail(
         const key = headers[j] || `col${j}`;
         rec[key] = (row[j] ?? "").trim();
       }
-      rec["nom"]    = rec["nom"]    || rec[`col${NO_HEADER_COLS.nom}`]    || "";
-      rec["prenom"] = rec["prenom"] || rec[`col${NO_HEADER_COLS.prenom}`] || "";
-      rec["age"]    = rec["age"]    || rec[`col${NO_HEADER_COLS.age}`]    || "";
-      rec["email"]  = rec["email"]  || rec[`col${NO_HEADER_COLS.email}`]  || "";
+      // Champs clés ajoutés pour correspondre à ton Excel
+      rec["objectif"] = rec["objectif"] || rec[`col${NO_HEADER_COLS.objectif}`] || "";
+      rec["niveau"] = rec["niveau"] || rec[`col${NO_HEADER_COLS.niveau}`] || "";
+      rec["lieu"] = rec["lieu"] || rec[`col${NO_HEADER_COLS.lieu}`] || "";
+      rec["as tu du materiel a ta disposition"] =
+        rec["as tu du materiel a ta disposition"] || rec[`col${NO_HEADER_COLS.materiel}`] || "";
+      rec["disponibilite"] =
+        rec["disponibilite"] || rec[`col${NO_HEADER_COLS.disponibilite}`] || "";
+      rec["poids"] = rec["poids"] || rec[`col${NO_HEADER_COLS.poids}`] || "";
+      rec["taille"] = rec["taille"] || rec[`col${NO_HEADER_COLS.taille}`] || "";
+      rec["email"] = rec["email"] || rec[`col${NO_HEADER_COLS.email}`] || "";
       return rec;
     }
   }
   return null;
 }
+
+export { buildProfileFromAnswers, generateProgrammeFromAnswers, getProgrammeForUser, getAiSessions } from "./ai-old";
 
 /* ===================== Parsing profil & règles ===================== */
 function classifyGoal(raw: string): Goal {
