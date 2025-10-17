@@ -173,14 +173,12 @@ async function fetchValues(sheetId: string, range: string) {
   throw new Error("SHEETS_FETCH_FAILED");
 }
 
-/* ========= Mapping par défaut (sans en-tête explicite) =========
-   NB: si ta feuille n’a PAS d’en-tête, ces index sont des garde-fous.
-   On a en plus des heuristiques de secours si ces index ne conviennent pas. */
+/* ========= Mapping par défaut (sans en-tête explicite) ========= */
 const NO_HEADER_COLS = {
-  prenom: 0,        // <-- ajuste si besoin
-  nom: 1,           // (non utilisé mais laissé pour trace)
-  age: 2,
-  poids: 3,
+  prenom: 1,        // date/heure en col0, prénom en col1
+  nom: 1,
+  age: 2,           // âge en col2
+  poids: 3,         // poids en col3
   taille: 4,
   niveau: 5,
   objectif: 6,
@@ -191,13 +189,12 @@ const NO_HEADER_COLS = {
 };
 
 function guessEmailColumn(values: string[][]): number {
-  const start = 0;
   const width = Math.max(...values.map((r) => r.length));
   let bestIdx = -1;
   let bestScore = -1;
   for (let j = 0; j < width; j++) {
     let score = 0;
-    for (let i = start; i < values.length; i++) {
+    for (let i = 0; i < values.length; i++) {
       const cell = (values[i]?.[j] || "").trim();
       if (isEmail(cell)) score++;
     }
@@ -210,10 +207,9 @@ function guessEmailColumn(values: string[][]): number {
 }
 
 function guessAgeFromRow(row: string[]): number | undefined {
-  // cherche un nombre entier plausible 10..100 dans la ligne
   for (const cell of row) {
     const n = readNum(cell);
-    if (typeof n === "number" && n >= 10 && n <= 100 && Number.isInteger(n)) {
+    if (typeof n === "number" && n >= 8 && n <= 100 && Number.isInteger(n)) {
       return n;
     }
   }
@@ -221,12 +217,10 @@ function guessAgeFromRow(row: string[]): number | undefined {
 }
 
 function guessFirstnameFromRow(row: string[], preferIdx?: number): string | undefined {
-  // priorité: colonne "prenom" par défaut si remplie
   if (typeof preferIdx === "number" && row[preferIdx]) {
     const v = row[preferIdx].trim();
     if (v && !isEmail(v) && !/\d/.test(v)) return v;
   }
-  // sinon, première cellule textuelle simple, non email, courte
   for (let j = 0; j < row.length; j++) {
     const v = (row[j] || "").trim();
     if (!v) continue;
@@ -257,10 +251,8 @@ export async function getAnswersForEmail(
     headers = firstRowNorm;
     idxEmail = headers.findIndex((h) => headerCandidates.includes(h));
   } else {
-    // Sans en-tête, on construit des clés col0..colN
     const width = Math.max(values[0]?.length || 0, NO_HEADER_COLS.email + 1);
     headers = Array.from({ length: width }, (_, i) => `col${i}`);
-    // on tente l'index par défaut, sinon on devine la colonne e-mail
     idxEmail = NO_HEADER_COLS.email;
     if (idxEmail >= width) idxEmail = -1;
     if (idxEmail === -1) {
@@ -268,10 +260,9 @@ export async function getAnswersForEmail(
     }
   }
 
-  // Si après tout ça, on n'a pas d'index email, on scanne chaque ligne pour matcher l'email
   if (idxEmail === -1) {
-    const start = hasHeader ? 1 : 0;
-    for (let i = values.length - 1; i >= start; i--) {
+    // scan brut si on n'a pas trouvé la colonne email
+    for (let i = values.length - 1; i >= 0; i--) {
       const row = values[i] || [];
       for (let j = 0; j < row.length; j++) {
         if ((row[j] || "").trim().toLowerCase() === email.trim().toLowerCase()) {
@@ -288,10 +279,8 @@ export async function getAnswersForEmail(
   const start = hasHeader ? 1 : 0;
   for (let i = values.length - 1; i >= start; i--) {
     const row = values[i] || [];
-    // match exact sur la colonne email détectée
     const cellAtEmailCol = (row[idxEmail] || "").trim().toLowerCase();
     if (cellAtEmailCol !== email.trim().toLowerCase()) {
-      // tolérance: si pas de header, on accepte aussi un match sur n'importe quelle colonne
       if (!hasHeader) {
         const anyCell = row.find(
           (c) => (c || "").trim().toLowerCase() === email.trim().toLowerCase()
@@ -308,7 +297,7 @@ export async function getAnswersForEmail(
       rec[key] = (row[j] ?? "").trim();
     }
 
-    // Normalisation des champs clés (compat Excel FR, avec et sans en-tête)
+    // Normalisation des champs clés
     rec["email"] =
       rec["email"] ||
       rec["adresse mail"] ||
@@ -346,7 +335,7 @@ export async function getAnswersForEmail(
     rec["taille"] =
       rec["taille"] || rec["height"] || rec[`col${NO_HEADER_COLS.taille}`] || "";
 
-    // ✅ Ajouts demandés : prénom + âge, même sans en-tête
+    // ✅ prénom + âge (même sans en-tête)
     rec["prenom"] =
       rec["prenom"] ||
       rec["prénom"] ||
@@ -482,37 +471,16 @@ export function generateProgrammeFromAnswers(answers: Answers): AiProgramme {
       exercises:
         type === "muscu"
           ? [
-              {
-                name: "Squat goblet",
-                sets: 3,
-                reps: "10-12",
-                rest: "60-90s",
-                block: "principal",
-              },
-              {
-                name: "Rowing haltère",
-                sets: 3,
-                reps: "8-10",
-                rest: "60-90s",
-                block: "principal",
-              },
+              { name: "Squat goblet", sets: 3, reps: "10-12", rest: "60-90s", block: "principal" },
+              { name: "Rowing haltère", sets: 3, reps: "8-10", rest: "60-90s", block: "principal" },
               { name: "Pompes", sets: 3, reps: "max-2", rest: "60s", block: "principal" },
             ]
           : type === "cardio"
           ? [
-              {
-                name: "Intervals 4x4",
-                durationSec: 4 * 60 * 4,
-                notes: "RPE 7-8",
-                block: "principal",
-              },
+              { name: "Intervals 4x4", durationSec: 4 * 60 * 4, notes: "RPE 7-8", block: "principal" },
             ]
           : [
-              {
-                name: "Flow hanches/chevilles",
-                durationSec: 10 * 60,
-                block: "principal",
-              },
+              { name: "Flow hanches/chevilles", durationSec: 10 * 60, block: "principal" },
             ],
     };
   });
@@ -528,11 +496,10 @@ export async function getProgrammeForUser(email: string): Promise<AiProgramme | 
 export async function getAiSessions(email?: string): Promise<AiSession[]> {
   const e =
     email ||
-    cookies().get("app_email")?.value || // ✅ cookie correct
+    cookies().get("app_email")?.value || // cookie correct
     "";
 
   if (!e) return [];
   const prog = await getProgrammeForUser(e);
   return prog?.sessions ?? [];
 }
-
