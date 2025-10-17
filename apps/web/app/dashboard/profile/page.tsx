@@ -3,13 +3,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
-// ⚠️ Import RELATIF vers la lib AI
-import {
-  getAiSessions,
-  getAnswersForEmail,
-  buildProfileFromAnswers,
-  type AiSession as AiSessionT,
-} from "../../../lib/coach/ai";
+import type { AiSession as AiSessionT } from "../../../lib/coach/ai";
 
 /** ================= Constantes ================= */
 const QUESTIONNAIRE_BASE = "https://questionnaire.files-coaching.com";
@@ -30,9 +24,6 @@ type Workout = {
 };
 
 type Store = { sessions: Workout[] };
-
-const norm = (s: string) =>
-  s.toString().trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
 /** ================= Utils ================= */
 function parseStore(val?: string | null): Store {
@@ -74,7 +65,7 @@ function typeBadgeClass(t: WorkoutType) {
   }
 }
 
-/** =============== Server Action: (Re)générer le programme (SANS limite) =============== */
+/** =============== Server Action: Générer (stocke dans Redis via l'API) =============== */
 async function doAutogenAction(formData: FormData) {
   "use server";
 
@@ -85,7 +76,6 @@ async function doAutogenAction(formData: FormData) {
   const qp = new URLSearchParams({ user, autogen: "1" });
   if (email) qp.set("email", email);
 
-  // ✅ URL ABSOLUE pour Netlify (évite "Serveur indisponible")
   const base =
     process.env.APP_BASE_URL?.replace(/\/+$/, "") ||
     process.env.NEXTAUTH_URL?.replace(/\/+$/, "") ||
@@ -106,27 +96,47 @@ async function doAutogenAction(formData: FormData) {
       redirect(`/dashboard/profile?error=${encodeURIComponent(msg)}`);
     }
   } catch {
-    redirect(
-      "/dashboard/profile?error=" +
-        encodeURIComponent("Serveur indisponible pour générer le programme.")
-    );
+    redirect(`/dashboard/profile?error=${encodeURIComponent("Serveur indisponible pour générer le programme.")}`);
   }
 
   revalidatePath("/dashboard/profile");
   redirect("/dashboard/profile?success=programme");
 }
 
-/** ================= Aides affichage nom/âge ================= */
-function looksLikeDateOrTime(v?: string) {
-  if (!v) return false;
-  const s = String(v).trim();
-  // patterns fréquents : 2025-10-17, 17/10/2025, 17-10-2025, 17:05, 17:05:22
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return true;
-  if (/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}$/.test(s)) return true;
-  if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(s)) return true;
-  // iso
-  if (!isNaN(Date.parse(s))) return true;
-  return false;
+/** ================= Helpers: chargement depuis l'API (Redis) ================= */
+type ProgrammeFromApi = {
+  sessions: AiSessionT[];
+  profile?: {
+    email: string;
+    prenom?: string;
+    age?: number;
+    goal?: string; // on l'affiche via map
+    timePerSession?: number;
+  } & Record<string, any>;
+};
+
+async function fetchProgrammeFromApi(): Promise<ProgrammeFromApi | null> {
+  const c = cookies();
+  const user = c.get("fc_uid")?.value || "me";
+  const base =
+    process.env.APP_BASE_URL?.replace(/\/+$/, "") ||
+    process.env.NEXTAUTH_URL?.replace(/\/+$/, "") ||
+    "http://localhost:3000";
+  const res = await fetch(`${base}/api/programme?user=${encodeURIComponent(user)}`, { cache: "no-store" });
+  if (!res.ok) return null;
+  return (await res.json().catch(() => null)) as ProgrammeFromApi | null;
+}
+
+function goalLabelFromKey(g?: string) {
+  const map: Record<string, string> = {
+    hypertrophy: "Hypertrophie / Esthétique",
+    fatloss: "Perte de gras",
+    strength: "Force",
+    endurance: "Endurance / Cardio",
+    mobility: "Mobilité / Souplesse",
+    general: "Forme générale",
+  };
+  return g ? (map[g] || "Non défini") : "Non défini";
 }
 
 /** ================= Page ================= */
@@ -143,57 +153,16 @@ export default async function Page({
     .filter((s) => s.status === "done")
     .sort((a, b) => (b.endedAt || "").localeCompare(a.endedAt || ""));
 
-  // Infos client depuis questionnaire
-  const emailForLink = c.get("app_email")?.value || "";
-  let clientPrenom = "";
-  let clientAge: number | undefined;
-  let clientEmailDisplay = emailForLink;
-  let goalLabel = "";
+  // ✅ Charge le programme + profil depuis l'API (=> Redis)
+  const prog = await fetchProgrammeFromApi();
+  const aiSessions: AiSessionT[] = Array.isArray(prog?.sessions) ? prog!.sessions : [];
 
-  try {
-    if (emailForLink) {
-      const ans = await getAnswersForEmail(emailForLink);
-      if (ans) {
-        const get = (k: string) => ans[norm(k)] || ans[k] || "";
-
-        // Profil (fallback)
-        const profile = buildProfileFromAnswers(ans);
-
-        // Prénom: valeur directe si pas date/heure, sinon fallback profil
-        const prenomRaw = get("prénom") || get("prenom") || "";
-        clientPrenom = !looksLikeDateOrTime(prenomRaw) && !/\d/.test(prenomRaw)
-          ? prenomRaw
-          : (profile.prenom || "");
-
-        // Âge: parse brut -> fallback profil.age
-        const ageStr = get("age");
-        const num = Number((ageStr || "").toString().replace(",", "."));
-        clientAge =
-          (Number.isFinite(num) && num > 0 ? Math.floor(num) : undefined) ??
-          (typeof profile.age === "number" ? profile.age : undefined);
-
-        // Email d’affichage
-        const emailSheet = get("email") || get("adresse mail") || get("e-mail") || get("mail");
-        if (!clientEmailDisplay && emailSheet) clientEmailDisplay = emailSheet;
-
-        // Objectif lisible
-        const goalMap: Record<string, string> = {
-          hypertrophy: "Hypertrophie / Esthétique",
-          fatloss: "Perte de gras",
-          strength: "Force",
-          endurance: "Endurance / Cardio",
-          mobility: "Mobilité / Souplesse",
-          general: "Forme générale",
-        };
-        goalLabel = goalMap[profile.goal] || "Non défini";
-      }
-    }
-  } catch {
-    // silencieux
-  }
-
-  // Propositions IA (renommées "Mon programme")
-  const aiSessions: AiSessionT[] = await getAiSessions();
+  // Infos profil persistantes (affichées même si Sheets n'est pas dispo)
+  const p = prog?.profile || {};
+  const clientPrenom = (typeof p.prenom === "string" && p.prenom && !/\d/.test(p.prenom)) ? p.prenom : "";
+  const clientAge = (typeof p.age === "number" && p.age > 0) ? p.age : undefined;
+  const clientEmailDisplay = (typeof p.email === "string" && p.email) ? p.email : (c.get("app_email")?.value || "");
+  const goalLabel = goalLabelFromKey((p as any).goal);
 
   // URL questionnaire pré-rempli
   const questionnaireUrl = (() => {
@@ -255,14 +224,13 @@ export default async function Page({
         )}
       </div>
 
-      {/* ===== Mes infos ===== */}
+      {/* ===== Mes infos (persistantes via Redis) ===== */}
       <section className="section" style={{ marginTop: 12 }}>
         <div
           className="section-head"
           style={{ marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}
         >
           <h2>Mes infos</h2>
-          {/* (le bouton Générer a été déplacé dans "Mon programme") */}
         </div>
 
         <div className="card">
@@ -304,7 +272,7 @@ export default async function Page({
         </div>
       </section>
 
-      {/* ===== Mon programme ===== */}
+      {/* ===== Mon programme (sessions stockées) ===== */}
       <section className="section" style={{ marginTop: 12 }}>
         <div
           className="section-head"
@@ -344,7 +312,7 @@ export default async function Page({
               <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted">🤖</span>
               <span>
                 Pas encore de séances.{" "}
-                <a className="link underline" href={questionnaireUrl}>
+                <a className="link underline" href={QUESTIONNAIRE_BASE}>
                   Remplissez le questionnaire
                 </a>{" "}
                 puis cliquez sur « Générer ».
