@@ -1,11 +1,8 @@
 // apps/web/app/api/programme/route.ts
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import {
-  getAnswersForEmail,
-  generateProgrammeFromAnswers,
-  type AiProgramme,
-} from "@/app/lib/coach/ai";
+import { getAnswersForEmail, generateProgrammeFromAnswers, type AiProgramme } from "../../../lib/coach/ai";
+
 
 export const runtime = "nodejs";
 
