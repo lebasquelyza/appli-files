@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 
 // ⚠️ Import RELATIF vers la lib AI
 import {
-  getProgrammeForUser,
+  getAiSessions,
   getAnswersForEmail,
   buildProfileFromAnswers,
   type AiSession as AiSessionT,
@@ -151,9 +151,8 @@ export default async function Page({
     // silencieux
   }
 
-  // Propositions IA (même pipeline que page séance)
-  const programme = await getProgrammeForUser();
-  const aiSessions: AiSessionT[] = programme?.sessions ?? [];
+  // Propositions IA (même pipeline que page séance) — lit l'email via cookies côté serveur
+  const aiSessions: AiSessionT[] = await getAiSessions();
 
   // URL questionnaire pré-rempli
   const questionnaireUrl = (() => {
