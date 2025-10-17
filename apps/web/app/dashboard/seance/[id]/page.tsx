@@ -22,7 +22,9 @@ async function getSignedInEmail(): Promise<string> {
     const session = await getServerSession(authOptions as any);
     const email = (session as any)?.user?.email as string | undefined;
     if (email) return email;
-  } catch {}
+  } catch (e) {
+    console.warn("getSignedInEmail: no session", e);
+  }
   return cookies().get("app_email")?.value || "";
 }
 
@@ -31,7 +33,9 @@ function parseStore(val?: string | null): { sessions: any[] } {
   try {
     const o = JSON.parse(val!);
     if (Array.isArray(o?.sessions)) return { sessions: o.sessions as any[] };
-  } catch {}
+  } catch (e) {
+    console.warn("parseStore: invalid cookie JSON", e);
+  }
   return { sessions: [] };
 }
 
@@ -111,11 +115,14 @@ type PageViewProps = {
   plannedMin: number;
   intensity: string;
   coachIntro: string;
+  goalText?: string | null;
+  dataSource?: string;
+  debug?: boolean;
 };
 
 /* ======================== View (JSX) ======================== */
 const PageView: React.FC<PageViewProps> = (props) => {
-  const { base, profile, groups, plannedMin, intensity, coachIntro } = props;
+  const { base, profile, groups, plannedMin, intensity, coachIntro, goalText, dataSource, debug } = props;
 
   return (
     <div>
@@ -128,12 +135,19 @@ const PageView: React.FC<PageViewProps> = (props) => {
         >
           ← Retour
         </a>
-        <a
-          href="javascript:print()"
-          className="inline-flex items-center rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm font-medium text-neutral-800 hover:bg-neutral-50"
-        >
-          Imprimer
-        </a>
+        <div className="flex items-center gap-2">
+          {debug && dataSource && (
+            <span className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-800">
+              Source: {dataSource}
+            </span>
+          )}
+          <a
+            href="javascript:print()"
+            className="inline-flex items-center rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm font-medium text-neutral-800 hover:bg-neutral-50"
+          >
+            Imprimer
+          </a>
+        </div>
       </div>
 
       {/* wrapper étroit pour mobile */}
@@ -154,9 +168,19 @@ const PageView: React.FC<PageViewProps> = (props) => {
             <h2 className="section-title">Brief de séance</h2>
           </div>
           <div className="compact-card">
+            {/* Objectif actuel du client (depuis le questionnaire) */}
+            {goalText && (
+              <div style={{ fontSize: 14, marginBottom: 8 }}>
+                🎯 <b>Objectif actuel</b> : {goalText}
+              </div>
+            )}
             <ul style={{ fontSize: 14, lineHeight: 1.5 }}>
-              <li>🎯 <b>Objectif</b> : {coachIntro}</li>
-              <li>⏱️ <b>Durée</b> : {plannedMin} min · <b>Intensité</b> : {intensity}</li>
+              <li>
+                🧭 <b>Intention de séance</b> : {coachIntro}
+              </li>
+              <li>
+                ⏱️ <b>Durée</b> : {plannedMin} min · <b>Intensité</b> : {intensity}
+              </li>
               {profile?.equipLevel && (
                 <li>
                   🧰 <b>Matériel</b> :{" "}
@@ -252,7 +276,15 @@ const PageView: React.FC<PageViewProps> = (props) => {
 async function loadData(
   id: string,
   searchParams?: Record<string, string | string[] | undefined>
-) {
+): Promise<{
+  base?: AiSession;
+  profile: ProfileT | null;
+  exercises: NormalizedExercise[];
+  dataSource: string;
+}> {
+  const debug = String(searchParams?.debug || "") === "1";
+  const forceRegen = String(searchParams?.regen || "") === "1";
+
   const store = parseStore(cookies().get("app_sessions")?.value);
   const fromStore = store.sessions.find((s) => s.id === id) as
     | (AiSession & { exercises?: NormalizedExercise[] })
@@ -261,7 +293,8 @@ async function loadData(
   let programme: { sessions: AiSession[] } | null = null;
   try {
     programme = await getProgrammeForUser();
-  } catch {
+  } catch (e) {
+    console.warn("getProgrammeForUser failed", e);
     programme = null;
   }
   const fromAi = programme?.sessions?.find((s) => s.id === id);
@@ -294,10 +327,34 @@ async function loadData(
       ? programme.sessions.find((s) => key(s.title, s.date, s.type) === key(qpTitle, qpDate, qpType))
       : undefined;
 
+  let dataSource = "unknown";
+
+  // Base prioritaire par id / query
   let base: AiSession | undefined =
     (fromStore as AiSession | undefined) || fromAi || (storeByQD as AiSession | undefined) || aiByQD;
 
+  if (fromStore) dataSource = "store";
+  else if (fromAi) dataSource = "ai";
+  else if (storeByQD) dataSource = "storeByQD";
+  else if (aiByQD) dataSource = "aiByQD";
+
+  // Force regeneration if requested
+  if (forceRegen) {
+    dataSource = "regen";
+    base =
+      base ||
+      ({
+        id: "stub",
+        title: qpTitle || "Séance personnalisée",
+        date: qpDate,
+        type: qpType,
+        plannedMin: qpPlannedMin,
+      } as AiSession);
+  }
+
+  // Si rien de trouvé mais des QPs => stub minimal
   if (!base && (qpTitle || qpDateRaw || (searchParams?.type as string | undefined))) {
+    dataSource = "stub";
     base = {
       id: "stub",
       title: qpTitle || "Séance personnalisée",
@@ -307,6 +364,7 @@ async function loadData(
     } as AiSession;
   }
 
+  // Profile depuis les réponses
   let profile: ProfileT | null = null;
   try {
     const email = await getSignedInEmail();
@@ -314,14 +372,18 @@ async function loadData(
       const answers = await getAnswersForEmail(email);
       if (answers) profile = buildProfileFromAnswers(answers);
     }
-  } catch {}
+  } catch (e) {
+    console.warn("build profile failed", e);
+  }
 
+  // Exercices
   let exercises: NormalizedExercise[] =
     (fromStore?.exercises as NormalizedExercise[] | undefined) ||
     ((fromAi as any)?.exercises as NormalizedExercise[] | undefined) ||
     [];
 
-  if (!exercises.length) {
+  // Régénération si demandée OU si on n'a rien
+  if (forceRegen || !exercises.length) {
     try {
       const email = await getSignedInEmail();
       if (email) {
@@ -332,14 +394,33 @@ async function loadData(
             regen.find(
               (s) => s.title === base?.title && s.type === base?.type && (s.date === base?.date || !base?.date)
             ) || regen[0];
-          if (match?.exercises?.length) exercises = match.exercises;
+          if (match?.exercises?.length) {
+            exercises = match.exercises;
+            if (!forceRegen && dataSource === "unknown") dataSource = "regen";
+          }
         }
       }
-    } catch {}
+    } catch (e) {
+      console.warn("generateProgrammeFromAnswers failed", e);
+    }
   }
-  if (!exercises.length) exercises = genericFallback((base?.type ?? "muscu") as WorkoutType);
 
-  return { base, profile, exercises };
+  if (!exercises.length) {
+    exercises = genericFallback((base?.type ?? "muscu") as WorkoutType);
+    if (dataSource === "unknown") dataSource = "fallback";
+  }
+
+  if (debug) {
+    console.log("seance page dataSource=", dataSource, {
+      id,
+      foundStore: !!fromStore,
+      foundAi: !!fromAi,
+      storeLen: store.sessions.length,
+      programmeLen: programme?.sessions?.length,
+    });
+  }
+
+  return { base, profile, exercises, dataSource };
 }
 
 /* ======================== Small UI ======================== */
@@ -368,7 +449,7 @@ export default async function Page({
     redirect("/dashboard/profile?error=Seance%20introuvable");
   }
 
-  const { base, profile, exercises } = await loadData(id, searchParams);
+  const { base, profile, exercises, dataSource } = await loadData(id, searchParams);
   if (!base) redirect("/dashboard/profile?error=Seance%20introuvable");
 
   const plannedMin = base.plannedMin ?? (profile?.timePerSession ?? 45);
@@ -382,6 +463,15 @@ export default async function Page({
       : base.type === "hiit"
       ? "Pics d’intensité courts, technique impeccable."
       : "Amplitude confortable, respiration calme, zéro douleur nette.";
+
+  // Objectif actuel du client depuis le profil (tolérant aux variations de clés)
+  const goalText =
+    (profile as any)?.goal ||
+    (profile as any)?.primaryGoal ||
+    (profile as any)?.objective ||
+    (profile as any)?.mainObjective ||
+    (profile as any)?.currentGoal ||
+    null;
 
   const blockOrder = { echauffement: 0, principal: 1, accessoires: 2, fin: 3 } as const;
 
@@ -397,6 +487,8 @@ export default async function Page({
     (groups[k] ||= []).push(ex);
   }
 
+  const debug = String(searchParams?.debug || "") === "1";
+
   return (
     <PageView
       base={base}
@@ -405,6 +497,9 @@ export default async function Page({
       plannedMin={plannedMin}
       intensity={intensity}
       coachIntro={coachIntro}
+      goalText={goalText}
+      dataSource={dataSource}
+      debug={debug}
     />
   );
 }
