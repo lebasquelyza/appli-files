@@ -2,12 +2,8 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import {
-  getProgrammeForUser,
-  getAnswersForEmail,
-  buildProfileFromAnswers,
-  type AiSession as AiSessionT,
-} from "@/app/lib/coach/ai";
+import { getProgrammeForUser, getAnswersForEmail, buildProfileFromAnswers, type AiSession as AiSessionT } from "../../../lib/coach/ai";
+
 
 /** ================= ENV ================= */
 const QUESTIONNAIRE_BASE = "https://questionnaire.files-coaching.com";
