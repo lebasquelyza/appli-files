@@ -40,8 +40,6 @@ export type AiSession = {
   content?: any;
 };
 
-export type AiProgramme = { sessions: AiSession[] };
-
 export type Answers = Record<string, string>;
 export type Goal =
   | "hypertrophy"
@@ -83,6 +81,12 @@ export type Profile = {
   sleepOk?: boolean;
   stressHigh?: boolean;
   likesWOD?: boolean;
+};
+
+/* ✅ AiProgramme élargi pour stocker le profil aussi */
+export type AiProgramme = {
+  sessions: AiSession[];
+  profile?: Profile;
 };
 
 /* ===================== Config ===================== */
@@ -173,12 +177,13 @@ async function fetchValues(sheetId: string, range: string) {
   throw new Error("SHEETS_FETCH_FAILED");
 }
 
-/* ========= Mapping par défaut (sans en-tête explicite) ========= */
+/* ========= Mapping par défaut (sans en-tête explicite) =========
+   Selon ton Excel: col0 = timestamp, col1 = prénom, col2 = âge, col3 = poids, col10 = email */
 const NO_HEADER_COLS = {
-  prenom: 1,        // date/heure en col0, prénom en col1
+  prenom: 1,
   nom: 1,
-  age: 2,           // âge en col2
-  poids: 3,         // poids en col3
+  age: 2,
+  poids: 3,
   taille: 4,
   niveau: 5,
   objectif: 6,
@@ -255,9 +260,7 @@ export async function getAnswersForEmail(
     headers = Array.from({ length: width }, (_, i) => `col${i}`);
     idxEmail = NO_HEADER_COLS.email;
     if (idxEmail >= width) idxEmail = -1;
-    if (idxEmail === -1) {
-      idxEmail = guessEmailColumn(values);
-    }
+    if (idxEmail === -1) idxEmail = guessEmailColumn(values);
   }
 
   if (idxEmail === -1) {
@@ -273,7 +276,6 @@ export async function getAnswersForEmail(
       if (idxEmail !== -1) break;
     }
   }
-
   if (idxEmail === -1) return null;
 
   const start = hasHeader ? 1 : 0;
@@ -484,6 +486,8 @@ export function generateProgrammeFromAnswers(answers: Answers): AiProgramme {
             ],
     };
   });
+  // on peut aussi attacher le profil ici si tu veux le persister directement :
+  // return { sessions, profile: p };
   return { sessions };
 }
 
