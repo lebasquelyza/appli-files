@@ -116,6 +116,19 @@ async function doAutogenAction(formData: FormData) {
   redirect("/dashboard/profile?success=programme");
 }
 
+/** ================= Aides affichage nom/âge ================= */
+function looksLikeDateOrTime(v?: string) {
+  if (!v) return false;
+  const s = String(v).trim();
+  // patterns fréquents : 2025-10-17, 17/10/2025, 17-10-2025, 17:05, 17:05:22
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return true;
+  if (/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}$/.test(s)) return true;
+  if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(s)) return true;
+  // iso
+  if (!isNaN(Date.parse(s))) return true;
+  return false;
+}
+
 /** ================= Page ================= */
 export default async function Page({
   searchParams,
@@ -139,16 +152,18 @@ export default async function Page({
 
   try {
     if (emailForLink) {
-      // Récupère la dernière ligne de réponses et construit le profil
       const ans = await getAnswersForEmail(emailForLink);
       if (ans) {
         const get = (k: string) => ans[norm(k)] || ans[k] || "";
 
-        // Profil (sert de fallback fiable pour prénom/âge/objectif)
+        // Profil (fallback)
         const profile = buildProfileFromAnswers(ans);
 
-        // Prénom prioritaire: réponses brutes -> fallback profil
-        clientPrenom = get("prénom") || get("prenom") || profile.prenom || "";
+        // Prénom: valeur directe si pas date/heure, sinon fallback profil
+        const prenomRaw = get("prénom") || get("prenom") || "";
+        clientPrenom = !looksLikeDateOrTime(prenomRaw) && !/\d/.test(prenomRaw)
+          ? prenomRaw
+          : (profile.prenom || "");
 
         // Âge: parse brut -> fallback profil.age
         const ageStr = get("age");
@@ -177,7 +192,7 @@ export default async function Page({
     // silencieux
   }
 
-  // Propositions IA (même pipeline que page séance) — lit l'email via cookies côté serveur
+  // Propositions IA (renommées "Mon programme")
   const aiSessions: AiSessionT[] = await getAiSessions();
 
   // URL questionnaire pré-rempli
@@ -240,33 +255,14 @@ export default async function Page({
         )}
       </div>
 
-      {/* ===== Mes infos + Objectif + Actions ===== */}
+      {/* ===== Mes infos ===== */}
       <section className="section" style={{ marginTop: 12 }}>
         <div
           className="section-head"
           style={{ marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}
         >
           <h2>Mes infos</h2>
-
-          {/* Bouton : Générer mon programme (pas de limite) */}
-          <form action={doAutogenAction}>
-            <button
-              type="submit"
-              className="btn"
-              style={{
-                background: "#111827",
-                color: "#ffffff",
-                border: "1px solid #d1d5db",
-                fontWeight: 600,
-                padding: "6px 10px",
-                lineHeight: 1.2,
-                borderRadius: 8,
-              }}
-              title="Génère/Met à jour ton programme personnalisé"
-            >
-              ⚙️ Générer mon programme
-            </button>
-          </form>
+          {/* (le bouton Générer a été déplacé dans "Mon programme") */}
         </div>
 
         <div className="card">
@@ -308,19 +304,38 @@ export default async function Page({
         </div>
       </section>
 
-      {/* ===== Séances proposées (IA) ===== */}
+      {/* ===== Mon programme ===== */}
       <section className="section" style={{ marginTop: 12 }}>
         <div
           className="section-head"
           style={{ marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}
         >
           <div>
-            <h2 style={{ marginBottom: 6 }}>Séances proposées</h2>
-            <p className="text-sm" style={{ color: "#6b7280" }}>Personnalisées via l’analyse de vos réponses.</p>
+            <h2 style={{ marginBottom: 6 }}>Mon programme</h2>
+            <p className="text-sm" style={{ color: "#6b7280" }}>
+              Personnalisé via l’analyse de vos réponses.
+            </p>
           </div>
-          <a href={questionnaireUrl} className="btn btn-dash">
-            Je mets à jour
-          </a>
+
+          {/* Bouton : Générer dans le bloc Programme */}
+          <form action={doAutogenAction}>
+            <button
+              type="submit"
+              className="btn"
+              style={{
+                background: "#111827",
+                color: "#ffffff",
+                border: "1px solid #d1d5db",
+                fontWeight: 600,
+                padding: "6px 10px",
+                lineHeight: 1.2,
+                borderRadius: 8,
+              }}
+              title="Génère/Met à jour ton programme personnalisé"
+            >
+              ⚙️ Générer
+            </button>
+          </form>
         </div>
 
         {aiSessions.length === 0 ? (
@@ -332,7 +347,7 @@ export default async function Page({
                 <a className="link underline" href={questionnaireUrl}>
                   Remplissez le questionnaire
                 </a>{" "}
-                puis cliquez sur « Générer mon programme ».
+                puis cliquez sur « Générer ».
               </span>
             </div>
           </div>
