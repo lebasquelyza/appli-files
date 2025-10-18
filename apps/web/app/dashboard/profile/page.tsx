@@ -83,12 +83,8 @@ async function doAutogenAction(formData: FormData) {
   const qp = new URLSearchParams({ user, autogen: "1" });
   if (email) qp.set("email", email);
 
-  const base =
-    process.env.APP_BASE_URL?.replace(/\/+$/, "") ||
-    process.env.NEXTAUTH_URL?.replace(/\/+$/, "") ||
-    "http://localhost:3000";
-
-  const url = `${base}/api/programme?${qp.toString()}`;
+  // ✅ URL RELATIVE (fonctionne en Netlify/SSR)
+  const url = `/api/programme?${qp.toString()}`;
 
   try {
     const res = await fetch(url, { cache: "no-store" });
@@ -107,10 +103,10 @@ async function doAutogenAction(formData: FormData) {
   }
 
   revalidatePath("/dashboard/profile");
-  redirect("/dashboard/profile?success=programme");
+  redirect("/dashboard/profile?success=programme`);
 }
 
-/** ================= Helpers: chargement depuis l'API (Redis/compute) ================= */
+/** ================= Helpers: chargement depuis l'API ================= */
 type ProgrammeFromApi = {
   sessions: AiSessionT[];
   profile?: Partial<ProfileT> & { email?: string };
@@ -119,16 +115,12 @@ type ProgrammeFromApi = {
 async function fetchProgrammeFromApi(email?: string): Promise<ProgrammeFromApi | null> {
   const c = cookies();
   const user = c.get("fc_uid")?.value || "me";
-  const base =
-    process.env.APP_BASE_URL?.replace(/\/+$/, "") ||
-    process.env.NEXTAUTH_URL?.replace(/\/+$/, "") ||
-    "http://localhost:3000";
 
-  // ✅ autogen=1 + email (si dispo) pour être sûr d'avoir des séances au chargement
+  // ✅ URL RELATIVE + autogen + email
   const qp = new URLSearchParams({ user, autogen: "1" });
   if (email) qp.set("email", email);
 
-  const res = await fetch(`${base}/api/programme?${qp.toString()}`, { cache: "no-store" });
+  const res = await fetch(`/api/programme?${qp.toString()}`, { cache: "no-store" });
   if (!res.ok) return null;
   return (await res.json().catch(() => null)) as ProgrammeFromApi | null;
 }
@@ -155,8 +147,7 @@ export default async function Page({
 
   // 2) Profil : API -> fallback Sheets si besoin
   let profile: Partial<ProfileT> & { email?: string } = (prog?.profile ?? {}) as any;
-
-  let preferredEmail = profile?.email || emailCookie; // <— on unifie l'email utilisé partout
+  let preferredEmail = profile?.email || emailCookie;
 
   if ((!profile?.prenom || !profile?.age) && preferredEmail) {
     try {
@@ -166,9 +157,7 @@ export default async function Page({
         profile = { ...built, ...profile };
         preferredEmail = profile.email || preferredEmail;
       }
-    } catch {
-      // silencieux
-    }
+    } catch {}
   }
 
   // 3) Séances à afficher : API -> fallback lib (Sheets) -> fallback getAiSessions
@@ -180,17 +169,13 @@ export default async function Page({
       if (answers) {
         aiSessions = generateProgrammeFromAnswers(answers).sessions;
       }
-    } catch {
-      // silencieux
-    }
+    } catch {}
   }
 
   if ((!aiSessions || aiSessions.length === 0) && preferredEmail) {
     try {
       aiSessions = await getAiSessions(preferredEmail);
-    } catch {
-      // silencieux
-    }
+    } catch {}
   }
 
   // Infos profil affichées
@@ -199,9 +184,7 @@ export default async function Page({
   const clientAge =
     typeof profile?.age === "number" && profile.age > 0 ? profile.age : undefined;
   const clientEmailDisplay =
-    typeof profile?.email === "string" && profile.email
-      ? profile.email
-      : preferredEmail;
+    typeof profile?.email === "string" && profile.email ? profile.email : preferredEmail;
 
   const goalLabel = (() => {
     const g = String((profile as any)?.goal || "").toLowerCase();
@@ -315,7 +298,6 @@ export default async function Page({
             )}
           </div>
 
-          {/* Lien vers questionnaire */}
           <div className="text-sm" style={{ marginTop: 10 }}>
             <a href={questionnaireUrl} className="underline">
               Mettre à jour mes réponses au questionnaire
@@ -337,7 +319,6 @@ export default async function Page({
             </p>
           </div>
 
-          {/* Bouton : Générer dans le bloc Programme */}
           <form action={doAutogenAction}>
             <button
               type="submit"
@@ -468,4 +449,3 @@ export default async function Page({
     </div>
   );
 }
-
