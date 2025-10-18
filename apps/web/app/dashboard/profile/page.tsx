@@ -3,11 +3,11 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
-// On importe les helpers pour fallback (profil/programmation depuis Sheets)
 import {
   getAnswersForEmail,
   buildProfileFromAnswers,
   generateProgrammeFromAnswers,
+  getAiSessions,
   type AiSession as AiSessionT,
   type Profile as ProfileT,
 } from "../../../lib/coach/ai";
@@ -153,29 +153,41 @@ export default async function Page({
   // 1) Récupère programme (et idéalement profil) via API
   const prog = await fetchProgrammeFromApi(emailCookie);
 
-  // 2) Fallback profil depuis Sheets si le profil n'est pas présent dans la réponse API
+  // 2) Profil : API -> fallback Sheets si besoin
   let profile: Partial<ProfileT> & { email?: string } = (prog?.profile ?? {}) as any;
 
-  if ((!profile?.prenom || !profile?.age) && emailCookie) {
+  let preferredEmail = profile?.email || emailCookie; // <— on unifie l'email utilisé partout
+
+  if ((!profile?.prenom || !profile?.age) && preferredEmail) {
     try {
-      const answers = await getAnswersForEmail(emailCookie);
+      const answers = await getAnswersForEmail(preferredEmail);
       if (answers) {
         const built = buildProfileFromAnswers(answers);
-        profile = { ...built, ...profile }; // garde ce qui vient de l'API mais complète depuis Sheets
+        profile = { ...built, ...profile };
+        preferredEmail = profile.email || preferredEmail;
       }
     } catch {
       // silencieux
     }
   }
 
-  // 3) Séances à afficher : celles de l'API ; si vide, fallback depuis Sheets localement
+  // 3) Séances à afficher : API -> fallback lib (Sheets) -> fallback getAiSessions
   let aiSessions: AiSessionT[] = Array.isArray(prog?.sessions) ? prog!.sessions : [];
-  if ((!aiSessions || aiSessions.length === 0) && emailCookie) {
+
+  if ((!aiSessions || aiSessions.length === 0) && preferredEmail) {
     try {
-      const answers = await getAnswersForEmail(emailCookie);
+      const answers = await getAnswersForEmail(preferredEmail);
       if (answers) {
         aiSessions = generateProgrammeFromAnswers(answers).sessions;
       }
+    } catch {
+      // silencieux
+    }
+  }
+
+  if ((!aiSessions || aiSessions.length === 0) && preferredEmail) {
+    try {
+      aiSessions = await getAiSessions(preferredEmail);
     } catch {
       // silencieux
     }
@@ -189,7 +201,7 @@ export default async function Page({
   const clientEmailDisplay =
     typeof profile?.email === "string" && profile.email
       ? profile.email
-      : emailCookie;
+      : preferredEmail;
 
   const goalLabel = (() => {
     const g = String((profile as any)?.goal || "").toLowerCase();
@@ -456,3 +468,4 @@ export default async function Page({
     </div>
   );
 }
+
