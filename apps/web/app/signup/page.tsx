@@ -29,61 +29,30 @@ export default function SignupPage() {
       const emailTrim = email.trim().toLowerCase();
       const passTrim = password.trim();
 
+      // ➜ plus de emailRedirectTo : on n’envoie pas d’email de confirmation
       const { data, error } = await supabase.auth.signUp({
         email: emailTrim,
         password: passTrim,
-        options: { emailRedirectTo: `${window.location.origin}/reset-password` },
       });
-
       if (error) throw error;
 
-      if (data?.user && !data.user.email_confirmed_at) {
-        setMessage(
-          "Compte créé ✅. Vérifie ta boîte mail pour confirmer ton adresse avant de te connecter."
-        );
-      } else {
-        setMessage("Compte créé ✅");
-      }
+      // En mode "auto-confirm", l’utilisateur est connecté immédiatement.
+      // Si tu veux qu’il doive se reconnecter : force un signOut.
+      await supabase.auth.signOut();
+
+      setMessage("Inscription réussie ✅ Tu peux maintenant te connecter.");
+      // Option : rediriger après 1–2 s
+      // setTimeout(() => (window.location.href = "/"), 1500);
     } catch (err: any) {
       const raw = String(err?.message || "");
       let friendly = raw;
 
       if (/user.*registered/i.test(raw)) {
-        friendly =
-          "Cet e-mail a déjà un compte. Essaie ‘Mot de passe oublié ?’ pour réinitialiser.";
-      } else if (/password/i.test(raw) && /length|weak|least/i.test(raw)) {
-        friendly = "Mot de passe trop faible (vérifie la longueur minimale définie).";
-      } else if (/redirect/i.test(raw) && /url/i.test(raw)) {
-        friendly =
-          "URL de redirection non autorisée. Ajoute ton domaine de prod dans Supabase > Auth > URL Configuration.";
+        friendly = "Cet e-mail a déjà un compte. Utilise “Mot de passe oublié ?”.";
+      } else if (/password/i.test(raw) && /(length|weak|least|min)/i.test(raw)) {
+        friendly = "Mot de passe trop faible (allonge-le et ajoute variété).";
       }
-
       setError(friendly);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleResendConfirmation = async () => {
-    const emailTrim = email.trim().toLowerCase();
-    if (!emailTrim) {
-      setError("Entre ton e-mail pour renvoyer la confirmation.");
-      return;
-    }
-    setLoading(true);
-    setMessage(null);
-    setError(null);
-    try {
-      const supabase = getSupabase();
-      const { error } = await supabase.auth.resend({
-        type: "signup",
-        email: emailTrim,
-        options: { emailRedirectTo: `${window.location.origin}/reset-password` },
-      });
-      if (error) throw error;
-      setMessage("E-mail de confirmation renvoyé 📩");
-    } catch (err: any) {
-      setError(err.message || "Erreur lors de l’envoi de la confirmation");
     } finally {
       setLoading(false);
     }
@@ -92,18 +61,13 @@ export default function SignupPage() {
   return (
     <main className="hide-topbar-menu pt-14 py-16">
       <div className="container max-w-md mx-auto">
-        <h1
-          className="not-prose font-bold mb-2 text-center
-                     [font-size:theme(fontSize.2xl)!important]
-                     sm:[font-size:theme(fontSize.3xl)!important]"
-        >
+        <h1 className="not-prose font-bold mb-2 text-center
+                       [font-size:theme(fontSize.2xl)!important]
+                       sm:[font-size:theme(fontSize.3xl)!important]">
           Créer un compte
         </h1>
 
-        {/* Petit message de bienvenue */}
-        <p className="text-center text-sm text-gray-600 mb-6">
-          Bienvenue 👋
-        </p>
+        <p className="text-center text-sm text-gray-600 mb-6">Bienvenue 👋</p>
 
         <form onSubmit={handleSignup} className="space-y-4">
           <div>
@@ -155,22 +119,15 @@ export default function SignupPage() {
             {loading ? "Création..." : "Créer mon compte"}
           </button>
 
-          {/* Bloc “Déjà un compte ? Se connecter” supprimé */}
-
-          <button
-            type="button"
-            onClick={handleResendConfirmation}
-            className="block w-full text-center text-sm text-gray-600 hover:underline mt-2"
-            disabled={!inputsReady}
-          >
-            Renvoyer l’e-mail de confirmation
-          </button>
-
+          {/* ➜ Bouton “Renvoyer l’e-mail de confirmation” retiré */}
           {message && <p className="text-sm text-emerald-600 mt-2 text-center">{message}</p>}
           {error && <p className="text-sm text-red-600 mt-2 text-center">{error}</p>}
+
+          <p className="text-center text-sm mt-2">
+            <a href="/" className="underline">Se connecter</a>
+          </p>
         </form>
       </div>
     </main>
   );
 }
-
