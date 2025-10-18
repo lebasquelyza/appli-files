@@ -14,7 +14,7 @@ export const runtime = "nodejs";
 const R_URL = process.env.UPSTASH_REDIS_REST_URL || "";
 const R_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || "";
 
-/** Upstash REST helper */
+/* ===================== Upstash helpers ===================== */
 async function redisCmd(command: (string | number)[]) {
   if (!R_URL || !R_TOKEN) return null;
   const res = await fetch(R_URL, {
@@ -49,28 +49,45 @@ async function redisSetJSON(key: string, value: any, ttlSeconds?: number) {
   return await redisCmd(["SET", key, payload]);
 }
 
-/** Clé Redis */
 const keyForUser = (user: string) => `fc:program:${user}`;
 
-/* ===================== GET ===================== */
+/* ===================== Normalisation stricte ===================== */
+function normalizeProgramme(input: any): AiProgramme {
+  const sessions = Array.isArray(input?.sessions) ? input.sessions : [];
+  const profile = input?.profile && typeof input.profile === "object" ? input.profile : undefined;
+  return { sessions, ...(profile ? { profile } : {}) };
+}
+
+/* ===================== GET =====================
+Lit le programme depuis Redis (si dispo).
+Si ?autogen=1 et vide, génère depuis Sheets et (si Redis) persiste.
+Query:
+  - user: id opaque (default cookie fc_uid ou "me")
+  - autogen=1: activer l’auto-génération si vide
+  - email: email pour chercher les réponses dans Sheets (fallback: cookie app_email)
+  - ttl: TTL en secondes optionnel pour la clé Redis
+================================================= */
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const user = searchParams.get("user") || cookies().get("fc_uid")?.value || "me";
     const autogen = searchParams.get("autogen") === "1";
     const ttl = Number(searchParams.get("ttl")) || 0;
-    const emailQP = searchParams.get("email") || "";
-    const emailCookie = cookies().get("app_email")?.value || "";
+    const emailQP = (searchParams.get("email") || "").trim().toLowerCase();
+    const emailCookie = (cookies().get("app_email")?.value || "").trim().toLowerCase();
     const email = emailQP || emailCookie;
 
-    // 1) Lecture Redis
-    let programme = await redisGetJSON<AiProgramme>(keyForUser(user));
+    // 1) Lire Redis si dispo
+    let programme: AiProgramme | null = null;
+    const cached = await redisGetJSON<any>(keyForUser(user));
+    if (cached) {
+      programme = normalizeProgramme(cached);
+    }
+
+    const hasSessions = !!programme?.sessions?.length;
 
     // 2) Autogen si demandé et vide
-    if (
-      autogen &&
-      (!programme || !Array.isArray(programme.sessions) || programme.sessions.length === 0)
-    ) {
+    if (autogen && !hasSessions) {
       if (!email) {
         return NextResponse.json(
           { ok: false, error: "NO_EMAIL", message: "Email requis pour générer le programme." },
@@ -86,12 +103,16 @@ export async function GET(req: Request) {
           );
         }
 
-        // ✅ construit le profil + programme
+        // ⚠️ generateProgrammeFromAnswers retourne { sessions }
+        const generated = generateProgrammeFromAnswers(answers);
         const profile: Profile = buildProfileFromAnswers(answers);
-        const prog = generateProgrammeFromAnswers(answers); // { sessions }
-        programme = { sessions: prog.sessions, profile };
 
-        await redisSetJSON(keyForUser(user), programme, ttl > 0 ? ttl : undefined);
+        programme = normalizeProgramme({ sessions: generated.sessions, profile });
+
+        // Ecrire en Redis si configuré
+        if (R_URL && R_TOKEN) {
+          await redisSetJSON(keyForUser(user), programme, ttl > 0 ? ttl : undefined);
+        }
       } catch (e: any) {
         return NextResponse.json(
           { ok: false, error: "AUTOGEN_FAILED", message: String(e?.message || e) },
@@ -100,7 +121,7 @@ export async function GET(req: Request) {
       }
     }
 
-    return NextResponse.json(programme ?? { sessions: [] }, { status: 200 });
+    return NextResponse.json(normalizeProgramme(programme ?? { sessions: [] }), { status: 200 });
   } catch (e: any) {
     return NextResponse.json(
       { sessions: [], error: "READ_FAILED", message: String(e?.message || e) },
@@ -109,22 +130,34 @@ export async function GET(req: Request) {
   }
 }
 
-/* ===================== POST ===================== */
+/* ===================== POST =====================
+Écrit un programme côté Redis tel quel (sans autogen).
+Body attendu:
+{
+  "user": "user-id-opaque",
+  "sessions": [ ... ],      // requis
+  "profile": { ... }        // optionnel
+}
+=================================================== */
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
     const user = String(body.user || cookies().get("fc_uid")?.value || "me");
     const sessions = Array.isArray(body.sessions) ? body.sessions : [];
-    const profile = (body.profile || null) as Profile | null;
+    const profile = body.profile && typeof body.profile === "object" ? body.profile : undefined;
 
     if (!sessions.length) {
       return NextResponse.json({ ok: false, error: "NO_SESSIONS" }, { status: 400 });
     }
 
-    const programme: AiProgramme = profile ? { sessions, profile } : { sessions };
-    await redisSetJSON(keyForUser(user), programme);
+    const programme: AiProgramme = normalizeProgramme({ sessions, profile });
 
-    return NextResponse.json({ ok: true, user, count: sessions.length }, { status: 200 });
+    // Si pas de Redis configuré, on renvoie quand même le programme pour usage immédiat côté client
+    if (R_URL && R_TOKEN) {
+      await redisSetJSON(keyForUser(user), programme);
+    }
+
+    return NextResponse.json({ ok: true, user, count: programme.sessions.length }, { status: 200 });
   } catch (e: any) {
     return NextResponse.json(
       { ok: false, error: "WRITE_FAILED", message: String(e?.message || e) },
