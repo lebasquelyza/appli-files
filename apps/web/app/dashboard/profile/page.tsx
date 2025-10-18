@@ -102,8 +102,8 @@ async function doAutogenAction(formData: FormData) {
     redirect(`/dashboard/profile?error=${encodeURIComponent("Serveur indisponible pour générer le programme.")}`);
   }
 
-  revalidatePath("/dashboard/profile");
-  redirect("/dashboard/profile?success=programme`);
+   revalidatePath("/dashboard/profile");
+  redirect("/dashboard/profile?success=programme");
 }
 
 /** ================= Helpers: chargement depuis l'API ================= */
