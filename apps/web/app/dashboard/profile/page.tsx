@@ -3,7 +3,14 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
-import type { AiSession as AiSessionT } from "../../../lib/coach/ai";
+// On importe les helpers pour fallback (profil/programmation depuis Sheets)
+import {
+  getAnswersForEmail,
+  buildProfileFromAnswers,
+  generateProgrammeFromAnswers,
+  type AiSession as AiSessionT,
+  type Profile as ProfileT,
+} from "../../../lib/coach/ai";
 
 /** ================= Constantes ================= */
 const QUESTIONNAIRE_BASE = "https://questionnaire.files-coaching.com";
@@ -65,7 +72,7 @@ function typeBadgeClass(t: WorkoutType) {
   }
 }
 
-/** =============== Server Action: Générer (stocke dans Redis via l'API) =============== */
+/** =============== Server Action: Générer (via l'API) =============== */
 async function doAutogenAction(formData: FormData) {
   "use server";
 
@@ -103,40 +110,27 @@ async function doAutogenAction(formData: FormData) {
   redirect("/dashboard/profile?success=programme");
 }
 
-/** ================= Helpers: chargement depuis l'API (Redis) ================= */
+/** ================= Helpers: chargement depuis l'API (Redis/compute) ================= */
 type ProgrammeFromApi = {
   sessions: AiSessionT[];
-  profile?: {
-    email: string;
-    prenom?: string;
-    age?: number;
-    goal?: string;
-    timePerSession?: number;
-  } & Record<string, any>;
+  profile?: Partial<ProfileT> & { email?: string };
 };
 
-async function fetchProgrammeFromApi(): Promise<ProgrammeFromApi | null> {
+async function fetchProgrammeFromApi(email?: string): Promise<ProgrammeFromApi | null> {
   const c = cookies();
   const user = c.get("fc_uid")?.value || "me";
   const base =
     process.env.APP_BASE_URL?.replace(/\/+$/, "") ||
     process.env.NEXTAUTH_URL?.replace(/\/+$/, "") ||
     "http://localhost:3000";
-  const res = await fetch(`${base}/api/programme?user=${encodeURIComponent(user)}`, { cache: "no-store" });
+
+  // ✅ autogen=1 + email (si dispo) pour être sûr d'avoir des séances au chargement
+  const qp = new URLSearchParams({ user, autogen: "1" });
+  if (email) qp.set("email", email);
+
+  const res = await fetch(`${base}/api/programme?${qp.toString()}`, { cache: "no-store" });
   if (!res.ok) return null;
   return (await res.json().catch(() => null)) as ProgrammeFromApi | null;
-}
-
-function goalLabelFromKey(g?: string) {
-  const map: Record<string, string> = {
-    hypertrophy: "Hypertrophie / Esthétique",
-    fatloss: "Perte de gras",
-    strength: "Force",
-    endurance: "Endurance / Cardio",
-    mobility: "Mobilité / Souplesse",
-    general: "Forme générale",
-  };
-  return g ? (map[g] || "Non défini") : "Non défini";
 }
 
 /** ================= Page ================= */
@@ -153,25 +147,62 @@ export default async function Page({
     .filter((s) => s.status === "done")
     .sort((a, b) => (b.endedAt || "").localeCompare(a.endedAt || ""));
 
-  // ✅ Charge le programme + profil depuis l'API (=> Redis)
-  const prog = await fetchProgrammeFromApi();
+  // Email connu côté app
+  const emailCookie = c.get("app_email")?.value || "";
 
-  // Typage sûr du profil (évite l'erreur "Property 'prenom' does not exist on type '{}'")
-  const p: {
-    email?: string;
-    prenom?: string;
-    age?: number;
-    goal?: string;
-    timePerSession?: number;
-  } = (prog?.profile ?? {}) as any;
+  // 1) Récupère programme (et idéalement profil) via API
+  const prog = await fetchProgrammeFromApi(emailCookie);
 
-  const aiSessions: AiSessionT[] = Array.isArray(prog?.sessions) ? prog!.sessions : [];
+  // 2) Fallback profil depuis Sheets si le profil n'est pas présent dans la réponse API
+  let profile: Partial<ProfileT> & { email?: string } = (prog?.profile ?? {}) as any;
 
-  // Infos profil persistantes (affichées même si Sheets n'est pas dispo)
-  const clientPrenom = (typeof p.prenom === "string" && p.prenom && !/\d/.test(p.prenom)) ? p.prenom : "";
-  const clientAge = (typeof p.age === "number" && p.age > 0) ? p.age : undefined;
-  const clientEmailDisplay = (typeof p.email === "string" && p.email) ? p.email : (c.get("app_email")?.value || "");
-  const goalLabel = goalLabelFromKey(p.goal);
+  if ((!profile?.prenom || !profile?.age) && emailCookie) {
+    try {
+      const answers = await getAnswersForEmail(emailCookie);
+      if (answers) {
+        const built = buildProfileFromAnswers(answers);
+        profile = { ...built, ...profile }; // garde ce qui vient de l'API mais complète depuis Sheets
+      }
+    } catch {
+      // silencieux
+    }
+  }
+
+  // 3) Séances à afficher : celles de l'API ; si vide, fallback depuis Sheets localement
+  let aiSessions: AiSessionT[] = Array.isArray(prog?.sessions) ? prog!.sessions : [];
+  if ((!aiSessions || aiSessions.length === 0) && emailCookie) {
+    try {
+      const answers = await getAnswersForEmail(emailCookie);
+      if (answers) {
+        aiSessions = generateProgrammeFromAnswers(answers).sessions;
+      }
+    } catch {
+      // silencieux
+    }
+  }
+
+  // Infos profil affichées
+  const clientPrenom =
+    typeof profile?.prenom === "string" && profile.prenom && !/\d/.test(profile.prenom) ? profile.prenom : "";
+  const clientAge =
+    typeof profile?.age === "number" && profile.age > 0 ? profile.age : undefined;
+  const clientEmailDisplay =
+    typeof profile?.email === "string" && profile.email
+      ? profile.email
+      : emailCookie;
+
+  const goalLabel = (() => {
+    const g = String((profile as any)?.goal || "").toLowerCase();
+    const map: Record<string, string> = {
+      hypertrophy: "Hypertrophie / Esthétique",
+      fatloss: "Perte de gras",
+      strength: "Force",
+      endurance: "Endurance / Cardio",
+      mobility: "Mobilité / Souplesse",
+      general: "Forme générale",
+    };
+    return map[g] || "Non défini";
+  })();
 
   // URL questionnaire pré-rempli
   const questionnaireUrl = (() => {
@@ -233,7 +264,7 @@ export default async function Page({
         )}
       </div>
 
-      {/* ===== Mes infos (persistantes via Redis) ===== */}
+      {/* ===== Mes infos ===== */}
       <section className="section" style={{ marginTop: 12 }}>
         <div
           className="section-head"
@@ -281,7 +312,7 @@ export default async function Page({
         </div>
       </section>
 
-      {/* ===== Mon programme (sessions stockées) ===== */}
+      {/* ===== Mon programme ===== */}
       <section className="section" style={{ marginTop: 12 }}>
         <div
           className="section-head"
@@ -315,7 +346,7 @@ export default async function Page({
           </form>
         </div>
 
-        {aiSessions.length === 0 ? (
+        {(!aiSessions || aiSessions.length === 0) ? (
           <div className="card text-sm" style={{ color: "#6b7280" }}>
             <div className="flex items-center gap-3">
               <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted">🤖</span>
