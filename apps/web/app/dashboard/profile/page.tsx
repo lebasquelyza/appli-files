@@ -1,5 +1,5 @@
 // apps/web/app/dashboard/profile/page.tsx
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
@@ -72,6 +72,14 @@ function typeBadgeClass(t: WorkoutType) {
   }
 }
 
+/** ================= Helpers: base URL sûre (Netlify/Prod/Local) ================= */
+function getBaseUrlFromHeaders() {
+  const h = headers();
+  const host = h.get("x-forwarded-host") || h.get("host") || "localhost:3000";
+  const proto = h.get("x-forwarded-proto") || (host.startsWith("localhost") ? "http" : "https");
+  return `${proto}://${host}`;
+}
+
 /** =============== Server Action: Générer (via l'API) =============== */
 async function doAutogenAction(formData: FormData) {
   "use server";
@@ -83,8 +91,9 @@ async function doAutogenAction(formData: FormData) {
   const qp = new URLSearchParams({ user, autogen: "1" });
   if (email) qp.set("email", email);
 
-  // ✅ URL RELATIVE (fonctionne en Netlify/SSR)
-  const url = `/api/programme?${qp.toString()}`;
+  // ✅ URL ABSOLUE basée sur headers (fiable sur Netlify)
+  const base = getBaseUrlFromHeaders();
+  const url = `${base}/api/programme?${qp.toString()}`;
 
   try {
     const res = await fetch(url, { cache: "no-store" });
@@ -98,11 +107,13 @@ async function doAutogenAction(formData: FormData) {
       } catch {}
       redirect(`/dashboard/profile?error=${encodeURIComponent(msg)}`);
     }
-  } catch {
-    redirect(`/dashboard/profile?error=${encodeURIComponent("Serveur indisponible pour générer le programme.")}`);
+  } catch (e: any) {
+    redirect(
+      `/dashboard/profile?error=${encodeURIComponent("Serveur indisponible pour générer le programme.")}`
+    );
   }
 
-   revalidatePath("/dashboard/profile");
+  revalidatePath("/dashboard/profile");
   redirect("/dashboard/profile?success=programme");
 }
 
@@ -116,13 +127,22 @@ async function fetchProgrammeFromApi(email?: string): Promise<ProgrammeFromApi |
   const c = cookies();
   const user = c.get("fc_uid")?.value || "me";
 
-  // ✅ URL RELATIVE + autogen + email
   const qp = new URLSearchParams({ user, autogen: "1" });
   if (email) qp.set("email", email);
 
-  const res = await fetch(`/api/programme?${qp.toString()}`, { cache: "no-store" });
-  if (!res.ok) return null;
-  return (await res.json().catch(() => null)) as ProgrammeFromApi | null;
+  // ✅ URL ABSOLUE
+  const base = getBaseUrlFromHeaders();
+  const url = `${base}/api/programme?${qp.toString()}`;
+
+  try {
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) return null;
+    const json = (await res.json().catch(() => null)) as ProgrammeFromApi | null;
+    return json;
+  } catch (e) {
+    console.error("fetchProgrammeFromApi error:", e);
+    return null;
+  }
 }
 
 /** ================= Page ================= */
@@ -142,7 +162,7 @@ export default async function Page({
   // Email connu côté app
   const emailCookie = c.get("app_email")?.value || "";
 
-  // 1) Récupère programme (et idéalement profil) via API
+  // 1) Récupère programme (et profil) via API absolue
   const prog = await fetchProgrammeFromApi(emailCookie);
 
   // 2) Profil : API -> fallback Sheets si besoin
@@ -157,7 +177,9 @@ export default async function Page({
         profile = { ...built, ...profile };
         preferredEmail = profile.email || preferredEmail;
       }
-    } catch {}
+    } catch (e) {
+      console.warn("profile fallback from Sheets failed", e);
+    }
   }
 
   // 3) Séances à afficher : API -> fallback lib (Sheets) -> fallback getAiSessions
@@ -169,13 +191,17 @@ export default async function Page({
       if (answers) {
         aiSessions = generateProgrammeFromAnswers(answers).sessions;
       }
-    } catch {}
+    } catch (e) {
+      console.warn("generateProgrammeFromAnswers fallback failed", e);
+    }
   }
 
   if ((!aiSessions || aiSessions.length === 0) && preferredEmail) {
     try {
       aiSessions = await getAiSessions(preferredEmail);
-    } catch {}
+    } catch (e) {
+      console.warn("getAiSessions fallback failed", e);
+    }
   }
 
   // Infos profil affichées
