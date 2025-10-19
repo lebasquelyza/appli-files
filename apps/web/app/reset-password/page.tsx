@@ -131,7 +131,7 @@ export default function ResetPasswordPage() {
               Définir un nouveau mot de passe
             </h1>
             <p className="text-center text-sm text-gray-600 mb-6">
-              Après validation, tu resteras connecté automatiquement.
+              Après validation, tu seras connecté à l’application automatiquement.
             </p>
 
             {phase === "init" && !err && (
