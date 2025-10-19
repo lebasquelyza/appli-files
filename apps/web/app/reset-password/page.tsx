@@ -15,7 +15,6 @@ export default function ResetPasswordPage() {
   const [showPwd2, setShowPwd2] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  // Styles cohérents
   const inputClass =
     "w-full border rounded-lg px-3 py-2 pr-10 focus:ring-2 focus:ring-emerald-500 outline-none";
   const btnClass =
@@ -26,7 +25,7 @@ export default function ResetPasswordPage() {
     boxShadow: "0 10px 22px rgba(22,163,74,.35)",
   };
 
-  // 1) Consommer les tokens du hash pour établir la session "recovery"
+  // 1) Consommer les tokens du lien (hash) pour établir la session recovery
   useEffect(() => {
     (async () => {
       try {
@@ -39,7 +38,7 @@ export default function ResetPasswordPage() {
           return;
         }
 
-        // Sinon, consommer les tokens de l'URL (#access_token, #refresh_token)
+        // Sinon, lire les tokens du hash #type=recovery&access_token&refresh_token
         const hash = window.location.hash.startsWith("#")
           ? window.location.hash.slice(1)
           : "";
@@ -51,8 +50,7 @@ export default function ResetPasswordPage() {
         if (type === "recovery" && access_token && refresh_token) {
           const { error } = await supabase.auth.setSession({ access_token, refresh_token });
           if (error) throw error;
-
-          // Nettoyer le hash (ne pas laisser les tokens dans l'historique)
+          // Nettoyer l'URL (ne pas garder les tokens)
           window.history.replaceState({}, document.title, window.location.pathname);
           setPhase("ready");
         } else {
@@ -95,31 +93,25 @@ export default function ResetPasswordPage() {
   return (
     <main className="hide-topbar-menu pt-14 py-16">
       <div className="container max-w-md mx-auto px-4">
-        {/* Écran confirmation après succès */}
         {phase === "done" ? (
+          // ✅ Écran minimal de succès demandé
           <>
             <h1
               className="not-prose font-bold mb-2 text-center
                          [font-size:theme(fontSize.2xl)!important]
                          sm:[font-size:theme(fontSize.3xl)!important]"
             >
-              Mot de passe mis à jour ✅
+              Mot de passe mis à jour
             </h1>
-            <p className="text-center text-sm text-gray-600 mb-6">
-              Tu es désormais connecté. Que veux-tu faire ?
-            </p>
-
-            <div className="space-y-3">
-              <a href="/dashboard" className={btnClass} style={btnStyle}>
-                Accéder au tableau de bord
-              </a>
+            <p className="text-center mt-4">
               <a
                 href="/"
-                className="w-full text-center font-semibold px-3 py-2 rounded-lg border border-gray-200 hover:bg-gray-50"
+                className="underline font-semibold hover:opacity-80"
+                aria-label="Retour sur Files"
               >
-                Retour à la page d’accueil
+                Retour sur Files
               </a>
-            </div>
+            </p>
           </>
         ) : (
           <>
@@ -131,7 +123,7 @@ export default function ResetPasswordPage() {
               Définir un nouveau mot de passe
             </h1>
             <p className="text-center text-sm text-gray-600 mb-6">
-              Après validation, tu seras connecté à l’application automatiquement.
+              Après validation, tu seras connecté à l’appli automatiquement.
             </p>
 
             {phase === "init" && !err && (
@@ -201,7 +193,6 @@ export default function ResetPasswordPage() {
 
                 <button
                   type="submit"
-                  // ✅ correctif TS: plus de test "|| phase === 'init'" dans ce bloc
                   disabled={phase === "saving"}
                   className={btnClass}
                   style={btnStyle}
