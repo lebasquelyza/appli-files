@@ -9,8 +9,11 @@ export default function Page() {
   const imc = m > 0 ? parseFloat(w || "0") / (m * m) : 0;
 
   return (
-    <>
-      {/* Header — mêmes tailles que la première page */}
+    <div
+      className="container"
+      style={{ paddingTop: 24, paddingBottom: 32, fontSize: "var(--settings-fs, 12px)" }}
+    >
+      {/* Header — mêmes tailles + même placement que les autres pages */}
       <div className="page-header">
         <div>
           <h1
@@ -46,6 +49,6 @@ export default function Page() {
           </div>
         </div>
       </Section>
-    </>
+    </div>
   );
 }
