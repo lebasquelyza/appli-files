@@ -42,11 +42,17 @@ function sanitizeImageInput(raw: string): SanitizeResult {
   return { ok: false, reason: "unsupported" };
 }
 
+type FoodItem = {
+  label: string;
+  grams: number;            // portion estimée
+  kcal_per_100g: number;    // densité estimée
+};
 type FoodAnalysis = {
-  food: string;
-  confidence: number;       // 0..1
-  kcal_per_100g: number;    // moyenne FR ou valeur lue sur l’étiquette
-  net_weight_g?: number | null;  // poids net détecté (ex: 90g)
+  // Cas “produit emballé” (étiquette)
+  food?: string;
+  confidence?: number;
+  kcal_per_100g?: number;
+  net_weight_g?: number | null;
   nutrition?: {
     carbs_g_per_100g?: number | null;
     sugars_g_per_100g?: number | null;
@@ -55,6 +61,9 @@ type FoodAnalysis = {
     fiber_g_per_100g?: number | null;
     salt_g_per_100g?: number | null;
   };
+  // Cas “assiette maison” (décomposition)
+  items?: FoodItem[];       // ex: [{label:"riz", grams:160, kcal_per_100g:130}, ...]
+  total_kcal?: number;      // somme des items (arrondie)
 };
 
 export async function POST(req: NextRequest) {
@@ -63,8 +72,8 @@ export async function POST(req: NextRequest) {
     if (!apiKey) return jsonError(400, "missing_OPENAI_API_KEY");
 
     const ct = (req.headers.get("content-type") || "").toLowerCase();
-
     let imageDataUrl = "";
+
     if (ct.includes("application/json")) {
       const body = await req.json().catch(() => ({}));
       const raw = typeof body.image === "string" ? body.image : "";
@@ -83,6 +92,7 @@ export async function POST(req: NextRequest) {
       return jsonError(415, "Unsupported Media Type. Envoyer multipart/form-data (image) ou JSON { image }.");
     }
 
+    // Prompt: supporte ETIQUETTE (produit) OU ASSIETTE (décomposition multi-ingrédients)
     const payload = {
       model: "gpt-4o-mini",
       temperature: 0,
@@ -91,9 +101,9 @@ export async function POST(req: NextRequest) {
         {
           role: "system",
           content:
-            "Tu es un expert en lecture d'étiquettes alimentaires. FRANÇAIS UNIQUEMENT. " +
-            "Quand l'étiquette est visible, lis le POIDS NET (ex: 90 g) et les VALEURS NUTRITIONNELLES. " +
-            "Sinon, estime raisonnablement.",
+            "FRANÇAIS UNIQUEMENT. Tu es un expert en nutrition visuelle. " +
+            "Si c'est un PRODUIT EMBALLÉ avec étiquette visible, lis POIDS NET et VALEURS/100g. " +
+            "Si c'est une ASSIETTE MAISON, identifie les principaux aliments, estime les GRAMMES par élément et les KCAL/100g plausibles, puis calcule le total.",
         },
         {
           role: "user",
@@ -101,22 +111,26 @@ export async function POST(req: NextRequest) {
             {
               type: "text",
               text:
-                "Analyse l'image et renvoie STRICTEMENT un JSON: " +
-                JSON.stringify({
-                  food: "<string>",
-                  confidence: "<number 0..1>",
-                  kcal_per_100g: "<number>",
-                  net_weight_g: "<number|null>",
-                  nutrition: {
-                    carbs_g_per_100g: "<number|null>",
-                    sugars_g_per_100g: "<number|null>",
-                    proteins_g_per_100g: "<number|null>",
-                    fats_g_per_100g: "<number|null>",
-                    fiber_g_per_100g: "<number|null>",
-                    salt_g_per_100g: "<number|null>"
-                  }
-                }) +
-                " . Ne renvoie rien d'autre.",
+                "Renvoie STRICTEMENT un JSON. Deux cas possibles :\n\n" +
+                "CAS_A (produit emballé) => {\n" +
+                '  "food": string,\n' +
+                '  "confidence": number,                // 0..1\n' +
+                '  "kcal_per_100g": number,             // étiquette si visible, sinon estimation\n' +
+                '  "net_weight_g": number|null,         // ex: 90\n' +
+                '  "nutrition": {                       // optionnel, valeurs/100g si visibles\n' +
+                '    "carbs_g_per_100g": number|null,\n' +
+                '    "sugars_g_per_100g": number|null,\n' +
+                '    "proteins_g_per_100g": number|null,\n' +
+                '    "fats_g_per_100g": number|null,\n' +
+                '    "fiber_g_per_100g": number|null,\n' +
+                '    "salt_g_per_100g": number|null\n' +
+                "  }\n" +
+                "}\n\n" +
+                "CAS_B (assiette maison) => {\n" +
+                '  "items": [ { "label": string, "grams": number, "kcal_per_100g": number }, ... ],\n' +
+                '  "total_kcal": number\n' +
+                "}\n\n" +
+                "Choisis UN SEUL cas selon l'image. Pas d'autres champs ni de texte libre.",
             },
             { type: "image_url", image_url: { url: imageDataUrl } },
           ],
@@ -143,21 +157,25 @@ export async function POST(req: NextRequest) {
     const json = await withTimeout(p, 25_000);
     const content = json?.choices?.[0]?.message?.content || "{}";
 
-    let out: FoodAnalysis = { food: "aliment", confidence: 0, kcal_per_100g: 0 };
-    try {
-      const parsed = JSON.parse(content);
-      out = {
-        food: String(parsed.food || "aliment"),
-        confidence: Math.max(0, Math.min(1, Number(parsed.confidence || 0))),
-        kcal_per_100g: Math.max(0, Number(parsed.kcal_per_100g || 0)),
-        net_weight_g: parsed.net_weight_g != null ? Math.max(0, Number(parsed.net_weight_g)) : null,
-        nutrition: parsed.nutrition || undefined,
-      };
-    } catch {
-      return jsonError(502, "bad_model_json");
+    let out: FoodAnalysis | null = null;
+    try { out = JSON.parse(content); } catch { return jsonError(502, "bad_model_json"); }
+
+    // Petites sécurités
+    if (out?.items?.length) {
+      out.items = out.items
+        .filter(it => it && it.label && Number.isFinite(Number(it.grams)) && Number(it.grams) > 0 && Number.isFinite(Number(it.kcal_per_100g)) && Number(it.kcal_per_100g) > 0)
+        .slice(0, 8)
+        .map(it => ({ label: String(it.label), grams: Math.round(Number(it.grams)), kcal_per_100g: Math.round(Number(it.kcal_per_100g)) }));
+      const sum = out.items.reduce((s, it) => s + (it.grams * it.kcal_per_100g) / 100, 0);
+      out.total_kcal = Math.round(sum);
+    } else {
+      // Clamp champs produit
+      if (typeof out?.confidence === "number") out.confidence = Math.max(0, Math.min(1, out.confidence));
+      if (typeof out?.kcal_per_100g === "number") out.kcal_per_100g = Math.max(0, out.kcal_per_100g);
+      if (out?.net_weight_g != null) out.net_weight_g = Math.max(0, Number(out.net_weight_g));
     }
 
-    return NextResponse.json(out, { headers: { "Cache-Control": "no-store, no-transform" } });
+    return NextResponse.json(out ?? {}, { headers: { "Cache-Control": "no-store, no-transform" } });
   } catch (e: any) {
     const status = e?.status ?? e?.response?.status ?? 500;
     return jsonError(status, e?.message || "internal_error");
