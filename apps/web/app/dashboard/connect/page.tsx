@@ -86,7 +86,7 @@ export default async function Page(props: {
             Santé, capteurs, etc. — synchronise automatiquement tes activités et mesures.
           </p>
         </div>
-        {/* Bouton ← Retour supprimé */}
+        {/* ← Retour supprimé */}
       </div>
 
       {/* Alerts */}
@@ -310,7 +310,8 @@ export default async function Page(props: {
             </div>
           </div>
 
-          <form action={subscribeAction} className="flex flex-col sm:flex-row items-stretch sm:items-center gap:2 w-full sm:w-auto">
+          {/* PATCH: empêcher l’étirement et donner la même taille que “Retour” */}
+          <form action={subscribeAction} className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
             <input type="hidden" name="want" value={isSubscribed ? "0" : "1"} />
             {isSubscribed ? (
               <button className="btn btn-outline w-full sm:w-auto" type="submit" style={{ color: "#111" }}>
@@ -318,10 +319,9 @@ export default async function Page(props: {
               </button>
             ) : (
               <button
-                className="btn-dash w-full sm:w-auto"
+                className="btn-dash"
                 type="submit"
-                /* Même taille que le bouton “← Retour” (padding + line-height) */
-                style={{ padding: "6px 10px", lineHeight: 1.2 }}
+                style={{ padding: "6px 10px", lineHeight: 1.2, alignSelf: "center" }}
               >
                 Me prévenir
               </button>
