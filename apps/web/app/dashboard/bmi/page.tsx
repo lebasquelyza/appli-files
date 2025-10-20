@@ -14,7 +14,7 @@ export default function Page() {
       style={{ paddingTop: 24, paddingBottom: 32, fontSize: "var(--settings-fs, 12px)" }}
     >
       {/* Header — mêmes tailles + même placement que les autres pages */}
-      <div className="page-header">
+      <div className="page-header" style={{ marginTop: 12 }}>
         <div>
           <h1
             className="h1"
