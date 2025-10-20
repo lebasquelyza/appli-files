@@ -42,13 +42,15 @@ function sanitizeImageInput(raw: string): SanitizeResult {
   return { ok: false, reason: "unsupported" };
 }
 
+/** Types **/
 type FoodItem = {
   label: string;
-  grams: number;            // portion estimée
-  kcal_per_100g: number;    // densité estimée
+  grams: number;              // portion estimée
+  kcal_per_100g: number;      // densité kcal
+  proteins_g_per_100g?: number | null; // protéines /100g (optionnel mais demandé)
 };
 type FoodAnalysis = {
-  // Cas “produit emballé” (étiquette)
+  // Produit emballé
   food?: string;
   confidence?: number;
   kcal_per_100g?: number;
@@ -56,14 +58,14 @@ type FoodAnalysis = {
   nutrition?: {
     carbs_g_per_100g?: number | null;
     sugars_g_per_100g?: number | null;
-    proteins_g_per_100g?: number | null;
+    proteins_g_per_100g?: number | null; // ← on garde
     fats_g_per_100g?: number | null;
     fiber_g_per_100g?: number | null;
     salt_g_per_100g?: number | null;
   };
-  // Cas “assiette maison” (décomposition)
-  items?: FoodItem[];       // ex: [{label:"riz", grams:160, kcal_per_100g:130}, ...]
-  total_kcal?: number;      // somme des items (arrondie)
+  // Assiette maison
+  items?: FoodItem[];
+  total_kcal?: number;
 };
 
 export async function POST(req: NextRequest) {
@@ -92,7 +94,7 @@ export async function POST(req: NextRequest) {
       return jsonError(415, "Unsupported Media Type. Envoyer multipart/form-data (image) ou JSON { image }.");
     }
 
-    // Prompt: supporte ETIQUETTE (produit) OU ASSIETTE (décomposition multi-ingrédients)
+    // Prompt : produit OU assiette (avec protéines)
     const payload = {
       model: "gpt-4o-mini",
       temperature: 0,
@@ -102,8 +104,8 @@ export async function POST(req: NextRequest) {
           role: "system",
           content:
             "FRANÇAIS UNIQUEMENT. Tu es un expert en nutrition visuelle. " +
-            "Si c'est un PRODUIT EMBALLÉ avec étiquette visible, lis POIDS NET et VALEURS/100g. " +
-            "Si c'est une ASSIETTE MAISON, identifie les principaux aliments, estime les GRAMMES par élément et les KCAL/100g plausibles, puis calcule le total.",
+            "Si PRODUIT EMBALLÉ: lis POIDS NET et VALEURS/100g (kcal, protéines). " +
+            "Si ASSIETTE: liste les principaux aliments, estime GRAMMES, KCAL/100g et PROTÉINES/100g.",
         },
         {
           role: "user",
@@ -111,26 +113,19 @@ export async function POST(req: NextRequest) {
             {
               type: "text",
               text:
-                "Renvoie STRICTEMENT un JSON. Deux cas possibles :\n\n" +
-                "CAS_A (produit emballé) => {\n" +
+                "Renvoie STRICTEMENT un JSON. Deux cas :\n\n" +
+                "CAS_A (produit) => {\n" +
                 '  "food": string,\n' +
-                '  "confidence": number,                // 0..1\n' +
-                '  "kcal_per_100g": number,             // étiquette si visible, sinon estimation\n' +
-                '  "net_weight_g": number|null,         // ex: 90\n' +
-                '  "nutrition": {                       // optionnel, valeurs/100g si visibles\n' +
-                '    "carbs_g_per_100g": number|null,\n' +
-                '    "sugars_g_per_100g": number|null,\n' +
-                '    "proteins_g_per_100g": number|null,\n' +
-                '    "fats_g_per_100g": number|null,\n' +
-                '    "fiber_g_per_100g": number|null,\n' +
-                '    "salt_g_per_100g": number|null\n' +
-                "  }\n" +
+                '  "confidence": number,\n' +
+                '  "kcal_per_100g": number,\n' +
+                '  "net_weight_g": number|null,\n' +
+                '  "nutrition": { "proteins_g_per_100g": number|null, "carbs_g_per_100g": number|null, "sugars_g_per_100g": number|null, "fats_g_per_100g": number|null, "fiber_g_per_100g": number|null, "salt_g_per_100g": number|null }\n' +
                 "}\n\n" +
-                "CAS_B (assiette maison) => {\n" +
-                '  "items": [ { "label": string, "grams": number, "kcal_per_100g": number }, ... ],\n' +
+                "CAS_B (assiette) => {\n" +
+                '  "items": [ { "label": string, "grams": number, "kcal_per_100g": number, "proteins_g_per_100g": number|null }, ... ],\n' +
                 '  "total_kcal": number\n' +
-                "}\n\n" +
-                "Choisis UN SEUL cas selon l'image. Pas d'autres champs ni de texte libre.",
+                "}\n" +
+                "Choisis UN CAS. Pas d'autres champs.",
             },
             { type: "image_url", image_url: { url: imageDataUrl } },
           ],
@@ -160,19 +155,27 @@ export async function POST(req: NextRequest) {
     let out: FoodAnalysis | null = null;
     try { out = JSON.parse(content); } catch { return jsonError(502, "bad_model_json"); }
 
-    // Petites sécurités
+    // Sécurisation des items (assiette)
     if (out?.items?.length) {
       out.items = out.items
-        .filter(it => it && it.label && Number.isFinite(Number(it.grams)) && Number(it.grams) > 0 && Number.isFinite(Number(it.kcal_per_100g)) && Number(it.kcal_per_100g) > 0)
+        .filter(it => it && it.label && Number(it.grams) > 0 && Number(it.kcal_per_100g) > 0)
         .slice(0, 8)
-        .map(it => ({ label: String(it.label), grams: Math.round(Number(it.grams)), kcal_per_100g: Math.round(Number(it.kcal_per_100g)) }));
+        .map(it => ({
+          label: String(it.label),
+          grams: Math.round(Number(it.grams)),
+          kcal_per_100g: Math.round(Number(it.kcal_per_100g)),
+          proteins_g_per_100g: it.proteins_g_per_100g != null ? Math.max(0, Number(it.proteins_g_per_100g)) : null,
+        }));
       const sum = out.items.reduce((s, it) => s + (it.grams * it.kcal_per_100g) / 100, 0);
       out.total_kcal = Math.round(sum);
     } else {
-      // Clamp champs produit
+      // Clamp produit
       if (typeof out?.confidence === "number") out.confidence = Math.max(0, Math.min(1, out.confidence));
       if (typeof out?.kcal_per_100g === "number") out.kcal_per_100g = Math.max(0, out.kcal_per_100g);
       if (out?.net_weight_g != null) out.net_weight_g = Math.max(0, Number(out.net_weight_g));
+      if (out?.nutrition && out.nutrition.proteins_g_per_100g != null) {
+        out.nutrition.proteins_g_per_100g = Math.max(0, Number(out.nutrition.proteins_g_per_100g));
+      }
     }
 
     return NextResponse.json(out ?? {}, { headers: { "Cache-Control": "no-store, no-transform" } });
