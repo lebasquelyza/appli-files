@@ -1,3 +1,4 @@
+// app/dashboard/calories/page.tsx
 import { cookies } from "next/headers";
 import FoodSnap from "./FoodSnap";
 import { saveCalories } from "./actions";
@@ -6,9 +7,10 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-type KcalStore = Record<string, number>;
-type NotesStore = Record<string, string>;
+type KcalStore = Record<string, number>; // "YYYY-MM-DD" -> kcal
+type NotesStore = Record<string, string>; // "YYYY-MM-DD" -> note (texte)
 
+/* ---------- Utils ---------- */
 const TZ = "Europe/Paris";
 function todayISO(tz = TZ) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date());
@@ -44,7 +46,11 @@ function parseNotesStore(raw?: string): NotesStore {
 }
 
 /* ---------- Page ---------- */
-export default async function Page({ searchParams }: { searchParams?: { saved?: string; err?: string } }) {
+export default async function Page({
+  searchParams,
+}: {
+  searchParams?: { saved?: string; err?: string };
+}) {
   const jar = cookies();
   const store = parseKcalStore(jar.get("app.kcals")?.value);
   const notes = parseNotesStore(jar.get("app.kcals.notes")?.value);
@@ -73,29 +79,48 @@ export default async function Page({ searchParams }: { searchParams?: { saved?: 
       </div>
 
       {searchParams?.saved && (
-        <div id="saved" className="card" style={{ border: "1px solid #16a34a33", background: "#16a34a0d", marginBottom: 12 }}>
+        <div
+          id="saved"
+          className="card"
+          style={{ border: "1px solid #16a34a33", background: "#16a34a0d", marginBottom: 12 }}
+        >
           <strong>Enregistré !</strong> Tes calories ont été mises à jour.
         </div>
       )}
       {searchParams?.err && (
-        <div className="card" style={{ border: "1px solid #dc262633", background: "#dc26260d", marginBottom: 12 }}>
-          <strong>Erreur</strong> : {searchParams.err === "bad_date" ? "date invalide." : "valeur de calories invalide."}
+        <div
+          className="card"
+          style={{ border: "1px solid #dc262633", background: "#dc26260d", marginBottom: 12 }}
+        >
+          <strong>Erreur</strong> :{" "}
+          {searchParams.err === "bad_date" ? "date invalide." : "valeur de calories invalide."}
         </div>
       )}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <article className="card">
           <h3 style={{ marginTop: 0, fontSize: 16, color: "#111827" }}>Aujourd’hui</h3>
-          <div className="text-sm" style={{ color: "#6b7280", fontSize: 14 }}>{today}</div>
-          <div style={{ fontSize: 20, fontWeight: 800, marginTop: 8, color: "#111827", lineHeight: 1 }}>
+          <div className="text-sm" style={{ color: "#6b7280", fontSize: 14 }}>
+            {today}
+          </div>
+          <div
+            style={{
+              fontSize: 20,
+              fontWeight: 800,
+              marginTop: 8,
+              color: "#111827",
+              lineHeight: 1,
+            }}
+          >
             {todayKcal.toLocaleString("fr-FR")} kcal
           </div>
 
-          {/* Module photo + nutrition (détection IA) */}
+          {/* Module photo + nutrition (détection IA : produit ou assiette, kcal + protéines) */}
           <div style={{ marginTop: 12 }}>
-            <FoodSnap today={today} />
+            <FoodSnap today={today} onSave={saveCalories} />
           </div>
 
+          {/* Formulaire manuel si l’utilisateur veut saisir à la main */}
           <form action={saveCalories} style={{ display: "grid", gap: 10, marginTop: 12 }}>
             <input type="hidden" name="date" value={today} />
             <div>
@@ -137,7 +162,9 @@ export default async function Page({ searchParams }: { searchParams?: { saved?: 
               />
             </div>
             <div style={{ display: "flex", gap: 8 }}>
-              <button className="btn btn-dash" type="submit" style={{ fontSize: 14 }}>Enregistrer</button>
+              <button className="btn btn-dash" type="submit" style={{ fontSize: 14 }}>
+                Enregistrer
+              </button>
               <a
                 href="/dashboard/calories"
                 className="btn"
@@ -189,8 +216,15 @@ export default async function Page({ searchParams }: { searchParams?: { saved?: 
                   {days.map((d) => (
                     <tr key={d.date}>
                       <td style={{ padding: "6px 8px" }}>
-                        {new Intl.DateTimeFormat("fr-FR", { timeZone: TZ, weekday: "short", day: "2-digit", month: "2-digit" }).format(new Date(d.date))}
-                        <span style={{ color: "#6b7280", marginLeft: 6, fontSize: 12 }}>({d.date})</span>
+                        {new Intl.DateTimeFormat("fr-FR", {
+                          timeZone: TZ,
+                          weekday: "short",
+                          day: "2-digit",
+                          month: "2-digit",
+                        }).format(new Date(d.date))}
+                        <span style={{ color: "#6b7280", marginLeft: 6, fontSize: 12 }}>
+                          ({d.date})
+                        </span>
                       </td>
                       <td style={{ padding: "6px 8px", textAlign: "right", fontFamily: "tabular-nums" }}>
                         {d.kcal.toLocaleString("fr-FR")}
@@ -209,3 +243,4 @@ export default async function Page({ searchParams }: { searchParams?: { saved?: 
     </div>
   );
 }
+
