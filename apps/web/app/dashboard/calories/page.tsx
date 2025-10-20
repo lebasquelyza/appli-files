@@ -1,5 +1,7 @@
+# File: app/dashboard/calories/page.tsx
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import FoodSnap from "./FoodSnap";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -9,7 +11,7 @@ type KcalStore = Record<string, number>; // "YYYY-MM-DD" -> kcal
 type NotesStore = Record<string, string>; // "YYYY-MM-DD" -> note (texte)
 
 /* ---------- Utils ---------- */
-const TZ = "Europe/Paris";
+const TZ = "Europe/Paris" as const;
 function todayISO(tz = TZ) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date());
 }
@@ -50,7 +52,7 @@ function pruneStore(store: Record<string, unknown>, keepDays = 60) {
 }
 
 /* ---------- Server action: enregistre kcal ---------- */
-async function saveCalories(formData: FormData) {
+export async function saveCalories(formData: FormData) {
   "use server";
   const date = String(formData.get("date") || todayISO());
   const kcal = Number(formData.get("kcal"));
@@ -128,6 +130,11 @@ export default async function Page({ searchParams }: { searchParams?: { saved?: 
           <div className="text-sm" style={{ color: "#6b7280", fontSize: 14 }}>{today}</div>
           <div style={{ fontSize: 20, fontWeight: 800, marginTop: 8, color: "#111827", lineHeight: 1 }}>
             {todayKcal.toLocaleString("fr-FR")} kcal
+          </div>
+
+          {/* --- AJOUT: module photo+nutrition --- */}
+          <div style={{ marginTop: 12 }}>
+            <FoodSnap today={today} />
           </div>
 
           <form action={saveCalories} style={{ display: "grid", gap: 10, marginTop: 12 }}>
@@ -244,4 +251,227 @@ export default async function Page({ searchParams }: { searchParams?: { saved?: 
       </div>
     </div>
   );
+}
+
+
+# File: app/dashboard/calories/FoodSnap.tsx
+"use client";
+import * as React from "react";
+
+/**
+ * FoodSnap — version IA only
+ * - Photo -> détection 100% IA (/api/food/analyze)
+ * - L'IA renvoie un aliment + confiance + kcal/100g (moyenne FR)
+ * - L'utilisateur peut ajuster la portion (g) et, si besoin, corriger la densité kcal/100g
+ * - Le résultat est injecté dans le formulaire principal
+ */
+
+type AnalyzeResponse = {
+  food: string;            // ex "poulet rôti"
+  confidence: number;      // 0..1
+  kcal_per_100g: number;   // ex 215
+};
+
+export default function FoodSnap({ today }: { today: string }) {
+  const [file, setFile] = React.useState<File | null>(null);
+  const [preview, setPreview] = React.useState<string | null>(null);
+  const [loading, setLoading] = React.useState(false);
+  const [result, setResult] = React.useState<AnalyzeResponse | null>(null);
+  const [portion, setPortion] = React.useState<number>(250); // g par défaut
+  const [kcal100, setKcal100] = React.useState<string>("");
+  const [error, setError] = React.useState<string | null>(null);
+
+  const inputRef = React.useRef<HTMLInputElement>(null);
+
+  function onPick() { inputRef.current?.click(); }
+
+  function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setFile(f);
+    setResult(null);
+    setError(null);
+    setKcal100("");
+    const url = URL.createObjectURL(f);
+    setPreview(url);
+  }
+
+  async function analyze() {
+    if (!file) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const body = new FormData();
+      body.append("image", file);
+      const res = await fetch("/api/food/analyze", { method: "POST", body });
+      if (!res.ok) {
+        const txt = await res.text().catch(()=>"");
+        throw new Error(txt || "Analyse impossible");
+      }
+      const data: AnalyzeResponse = await res.json();
+      setResult(data);
+      setKcal100(String(data.kcal_per_100g || ""));
+    } catch (e: any) {
+      setError(e?.message || "Erreur inconnue");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function estimatedKcal(): number | null {
+    const n = Number((kcal100 || "").trim());
+    if (!Number.isFinite(n) || n <= 0) return null;
+    return Math.round((n * (portion || 0)) / 100);
+  }
+
+  function injectToMainForm() {
+    const kcal = estimatedKcal();
+    if (!kcal) return;
+    const kcalInput = document.querySelector<HTMLInputElement>('form[action][method="post"] input[name="kcal"]');
+    const noteInput = document.querySelector<HTMLInputElement>('form[action][method="post"] input[name="note"]');
+    if (kcalInput) kcalInput.value = String(kcal);
+    if (noteInput) noteInput.value = `Photo: ${result?.food || "aliment"} (~${portion}g)`;
+    const submit = document.querySelector<HTMLButtonElement>('form[action][method="post"] button[type="submit"]');
+    submit?.focus();
+  }
+
+  return (
+    <div className="card" style={{ border: "1px dashed #d1d5db", padding: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+        <div>
+          <div style={{ fontWeight: 600 }}>Prendre une photo d’un aliment</div>
+          <div className="text-xs" style={{ color: "#6b7280" }}>Détection 100% IA + calcul des kcal.</div>
+        </div>
+        <button className="btn" onClick={onPick} style={{ fontSize: 13 }}>📸 Prendre/Choisir</button>
+        <input ref={inputRef} type="file" accept="image/*" capture="environment" onChange={onFile} hidden />
+      </div>
+
+      {preview && (
+        <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+          <img src={preview} alt="prévisualisation" style={{ maxWidth: "100%", borderRadius: 8 }} />
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn btn-dash" onClick={analyze} disabled={loading}>
+              {loading ? "Analyse…" : "Analyser la photo"}
+            </button>
+            <button className="btn" onClick={() => { setFile(null); setPreview(null); setResult(null); setKcal100(""); }}>
+              Changer de photo
+            </button>
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <div className="text-xs" style={{ color: "#dc2626", marginTop: 8 }}>
+          {error.includes("OPENAI_API_KEY") ? (
+            <>Configure <code>OPENAI_API_KEY</code> dans <code>.env.local</code> pour activer la détection IA.</>
+          ) : (
+            error
+          )}
+        </div>
+      )}
+
+      {result && (
+        <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
+          <div style={{ fontSize: 14 }}>
+            IA : <strong>{result.food}</strong> {typeof result.confidence === "number" && `(${Math.round(result.confidence * 100)}%)`}
+          </div>
+          <div style={{ display: "grid", gap: 8, gridTemplateColumns: "1fr 1fr" }}>
+            <label className="label">Portion estimée (g)
+              <input className="input" type="number" min={1} step={1} value={portion} onChange={(e) => setPortion(Number(e.target.value))} />
+            </label>
+            <label className="label">kcal / 100 g
+              <input className="input" type="number" min={1} step={1} value={kcal100} onChange={(e) => setKcal100(e.target.value)} placeholder="ex: 130" />
+            </label>
+          </div>
+          <div className="text-sm" style={{ color: "#6b7280" }}>
+            Les valeurs sont des moyennes. Tu peux corriger la densité si besoin.
+          </div>
+          <div style={{ fontSize: 18, fontWeight: 700 }}>
+            Total estimé : {estimatedKcal() ?? "—"} kcal
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn btn-dash" disabled={!estimatedKcal()} onClick={injectToMainForm}>
+              Remplir le formulaire
+            </button>
+            <button className="btn" onClick={() => setResult(null)}>Réinitialiser</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+# File: app/api/food/analyze/route.ts
+import { NextRequest, NextResponse } from "next/server";
+
+/**
+ * Détection IA universelle :
+ * - Reçoit { image: File }
+ * - Utilise un modèle de vision pour renvoyer { food, confidence, kcal_per_100g }
+ * - Nécessite OPENAI_API_KEY (sinon 400 explicite)
+ */
+
+export async function POST(req: NextRequest) {
+  const form = await req.formData();
+  const file = form.get("image");
+  if (!(file instanceof File)) {
+    return NextResponse.json({ error: "no_image" }, { status: 400 });
+  }
+
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    return NextResponse.json({ error: "missing_OPENAI_API_KEY" }, { status: 400 });
+  }
+
+  try {
+    const bytes = Buffer.from(await file.arrayBuffer());
+    const base64 = bytes.toString("base64");
+
+    const payload = {
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: "Tu es un expert en vision alimentaire. Donne une seule classe d'aliment précise en français, puis une estimation moyenne de kcal/100g pour la France." },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Analyse l'image et renvoie STRICTEMENT un JSON {\"food\":string, \"confidence\":number, \"kcal_per_100g\":number}. Aucune autre sortie. La valeur kcal/100g doit être réaliste pour l'aliment identifié." },
+            { type: "image_url", image_url: { url: `data:${file.type};base64,${base64}` } },
+          ],
+        },
+      ],
+      temperature: 0,
+      response_format: { type: "json_object" },
+    } as const;
+
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      console.error("Vision API error:", err);
+      return NextResponse.json({ error: "vision_error" }, { status: 500 });
+    }
+
+    const json = await res.json();
+    const content = json.choices?.[0]?.message?.content || "{}";
+    let parsed: any = {};
+    try { parsed = JSON.parse(content); } catch {}
+
+    const out = {
+      food: String(parsed.food || "aliment"),
+      confidence: Number(parsed.confidence || 0),
+      kcal_per_100g: Number(parsed.kcal_per_100g || 0),
+    };
+
+    return NextResponse.json(out);
+  } catch (e) {
+    console.error(e);
+    return NextResponse.json({ error: "analyze_failed" }, { status: 500 });
+  }
 }
