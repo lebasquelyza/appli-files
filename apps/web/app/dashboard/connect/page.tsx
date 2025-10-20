@@ -73,8 +73,18 @@ export default async function Page(props: {
       {/* Header */}
       <div className="page-header">
         <div>
-          <h1 className="h1" style={{ fontSize: 22 }}>Connecte tes données</h1>
-          <p className="lead">Santé, capteurs, etc. — synchronise automatiquement tes activités et mesures.</p>
+          <h1
+            className="h1"
+            style={{ fontSize: "clamp(20px, 2.2vw, 24px)", lineHeight: 1.15 }}
+          >
+            Connecte tes données
+          </h1>
+          <p
+            className="lead"
+            style={{ fontSize: "clamp(12px, 1.6vw, 14px)", lineHeight: 1.35 }}
+          >
+            Santé, capteurs, etc. — synchronise automatiquement tes activités et mesures.
+          </p>
         </div>
         <a
           href="/dashboard"
@@ -275,7 +285,7 @@ export default async function Page(props: {
               <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {acts.map((a, idx) => (
                   <article key={idx} className="card p-3 sm:p-4" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify_between">
                       <h3 className="font-semibold text-sm sm:text-base truncate" style={{ margin: 0 }}>{fmtAppleType(a.type)}</h3>
                       <span className="badge text-xs sm:text-sm">Apple</span>
                     </div>
@@ -309,7 +319,7 @@ export default async function Page(props: {
           <form action={subscribeAction} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
             <input type="hidden" name="want" value={isSubscribed ? "0" : "1"} />
             {isSubscribed ? (
-              <button className="btn btn-outline w-full sm:w-auto" type="submit" style={{ color: "#111" }}>
+              <button className="btn btn-outline w_full sm:w-auto" type="submit" style={{ color: "#111" }}>
                 Désactiver
               </button>
             ) : (
