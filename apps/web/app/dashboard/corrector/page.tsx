@@ -219,10 +219,10 @@ export default function Page() {
     >
       <div className="page-header">
         <div>
-          <h1 className="h1" style={{ fontSize: 22 }}>
+          <h1 className="h1" style={{ fontSize: "clamp(20px, 2.2vw, 24px)", lineHeight: 1.15 }}>
             Import / Enregistrement
           </h1>
-          <p className="lead">
+          <p className="lead" style={{ fontSize: "clamp(12px, 1.6vw, 14px)", lineHeight: 1.35 }}>
             Filme ou importe ta vidéo, ajoute ton ressenti puis lance l’analyse IA.
           </p>
         </div>
