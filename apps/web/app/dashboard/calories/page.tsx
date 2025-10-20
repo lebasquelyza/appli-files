@@ -153,7 +153,7 @@ export default async function Page({ searchParams }: { searchParams?: { saved?: 
                   color: "#111827",
                   border: "1px solid #d1d5db",
                   caretColor: "#111827",
-                  WebkitTextFillColor: "#111827" as any
+                  WebkitTextFillColor: "#111827" as any,
                 }}
               />
               <div className="text-xs" style={{ color: "#6b7280", marginTop: 4, fontSize: 12 }}>
@@ -170,9 +170,9 @@ export default async function Page({ searchParams }: { searchParams?: { saved?: 
                 style={{
                   background: "#ffffff",
                   color: "#111827",
-                  border: "1px solid "#d1d5db",
+                  border: "1px solid #d1d5db",  // ✅ correction ici
                   caretColor: "#111827",
-                  WebkitTextFillColor: "#111827" as any
+                  WebkitTextFillColor: "#111827" as any,
                 }}
               />
             </div>
@@ -186,7 +186,7 @@ export default async function Page({ searchParams }: { searchParams?: { saved?: 
                   color: "#111827",
                   border: "1px solid #d1d5db",
                   fontWeight: 500,
-                  fontSize: 14
+                  fontSize: 14,
                 }}
               >
                 Actualiser
