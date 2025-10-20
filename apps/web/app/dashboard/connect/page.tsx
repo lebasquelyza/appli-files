@@ -86,13 +86,7 @@ export default async function Page(props: {
             Santé, capteurs, etc. — synchronise automatiquement tes activités et mesures.
           </p>
         </div>
-        <a
-          href="/dashboard"
-          className="btn"
-          style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500, padding: "6px 10px", lineHeight: 1.2 }}
-        >
-          ← Retour
-        </a>
+        {/* Bouton ← Retour supprimé */}
       </div>
 
       {/* Alerts */}
@@ -285,7 +279,7 @@ export default async function Page(props: {
               <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {acts.map((a, idx) => (
                   <article key={idx} className="card p-3 sm:p-4" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    <div className="flex items-center justify_between">
+                    <div className="flex items-center justify-between">
                       <h3 className="font-semibold text-sm sm:text-base truncate" style={{ margin: 0 }}>{fmtAppleType(a.type)}</h3>
                       <span className="badge text-xs sm:text-sm">Apple</span>
                     </div>
@@ -316,14 +310,21 @@ export default async function Page(props: {
             </div>
           </div>
 
-          <form action={subscribeAction} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+          <form action={subscribeAction} className="flex flex-col sm:flex-row items-stretch sm:items-center gap:2 w-full sm:w-auto">
             <input type="hidden" name="want" value={isSubscribed ? "0" : "1"} />
             {isSubscribed ? (
-              <button className="btn btn-outline w_full sm:w-auto" type="submit" style={{ color: "#111" }}>
+              <button className="btn btn-outline w-full sm:w-auto" type="submit" style={{ color: "#111" }}>
                 Désactiver
               </button>
             ) : (
-              <button className="btn-dash w-full sm:w-auto" type="submit">Me prévenir</button>
+              <button
+                className="btn-dash w-full sm:w-auto"
+                type="submit"
+                /* Même taille que le bouton “← Retour” (padding + line-height) */
+                style={{ padding: "6px 10px", lineHeight: 1.2 }}
+              >
+                Me prévenir
+              </button>
             )}
           </form>
         </div>
