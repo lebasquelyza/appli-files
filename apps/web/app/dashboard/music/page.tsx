@@ -36,8 +36,8 @@ function useAudioChime() {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.type = "sine";
-      osc.frequency.value = 880;     // petit bip
-      gain.gain.value = 0.25;        // volume discret
+      osc.frequency.value = 880;
+      gain.gain.value = 0.25;
       osc.connect(gain); gain.connect(ctx.destination);
       const t = ctx.currentTime;
       osc.start(t);
@@ -81,7 +81,7 @@ function TabataTimerCompact() {
   const [running, setRunning] = useState(false);
 
   const totalSec = useMemo(
-    () => rounds * (workSec + restSec) - restSec, // pas de repos après le dernier round
+    () => rounds * (workSec + restSec) - restSec,
     [rounds, workSec, restSec]
   );
 
@@ -119,14 +119,12 @@ function TabataTimerCompact() {
       setRemaining((r) => {
         const next = r - 1;
 
-        // 3-2-1 avant la fin
         if (next === 3 || next === 2 || next === 1) {
           void tick();
         }
 
         if (r > 1) return next;
 
-        // r <= 1  → fin de phase
         void chimeStrong();
 
         if (phase === "work") {
@@ -231,16 +229,17 @@ export default function MusicPage() {
   const { data: session, status } = useSession();
 
   // Centrage horizontal
-  const PAGE_MAX_WIDTH = 740;   // ajuste si besoin
+  const PAGE_MAX_WIDTH = 740;
   const SIDE_PADDING = 16;
 
   // Réduction du bloc Spotify
   const PLAYER_SCALE = 0.84;
   const invPlayer = 1 / PLAYER_SCALE;
 
-  useEffect(() => {
-    if (status === "unauthenticated") signIn("spotify", { callbackUrl: "/dashboard/music" });
-  }, [status]);
+  // ❌ Suppression de la redirection auto vers Spotify
+  // useEffect(() => {
+  //   if (status === "unauthenticated") signIn("spotify", { callbackUrl: "/dashboard/music" });
+  // }, [status]);
 
   if (status === "loading") {
     return (
@@ -272,8 +271,12 @@ export default function MusicPage() {
         </div>
         <div className="card" style={{ border: "1px solid #d1d5db", background: "#ffffff", padding: 10 }}>
           <div style={{ display: "flex", gap: 6, alignItems: "center", justifyContent: "space-between" }}>
-            <div style={{ fontSize: 13, color: "#374151" }}>Redirection vers Spotify…</div>
-            <button className="btn btn-dash" onClick={() => signIn("spotify", { callbackUrl: "/dashboard/music" })} style={{ fontSize: 13 }}>
+            <div style={{ fontSize: 13, color: "#374151" }}>Connecte-toi pour utiliser le lecteur Spotify.</div>
+            <button
+              className="btn btn-dash"
+              onClick={() => signIn("spotify", { callbackUrl: "/dashboard/music" })}
+              style={{ fontSize: 13 }}
+            >
               Se connecter
             </button>
           </div>
@@ -305,7 +308,7 @@ export default function MusicPage() {
           <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
             <h3 style={{ marginTop: 0, fontSize: 16, color: "#111827", fontWeight: 800 }}>Timer</h3>
 
-            {/* Bouton Tabata — texte noir */}
+            {/* Bouton Tabata */}
             <button
               type="button"
               className="btn"
@@ -313,7 +316,7 @@ export default function MusicPage() {
                 fontSize: 12,
                 padding: "6px 10px",
                 background: "#ffffff",
-                color: "#111827", // texte noir
+                color: "#111827",
                 border: "1px solid #d1d5db",
                 borderRadius: 999,
                 fontWeight: 600,
