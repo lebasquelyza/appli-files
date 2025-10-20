@@ -5,7 +5,6 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const revalidate = 0;
 
-/* Utils */
 function jsonError(status: number, msg: string) {
   return new NextResponse(JSON.stringify({ error: msg }), {
     status,
@@ -43,12 +42,21 @@ function sanitizeImageInput(raw: string): SanitizeResult {
   return { ok: false, reason: "unsupported" };
 }
 
-/* GET de diagnostic rapide (utile pour vérifier le 404) */
-export async function GET() {
-  return NextResponse.json({ ok: true, route: "/api/food/analyze" }, { headers: { "Cache-Control": "no-store" } });
-}
+type FoodAnalysis = {
+  food: string;
+  confidence: number;       // 0..1
+  kcal_per_100g: number;    // moyenne FR ou valeur lue sur l’étiquette
+  net_weight_g?: number | null;  // poids net détecté (ex: 90g)
+  nutrition?: {
+    carbs_g_per_100g?: number | null;
+    sugars_g_per_100g?: number | null;
+    proteins_g_per_100g?: number | null;
+    fats_g_per_100g?: number | null;
+    fiber_g_per_100g?: number | null;
+    salt_g_per_100g?: number | null;
+  };
+};
 
-/* POST: IA vision -> { food, confidence, kcal_per_100g } */
 export async function POST(req: NextRequest) {
   try {
     const apiKey = (process.env.OPENAI_API_KEY || process.env.OPEN_API_KEY || "").trim();
@@ -83,8 +91,9 @@ export async function POST(req: NextRequest) {
         {
           role: "system",
           content:
-            "Tu es un expert en reconnaissance alimentaire. En FRANÇAIS UNIQUEMENT, identifie l'aliment/plat principal, " +
-            "donne une confiance (0..1), et une estimation réaliste FR des kcal pour 100 g.",
+            "Tu es un expert en lecture d'étiquettes alimentaires. FRANÇAIS UNIQUEMENT. " +
+            "Quand l'étiquette est visible, lis le POIDS NET (ex: 90 g) et les VALEURS NUTRITIONNELLES. " +
+            "Sinon, estime raisonnablement.",
         },
         {
           role: "user",
@@ -93,7 +102,21 @@ export async function POST(req: NextRequest) {
               type: "text",
               text:
                 "Analyse l'image et renvoie STRICTEMENT un JSON: " +
-                '{ "food": string, "confidence": number, "kcal_per_100g": number }',
+                JSON.stringify({
+                  food: "<string>",
+                  confidence: "<number 0..1>",
+                  kcal_per_100g: "<number>",
+                  net_weight_g: "<number|null>",
+                  nutrition: {
+                    carbs_g_per_100g: "<number|null>",
+                    sugars_g_per_100g: "<number|null>",
+                    proteins_g_per_100g: "<number|null>",
+                    fats_g_per_100g: "<number|null>",
+                    fiber_g_per_100g: "<number|null>",
+                    salt_g_per_100g: "<number|null>"
+                  }
+                }) +
+                " . Ne renvoie rien d'autre.",
             },
             { type: "image_url", image_url: { url: imageDataUrl } },
           ],
@@ -113,21 +136,22 @@ export async function POST(req: NextRequest) {
         const err: any = new Error(msg); err.status = resp.status;
         throw err;
       }
-      let parsed: any = {};
-      try { parsed = JSON.parse(txt); } catch { throw Object.assign(new Error("non_json"), { status: 502, detail: txt?.slice?.(0,400) }); }
+      let parsed: any = {}; try { parsed = JSON.parse(txt); } catch { throw Object.assign(new Error("non_json"), { status: 502 }); }
       return parsed;
     });
 
     const json = await withTimeout(p, 25_000);
     const content = json?.choices?.[0]?.message?.content || "{}";
 
-    let out = { food: "aliment", confidence: 0, kcal_per_100g: 0 };
+    let out: FoodAnalysis = { food: "aliment", confidence: 0, kcal_per_100g: 0 };
     try {
       const parsed = JSON.parse(content);
       out = {
         food: String(parsed.food || "aliment"),
         confidence: Math.max(0, Math.min(1, Number(parsed.confidence || 0))),
         kcal_per_100g: Math.max(0, Number(parsed.kcal_per_100g || 0)),
+        net_weight_g: parsed.net_weight_g != null ? Math.max(0, Number(parsed.net_weight_g)) : null,
+        nutrition: parsed.nutrition || undefined,
       };
     } catch {
       return jsonError(502, "bad_model_json");
