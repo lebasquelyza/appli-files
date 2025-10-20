@@ -1,15 +1,14 @@
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
 import FoodSnap from "./FoodSnap";
+import { saveCalories } from "./actions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-type KcalStore = Record<string, number>; // "YYYY-MM-DD" -> kcal
-type NotesStore = Record<string, string>; // "YYYY-MM-DD" -> note (texte)
+type KcalStore = Record<string, number>;
+type NotesStore = Record<string, string>;
 
-/* ---------- Utils ---------- */
 const TZ = "Europe/Paris";
 function todayISO(tz = TZ) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date());
@@ -42,45 +41,6 @@ function parseNotesStore(raw?: string): NotesStore {
     }
   } catch {}
   return {};
-}
-
-function pruneStore(store: Record<string, unknown>, keepDays = 60) {
-  const keys = Object.keys(store).sort(); // "YYYY-MM-DD"
-  const toDrop = Math.max(0, keys.length - keepDays);
-  for (let i = 0; i < toDrop; i++) delete (store as any)[keys[i]];
-}
-
-/* ---------- Server action: enregistre kcal ---------- */
-export async function saveCalories(formData: FormData) {
-  "use server";
-  const date = String(formData.get("date") || todayISO());
-  const kcal = Number(formData.get("kcal"));
-  const note = (formData.get("note") || "").toString().slice(0, 120);
-
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) redirect("/dashboard/calories?err=bad_date");
-  if (!Number.isFinite(kcal) || kcal < 0 || kcal > 50000) redirect("/dashboard/calories?err=bad_kcal");
-
-  const jar = cookies();
-  const store = parseKcalStore(jar.get("app.kcals")?.value);
-
-  // on cumule au jour
-  store[date] = (store[date] || 0) + Math.round(kcal);
-  pruneStore(store, 60);
-
-  jar.set("app.kcals", JSON.stringify(store), {
-    path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365, httpOnly: false,
-  });
-
-  if (note) {
-    const notes = parseNotesStore(jar.get("app.kcals.notes")?.value);
-    notes[date] = note; // <-- string dans un store string ✅
-    pruneStore(notes, 60);
-    jar.set("app.kcals.notes", JSON.stringify(notes), {
-      path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365, httpOnly: false,
-    });
-  }
-
-  redirect("/dashboard/calories?saved=1#saved");
 }
 
 /* ---------- Page ---------- */
@@ -170,7 +130,7 @@ export default async function Page({ searchParams }: { searchParams?: { saved?: 
                 style={{
                   background: "#ffffff",
                   color: "#111827",
-                  border: "1px solid #d1d5db",  // ✅ correction ici
+                  border: "1px solid #d1d5db",
                   caretColor: "#111827",
                   WebkitTextFillColor: "#111827" as any,
                 }}
