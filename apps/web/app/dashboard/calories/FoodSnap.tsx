@@ -1,10 +1,20 @@
+// apps/web/app/dashboard/calories/FoodSnap.tsx
 "use client";
 import * as React from "react";
 
 type AnalyzeResponse = {
-  food: string;          // libellé détecté par l'IA
-  confidence: number;    // 0..1
-  kcal_per_100g: number; // moyenne kcal / 100 g
+  food: string;
+  confidence: number;
+  kcal_per_100g: number;
+  net_weight_g?: number | null;
+  nutrition?: {
+    carbs_g_per_100g?: number | null;
+    sugars_g_per_100g?: number | null;
+    proteins_g_per_100g?: number | null;
+    fats_g_per_100g?: number | null;
+    fiber_g_per_100g?: number | null;
+    salt_g_per_100g?: number | null;
+  };
 };
 
 type Props = {
@@ -17,16 +27,14 @@ export default function FoodSnap({ today, onSave }: Props) {
   const [preview, setPreview] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [result, setResult] = React.useState<AnalyzeResponse | null>(null);
-  const [portion, setPortion] = React.useState<number>(250); // g
-  const [kcal100, setKcal100] = React.useState<string>("");  // string pour l’input
+  const [portion, setPortion] = React.useState<number>(250); // g défaut si rien détecté
+  const [portionAuto, setPortionAuto] = React.useState<null | number>(null); // mémorise la détection
+  const [kcal100, setKcal100] = React.useState<string>("");
   const [error, setError] = React.useState<string | null>(null);
 
   const inputRef = React.useRef<HTMLInputElement>(null);
 
-  function onPick() {
-    inputRef.current?.click();
-  }
-
+  function onPick() { inputRef.current?.click(); }
   function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (!f) return;
@@ -34,6 +42,8 @@ export default function FoodSnap({ today, onSave }: Props) {
     setResult(null);
     setError(null);
     setKcal100("");
+    setPortion(250);
+    setPortionAuto(null);
     setPreview(URL.createObjectURL(f));
   }
 
@@ -52,6 +62,10 @@ export default function FoodSnap({ today, onSave }: Props) {
       const data: AnalyzeResponse = await res.json();
       setResult(data);
       setKcal100(String(data.kcal_per_100g || ""));
+      if (typeof data.net_weight_g === "number" && data.net_weight_g > 0) {
+        setPortion(data.net_weight_g);
+        setPortionAuto(data.net_weight_g);
+      }
     } catch (e: any) {
       setError(e?.message || "Erreur inconnue");
     } finally {
@@ -65,14 +79,12 @@ export default function FoodSnap({ today, onSave }: Props) {
     return Math.round((n * (portion || 0)) / 100);
   }
 
-  // Note compacte (<= 120 chars, gérée aussi côté server action)
   function buildNote(): string {
     const conf = typeof result?.confidence === "number" ? ` (${Math.round(result!.confidence * 100)}%)` : "";
-    const text = `Photo: ${result?.food || "aliment"} ~${portion}g @${kcal100 || "?"}kcal/100g${conf}`;
-    return text.slice(0, 120);
+    const note = `Photo: ${result?.food || "aliment"} ~${portion}g @${kcal100 || "?"}kcal/100g${conf}`;
+    return note.slice(0, 120);
   }
 
-  // Option A (déjà présente sur ta page) : injecter dans le formulaire principal
   function injectToMainForm() {
     const kcal = estimatedKcal();
     if (!kcal) return;
@@ -89,17 +101,10 @@ export default function FoodSnap({ today, onSave }: Props) {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
         <div>
           <div style={{ fontWeight: 600 }}>Prendre une photo d’un aliment</div>
-          <div className="text-xs" style={{ color: "#6b7280" }}>Analyse IA, récap, puis ajout direct à tes calories.</div>
+          <div className="text-xs" style={{ color: "#6b7280" }}>Lecture d’étiquette quand visible (poids net, kcal/100g).</div>
         </div>
         <button className="btn" onClick={onPick} style={{ fontSize: 13 }}>📸 Prendre/Choisir</button>
-        <input
-          ref={inputRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          onChange={onFile}
-          hidden
-        />
+        <input ref={inputRef} type="file" accept="image/*" capture="environment" onChange={onFile} hidden />
       </div>
 
       {preview && (
@@ -109,31 +114,15 @@ export default function FoodSnap({ today, onSave }: Props) {
             <button className="btn btn-dash" onClick={analyze} disabled={loading}>
               {loading ? "Analyse…" : "Analyser la photo"}
             </button>
-            <button
-              className="btn"
-              onClick={() => {
-                setFile(null);
-                setPreview(null);
-                setResult(null);
-                setKcal100("");
-                setError(null);
-              }}
-            >
+            <button className="btn" onClick={() => { setFile(null); setPreview(null); setResult(null); setKcal100(""); setPortion(250); setPortionAuto(null); setError(null); }}>
               Changer de photo
             </button>
           </div>
         </div>
       )}
 
-      {error && (
-        <div className="text-xs" style={{ color: "#dc2626", marginTop: 8 }}>
-          {error.includes("missing_OPENAI_API_KEY")
-            ? <>Configure <code>OPENAI_API_KEY</code> dans l’environnement serveur.</>
-            : error}
-        </div>
-      )}
+      {error && <div className="text-xs" style={{ color: "#dc2626", marginTop: 8 }}>{error}</div>}
 
-      {/* ---- Récap complet + actions ---- */}
       {result && (
         <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
           <div style={{ fontSize: 14, lineHeight: 1.4 }}>
@@ -142,47 +131,42 @@ export default function FoodSnap({ today, onSave }: Props) {
             <div><strong>kcal / 100 g</strong> : {kcal100 || "—"}</div>
           </div>
 
-          <div style={{ display: "grid", gap: 8, gridTemplateColumns: "1fr 1fr" }}>
+          <div style={{ display: "grid", gap: 8, gridTemplateColumns: "1fr 1fr", alignItems: "end" }}>
             <label className="label">
               Portion (g)
-              <input
-                className="input"
-                type="number"
-                min={1}
-                step={1}
-                value={portion}
-                onChange={(e) => setPortion(Number(e.target.value))}
-              />
+              <input className="input" type="number" min={1} step={1} value={portion} onChange={(e) => setPortion(Number(e.target.value))} />
             </label>
+            <div className="text-xs" style={{ color: "#6b7280" }}>
+              {portionAuto ? <>Détecté depuis l’étiquette&nbsp;: <strong>{portionAuto} g</strong></> : "Régle la portion si besoin"}
+            </div>
             <label className="label">
               kcal / 100 g
-              <input
-                className="input"
-                type="number"
-                min={1}
-                step={1}
-                value={kcal100}
-                onChange={(e) => setKcal100(e.target.value)}
-                placeholder="ex: 130"
-              />
+              <input className="input" type="number" min={1} step={1} value={kcal100} onChange={(e) => setKcal100(e.target.value)} placeholder="ex: 130" />
             </label>
+            <div className="text-xs" style={{ color: "#6b7280" }}>
+              Valeur issue de l’étiquette si visible — sinon estimation IA.
+            </div>
           </div>
 
-          <div className="text-sm" style={{ color: "#6b7280" }}>
-            Ajuste si besoin : la densité dépend de la recette et de la cuisson.
-          </div>
+          {/* (facultatif) Affichage nutrition si disponible */}
+          {result.nutrition && (
+            <div className="text-xs" style={{ color: "#374151" }}>
+              <em>Par 100 g</em> — Glucides: {result.nutrition.carbs_g_per_100g ?? "—"} g (dont sucres {result.nutrition.sugars_g_per_100g ?? "—"} g) ·
+              Protéines: {result.nutrition.proteins_g_per_100g ?? "—"} g ·
+              Lipides: {result.nutrition.fats_g_per_100g ?? "—"} g ·
+              Fibres: {result.nutrition.fiber_g_per_100g ?? "—"} g ·
+              Sel: {result.nutrition.salt_g_per_100g ?? "—"} g
+            </div>
+          )}
 
           <div style={{ fontSize: 18, fontWeight: 700 }}>
             Total estimé : {estimatedKcal() ?? "—"} kcal
           </div>
 
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-            {/* Option A : remplir le formulaire principal existant */}
             <button className="btn" onClick={injectToMainForm} disabled={!estimatedKcal()}>
               Remplir le formulaire en haut
             </button>
-
-            {/* Option B : enregistrement direct via server action passée en prop */}
             {onSave && (
               <form action={onSave} style={{ display: "inline-flex", gap: 8 }}>
                 <input type="hidden" name="date" value={today} />
