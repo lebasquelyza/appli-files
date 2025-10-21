@@ -39,7 +39,7 @@ function getBaseUrlFromHeaders() {
   return `${proto}://${host}`;
 }
 
-/** =============== Email via NextAuth (session) =============== */
+/** =============== Email depuis la connexion =============== */
 async function getSignedInEmail(): Promise<string> {
   try {
     // @ts-ignore optional deps
@@ -59,16 +59,7 @@ async function doAutogenAction(formData: FormData) {
 
   const c = cookies();
   const user = c.get("fc_uid")?.value || "me";
-
-  let email = "";
-  try {
-    // @ts-ignore
-    const { getServerSession } = await import("next-auth");
-    // @ts-ignore
-    const { authOptions } = await import("../../../lib/auth");
-    const session = await getServerSession(authOptions as any);
-    email = ((session as any)?.user?.email as string | undefined) || "";
-  } catch {}
+  let email = await getSignedInEmail();
   if (!email) email = c.get("app_email")?.value || "";
 
   const qp = new URLSearchParams({ user, autogen: "1" });
@@ -94,7 +85,7 @@ async function doAutogenAction(formData: FormData) {
   redirect("/dashboard/profile?success=programme");
 }
 
-/** ================= Helpers: chargement depuis l'API ================= */
+/** ================= Helpers: chargement depuis l’API ================= */
 type ProgrammeFromApi = {
   sessions: AiSessionT[];
   profile?: Partial<ProfileT> & { email?: string; objectif?: string; lieu?: string };
@@ -104,7 +95,7 @@ async function fetchProgrammeFromApi(email?: string): Promise<ProgrammeFromApi |
   const c = cookies();
   const user = c.get("fc_uid")?.value || "me";
 
-  const qp = new URLSearchParams({ user, autogen: "1" });
+  const qp = new URLSearchParams({ user, autogen: "1" }); // ← force autogen (dernières réponses)
   if (email) qp.set("email", email);
 
   const url = `${getBaseUrlFromHeaders()}/api/programme?${qp.toString()}`;
@@ -129,10 +120,10 @@ export default async function Page({
   const cookieEmail = cookies().get("app_email")?.value || "";
   const email = emailBySession || cookieEmail;
 
-  // 1) Récupérer le programme IA (et profil) via l’API
+  // 1) Programme IA basé sur les DERNIÈRES réponses (via API autogen)
   const prog = await fetchProgrammeFromApi(email);
 
-  // 2) Profil : API -> si incomplet, on complète via Sheets (email de session)
+  // 2) Profil : si incomplet, compléter directement depuis Sheets à partir de l’email
   let profile: Partial<ProfileT> & { email?: string; objectif?: string; lieu?: string } =
     (prog?.profile ?? {}) as any;
 
@@ -146,7 +137,7 @@ export default async function Page({
       try {
         const answers = await getAnswersForEmail(email);
         if (answers) {
-          const built = buildProfileFromAnswers(answers); // ✅ mappe prénom, age, objectif, lieu, email…
+          const built = buildProfileFromAnswers(answers); // ← map direct depuis les colonnes
           profile = { ...built, ...profile, email: built.email || email };
         }
       } catch {}
@@ -155,7 +146,8 @@ export default async function Page({
     if (!profile?.email) profile = { ...profile, email };
   }
 
-  // 3) Séances IA à afficher : API -> fallback lib (Sheets) -> fallback getAiSessions
+  // 3) Séances affichées = celles générées par l’API (dernières réponses).
+  // Fallbacks (si jamais API ne renvoie rien) : Sheets -> store.
   let aiSessions: AiSessionT[] = Array.isArray(prog?.sessions) ? prog!.sessions : [];
 
   if ((!aiSessions || aiSessions.length === 0) && email) {
@@ -192,7 +184,7 @@ export default async function Page({
     ];
   }
 
-  // ====== Affichage "Mes infos" (toutes les colonnes utiles)
+  // ====== Affichage "Mes infos"
   const clientPrenom =
     typeof profile?.prenom === "string" && profile.prenom && !/\d/.test(profile.prenom) ? profile.prenom : "";
   const clientAge = typeof profile?.age === "number" && profile.age > 0 ? profile.age : undefined;
@@ -210,11 +202,6 @@ export default async function Page({
       maintenance: "Maintien / Santé",
       hero: "WOD Héros",
       marathon: "Course (semi / marathon)",
-      "prise de masse": "Hypertrophie / Esthétique",
-      "perte de poid": "Perte de gras",
-      "perte de poids": "Perte de gras",
-      "prise de bras": "Objectif spécifique bras",
-      "retrouver de la vitalité": "Vitalité / Bien-être",
     };
     if (map[rawGoal]) return map[rawGoal];
     if (!rawGoal) return "Non défini";
