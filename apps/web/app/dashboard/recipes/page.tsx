@@ -761,8 +761,8 @@ export default async function Page({
               Filtres actifs —
               {hasKcalTarget && <> cible: ~{kcal} kcal</>}
               {!hasKcalTarget && (hasKcalMin || hasKcalMax) && <> plage: {hasKcalMin? kcalMin:"…"}–{hasKcalMax? kcalMax:"…"} kcal</>}
-              {hasProteinTarget && <> · prot&eacute;ines: ~{proteinG} g</>}
-              {!hasProteinTarget && (hasProteinMin || hasProteinMax) && <> · prot&eacute;ines: {hasProteinMin? proteinMin:"…"}–{hasProteinMax? proteinMax:"…"} g</>}
+              {hasProteinTarget && <> · protéines: ~{proteinG} g</>}
+              {!hasProteinTarget && (hasProteinMin || hasProteinMax) && <> · protéines: {hasProteinMin? proteinMin:"…"}–{hasProteinMax? proteinMax:"…"} g</>}
               {allergens.length ? <> · allergènes: {allergens.join(", ")}</> : null}
               {dislikes.length ? <> · non aimés: {dislikes.join(", ")}</> : null}
               {(!hasKcalTarget && !hasKcalMin && !hasKcalMax && !hasProteinTarget && !hasProteinMin && !hasProteinMax && !allergens.length && !dislikes.length) && " aucun"}
@@ -1068,7 +1068,7 @@ function ShakeCard({
   isSaved: boolean;
   currentUrl: string;
 }) {
-  const href = `/dashboard/recipes/${s.id}${detailQS}`; // même logique de détail (data=...) réutilisable
+  const href = `/dashboard/recipes/${s.id}${detailQS}`; // même logique de détail
   const ing = Array.isArray(s.ingredients) ? s.ingredients : [];
   const shown = ing.slice(0, 8);
   const more = Math.max(0, ing.length - shown.length);
