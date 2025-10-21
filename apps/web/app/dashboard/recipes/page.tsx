@@ -24,22 +24,6 @@ type Recipe = {
   rework?: Rework[];
 };
 
-/* ======= Types (Bar à Prot') ======= */
-type Shake = {
-  id: string;
-  title: string;
-  subtitle?: string;
-  kcal?: number;
-  proteinG?: number; // grammes de protéines par boisson
-  timeMin?: number;
-  tags: string[];
-  goals: string[];
-  minPlan: Plan;
-  ingredients: string[];
-  steps: string[];
-  rework?: Rework[];
-};
-
 /* ===================== Utils ===================== */
 function planRank(p?: Plan) { return p === "PREMIUM" ? 3 : p === "PLUS" ? 2 : 1; }
 function isUnlocked(r: Recipe, userPlan: Plan) { return planRank(userPlan) >= planRank(r.minPlan); }
@@ -89,10 +73,6 @@ const REWORK_TIPS: Record<string, string[]> = {
   "courgette": ["Tagliatelles ail-citron", "Gratin ricotta-menthe", "Galettes râpées"],
   "épinards": ["Sautés minute", "Pesto doux", "Fondue légère"],
   "lentilles": ["Dal coco", "Salade tiède", "Soupe carotte-cumin"],
-  /* shakes courants */
-  "banane": ["Caraméliser légèrement", "Mixer bien froid", "Associer cacao amer"],
-  "café": ["Utiliser café froid", "Doubler l'espresso", "Ajouter cannelle"],
-  "cacahuète": ["Remplacer par amande", "Ajouter pincée de sel", "Mixer plus longuement"],
 };
 
 /* ---- base healthy (dispo pour tous) ---- */
@@ -117,24 +97,20 @@ const HEALTHY_BASE: Recipe[] = [
     ingredients:["tofu ferme","brocoli","sauce soja","ail","gingembre","graines de sésame","huile","maïzena"], steps:["Saisir, lier, napper"] },
 ];
 
-/* ---- base shakes (dispo pour tous) ---- */
-const SHAKES_BASE: Shake[] = [
+/* ---- base Bar à prot' (même type Recipe, pour réutiliser Card & les actions) ---- */
+const SHAKES_BASE: Recipe[] = [
   { id:"shake-choco-banane", title:"Choco-banane protéiné", subtitle:"Lait, whey chocolat",
-    kcal:360, proteinG:30, timeMin:5, tags:["rapide","sucré"], goals:["prise de masse","equilibre"], minPlan:"BASIC",
-    ingredients:["banane","lait (ou végétal)","whey chocolat","beurre de cacahuète","glaçons"],
-    steps:["Mixer ensemble 30–40 s","Servir bien frais"] },
+    kcal:360, timeMin:5, tags:["shake","rapide"], goals:["prise de masse","equilibre"], minPlan:"BASIC",
+    ingredients:["banane","lait (ou végétal)","whey chocolat","beurre de cacahuète","glaçons"], steps:["Mixer 30–40 s","Servir bien frais"] },
   { id:"shake-vanille-cafe", title:"Vanille café frappé", subtitle:"Skyr, vanille",
-    kcal:280, proteinG:28, timeMin:5, tags:["caféiné","rapide"], goals:["sèche","equilibre"], minPlan:"BASIC",
-    ingredients:["skyr","lait (ou végétal)","expresso froid","vanille","édulcorant (option)","glaçons"],
-    steps:["Verser tout au blender","Mixer et déguster"] },
+    kcal:280, timeMin:5, tags:["shake","café"], goals:["sèche","equilibre"], minPlan:"BASIC",
+    ingredients:["skyr","lait (ou végétal)","expresso froid","vanille","édulcorant (option)","glaçons"], steps:["Verser au blender","Mixer et déguster"] },
   { id:"shake-fruits-rouges", title:"Fruits rouges & yaourt grec", subtitle:"Frais & onctueux",
-    kcal:320, proteinG:25, timeMin:5, tags:["fruité","sans-gluten"], goals:["equilibre"], minPlan:"BASIC",
-    ingredients:["yaourt grec 0%","lait (ou végétal)","fruits rouges surgelés","whey neutre","miel (option)"],
-    steps:["Mixer finement","Rectifier sucrant si besoin"] },
-  { id:"shake-tropical", title:"Tropical coco", subtitle:"Mangue, coco, neutre",
-    kcal:340, proteinG:24, timeMin:5, tags:["fruité","veggie"], goals:["equilibre"], minPlan:"BASIC",
-    ingredients:["lait de coco léger","mangue","ananas","whey neutre ou pois","citron vert"],
-    steps:["Mixer 40 s","Servir avec glaçons"] },
+    kcal:320, timeMin:5, tags:["shake","fruité"], goals:["equilibre"], minPlan:"BASIC",
+    ingredients:["yaourt grec 0%","lait (ou végétal)","fruits rouges surgelés","whey neutre","miel (option)"], steps:["Mixer fin","Goûter et ajuster"] },
+  { id:"shake-tropical", title:"Tropical coco", subtitle:"Mangue, coco",
+    kcal:340, timeMin:5, tags:["shake","fruité"], goals:["equilibre"], minPlan:"BASIC",
+    ingredients:["lait de coco léger","mangue","ananas","whey neutre ou pois","citron vert"], steps:["Mixer 40 s","Servir avec glaçons"] },
 ];
 
 /* ========= Mode IA pour PLUS/PREMIUM ========= */
@@ -257,139 +233,6 @@ Règles:
   }
 }
 
-/* ========= Mode IA Shakes (PLUS/PREMIUM) ========= */
-async function generateAIShakes({
-  plan,
-  kcal, kcalMin, kcalMax,
-  proteinG, proteinMin, proteinMax,
-  allergens, dislikes,
-  count = 8,
-}: {
-  plan: Plan;
-  kcal?: number; kcalMin?: number; kcalMax?: number;
-  proteinG?: number; proteinMin?: number; proteinMax?: number;
-  allergens: string[]; dislikes: string[];
-  count?: number;
-}): Promise<Shake[]> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return [];
-
-  const constraints: string[] = [];
-  // Protéines
-  if (typeof proteinG === "number" && proteinG > 0) {
-    constraints.push(`- Viser ~${proteinG} g de protéines par boisson (±10%).`);
-  } else {
-    const hasMin = typeof proteinMin === "number" && proteinMin > 0;
-    const hasMax = typeof proteinMax === "number" && proteinMax > 0;
-    if (hasMin && hasMax) constraints.push(`- Plage protéines ${proteinMin}-${proteinMax} g.`);
-    else if (hasMin) constraints.push(`- Minimum ${proteinMin} g de protéines.`);
-    else if (hasMax) constraints.push(`- Maximum ${proteinMax} g de protéines.`);
-  }
-  // Calories
-  if (typeof kcal === "number" && kcal > 0) constraints.push(`- Viser ~${kcal} kcal (±10%).`);
-  else {
-    const hasMin = typeof kcalMin === "number" && kcalMin > 0;
-    const hasMax = typeof kcalMax === "number" && kcalMax > 0;
-    if (hasMin && hasMax) constraints.push(`- Plage calories ${kcalMin}-${kcalMax} kcal.`);
-    else if (hasMin) constraints.push(`- Minimum ${kcalMin} kcal.`);
-    else if (hasMax) constraints.push(`- Maximum ${kcalMax} kcal.`);
-  }
-  if (allergens.length) constraints.push(`- Exclure strictement: ${allergens.join(", ")}.`);
-  if (dislikes.length) constraints.push(`- Si un ingrédient non-aimé apparaît, proposer "rework" (2–3 idées).`);
-
-  const prompt =
-`Tu es un chef-nutritionniste. Renvoie UNIQUEMENT du JSON valide.
-Utilisateur:
-- Plan: ${plan}
-- Allergènes: ${allergens.join(", ") || "aucun"}
-- Aliments non aimés: ${dislikes.join(", ") || "aucun"}
-- Nombre de boissons: ${count}
-
-Contraintes:
-${constraints.join("\n")}
-
-Schéma TypeScript:
-Shake = {
-  id: string, title: string, subtitle?: string,
-  kcal?: number, proteinG?: number, timeMin?: number, tags: string[],
-  goals: string[], minPlan: "BASIC" | "PLUS" | "PREMIUM",
-  ingredients: string[], steps: string[],
-  rework?: { ingredient: string, tips: string[] }[]
-}
-
-Règles:
-- minPlan = "${plan}" pour toutes les boissons.
-- Focus "boisson protéinée" type shake/smoothie mixé.
-- steps = 2–4 étapes courtes.
-- Renvoyer {"shakes": Shake[]}.`;
-
-  try {
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        temperature: 0.7,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: "Tu parles français et tu réponds en JSON strict." },
-          { role: "user", content: prompt },
-        ],
-      }),
-      cache: "no-store",
-    });
-
-    if (!res.ok) return [];
-    const data = await res.json();
-    let payload: any = {};
-    try { payload = JSON.parse(data?.choices?.[0]?.message?.content ?? "{}"); } catch {}
-    const arr: any[] = Array.isArray(payload?.shakes) ? payload.shakes : [];
-    const seen = new Set<string>();
-    const clean: Shake[] = arr.map((raw) => {
-      const title = String(raw?.title ?? "").trim();
-      const id = String(raw?.id || title || Math.random().toString(36).slice(2)).trim()
-        .toLowerCase().replace(/[^a-z0-9-]+/g, "-");
-      const ingredients = Array.isArray(raw?.ingredients) ? raw.ingredients.map((x: any) => String(x)) : [];
-      const steps = Array.isArray(raw?.steps) ? raw.steps.map((x: any) => String(x)) : [];
-      const rework: Rework[] | undefined = Array.isArray(raw?.rework)
-        ? raw.rework.map((x: any) => ({
-            ingredient: String(x?.ingredient || "").toLowerCase(),
-            tips: Array.isArray(x?.tips) ? x.tips.map((t: any) => String(t)) : []
-          }))
-        : undefined;
-      const minPlan: Plan = (plan === "PREMIUM" ? "PREMIUM" : "PLUS");
-
-      return {
-        id, title,
-        subtitle: raw?.subtitle ? String(raw.subtitle) : undefined,
-        kcal: typeof raw?.kcal === "number" ? raw.kcal : undefined,
-        proteinG: typeof raw?.proteinG === "number" ? raw.proteinG : undefined,
-        timeMin: typeof raw?.timeMin === "number" ? raw.timeMin : undefined,
-        tags: Array.isArray(raw?.tags) ? raw.tags.map((t: any) => String(t)) : [],
-        goals: Array.isArray(raw?.goals) ? raw.goals.map((g: any) => String(g)) : [],
-        minPlan,
-        ingredients,
-        steps,
-        rework,
-      } as Shake;
-    }).filter((s) => {
-      if (!s.title) return false;
-      if (seen.has(s.id)) return false;
-      seen.add(s.id);
-      const ingLow = s.ingredients.map(i => i.toLowerCase());
-      if (allergens.some(a => ingLow.includes(a))) return false;
-      return true;
-    });
-
-    return clean;
-  } catch {
-    return [];
-  }
-}
-
 /* ---- fallback si IA indisponible ---- */
 function personalizeFallback({
   base, kcal, kcalMin, kcalMax, allergens, dislikes, plan,
@@ -423,60 +266,11 @@ function personalizeFallback({
   return out;
 }
 
-/* ---- fallback Shakes ---- */
-function personalizeShakesFallback({
-  base, kcal, kcalMin, kcalMax, proteinG, proteinMin, proteinMax, allergens, dislikes, plan,
-}: {
-  base: Shake[];
-  kcal?: number; kcalMin?: number; kcalMax?: number;
-  proteinG?: number; proteinMin?: number; proteinMax?: number;
-  allergens: string[]; dislikes: string[]; plan: Plan;
-}): Shake[] {
-  let filtered = base.filter(s => {
-    const ing = s.ingredients.map(i => i.toLowerCase());
-    return !allergens.some(a => ing.includes(a));
-  });
-
-  // calories
-  if (typeof kcal === "number" && !isNaN(kcal) && kcal > 0) {
-    const tol = Math.max(60, Math.round(kcal * 0.15));
-    filtered = filtered.filter(s => typeof s.kcal === "number" && Math.abs((s.kcal || 0) - kcal) <= tol);
-  } else {
-    const hasMin = typeof kcalMin === "number" && !isNaN(kcalMin) && kcalMin > 0;
-    const hasMax = typeof kcalMax === "number" && !isNaN(kcalMax) && kcalMax > 0;
-    if (hasMin) filtered = filtered.filter(s => (s.kcal || 0) >= (kcalMin as number));
-    if (hasMax) filtered = filtered.filter(s => (s.kcal || 0) <= (kcalMax as number));
-  }
-
-  // protéines
-  if (typeof proteinG === "number" && proteinG > 0) {
-    const tolP = Math.max(4, Math.round(proteinG * 0.15));
-    filtered = filtered.filter(s => typeof s.proteinG === "number" && Math.abs((s.proteinG || 0) - proteinG) <= tolP);
-  } else {
-    const pMin = typeof proteinMin === "number" && proteinMin > 0 ? proteinMin : undefined;
-    const pMax = typeof proteinMax === "number" && proteinMax > 0 ? proteinMax : undefined;
-    if (pMin !== undefined) filtered = filtered.filter(s => (s.proteinG || 0) >= pMin);
-    if (pMax !== undefined) filtered = filtered.filter(s => (s.proteinG || 0) <= pMax);
-  }
-
-  const dislikesSet = new Set(dislikes);
-  const out: Shake[] = filtered.map<Shake>(s => {
-    const ingLower = s.ingredients.map(i => i.toLowerCase());
-    const hits = [...dislikesSet].filter(d => ingLower.includes(d));
-    const minPlan: Plan = (plan === "PREMIUM" ? "PREMIUM" : "PLUS");
-    if (!hits.length) return { ...s, minPlan };
-    const tips: Rework[] = hits.map(h => ({ ingredient: h, tips: REWORK_TIPS[h] ?? ["Changer la base lactée", "Ajouter épices", "Mixer plus longtemps"] }));
-    return { ...s, minPlan, rework: tips };
-  });
-
-  return out;
-}
-
 /* ===================== Filtres (Server Action) ===================== */
 async function applyFiltersAction(formData: FormData): Promise<void> {
   "use server";
   const params = new URLSearchParams();
-  const fields = ["kcal","kcalMin","kcalMax","allergens","dislikes","proteinG","proteinMin","proteinMax"] as const;
+  const fields = ["kcal","kcalMin","kcalMax","allergens","dislikes"] as const;
   for (const f of fields) {
     const val = (formData.get(f) ?? "").toString().trim();
     if (val) params.set(f, val);
@@ -488,7 +282,6 @@ async function applyFiltersAction(formData: FormData): Promise<void> {
 /* ===================== Sauvegarde via Cookie (Server Actions) ===================== */
 type SavedItem = { id: string; title: string };
 const SAVED_COOKIE = "saved_recipes_v1";
-const SAVED_COOKIE_SHAKES = "saved_shakes_v1";
 
 function readSaved(): SavedItem[] {
   try {
@@ -502,25 +295,6 @@ function readSaved(): SavedItem[] {
 
 function writeSaved(list: SavedItem[]) {
   cookies().set(SAVED_COOKIE, JSON.stringify(list), {
-    path: "/",
-    httpOnly: false,
-    sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 365,
-  });
-}
-
-function readSavedShakes(): SavedItem[] {
-  try {
-    const raw = cookies().get(SAVED_COOKIE_SHAKES)?.value ?? "[]";
-    const arr = JSON.parse(raw);
-    return Array.isArray(arr) ? arr.filter(x => x && typeof x.id === "string" && typeof x.title === "string") : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeSavedShakes(list: SavedItem[]) {
-  cookies().set(SAVED_COOKIE_SHAKES, JSON.stringify(list), {
     path: "/",
     httpOnly: false,
     sameSite: "lax",
@@ -554,41 +328,11 @@ async function removeRecipeAction(formData: FormData) {
   redirect(returnTo);
 }
 
-async function saveShakeAction(formData: FormData) {
-  "use server";
-  const id = String(formData.get("id") ?? "");
-  const title = String(formData.get("title") ?? "");
-  const returnTo = String(formData.get("returnTo") ?? "/dashboard/recipes");
-  if (!id || !title) redirect(returnTo);
-
-  const cur = readSavedShakes();
-  if (!cur.some(x => x.id === id)) {
-    cur.push({ id, title });
-    writeSavedShakes(cur);
-  }
-  redirect(returnTo);
-}
-
-async function removeShakeAction(formData: FormData) {
-  "use server";
-  const id = String(formData.get("id") ?? "");
-  const returnTo = String(formData.get("returnTo") ?? "/dashboard/recipes");
-  if (!id) redirect(returnTo);
-
-  const cur = readSavedShakes().filter(x => x.id !== id);
-  writeSavedShakes(cur);
-  redirect(returnTo);
-}
-
 /* ===================== Page ===================== */
 export default async function Page({
   searchParams,
 }: {
-  searchParams?: {
-    kcal?: string; kcalMin?: string; kcalMax?: string;
-    allergens?: string; dislikes?: string; rnd?: string;
-    proteinG?: string; proteinMin?: string; proteinMax?: string;
-  };
+  searchParams?: { kcal?: string; kcalMin?: string; kcalMax?: string; allergens?: string; dislikes?: string; rnd?: string };
 }) {
   // Lecture session — aucune redirection selon le plan
   let plan: Plan = "BASIC";
@@ -598,29 +342,19 @@ export default async function Page({
     plan = (s?.plan as Plan) || "BASIC";
   } catch {}
 
-  // Recettes — paramètres
   const kcal = Number(searchParams?.kcal ?? "");
   const kcalMin = Number(searchParams?.kcalMin ?? "");
   const kcalMax = Number(searchParams?.kcalMax ?? "");
   const allergens = parseCsv(searchParams?.allergens);
   const dislikes = parseCsv(searchParams?.dislikes);
 
-  // Shakes — paramètres protéines
-  const proteinG = Number(searchParams?.proteinG ?? "");
-  const proteinMin = Number(searchParams?.proteinMin ?? "");
-  const proteinMax = Number(searchParams?.proteinMax ?? "");
-
   const hasKcalTarget = !isNaN(kcal) && kcal > 0;
   const hasKcalMin = !isNaN(kcalMin) && kcalMin > 0;
   const hasKcalMax = !isNaN(kcalMax) && kcalMax > 0;
 
-  const hasProteinTarget = !isNaN(proteinG) && proteinG > 0;
-  const hasProteinMin = !isNaN(proteinMin) && proteinMin > 0;
-  const hasProteinMax = !isNaN(proteinMax) && proteinMax > 0;
-
   const healthy = HEALTHY_BASE;
 
-  // bloc IA (PLUS/PREMIUM) — Recettes
+  // bloc IA (PLUS/PREMIUM)
   let personalized: Recipe[] = [];
   let relaxedNote: string | null = null;
 
@@ -656,83 +390,29 @@ export default async function Page({
     }
   }
 
-  /* ========= Bar à Prot' ========= */
-  const shakesHealthy = SHAKES_BASE;
-
-  let shakesPersonalized: Shake[] = [];
-  let shakesRelaxedNote: string | null = null;
-
-  if (plan !== "BASIC") {
-    const aiShakes = await generateAIShakes({
-      plan,
-      kcal: hasKcalTarget ? kcal : undefined,
-      kcalMin: hasKcalMin ? kcalMin : undefined,
-      kcalMax: hasKcalMax ? kcalMax : undefined,
-      proteinG: hasProteinTarget ? proteinG : undefined,
-      proteinMin: hasProteinMin ? proteinMin : undefined,
-      proteinMax: hasProteinMax ? proteinMax : undefined,
-      allergens, dislikes,
-      count: 10,
-    });
-
-    shakesPersonalized = aiShakes.length
-      ? aiShakes
-      : personalizeShakesFallback({
-          base: SHAKES_BASE,
-          kcal: hasKcalTarget ? kcal : undefined,
-          kcalMin: hasKcalMin ? kcalMin : undefined,
-          kcalMax: hasKcalMax ? kcalMax : undefined,
-          proteinG: hasProteinTarget ? proteinG : undefined,
-          proteinMin: hasProteinMin ? proteinMin : undefined,
-          proteinMax: hasProteinMax ? proteinMax : undefined,
-          allergens, dislikes, plan,
-        });
-
-    if (shakesPersonalized.length === 0) {
-      const relaxed = personalizeShakesFallback({
-        base: SHAKES_BASE, allergens, dislikes, plan
-      });
-      if (relaxed.length) {
-        shakesPersonalized = relaxed;
-        shakesRelaxedNote = "Ajustement automatique : contraintes relâchées (allergènes respectés).";
-      } else {
-        shakesPersonalized = SHAKES_BASE.map(s => ({ ...s, minPlan: plan }));
-        shakesRelaxedNote = "Ajustement automatique : suggestions healthy compatibles avec vos contraintes.";
-      }
-    }
-  }
-
   // cartes à afficher
   const seed = Number(searchParams?.rnd ?? "0") || 123456789;
   const healthyPick = pickRandomSeeded(healthy, 4, seed);
   const personalizedPick = pickRandomSeeded(personalized, 6, seed);
 
-  // Bar à Prot' picks (on décale la seed pour varier vs recettes)
-  const healthyShakesPick = pickRandomSeeded(shakesHealthy, 4, seed + 1);
-  const personalizedShakesPick = pickRandomSeeded(shakesPersonalized, 6, seed + 1);
+  // Bar à prot' : on pioche dans SHAKES_BASE (même Card)
+  const shakesPick = pickRandomSeeded(SHAKES_BASE, 4, seed + 7);
 
-  // QS gardés (pour Voir la recette / boisson)
+  // QS gardés (pour Voir la recette)
   const qsParts: string[] = [];
   if (hasKcalTarget) qsParts.push(`kcal=${kcal}`);
   if (hasKcalMin) qsParts.push(`kcalMin=${kcalMin}`);
   if (hasKcalMax) qsParts.push(`kcalMax=${kcalMax}`);
-  if (hasProteinTarget) qsParts.push(`proteinG=${proteinG}`);
-  if (hasProteinMin) qsParts.push(`proteinMin=${proteinMin}`);
-  if (hasProteinMax) qsParts.push(`proteinMax=${proteinMax}`);
   if (allergens.length) qsParts.push(`allergens=${encodeURIComponent(allergens.join(","))}`);
   if (dislikes.length) qsParts.push(`dislikes=${encodeURIComponent(dislikes.join(","))}`);
   const baseQS = qsParts.length ? `?${qsParts.join("&")}` : "";
-  const encode = (r: Recipe | Shake) => `${baseQS}${baseQS ? "&" : "?"}data=${encodeB64UrlJson(r)}`;
+  const encode = (r: Recipe) => `${baseQS}${baseQS ? "&" : "?"}data=${encodeB64UrlJson(r)}`;
 
   const disabled = plan === "BASIC";
 
   // Lecture des recettes enregistrées (cookie)
   const saved = readSaved();
   const savedSet = new Set(saved.map(s => s.id));
-  // Shakes enregistrés
-  const savedShakes = readSavedShakes();
-  const savedShakesSet = new Set(savedShakes.map(s => s.id));
-
   const currentUrl = `/dashboard/recipes${baseQS}`;
 
   return (
@@ -758,14 +438,12 @@ export default async function Page({
 
             {/* Récap filtres actifs */}
             <div className="text-xs" style={{color:"#6b7280", marginTop:8}}>
-              Filtres actifs —
+              Filtres actifs — 
               {hasKcalTarget && <> cible: ~{kcal} kcal</>}
               {!hasKcalTarget && (hasKcalMin || hasKcalMax) && <> plage: {hasKcalMin? kcalMin:"…"}–{hasKcalMax? kcalMax:"…"} kcal</>}
-              {hasProteinTarget && <> · protéines: ~{proteinG} g</>}
-              {!hasProteinTarget && (hasProteinMin || hasProteinMax) && <> · protéines: {hasProteinMin? proteinMin:"…"}–{hasProteinMax? proteinMax:"…"} g</>}
               {allergens.length ? <> · allergènes: {allergens.join(", ")}</> : null}
               {dislikes.length ? <> · non aimés: {dislikes.join(", ")}</> : null}
-              {(!hasKcalTarget && !hasKcalMin && !hasKcalMax && !hasProteinTarget && !hasProteinMin && !hasProteinMax && !allergens.length && !dislikes.length) && " aucun"}
+              {(!hasKcalTarget && !hasKcalMin && !hasKcalMax && !allergens.length && !dislikes.length) && " aucun"}
             </div>
           </div>
           <div className="text-sm">
@@ -817,21 +495,6 @@ export default async function Page({
                 </div>
               </div>
 
-              <div className="grid gap-6 sm:grid-cols-3">
-                <div>
-                  <label className="label">Cible protéines (g)</label>
-                  <input className="input" type="number" name="proteinG" placeholder="ex: 30" defaultValue={hasProteinTarget ? String(proteinG) : ""} />
-                </div>
-                <div>
-                  <label className="label">Min prot. (g)</label>
-                  <input className="input" type="number" name="proteinMin" placeholder="ex: 20" defaultValue={hasProteinMin ? String(proteinMin) : ""} />
-                </div>
-                <div>
-                  <label className="label">Max prot. (g)</label>
-                  <input className="input" type="number" name="proteinMax" placeholder="ex: 40" defaultValue={hasProteinMax ? String(proteinMax) : ""} />
-                </div>
-              </div>
-
               <div>
                 <label className="label">Allergènes / intolérances (séparés par virgules)</label>
                 <input className="input" type="text" name="allergens" placeholder="arachide, lactose, gluten" defaultValue={allergens.join(", ")} />
@@ -861,20 +524,20 @@ export default async function Page({
         </div>
 
         {/* =================== Vos recettes enregistrées =================== */}
-        {saved.length > 0 && (
+        {readSaved().length > 0 && (
           <section className="section" style={{ marginTop: 12 }}>
             <div className="section-head" style={{ marginBottom: 8 }}>
               <h2>Vos recettes enregistrées</h2>
             </div>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-2">
-              {saved.map((s) => (
+              {readSaved().map((s) => (
                 <article key={s.id} className="card" style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
                   <a href={`/dashboard/recipes/${s.id}`} className="font-semibold" style={{ textDecoration:"none", color:"var(--text,#111)" }}>
                     {s.title}
                   </a>
                   <form action={removeRecipeAction}>
                     <input type="hidden" name="id" value={s.id} />
-                    <input type="hidden" name="returnTo" value={currentUrl} />
+                    <input type="hidden" name="returnTo" value={`/dashboard/recipes${baseQS}`} />
                     <button type="submit" className="btn btn-outline" style={{ color: "var(--text, #111)" }}>
                       Retirer
                     </button>
@@ -895,7 +558,7 @@ export default async function Page({
                 r={r}
                 detailQS={encode(r)}
                 isSaved={savedSet.has(r.id)}
-                currentUrl={currentUrl}
+                currentUrl={`/dashboard/recipes${baseQS}`}
               />
             ))}
           </div>
@@ -922,7 +585,7 @@ export default async function Page({
                     r={r}
                     detailQS={encode(r)}
                     isSaved={savedSet.has(r.id)}
-                    currentUrl={currentUrl}
+                    currentUrl={`/dashboard/recipes${baseQS}`}
                   />
                 ))}
               </div>
@@ -941,52 +604,17 @@ export default async function Page({
             <h2>Bar à prot’ — Boissons protéinées</h2>
           </div>
 
-          {/* Shakes healthy pour tous */}
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
-            {healthyShakesPick.map((s) => (
-              <ShakeCard
-                key={s.id}
-                s={s}
-                detailQS={encode(s)}
-                isSaved={savedShakesSet.has(s.id)}
-                currentUrl={currentUrl}
+            {shakesPick.map((r) => (
+              <Card
+                key={r.id}
+                r={r}
+                detailQS={encode(r)}
+                isSaved={savedSet.has(r.id)}
+                currentUrl={`/dashboard/recipes${baseQS}`}
               />
             ))}
           </div>
-
-          {/* Shakes personnalisés IA */}
-          {plan !== "BASIC" && (
-            <div style={{ marginTop: 16 }}>
-              <div className="section-head" style={{ marginBottom: 8 }}>
-                <h3 style={{ margin:0, fontSize:18 }}>Boissons personnalisées (IA)</h3>
-              </div>
-
-              {shakesRelaxedNote && (
-                <div className="text-xs" style={{ color:"#6b7280", marginBottom:8 }}>
-                  {shakesRelaxedNote}
-                </div>
-              )}
-
-              {personalizedShakesPick.length ? (
-                <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
-                  {personalizedShakesPick.map((s) => (
-                    <ShakeCard
-                      key={s.id}
-                      s={s}
-                      detailQS={encode(s)}
-                      isSaved={savedShakesSet.has(s.id)}
-                      currentUrl={currentUrl}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <div className="card text-sm" style={{ color:"#6b7280" }}>
-                  Aucune boisson correspondant exactement à vos filtres (kcal / protéines).
-                  Essayez d’élargir les plages ou de réduire les exclusions.
-                </div>
-              )}
-            </div>
-          )}
         </section>
       </div>
     </>
@@ -1045,70 +673,6 @@ function Card({
           <form action={saveRecipeAction}>
             <input type="hidden" name="id" value={r.id} />
             <input type="hidden" name="title" value={r.title} />
-            <input type="hidden" name="returnTo" value={currentUrl} />
-            <button type="submit" className="btn btn-outline" style={{ color: "var(--text, #111)" }}>
-              Enregistrer
-            </button>
-          </form>
-        )}
-      </div>
-    </article>
-  );
-}
-
-/* ===================== Carte Shake (Bar à Prot') ===================== */
-function ShakeCard({
-  s,
-  detailQS,
-  isSaved,
-  currentUrl,
-}: {
-  s: Shake;
-  detailQS: string;
-  isSaved: boolean;
-  currentUrl: string;
-}) {
-  const href = `/dashboard/recipes/${s.id}${detailQS}`; // même logique de détail
-  const ing = Array.isArray(s.ingredients) ? s.ingredients : [];
-  const shown = ing.slice(0, 8);
-  const more = Math.max(0, ing.length - shown.length);
-
-  return (
-    <article className="card" style={{ overflow: "hidden" }}>
-      <div className="flex items-center justify-between">
-        <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>{s.title}</h3>
-        <span className="badge">{s.minPlan}</span>
-      </div>
-
-      <div className="text-sm" style={{ marginTop: 10, display: "flex", gap: 12, flexWrap: "wrap" }}>
-        {typeof s.kcal === "number" && <span className="badge">{s.kcal} kcal</span>}
-        {typeof s.proteinG === "number" && <span className="badge">{s.proteinG} g prot.</span>}
-        {typeof s.timeMin === "number" && <span className="badge">{s.timeMin} min</span>}
-      </div>
-
-      <div className="text-sm" style={{ marginTop: 10 }}>
-        <strong>Ingrédients</strong>
-        <ul style={{ margin: "6px 0 0 16px" }}>
-          {shown.map((i, idx) => <li key={idx}>{i}</li>)}
-          {more > 0 && <li>+ {more} autre(s)…</li>}
-        </ul>
-      </div>
-
-      <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
-        <a className="btn btn-dash" href={href}>Voir la boisson</a>
-
-        {isSaved ? (
-          <form action={removeShakeAction}>
-            <input type="hidden" name="id" value={s.id} />
-            <input type="hidden" name="returnTo" value={currentUrl} />
-            <button type="submit" className="btn btn-outline" style={{ color: "var(--text, #111)" }}>
-              Enregistrée ✓ (Retirer)
-            </button>
-          </form>
-        ) : (
-          <form action={saveShakeAction}>
-            <input type="hidden" name="id" value={s.id} />
-            <input type="hidden" name="title" value={s.title} />
             <input type="hidden" name="returnTo" value={currentUrl} />
             <button type="submit" className="btn btn-outline" style={{ color: "var(--text, #111)" }}>
               Enregistrer
