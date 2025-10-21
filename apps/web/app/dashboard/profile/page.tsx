@@ -39,7 +39,7 @@ function getBaseUrlFromHeaders() {
   return `${proto}://${host}`;
 }
 
-/** =============== Email depuis la connexion =============== */
+/** =============== Email via NextAuth (session) =============== */
 async function getSignedInEmail(): Promise<string> {
   try {
     // @ts-ignore optional deps
@@ -59,7 +59,16 @@ async function doAutogenAction(formData: FormData) {
 
   const c = cookies();
   const user = c.get("fc_uid")?.value || "me";
-  let email = await getSignedInEmail();
+
+  let email = "";
+  try {
+    // @ts-ignore
+    const { getServerSession } = await import("next-auth");
+    // @ts-ignore
+    const { authOptions } = await import("../../../lib/auth");
+    const session = await getServerSession(authOptions as any);
+    email = ((session as any)?.user?.email as string | undefined) || "";
+  } catch {}
   if (!email) email = c.get("app_email")?.value || "";
 
   const qp = new URLSearchParams({ user, autogen: "1" });
@@ -95,7 +104,7 @@ async function fetchProgrammeFromApi(email?: string): Promise<ProgrammeFromApi |
   const c = cookies();
   const user = c.get("fc_uid")?.value || "me";
 
-  const qp = new URLSearchParams({ user, autogen: "1" }); // ← force autogen (dernières réponses)
+  const qp = new URLSearchParams({ user, autogen: "1" }); // force autogen = dernières réponses
   if (email) qp.set("email", email);
 
   const url = `${getBaseUrlFromHeaders()}/api/programme?${qp.toString()}`;
@@ -123,7 +132,7 @@ export default async function Page({
   // 1) Programme IA basé sur les DERNIÈRES réponses (via API autogen)
   const prog = await fetchProgrammeFromApi(email);
 
-  // 2) Profil : si incomplet, compléter directement depuis Sheets à partir de l’email
+  // 2) Profil : si incomplet, compléter depuis Sheets à partir de l’email
   let profile: Partial<ProfileT> & { email?: string; objectif?: string; lieu?: string } =
     (prog?.profile ?? {}) as any;
 
@@ -131,9 +140,8 @@ export default async function Page({
     const needPrenom = !(typeof profile?.prenom === "string" && profile.prenom && !/\d/.test(profile.prenom));
     const needAge = !(typeof profile?.age === "number" && profile.age > 0);
     const needGoal = !((profile as any)?.goal || (profile as any)?.objectif);
-    const needLieu = !(typeof (profile as any)?.lieu === "string" && (profile as any)?.lieu);
 
-    if (needPrenom || needAge || needGoal || needLieu || !profile?.email) {
+    if (needPrenom || needAge || needGoal || !profile?.email) {
       try {
         const answers = await getAnswersForEmail(email);
         if (answers) {
@@ -184,7 +192,7 @@ export default async function Page({
     ];
   }
 
-  // ====== Affichage "Mes infos"
+  // ====== Affichage "Mes infos" (Sans le champ Lieu)
   const clientPrenom =
     typeof profile?.prenom === "string" && profile.prenom && !/\d/.test(profile.prenom) ? profile.prenom : "";
   const clientAge = typeof profile?.age === "number" && profile.age > 0 ? profile.age : undefined;
@@ -207,8 +215,6 @@ export default async function Page({
     if (!rawGoal) return "Non défini";
     return rawGoal;
   })();
-
-  const clientLieu = (profile as any)?.lieu || "";
 
   const questionnaireUrl = (() => {
     const qp = new URLSearchParams();
@@ -259,7 +265,7 @@ export default async function Page({
         )}
       </div>
 
-      {/* ===== Mes infos ===== */}
+      {/* ===== Mes infos (sans Lieu) ===== */}
       <section className="section" style={{ marginTop: 12 }}>
         <div
           className="section-head"
@@ -279,9 +285,6 @@ export default async function Page({
             </span>
             <span>
               <b>Objectif actuel :</b> {goalLabel || <i className="text-gray-400">Non défini</i>}
-            </span>
-            <span>
-              <b>Lieu :</b> {(clientLieu && String(clientLieu)) || <i className="text-gray-400">Non renseigné</i>}
             </span>
           </div>
 
@@ -322,7 +325,7 @@ export default async function Page({
             </p>
           </div>
 
-          {/* Bouton : Générer */}
+        {/* Bouton : Générer */}
           <form action={doAutogenAction}>
             <button
               type="submit"
@@ -402,3 +405,4 @@ export default async function Page({
     </div>
   );
 }
+
