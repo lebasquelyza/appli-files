@@ -275,6 +275,18 @@ export default async function Page({
         </div>
       </section>
 
+      {/* ===== Bloc PS ===== */}
+      <section className="section" style={{ marginTop: 12 }}>
+        <div className="card text-sm" style={{ lineHeight: 1.5 }}>
+          <b>PS&nbsp;:</b>{" "}
+          Si les infos ci-dessus ne sont pas à jour, mets à jour le{" "}
+          <a href={questionnaireUrl} className="underline">
+            questionnaire
+          </a>{" "}
+          pour affiner ton programme… ;)
+        </div>
+      </section>
+
       {/* ===== Mon programme (IA SEULEMENT) ===== */}
       <section className="section" style={{ marginTop: 12 }}>
         <div
