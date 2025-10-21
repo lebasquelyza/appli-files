@@ -6,8 +6,8 @@ import ConnectSpotifyButton from "@/components/ConnectSpotifyButton";
 export default async function SignInPage() {
   const session = await getServerSession(authOptions);
 
-  // ↪️ Dès que l'utilisateur est authentifié, on passe par /after-login
-  // qui va poser le cookie app_email (et app_prenom) puis rediriger vers ton profil.
+  // Dès que l'utilisateur est connecté, on passe par /after-login
+  // pour poser les cookies (app_email, app_prenom) et rediriger proprement.
   if (session) redirect("/after-login");
 
   return (
@@ -16,10 +16,10 @@ export default async function SignInPage() {
         <h1 style={{ fontSize: 24, fontWeight: 600 }}>Se connecter</h1>
         <p>Connecte ton compte Spotify pour continuer.</p>
 
-        {/* Ton bouton custom conserve son comportement */}
+        {/* ⚠️ Assure-toi que ce composant utilise aussi callbackUrl=/after-login */}
         <ConnectSpotifyButton />
 
-        {/* On force le callbackUrl vers /after-login */}
+        {/* Lien direct NextAuth → Spotify avec callback vers /after-login */}
         <a
           href="/api/auth/signin/spotify?callbackUrl=%2Fafter-login"
           style={{ display: "block", textAlign: "center", border: "1px solid #ddd", padding: 10, borderRadius: 8 }}
