@@ -53,10 +53,12 @@ async function getSignedInEmail(): Promise<string> {
   return cookies().get("app_email")?.value || "";
 }
 
-/** =============== Server Action: Générer (via l'API) =============== */
+/** =============== Server Action: Générer (optionnel) =============== */
 async function doAutogenAction(formData: FormData) {
   "use server";
 
+  // Ici on passe par l’API si tu veux garder le bouton, 
+  // mais la page remplit déjà Mes infos directement via Sheets (ci-dessous).
   const c = cookies();
   const user = c.get("fc_uid")?.value || "me";
 
@@ -94,71 +96,66 @@ async function doAutogenAction(formData: FormData) {
   redirect("/dashboard/profile?success=programme");
 }
 
-/** ================= Helpers: chargement depuis l’API ================= */
-type ProgrammeFromApi = {
-  sessions: AiSessionT[];
-  profile?: Partial<ProfileT> & { email?: string; objectif?: string; lieu?: string };
-};
-
-async function fetchProgrammeFromApi(email?: string): Promise<ProgrammeFromApi | null> {
-  const c = cookies();
-  const user = c.get("fc_uid")?.value || "me";
-
-  const qp = new URLSearchParams({ user, autogen: "1" }); // force autogen = dernières réponses
-  if (email) qp.set("email", email);
-
-  const url = `${getBaseUrlFromHeaders()}/api/programme?${qp.toString()}`;
-
-  try {
-    const res = await fetch(url, { cache: "no-store" });
-    if (!res.ok) return null;
-    return (await res.json().catch(() => null)) as ProgrammeFromApi | null;
-  } catch {
-    return null;
-  }
-}
-
 /** ================= Page ================= */
 export default async function Page({
   searchParams,
 }: {
   searchParams?: { success?: string; error?: string };
 }) {
-  // 0) Email prioritaire = connexion
+  // 0) Email prioritaire = connexion (fallback cookie)
   const emailBySession = await getSignedInEmail();
   const cookieEmail = cookies().get("app_email")?.value || "";
-  const email = emailBySession || cookieEmail;
+  const email = (emailBySession || cookieEmail || "").trim().toLowerCase();
 
-  // 1) Programme IA basé sur les DERNIÈRES réponses (via API autogen)
-  const prog = await fetchProgrammeFromApi(email);
-
-  // 2) Profil : si incomplet, compléter depuis Sheets à partir de l’email
-  let profile: Partial<ProfileT> & { email?: string; objectif?: string; lieu?: string } =
-    (prog?.profile ?? {}) as any;
-
+  // 1) MES INFOS : lecture DIRECTE de Sheets avec la logique de ton ancien ai.ts
+  let profile: Partial<ProfileT> & { email?: string } = {};
   if (email) {
-    const needPrenom = !(typeof profile?.prenom === "string" && profile.prenom && !/\d/.test(profile.prenom));
-    const needAge = !(typeof profile?.age === "number" && profile.age > 0);
-    const needGoal = !((profile as any)?.goal || (profile as any)?.objectif);
-
-    if (needPrenom || needAge || needGoal || !profile?.email) {
-      try {
-        const answers = await getAnswersForEmail(email);
-        if (answers) {
-          const built = buildProfileFromAnswers(answers); // ← map direct depuis les colonnes
-          profile = { ...built, ...profile, email: built.email || email };
-        }
-      } catch {}
+    try {
+      const answers = await getAnswersForEmail(email);
+      if (answers) {
+        const built = buildProfileFromAnswers(answers);
+        profile = { ...built, email: built.email || email };
+      } else {
+        // Fallback minimal si pas de réponses
+        profile = { email };
+      }
+    } catch {
+      profile = { email };
     }
-
-    if (!profile?.email) profile = { ...profile, email };
   }
 
-  // 3) Séances affichées = celles générées par l’API (dernières réponses).
-  // Fallbacks (si jamais API ne renvoie rien) : Sheets -> store.
-  let aiSessions: AiSessionT[] = Array.isArray(prog?.sessions) ? prog!.sessions : [];
+  // ====== Affichage "Mes infos" (Sans le champ Lieu)
+  const clientPrenom =
+    typeof profile?.prenom === "string" && profile.prenom && !/\d/.test(profile.prenom) ? profile.prenom : "";
+  const clientAge = typeof profile?.age === "number" && profile.age > 0 ? profile.age : undefined;
+  const clientEmailDisplay = String(profile?.email || email || "");
 
-  if ((!aiSessions || aiSessions.length === 0) && email) {
+  const rawGoal = String((profile as any)?.goal || (profile as any)?.objectif || "").toLowerCase();
+  const goalLabel = (() => {
+    const map: Record<string, string> = {
+      hypertrophy: "Hypertrophie / Esthétique",
+      fatloss: "Perte de gras",
+      strength: "Force",
+      endurance: "Endurance / Cardio",
+      mobility: "Mobilité / Souplesse",
+      general: "Forme générale",
+    };
+    if (map[rawGoal]) return map[rawGoal];
+    if (!rawGoal) return "Non défini";
+    return rawGoal;
+  })();
+
+  const questionnaireUrl = (() => {
+    const qp = new URLSearchParams();
+    if (clientEmailDisplay) qp.set("email", clientEmailDisplay);
+    if (clientPrenom) qp.set("prenom", clientPrenom);
+    const qs = qp.toString();
+    return qs ? `${QUESTIONNAIRE_BASE}?${qs}` : QUESTIONNAIRE_BASE;
+  })();
+
+  // 2) PROGRAMME : on génère depuis les mêmes réponses (logique ancien ai.ts)
+  let aiSessions: AiSessionT[] = [];
+  if (email) {
     try {
       const answers = await getAnswersForEmail(email);
       if (answers) {
@@ -166,13 +163,12 @@ export default async function Page({
       }
     } catch {}
   }
-
+  // Fallback via lib si besoin (cookie store etc.)
   if ((!aiSessions || aiSessions.length === 0) && email) {
     try {
       aiSessions = await getAiSessions(email);
     } catch {}
   }
-
   // 🔒 filet de sécurité
   if (!aiSessions || aiSessions.length === 0) {
     aiSessions = [
@@ -192,38 +188,6 @@ export default async function Page({
     ];
   }
 
-  // ====== Affichage "Mes infos" (Sans le champ Lieu)
-  const clientPrenom =
-    typeof profile?.prenom === "string" && profile.prenom && !/\d/.test(profile.prenom) ? profile.prenom : "";
-  const clientAge = typeof profile?.age === "number" && profile.age > 0 ? profile.age : undefined;
-  const clientEmailDisplay = String(profile?.email || email || "");
-
-  const rawGoal = String((profile as any)?.goal || (profile as any)?.objectif || "").toLowerCase();
-  const goalLabel = (() => {
-    const map: Record<string, string> = {
-      hypertrophy: "Hypertrophie / Esthétique",
-      fatloss: "Perte de gras",
-      strength: "Force",
-      endurance: "Endurance / Cardio",
-      mobility: "Mobilité / Souplesse",
-      general: "Forme générale",
-      maintenance: "Maintien / Santé",
-      hero: "WOD Héros",
-      marathon: "Course (semi / marathon)",
-    };
-    if (map[rawGoal]) return map[rawGoal];
-    if (!rawGoal) return "Non défini";
-    return rawGoal;
-  })();
-
-  const questionnaireUrl = (() => {
-    const qp = new URLSearchParams();
-    if (clientEmailDisplay) qp.set("email", clientEmailDisplay);
-    if (clientPrenom) qp.set("prenom", clientPrenom);
-    const qs = qp.toString();
-    return qs ? `${QUESTIONNAIRE_BASE}?${qs}` : QUESTIONNAIRE_BASE;
-  })();
-
   const displayedError = searchParams?.error || "";
   const displayedSuccess = searchParams?.success || "";
 
@@ -236,7 +200,7 @@ export default async function Page({
           </h1>
         </div>
         <a
-          href="/dashboard"
+          href="/dashboard/progress"  // ← Retour vers ta page “progress”
           className="btn"
           style={{
             background: "#ffffff",
@@ -325,7 +289,7 @@ export default async function Page({
             </p>
           </div>
 
-        {/* Bouton : Générer */}
+          {/* Bouton : Générer (optionnel) */}
           <form action={doAutogenAction}>
             <button
               type="submit"
@@ -405,4 +369,3 @@ export default async function Page({
     </div>
   );
 }
-
