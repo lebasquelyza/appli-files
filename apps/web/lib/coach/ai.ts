@@ -40,6 +40,8 @@ export type AiSession = {
   content?: any;
 };
 
+export type AiProgramme = { sessions: AiSession[] };
+
 export type Answers = Record<string, string>;
 export type Goal =
   | "hypertrophy"
@@ -81,15 +83,6 @@ export type Profile = {
   sleepOk?: boolean;
   stressHigh?: boolean;
   likesWOD?: boolean;
-  // Champs bruts utiles pour l'affichage "Mes infos"
-  objectif?: string;
-  lieu?: string;
-};
-
-/* ✅ AiProgramme élargi pour stocker le profil aussi */
-export type AiProgramme = {
-  sessions: AiSession[];
-  profile?: Profile;
 };
 
 /* ===================== Config ===================== */
@@ -180,13 +173,12 @@ async function fetchValues(sheetId: string, range: string) {
   throw new Error("SHEETS_FETCH_FAILED");
 }
 
-/* ========= Mapping par défaut (sans en-tête explicite) =========
-   Selon ton format: col0 = timestamp, col1 = prénom, col2 = âge, col3 = poids, col10 = email */
+/* ========= Mapping par défaut (sans en-tête explicite) ========= */
 const NO_HEADER_COLS = {
-  prenom: 1,
+  prenom: 1,        // date/heure en col0, prénom en col1
   nom: 1,
-  age: 2,
-  poids: 3,
+  age: 2,           // âge en col2
+  poids: 3,         // poids en col3
   taille: 4,
   niveau: 5,
   objectif: 6,
@@ -263,7 +255,9 @@ export async function getAnswersForEmail(
     headers = Array.from({ length: width }, (_, i) => `col${i}`);
     idxEmail = NO_HEADER_COLS.email;
     if (idxEmail >= width) idxEmail = -1;
-    if (idxEmail === -1) idxEmail = guessEmailColumn(values);
+    if (idxEmail === -1) {
+      idxEmail = guessEmailColumn(values);
+    }
   }
 
   if (idxEmail === -1) {
@@ -279,6 +273,7 @@ export async function getAnswersForEmail(
       if (idxEmail !== -1) break;
     }
   }
+
   if (idxEmail === -1) return null;
 
   const start = hasHeader ? 1 : 0;
@@ -302,7 +297,7 @@ export async function getAnswersForEmail(
       rec[key] = (row[j] ?? "").trim();
     }
 
-    // Normalisation des champs clés (pour l'affichage + génération)
+    // Normalisation des champs clés
     rec["email"] =
       rec["email"] ||
       rec["adresse mail"] ||
@@ -394,18 +389,15 @@ export function buildProfileFromAnswers(answers: Answers): Profile {
   const imc =
     weight && height ? +(weight / Math.pow((height ?? 0) / 100, 2)).toFixed(1) : undefined;
 
-  // ✅ clamp fréquence min 1 / max 7
-  const freqRaw =
+  const freq =
     readNum(answers["disponibilite"] || answers["fréquence"] || "") ?? 3;
-  const freq = Math.max(1, Math.min(7, Math.floor(freqRaw)));
 
-  const timePerSession =
-    readNum(
-      answers["temps par séance"] ||
-        answers["durée séance"] ||
-        answers["duree seance"] ||
-        ""
-    ) ?? 45;
+  const timePerSession = readNum(
+    answers["temps par séance"] ||
+      answers["durée séance"] ||
+      answers["duree seance"] ||
+      ""
+  ) ?? 45;
 
   const locationStr = norm(answers["lieu"] || "");
   const location: Profile["location"] =
@@ -434,8 +426,6 @@ export function buildProfileFromAnswers(answers: Answers): Profile {
     weight: weight ?? undefined,
     imc,
     goal: mapGoal(answers["objectif"]),
-    objectif: answers["objectif"] || "",
-    lieu: answers["lieu"] || "",
     subGoals: [],
     level: mapLevel(answers["niveau"]),
     freq,
@@ -456,11 +446,7 @@ export function buildProfileFromAnswers(answers: Answers): Profile {
 export function generateProgrammeFromAnswers(answers: Answers): AiProgramme {
   const p = buildProfileFromAnswers(answers);
   const today = new Date();
-
-  // ✅ min 1 séance quoi qu'il arrive
-  const count = Math.max(1, Math.min(7, Math.floor(p.freq || 3)));
-
-  const sessions: AiSession[] = Array.from({ length: count }).map((_, i) => {
+  const sessions: AiSession[] = Array.from({ length: p.freq }).map((_, i) => {
     const d = new Date(today);
     d.setDate(today.getDate() + i);
     const type: WorkoutType =
@@ -470,13 +456,13 @@ export function generateProgrammeFromAnswers(answers: Answers): AiProgramme {
         ? "mobilité"
         : "muscu";
     return {
-      id: `${p.email}-${d.toISOString().slice(0, 10)}-${i + 1}`,
+      id: `${p.email}-${d.toISOString().slice(0, 10)}`,
       title:
         type === "muscu"
-          ? `Full body #${i + 1}`
+          ? "Full body"
           : type === "cardio"
-          ? `Cardio structuré #${i + 1}`
-          : `Mobilité #${i + 1}`,
+          ? "Cardio structuré"
+          : "Mobilité",
       type,
       date: d.toISOString().slice(0, 10),
       plannedMin: p.timePerSession,
@@ -490,22 +476,19 @@ export function generateProgrammeFromAnswers(answers: Answers): AiProgramme {
               { name: "Pompes", sets: 3, reps: "max-2", rest: "60s", block: "principal" },
             ]
           : type === "cardio"
-          ? [{ name: "Intervals 4x4", durationSec: 4 * 60 * 4, notes: "RPE 7-8", block: "principal" }]
-          : [{ name: "Flow hanches/chevilles", durationSec: 10 * 60, block: "principal" }],
+          ? [
+              { name: "Intervals 4x4", durationSec: 4 * 60 * 4, notes: "RPE 7-8", block: "principal" },
+            ]
+          : [
+              { name: "Flow hanches/chevilles", durationSec: 10 * 60, block: "principal" },
+            ],
     };
   });
-
-  // ✅ on renvoie aussi le profil pour affichage/persistance
-  return { sessions, profile: p };
+  return { sessions };
 }
 
-export async function getProgrammeForUser(email?: string): Promise<AiProgramme | null> {
-  const e =
-    email ||
-    cookies().get("app_email")?.value || // fallback cookie
-    "";
-  if (!e) return null;
-  const ans = await getAnswersForEmail(e);
+export async function getProgrammeForUser(email: string): Promise<AiProgramme | null> {
+  const ans = await getAnswersForEmail(email);
   if (!ans) return null;
   return generateProgrammeFromAnswers(ans);
 }
@@ -515,6 +498,7 @@ export async function getAiSessions(email?: string): Promise<AiSession[]> {
     email ||
     cookies().get("app_email")?.value || // cookie correct
     "";
+
   if (!e) return [];
   const prog = await getProgrammeForUser(e);
   return prog?.sessions ?? [];
