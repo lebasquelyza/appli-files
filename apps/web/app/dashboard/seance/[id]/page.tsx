@@ -142,7 +142,7 @@ const PageView: React.FC<PageViewProps> = (props) => {
       {/* top bar */}
       <div className="mb-2 flex items-center justify-between no-print" style={{ paddingInline: 12 }}>
         <a
-          href="/dashboard/progress" // ⬅️ MODIF: retour vers progress
+          href="/dashboard/progress"
           className="inline-flex items-center rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm font-medium text-neutral-800 hover:bg-neutral-50"
         >
           ← Retour
@@ -302,10 +302,11 @@ async function loadData(
     | (AiSession & { exercises?: NormalizedExercise[] })
     | undefined;
 
-  // ⬇️ lire les séances IA via la lib (email depuis cookie app_email)
+  // ⬇️ lire les séances IA via la lib (email depuis cookie/app session)
   let aiSessions: AiSession[] = [];
   try {
-    aiSessions = await getAiSessions();
+    const email = await getSignedInEmail();
+    aiSessions = email ? await getAiSessions(email) : [];
   } catch (e) {
     console.warn("getAiSessions failed", e);
     aiSessions = [];
@@ -520,4 +521,3 @@ export default async function Page({
     />
   );
 }
-
