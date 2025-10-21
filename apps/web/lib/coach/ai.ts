@@ -1,7 +1,5 @@
 // apps/web/lib/coach/ai.ts
 import "server-only";
-import fs from "fs";
-import path from "path";
 
 /* ===================== Types ===================== */
 export type WorkoutType = "muscu" | "cardio" | "hiit" | "mobilité";
@@ -74,11 +72,9 @@ export type AiProgramme = {
 function norm(s: string) {
   return String(s).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }
-
 function safePrenom(str?: string) {
   return str?.trim() ? str : "Coaché";
 }
-
 function mapGoal(s?: string): Goal {
   const g = norm(s || "");
   if (g.includes("force")) return "strength";
@@ -127,7 +123,7 @@ function applyProgression(
   goal: Goal,
   week: number
 ): NormalizedExercise[] {
-  const newExos = structuredClone(exercises);
+  const newExos = JSON.parse(JSON.stringify(exercises)) as NormalizedExercise[];
 
   for (const ex of newExos) {
     if (goal === "hypertrophy" || goal === "strength") {
@@ -137,21 +133,18 @@ function applyProgression(
         ex.reps = `${base + week}-12`;
       }
     }
-
     if (goal === "fatloss" || goal === "endurance" || goal === "marathon") {
       if (typeof ex.reps === "string" && ex.reps.includes("min")) {
         const add = Math.min(week * 2, 15);
         ex.reps = ex.reps.replace(/\d+/, (m) => String(parseInt(m) + add));
       }
     }
-
     if (goal === "mobility") {
       if (typeof ex.reps === "string" && ex.reps.includes("min")) {
         const add = Math.min(week, 5);
         ex.reps = ex.reps.replace(/\d+/, (m) => String(parseInt(m) + add));
       }
     }
-
     if (goal === "hero") {
       if (typeof ex.reps === "string" && ex.reps.includes("mile")) {
         const add = Math.min(week * 0.5, 2);
@@ -208,7 +201,7 @@ export function generateProgrammeFromAnswers(answers: Answers, week = 0): AiProg
     };
   };
 
-  // Exercices de base
+  // Exercices de base (fallback universel)
   const fullBodyNone = [
     { name: "Pompes", sets: 3, reps: "max–2", rest: "90s" },
     { name: "Squats", sets: 3, reps: "15–20", rest: "90s" },
@@ -265,10 +258,30 @@ export function generateProgrammeFromAnswers(answers: Answers, week = 0): AiProg
   };
 }
 
-/* ===================== Sauvegarde / chargement ===================== */
-const PROGRAMMES_DIR = path.join(process.cwd(), "data", "programmes");
-if (!fs.existsSync(PROGRAMMES_DIR)) fs.mkdirSync(PROGRAMMES_DIR, { recursive: true });
+/* ===================== Accès fichier (optionnel, edge-safe) ===================== */
+function getFS() {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const fs = require("fs") as typeof import("fs");
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const path = require("path") as typeof import("path");
+    return { fs, path };
+  } catch {
+    return null; // Edge runtime : pas de fs
+  }
+}
+function programmesDir() {
+  const mod = getFS();
+  if (!mod) return null;
+  const { fs, path } = mod;
+  const dir = path.join(process.cwd(), "data", "programmes");
+  try {
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  } catch {}
+  return dir;
+}
 
+/* ===================== Sauvegarde / chargement (no-op si edge) ===================== */
 export type SavedProgramme = {
   email: string;
   week: number;
@@ -277,28 +290,48 @@ export type SavedProgramme = {
 };
 
 export async function saveProgrammeForUser(email: string, programme: AiProgramme, week = 0) {
-  const filePath = path.join(PROGRAMMES_DIR, `${email}.json`);
+  const mod = getFS();
+  const dir = programmesDir();
+  if (!mod || !dir) return true; // no-op en edge
+  const { fs, path } = mod;
+  const filePath = path.join(dir, `${email}.json`);
   const payload: SavedProgramme = { email, week, programme, createdAt: new Date().toISOString() };
   fs.writeFileSync(filePath, JSON.stringify(payload, null, 2));
   return true;
 }
 
 export async function loadProgrammeForUser(email: string): Promise<SavedProgramme | null> {
-  const filePath = path.join(PROGRAMMES_DIR, `${email}.json`);
-  if (!fs.existsSync(filePath)) return null;
-  const raw = fs.readFileSync(filePath, "utf-8");
-  return JSON.parse(raw) as SavedProgramme;
+  const mod = getFS();
+  const dir = programmesDir();
+  if (!mod || !dir) return null; // pas de persistence en edge
+  const { fs, path } = mod;
+  const filePath = path.join(dir, `${email}.json`);
+  try {
+    if (!fs.existsSync(filePath)) return null;
+    const raw = fs.readFileSync(filePath, "utf-8");
+    return JSON.parse(raw) as SavedProgramme;
+  } catch {
+    return null;
+  }
 }
 
-/* ===================== Legacy helpers ===================== */
+/* ===================== Legacy: réponses (mock) ===================== */
 export async function getAnswersForEmail(email: string): Promise<Record<string, string> | null> {
+  // ⚠️ à adapter à ta source réelle (Sheets / API). Ici : mock optionnel.
+  const mod = getFS();
+  if (!mod) return null; // edge : pas de mock fichier
+  const { fs, path } = mod;
   const filePath = path.join(process.cwd(), "data", "mock-answers.json");
-  if (!fs.existsSync(filePath)) return null;
-  const data = JSON.parse(fs.readFileSync(filePath, "utf-8"));
-  return data[email] || null;
+  try {
+    if (!fs.existsSync(filePath)) return null;
+    const data = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+    return data[email] || null;
+  } catch {
+    return null;
+  }
 }
 
-/* ===================== Profile Builder ===================== */
+/* ===================== Profile Builder (compatible pages) ===================== */
 export function buildProfileFromAnswers(answers: Record<string, string>) {
   const locationRaw = (answers["lieu"] || "").toLowerCase();
   let equipLevel: EquipLevel = "full";
@@ -341,17 +374,14 @@ export async function getAiSessions(input?: string | AiProgramme) {
       const saved = await loadProgrammeForUser(email);
       return saved?.programme?.sessions || [];
     }
-
     if (typeof input === "string") {
       if (!input || !input.includes("@")) return [];
       const saved = await loadProgrammeForUser(input);
       return saved?.programme?.sessions || [];
     }
-
     if (input && Array.isArray(input.sessions)) {
       return input.sessions;
     }
-
     return [];
   } catch (err) {
     console.error("[getAiSessions] ERREUR :", err);
