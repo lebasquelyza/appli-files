@@ -320,6 +320,7 @@ export async function generateNextWeekForUser(email: string, answers: Answers) {
 }
 
 /* ===================== Legacy helpers (pour build) ===================== */
+
 // 📌 Simule la récupération des réponses client
 export async function getAnswersForEmail(email: string): Promise<Record<string, string> | null> {
   const filePath = path.join(process.cwd(), "data", "mock-answers.json");
@@ -339,8 +340,11 @@ export function buildProfileFromAnswers(answers: Record<string, string>) {
   };
 }
 
-// 📌 Fournit la liste de séances du programme généré
-export function getAiSessions(programme: AiProgramme) {
-  return programme.sessions || [];
+// 📌 Fournit la liste de séances du programme généré ou chargé
+export async function getAiSessions(input: string | AiProgramme) {
+  if (typeof input === "string") {
+    const saved = await loadProgrammeForUser(input);
+    return saved?.programme?.sessions || [];
+  }
+  return input.sessions || [];
 }
-
