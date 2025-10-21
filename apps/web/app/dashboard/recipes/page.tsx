@@ -456,9 +456,10 @@ export default async function Page({
           <a href={linkMeals} className="card" style={{ textDecoration:"none", color:"inherit", borderColor: view==="meals" ? "#111" : undefined }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
               <div>
-                <strong>Recettes (healthy + personnalisées)</strong>
+                {/* CHANGEMENT: libellé "Recettes — Healthy" */}
+                <strong>Recettes — Healthy</strong>
                 <div className="text-sm" style={{ color:"#6b7280" }}>
-                  Base healthy pour tous + IA (selon votre plan)
+                  Base healthy pour tous
                 </div>
               </div>
               {view==="meals" && <span className="badge">Actif</span>}
@@ -478,8 +479,8 @@ export default async function Page({
           </a>
         </div>
 
-        {/* CTA upgrade pour BASIC */}
-        {plan === "BASIC" && view==="meals" && (
+        {/* =================== CTA upgrade pour BASIC (visible dans les deux vues) =================== */}
+        {plan === "BASIC" && (
           <div className="card" style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:12, marginTop:12 }}>
             <div>
               <strong>Débloquez la personnalisation IA</strong>
@@ -489,8 +490,8 @@ export default async function Page({
           </div>
         )}
 
-        {/* =================== Filtres (seulement pour les recettes) =================== */}
-        {view==="meals" && (
+        {/* =================== Contraintes & filtres (les deux vues) =================== */}
+        {(view==="meals" || view==="shakes") && (
           <div className="section" style={{ marginTop: 12 }}>
             <div className="section-head" style={{ marginBottom: 8, display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
               <h2 style={{ margin:0, fontSize:"clamp(16px,1.9vw,18px)", lineHeight:1.2 }}>
