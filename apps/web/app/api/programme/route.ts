@@ -14,34 +14,52 @@ import {
 
 export const runtime = "nodejs";
 
-/* ===================== GET ===================== */
+/* ===================== GET =====================
+Supporte:
+- ?email=... : charge le programme sauvegardé (si dispo)
+- ?autogen=1&email=... : génère à la volée depuis les réponses (sans persister)
+================================================= */
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const email = (searchParams.get("email") || cookies().get("app_email")?.value || "").trim().toLowerCase();
+    const autogen = searchParams.get("autogen") === "1";
 
     if (!email) {
       return NextResponse.json({ sessions: [], profile: null }, { status: 200 });
     }
 
-    const programme = await loadProgrammeForUser(email);
-    if (!programme) {
-      return NextResponse.json({ sessions: [], profile: null }, { status: 200 });
+    if (autogen) {
+      const answers = await getAnswersForEmail(email);
+      if (!answers) {
+        // Pas de réponses → retour neutre (pas de 500)
+        return NextResponse.json({ sessions: [], profile: buildProfileFromAnswers({ email }) }, { status: 200 });
+      }
+      const prog = generateProgrammeFromAnswers(answers);
+      return NextResponse.json(prog, { status: 200 });
     }
 
-    return NextResponse.json(programme.programme, { status: 200 });
+    // lecture "persistée" (noop en edge si pas de fs)
+    const saved = await loadProgrammeForUser(email);
+    if (!saved?.programme) {
+      return NextResponse.json({ sessions: [], profile: null }, { status: 200 });
+    }
+    return NextResponse.json(saved.programme, { status: 200 });
   } catch (err) {
     console.error("[API /programme GET] ERREUR :", err);
-    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
+    return NextResponse.json({ sessions: [], profile: null }, { status: 200 });
   }
 }
 
-/* ===================== POST ===================== */
+/* ===================== POST =====================
+Body:
+- { email, autogen: true }  → génère depuis réponses et (optionnel) persiste
+- { email, programme }      → persiste tel quel
+================================================= */
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
-    const email = (body.email || cookies().get("app_email")?.value || "").trim().toLowerCase();
-
+    const email = String(body.email || cookies().get("app_email")?.value || "").trim().toLowerCase();
     if (!email) {
       return NextResponse.json({ ok: false, error: "NO_EMAIL" }, { status: 400 });
     }
@@ -54,14 +72,20 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: false, error: "NO_ANSWERS" }, { status: 404 });
       }
       programme = generateProgrammeFromAnswers(answers);
+    } else if (body.programme) {
+      programme = body.programme as AiProgramme;
     } else {
-      programme = body.programme;
+      return NextResponse.json({ ok: false, error: "NO_PROGRAMME" }, { status: 400 });
     }
 
+    // Persistance best-effort (noop si edge)
     await saveProgrammeForUser(email, programme);
+
     return NextResponse.json({ ok: true, programme }, { status: 200 });
   } catch (err) {
     console.error("[API /programme POST] ERREUR :", err);
-    return NextResponse.json({ ok: false, error: "Erreur interne" }, { status: 500 });
+    // On évite de renvoyer 500 aux pages qui attendent un JSON toujours valide
+    return NextResponse.json({ ok: false, error: "INTERNAL" }, { status: 200 });
   }
 }
+
