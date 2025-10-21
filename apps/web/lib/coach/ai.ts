@@ -190,6 +190,10 @@ export function generateProgrammeFromAnswers(answers: Answers, week = 0): AiProg
   else if (eq.includes("halter") || eq.includes("elasti") || eq.includes("kettle")) equipLevel = "limited";
   else if (eq.includes("aucun") || eq.includes("rien")) equipLevel = "none";
 
+  const injuries = answers["blessures"]
+    ? answers["blessures"].split(",").map((s) => s.trim())
+    : [];
+
   const makeSession = (title: string, type: WorkoutType, exos: NormalizedExercise[], offset = 0): AiSession => {
     const d = new Date(today);
     d.setDate(today.getDate() + offset);
@@ -204,49 +208,29 @@ export function generateProgrammeFromAnswers(answers: Answers, week = 0): AiProg
     };
   };
 
-  /* Exercices */
-  const pushFull = [{ name: "Développé couché barre", sets: 4, reps: "6–10", rest: "90s", block: "principal" }];
-  const pushLimited = [{ name: "Pompes lestées", sets: 4, reps: "8–12", rest: "90s", block: "principal" }];
-  const pushNone = [{ name: "Pompes", sets: 4, reps: "max–2", rest: "90s", block: "principal" }];
+  // Exercices de base (simplifiés)
+  const pushNone = [{ name: "Pompes", sets: 4, reps: "max–2", rest: "90s" }];
+  const pullNone = [{ name: "Superman hold", sets: 3, reps: "30s", rest: "60s" }];
+  const legsNone = [{ name: "Air squat", sets: 4, reps: "20", rest: "60s" }];
 
-  const pullFull = [{ name: "Tractions lestées", sets: 4, reps: "6–10", rest: "90s", block: "principal" }];
-  const pullLimited = [{ name: "Rowing haltère", sets: 4, reps: "10–15", rest: "90s", block: "principal" }];
-  const pullNone = [{ name: "Superman hold", sets: 3, reps: "30s", rest: "60s", block: "principal" }];
-
-  const legsFull = [{ name: "Back squat", sets: 4, reps: "6–10", rest: "120s", block: "principal" }];
-  const legsLimited = [{ name: "Goblet squat", sets: 4, reps: "10–12", rest: "90s", block: "principal" }];
-  const legsNone = [{ name: "Air squat", sets: 4, reps: "20", rest: "60s", block: "principal" }];
-
-  const fullBodyLimited = [
-    { name: "Goblet squat", sets: 3, reps: "12", rest: "90s", block: "principal" },
-    { name: "Pompes", sets: 3, reps: "max–2", rest: "90s", block: "principal" },
-  ];
   const fullBodyNone = [
-    { name: "Pompes", sets: 3, reps: "max–2", rest: "90s", block: "principal" },
-    { name: "Squats", sets: 3, reps: "15–20", rest: "90s", block: "principal" },
+    { name: "Pompes", sets: 3, reps: "max–2", rest: "90s" },
+    { name: "Squats", sets: 3, reps: "15–20", rest: "90s" },
   ];
 
-  const cardio = [{ name: "Intervalles 4×4 min Z3", reps: "4×4 min", rest: "2 min", block: "principal" }];
+  const cardio = [{ name: "Intervalles 4×4 min Z3", reps: "4×4 min", rest: "2 min" }];
   const hero = [{ name: "Murph modifié", reps: "1 mile run + 100 pompes + 200 squats + 100 tractions + 1 mile run" }];
-  const marathon = [{ name: "Course tempo", reps: "30 min", block: "principal" }];
-  const mobility = [{ name: "Flow hanches 90/90", reps: "10 min", block: "principal" }];
+  const marathon = [{ name: "Course tempo", reps: "30 min" }];
+  const mobility = [{ name: "Flow hanches 90/90", reps: "10 min" }];
 
-  const getPush = () => equipLevel === "full" ? pushFull : equipLevel === "limited" ? pushLimited : pushNone;
-  const getPull = () => equipLevel === "full" ? pullFull : equipLevel === "limited" ? pullLimited : pullNone;
-  const getLegs = () => equipLevel === "full" ? legsFull : equipLevel === "limited" ? legsLimited : legsNone;
-  const getFullBody = () => equipLevel === "full" ? fullBodyLimited : equipLevel === "limited" ? fullBodyLimited : fullBodyNone;
+  const getFullBody = () => fullBodyNone;
 
   const sessions: AiSession[] = [];
 
   switch (goal) {
     case "hypertrophy":
     case "strength":
-      if (freq === 1) sessions.push(makeSession("Full Body", "muscu", getFullBody(), 0));
-      else {
-        sessions.push(makeSession("Push", "muscu", getPush(), 0));
-        if (freq > 1) sessions.push(makeSession("Pull", "muscu", getPull(), 1));
-        if (freq > 2) sessions.push(makeSession("Legs", "muscu", getLegs(), 2));
-      }
+      sessions.push(makeSession("Full Body", "muscu", getFullBody(), 0));
       break;
     case "fatloss":
     case "maintenance":
@@ -273,7 +257,6 @@ export function generateProgrammeFromAnswers(answers: Answers, week = 0): AiProg
     profile: {
       email,
       prenom,
-      age: undefined,
       objectif: answers["objectif"],
       goal,
       subGoals: [],
@@ -284,7 +267,7 @@ export function generateProgrammeFromAnswers(answers: Answers, week = 0): AiProg
       equipItems: [],
       gym: location === "gym",
       location,
-      injuries: [],
+      injuries,
     },
   };
 }
@@ -324,7 +307,6 @@ export async function generateNextWeekForUser(email: string, answers: Answers) {
 
 /* ===================== Legacy helpers (pour build) ===================== */
 
-// 📌 Simule la récupération des réponses client
 export async function getAnswersForEmail(email: string): Promise<Record<string, string> | null> {
   const filePath = path.join(process.cwd(), "data", "mock-answers.json");
   if (!fs.existsSync(filePath)) return null;
@@ -332,7 +314,6 @@ export async function getAnswersForEmail(email: string): Promise<Record<string, 
   return data[email] || null;
 }
 
-// 📌 Construit un profil cohérent avec la structure utilisée sur la séance
 export function buildProfileFromAnswers(answers: Record<string, string>) {
   const locationRaw = (answers["lieu"] || "").toLowerCase();
   let equipLevel: EquipLevel = "full";
@@ -356,10 +337,12 @@ export function buildProfileFromAnswers(answers: Record<string, string>) {
     lieu: answers["lieu"] || "",
     equipLevel,
     equipItems,
+    injuries: answers["blessures"]
+      ? answers["blessures"].split(",").map((s) => s.trim())
+      : [],
   };
 }
 
-// 📌 Fournit la liste de séances du programme généré ou chargé
 export async function getAiSessions(input: string | AiProgramme) {
   if (typeof input === "string") {
     const saved = await loadProgrammeForUser(input);
@@ -367,3 +350,4 @@ export async function getAiSessions(input: string | AiProgramme) {
   }
   return input.sessions || [];
 }
+
