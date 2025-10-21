@@ -39,13 +39,40 @@ function getBaseUrlFromHeaders() {
   return `${proto}://${host}`;
 }
 
+/** =============== Email depuis la connexion (NextAuth) =============== */
+async function getSignedInEmail(): Promise<string> {
+  try {
+    // @ts-ignore optional deps
+    const { getServerSession } = await import("next-auth");
+    // @ts-ignore optional deps
+    const { authOptions } = await import("../../../lib/auth");
+    const session = await getServerSession(authOptions as any);
+    const mail = (session as any)?.user?.email as string | undefined;
+    if (mail) return mail;
+  } catch {
+    // pas de next-auth installé/configuré => on continue
+  }
+  // fallback cookie si pas de session
+  return cookies().get("app_email")?.value || "";
+}
+
 /** =============== Server Action: Générer (via l'API) =============== */
 async function doAutogenAction(formData: FormData) {
   "use server";
 
   const c = cookies();
   const user = c.get("fc_uid")?.value || "me";
-  const email = c.get("app_email")?.value || "";
+  // On privilégie l'email de session, sinon cookie
+  let email = "";
+  try {
+    // @ts-ignore
+    const { getServerSession } = await import("next-auth");
+    // @ts-ignore
+    const { authOptions } = await import("../../../lib/auth");
+    const session = await getServerSession(authOptions as any);
+    email = ((session as any)?.user?.email as string | undefined) || "";
+  } catch {}
+  if (!email) email = c.get("app_email")?.value || "";
 
   const qp = new URLSearchParams({ user, autogen: "1" });
   if (email) qp.set("email", email);
@@ -70,7 +97,7 @@ async function doAutogenAction(formData: FormData) {
   redirect("/dashboard/profile?success=programme");
 }
 
-/** ================= Helpers: chargement depuis l'API ================= */
+/** ================= Helpers: chargement depuis l’API ================= */
 type ProgrammeFromApi = {
   sessions: AiSessionT[];
   profile?: Partial<ProfileT> & { email?: string };
@@ -100,44 +127,52 @@ export default async function Page({
 }: {
   searchParams?: { success?: string; error?: string };
 }) {
-  const c = cookies();
-
-  // Email connu côté app
-  const emailCookie = c.get("app_email")?.value || "";
+  // 0) Email prioritaire = connexion
+  const signedEmail = await getSignedInEmail();
+  const cookieEmail = cookies().get("app_email")?.value || "";
+  const email = signedEmail || cookieEmail;
 
   // 1) Récupérer le programme IA (et profil) via l’API
-  const prog = await fetchProgrammeFromApi(emailCookie);
+  const prog = await fetchProgrammeFromApi(email);
 
-  // 2) Profil : API -> fallback Sheets si besoin
+  // 2) Profil : API -> si incomplet, on complète via Sheets (email de session)
   let profile: Partial<ProfileT> & { email?: string } = (prog?.profile ?? {}) as any;
-  let preferredEmail = profile?.email || emailCookie;
 
-  if ((!profile?.prenom || !profile?.age) && preferredEmail) {
-    try {
-      const answers = await getAnswersForEmail(preferredEmail);
-      if (answers) {
-        const built = buildProfileFromAnswers(answers);
-        profile = { ...built, ...profile };
-        preferredEmail = profile.email || preferredEmail;
-      }
-    } catch {}
+  if (email) {
+    // si profil incomplet, on enrichit avec Sheets
+    const needPrenom = !(typeof profile?.prenom === "string" && profile.prenom && !/\d/.test(profile.prenom));
+    const needAge = !(typeof profile?.age === "number" && profile.age > 0);
+    const needGoal = !((profile as any)?.goal || (profile as any)?.objectif);
+
+    if (needPrenom || needAge || needGoal) {
+      try {
+        const answers = await getAnswersForEmail(email);
+        if (answers) {
+          const built = buildProfileFromAnswers(answers);
+          profile = { ...built, ...profile, email: built.email || email };
+        }
+      } catch {}
+    }
+
+    // s'il n'y a toujours pas d'email dans le profil, on met celui de la session
+    if (!profile?.email) profile = { ...profile, email };
   }
 
-  // 3) Séances IA à afficher : API -> fallback lib (Sheets) -> fallback getAiSessions
+  // 3) Séances IA à afficher : API -> fallback Sheets -> fallback store
   let aiSessions: AiSessionT[] = Array.isArray(prog?.sessions) ? prog!.sessions : [];
 
-  if ((!aiSessions || aiSessions.length === 0) && preferredEmail) {
+  if ((!aiSessions || aiSessions.length === 0) && email) {
     try {
-      const answers = await getAnswersForEmail(preferredEmail);
+      const answers = await getAnswersForEmail(email);
       if (answers) {
         aiSessions = generateProgrammeFromAnswers(answers).sessions;
       }
     } catch {}
   }
 
-  if ((!aiSessions || aiSessions.length === 0) && preferredEmail) {
+  if ((!aiSessions || aiSessions.length === 0) && email) {
     try {
-      aiSessions = await getAiSessions(preferredEmail);
+      aiSessions = await getAiSessions(email);
     } catch {}
   }
 
@@ -160,14 +195,14 @@ export default async function Page({
     ];
   }
 
-  // Infos profil affichées
+  // ====== Affichage "Mes infos"
   const clientPrenom =
     typeof profile?.prenom === "string" && profile.prenom && !/\d/.test(profile.prenom) ? profile.prenom : "";
   const clientAge = typeof profile?.age === "number" && profile.age > 0 ? profile.age : undefined;
-  const clientEmailDisplay = typeof profile?.email === "string" && profile.email ? profile.email : preferredEmail;
+  const clientEmailDisplay = String(profile?.email || email || "");
 
   const goalLabel = (() => {
-    const g = String((profile as any)?.goal || "").toLowerCase();
+    const raw = String((profile as any)?.goal || (profile as any)?.objectif || "").toLowerCase();
     const map: Record<string, string> = {
       hypertrophy: "Hypertrophie / Esthétique",
       fatloss: "Perte de gras",
@@ -175,8 +210,13 @@ export default async function Page({
       endurance: "Endurance / Cardio",
       mobility: "Mobilité / Souplesse",
       general: "Forme générale",
+      maintenance: "Maintien / Santé",
+      hero: "WOD Héros",
+      marathon: "Course (semi / marathon)",
     };
-    return map[g] || "Non défini";
+    if (map[raw]) return map[raw];
+    if (!raw) return "Non défini";
+    return raw;
   })();
 
   const questionnaireUrl = (() => {
