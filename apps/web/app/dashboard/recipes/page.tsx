@@ -36,7 +36,7 @@ function parseCsv(value?: string | string[]): string[] {
 function seededPRNG(seed: number) { let s = seed >>> 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 2 ** 32); }
 function seededShuffle<T>(arr: T[], seed: number): T[] {
   const rand = seededPRNG(seed); const a = arr.slice();
-  for (let i = a.length - 1; i > 0; i++) { const j = Math.floor(rand() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
   return a;
 }
 function pickRandomSeeded<T>(arr: T[], n: number, seed: number): T[] {
@@ -95,22 +95,6 @@ const HEALTHY_BASE: Recipe[] = [
   { id:"tofu-brocoli-wok", title:"Tofu sauté au brocoli (wok)", subtitle:"Sauce soja-sésame",
     kcal:530, timeMin:15, tags:["vegan","rapide"], goals:["sèche","equilibre"], minPlan:"BASIC",
     ingredients:["tofu ferme","brocoli","sauce soja","ail","gingembre","graines de sésame","huile","maïzena"], steps:["Saisir, lier, napper"] },
-];
-
-/* ---- base Bar à prot' (même type Recipe, pour réutiliser Card & les actions) ---- */
-const SHAKES_BASE: Recipe[] = [
-  { id:"shake-choco-banane", title:"Choco-banane protéiné", subtitle:"Lait, whey chocolat",
-    kcal:360, timeMin:5, tags:["shake","rapide"], goals:["prise de masse","equilibre"], minPlan:"BASIC",
-    ingredients:["banane","lait (ou végétal)","whey chocolat","beurre de cacahuète","glaçons"], steps:["Mixer 30–40 s","Servir bien frais"] },
-  { id:"shake-vanille-cafe", title:"Vanille café frappé", subtitle:"Skyr, vanille",
-    kcal:280, timeMin:5, tags:["shake","café"], goals:["sèche","equilibre"], minPlan:"BASIC",
-    ingredients:["skyr","lait (ou végétal)","expresso froid","vanille","édulcorant (option)","glaçons"], steps:["Verser au blender","Mixer et déguster"] },
-  { id:"shake-fruits-rouges", title:"Fruits rouges & yaourt grec", subtitle:"Frais & onctueux",
-    kcal:320, timeMin:5, tags:["shake","fruité"], goals:["equilibre"], minPlan:"BASIC",
-    ingredients:["yaourt grec 0%","lait (ou végétal)","fruits rouges surgelés","whey neutre","miel (option)"], steps:["Mixer fin","Goûter et ajuster"] },
-  { id:"shake-tropical", title:"Tropical coco", subtitle:"Mangue, coco",
-    kcal:340, timeMin:5, tags:["shake","fruité"], goals:["equilibre"], minPlan:"BASIC",
-    ingredients:["lait de coco léger","mangue","ananas","whey neutre ou pois","citron vert"], steps:["Mixer 40 s","Servir avec glaçons"] },
 ];
 
 /* ========= Mode IA pour PLUS/PREMIUM ========= */
@@ -395,9 +379,6 @@ export default async function Page({
   const healthyPick = pickRandomSeeded(healthy, 4, seed);
   const personalizedPick = pickRandomSeeded(personalized, 6, seed);
 
-  // Bar à prot' : on pioche dans SHAKES_BASE (même Card)
-  const shakesPick = pickRandomSeeded(SHAKES_BASE, 4, seed + 7);
-
   // QS gardés (pour Voir la recette)
   const qsParts: string[] = [];
   if (hasKcalTarget) qsParts.push(`kcal=${kcal}`);
@@ -524,20 +505,20 @@ export default async function Page({
         </div>
 
         {/* =================== Vos recettes enregistrées =================== */}
-        {readSaved().length > 0 && (
+        {saved.length > 0 && (
           <section className="section" style={{ marginTop: 12 }}>
             <div className="section-head" style={{ marginBottom: 8 }}>
               <h2>Vos recettes enregistrées</h2>
             </div>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-2">
-              {readSaved().map((s) => (
+              {saved.map((s) => (
                 <article key={s.id} className="card" style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
                   <a href={`/dashboard/recipes/${s.id}`} className="font-semibold" style={{ textDecoration:"none", color:"var(--text,#111)" }}>
                     {s.title}
                   </a>
                   <form action={removeRecipeAction}>
                     <input type="hidden" name="id" value={s.id} />
-                    <input type="hidden" name="returnTo" value={`/dashboard/recipes${baseQS}`} />
+                    <input type="hidden" name="returnTo" value={currentUrl} />
                     <button type="submit" className="btn btn-outline" style={{ color: "var(--text, #111)" }}>
                       Retirer
                     </button>
@@ -558,7 +539,7 @@ export default async function Page({
                 r={r}
                 detailQS={encode(r)}
                 isSaved={savedSet.has(r.id)}
-                currentUrl={`/dashboard/recipes${baseQS}`}
+                currentUrl={currentUrl}
               />
             ))}
           </div>
@@ -585,7 +566,7 @@ export default async function Page({
                     r={r}
                     detailQS={encode(r)}
                     isSaved={savedSet.has(r.id)}
-                    currentUrl={`/dashboard/recipes${baseQS}`}
+                    currentUrl={currentUrl}
                   />
                 ))}
               </div>
@@ -597,25 +578,6 @@ export default async function Page({
             )}
           </section>
         )}
-
-        {/* =================== Bar à prot’ — Boissons protéinées =================== */}
-        <section className="section" style={{ marginTop: 24 }}>
-          <div className="section-head" style={{ marginBottom: 8 }}>
-            <h2>Bar à prot’ — Boissons protéinées</h2>
-          </div>
-
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
-            {shakesPick.map((r) => (
-              <Card
-                key={r.id}
-                r={r}
-                detailQS={encode(r)}
-                isSaved={savedSet.has(r.id)}
-                currentUrl={`/dashboard/recipes${baseQS}`}
-              />
-            ))}
-          </div>
-        </section>
       </div>
     </>
   );
