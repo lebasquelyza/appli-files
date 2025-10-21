@@ -298,6 +298,7 @@ export async function getAnswersForEmail(email: string): Promise<Record<string, 
   return data[email] || null;
 }
 
+/* ===================== Profile Builder corrigé ===================== */
 export function buildProfileFromAnswers(answers: Record<string, string>) {
   const locationRaw = (answers["lieu"] || "").toLowerCase();
   let equipLevel: EquipLevel = "full";
@@ -313,6 +314,10 @@ export function buildProfileFromAnswers(answers: Record<string, string>) {
     equipItems = ["machines", "barres", "haltères"];
   }
 
+  const freq = Math.max(1, Math.min(7, parseInt(answers["disponibilite"] || "3") || 3));
+  const goal = mapGoal(answers["objectif"]);
+  const { timePerSession } = computeSessionParams(goal, freq);
+
   return {
     email: answers["email"] || "",
     prenom: answers["prenom"] || answers["prénom"] || "Coaché",
@@ -321,6 +326,7 @@ export function buildProfileFromAnswers(answers: Record<string, string>) {
     lieu: answers["lieu"] || "",
     equipLevel,
     equipItems,
+    timePerSession,
     injuries: answers["blessures"]
       ? answers["blessures"].split(",").map((s) => s.trim())
       : [],
@@ -328,10 +334,7 @@ export function buildProfileFromAnswers(answers: Record<string, string>) {
 }
 
 /* ===================== getAiSessions + Next Week ===================== */
-
-// 📌 getAiSessions avec paramètre facultatif
 export async function getAiSessions(input?: string | AiProgramme) {
-  // Aucun argument → fallback email par défaut ou vide
   if (!input) {
     const email = process.env.DEFAULT_TEST_EMAIL || "test@example.com";
     const saved = await loadProgrammeForUser(email);
@@ -346,7 +349,6 @@ export async function getAiSessions(input?: string | AiProgramme) {
   return input.sessions || [];
 }
 
-// 📌 Génération de la semaine suivante avec progression IA
 export async function generateNextWeekForUser(email: string, answers: Answers) {
   const saved = await loadProgrammeForUser(email);
   const nextWeek = saved ? saved.week + 1 : 0;
