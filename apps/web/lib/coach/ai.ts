@@ -51,16 +51,18 @@ export type Profile = {
   email: string;
   prenom?: string;
   age?: number;
-  goal: Goal;
-  subGoals: string[];
-  level: "debutant" | "intermediaire" | "avance";
-  freq: number;
-  timePerSession: number;
+  objectif?: string;
+  lieu?: string;
+  goal?: Goal;
+  subGoals?: string[];
+  level?: "debutant" | "intermediaire" | "avance";
+  freq?: number;
+  timePerSession?: number;
   equipLevel: EquipLevel;
-  equipItems: string[];
-  gym: boolean;
-  location: "gym" | "home" | "outdoor" | "mixed" | "box";
-  injuries: string[];
+  equipItems?: string[];
+  gym?: boolean;
+  location?: "gym" | "home" | "outdoor" | "mixed" | "box";
+  injuries?: string[];
 };
 
 export type AiProgramme = {
@@ -202,7 +204,7 @@ export function generateProgrammeFromAnswers(answers: Answers, week = 0): AiProg
     };
   };
 
-  /* Exercices de base */
+  /* Exercices */
   const pushFull = [{ name: "Développé couché barre", sets: 4, reps: "6–10", rest: "90s", block: "principal" }];
   const pushLimited = [{ name: "Pompes lestées", sets: 4, reps: "8–12", rest: "90s", block: "principal" }];
   const pushNone = [{ name: "Pompes", sets: 4, reps: "max–2", rest: "90s", block: "principal" }];
@@ -272,6 +274,7 @@ export function generateProgrammeFromAnswers(answers: Answers, week = 0): AiProg
       email,
       prenom,
       age: undefined,
+      objectif: answers["objectif"],
       goal,
       subGoals: [],
       level: "debutant",
@@ -329,14 +332,30 @@ export async function getAnswersForEmail(email: string): Promise<Record<string, 
   return data[email] || null;
 }
 
-// 📌 Construit un profil minimal à partir des réponses
+// 📌 Construit un profil cohérent avec la structure utilisée sur la séance
 export function buildProfileFromAnswers(answers: Record<string, string>) {
+  const locationRaw = (answers["lieu"] || "").toLowerCase();
+  let equipLevel: EquipLevel = "full";
+  let equipItems: string[] = [];
+
+  if (locationRaw.includes("dehors") || locationRaw.includes("extérieur")) {
+    equipLevel = "none";
+  } else if (locationRaw.includes("maison") || locationRaw.includes("appartement")) {
+    equipLevel = "limited";
+    equipItems = ["haltères légers", "élastiques"];
+  } else if (locationRaw.includes("salle")) {
+    equipLevel = "full";
+    equipItems = ["machines", "barres", "haltères"];
+  }
+
   return {
     email: answers["email"] || "",
     prenom: answers["prenom"] || answers["prénom"] || "Coaché",
     age: answers["age"] ? parseInt(answers["age"]) : undefined,
     objectif: answers["objectif"] || "",
     lieu: answers["lieu"] || "",
+    equipLevel,
+    equipItems,
   };
 }
 
