@@ -203,36 +203,69 @@ export function generateProgrammeFromAnswers(answers: Answers, week = 0): AiProg
   };
 
   /* Exercices de base */
-  const pushFull = [{ name: "Développé couché barre", sets: 4, reps: "6–10", rest: "90s", block: "principal" }];
-  const pushLimited = [{ name: "Pompes lestées", sets: 4, reps: "8–12", rest: "90s", block: "principal" }];
-  const pushNone = [{ name: "Pompes", sets: 4, reps: "max–2", rest: "90s", block: "principal" }];
+  const pushFull: NormalizedExercise[] = [
+    { name: "Développé couché barre", sets: 4, reps: "6–10", rest: "90s", block: "principal" },
+  ];
+  const pushLimited: NormalizedExercise[] = [
+    { name: "Pompes lestées", sets: 4, reps: "8–12", rest: "90s", block: "principal" },
+  ];
+  const pushNone: NormalizedExercise[] = [
+    { name: "Pompes", sets: 4, reps: "max–2", rest: "90s", block: "principal" },
+  ];
 
-  const pullFull = [{ name: "Tractions lestées", sets: 4, reps: "6–10", rest: "90s", block: "principal" }];
-  const pullLimited = [{ name: "Rowing haltère", sets: 4, reps: "10–15", rest: "90s", block: "principal" }];
-  const pullNone = [{ name: "Superman hold", sets: 3, reps: "30s", rest: "60s", block: "principal" }];
+  const pullFull: NormalizedExercise[] = [
+    { name: "Tractions lestées", sets: 4, reps: "6–10", rest: "90s", block: "principal" },
+  ];
+  const pullLimited: NormalizedExercise[] = [
+    { name: "Rowing haltère", sets: 4, reps: "10–15", rest: "90s", block: "principal" },
+  ];
+  const pullNone: NormalizedExercise[] = [
+    { name: "Superman hold", sets: 3, reps: "30s", rest: "60s", block: "principal" },
+  ];
 
-  const legsFull = [{ name: "Back squat", sets: 4, reps: "6–10", rest: "120s", block: "principal" }];
-  const legsLimited = [{ name: "Goblet squat", sets: 4, reps: "10–12", rest: "90s", block: "principal" }];
-  const legsNone = [{ name: "Air squat", sets: 4, reps: "20", rest: "60s", block: "principal" }];
+  const legsFull: NormalizedExercise[] = [
+    { name: "Back squat", sets: 4, reps: "6–10", rest: "120s", block: "principal" },
+  ];
+  const legsLimited: NormalizedExercise[] = [
+    { name: "Goblet squat", sets: 4, reps: "10–12", rest: "90s", block: "principal" },
+  ];
+  const legsNone: NormalizedExercise[] = [
+    { name: "Air squat", sets: 4, reps: "20", rest: "60s", block: "principal" },
+  ];
 
-  const fullBodyLimited = [
+  const fullBodyFull: NormalizedExercise[] = [
+    { name: "Back squat", sets: 3, reps: "6–10", rest: "120s", block: "principal" },
+    { name: "Développé couché barre", sets: 3, reps: "6–10", rest: "90s", block: "principal" },
+    { name: "Rowing barre", sets: 3, reps: "8–12", rest: "90s", block: "principal" },
+  ];
+
+  const fullBodyLimited: NormalizedExercise[] = [
     { name: "Goblet squat", sets: 3, reps: "12", rest: "90s", block: "principal" },
     { name: "Pompes", sets: 3, reps: "max–2", rest: "90s", block: "principal" },
   ];
-  const fullBodyNone = [
+  const fullBodyNone: NormalizedExercise[] = [
     { name: "Pompes", sets: 3, reps: "max–2", rest: "90s", block: "principal" },
     { name: "Squats", sets: 3, reps: "15–20", rest: "90s", block: "principal" },
   ];
 
-  const cardio = [{ name: "Intervalles 4×4 min Z3", reps: "4×4 min", rest: "2 min", block: "principal" }];
-  const hero = [{ name: "Murph modifié", reps: "1 mile run + 100 pompes + 200 squats + 100 tractions + 1 mile run" }];
-  const marathon = [{ name: "Course tempo", reps: "30 min", block: "principal" }];
-  const mobility = [{ name: "Flow hanches 90/90", reps: "10 min", block: "principal" }];
+  const cardio: NormalizedExercise[] = [
+    { name: "Intervalles 4×4 min Z3", reps: "4×4 min", rest: "2 min", block: "principal" },
+  ];
+  const hero: NormalizedExercise[] = [
+    { name: "Murph modifié", reps: "1 mile run + 100 pompes + 200 squats + 100 tractions + 1 mile run" },
+  ];
+  const marathon: NormalizedExercise[] = [
+    { name: "Course tempo", reps: "30 min", block: "principal" },
+  ];
+  const mobility: NormalizedExercise[] = [
+    { name: "Flow hanches 90/90", reps: "10 min", block: "principal" },
+  ];
 
-  const getPush = () => equipLevel === "full" ? pushFull : equipLevel === "limited" ? pushLimited : pushNone;
-  const getPull = () => equipLevel === "full" ? pullFull : equipLevel === "limited" ? pullLimited : pullNone;
-  const getLegs = () => equipLevel === "full" ? legsFull : equipLevel === "limited" ? legsLimited : legsNone;
-  const getFullBody = () => equipLevel === "full" ? fullBodyLimited : equipLevel === "limited" ? fullBodyLimited : fullBodyNone;
+  const getPush = () => (equipLevel === "full" ? pushFull : equipLevel === "limited" ? pushLimited : pushNone);
+  const getPull = () => (equipLevel === "full" ? pullFull : equipLevel === "limited" ? pullLimited : pullNone);
+  const getLegs = () => (equipLevel === "full" ? legsFull : equipLevel === "limited" ? legsLimited : legsNone);
+  const getFullBody = () =>
+    equipLevel === "full" ? fullBodyFull : equipLevel === "limited" ? fullBodyLimited : fullBodyNone;
 
   const sessions: AiSession[] = [];
 
@@ -345,6 +378,6 @@ export async function getAiSessions(input: string | AiProgramme) {
   if (typeof input === "string") {
     const saved = await loadProgrammeForUser(input);
     return saved?.programme?.sessions || [];
-  }
+    }
   return input.sessions || [];
 }
