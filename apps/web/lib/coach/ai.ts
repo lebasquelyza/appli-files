@@ -319,10 +319,26 @@ export function generateProgrammeFromAnswers(answers: Answers, week = 0): AiProg
   };
 }
 
-/* ===================== Sauvegarde / chargement ===================== */
-const PROGRAMMES_DIR = path.join(process.cwd(), "data", "programmes");
-if (!fs.existsSync(PROGRAMMES_DIR)) fs.mkdirSync(PROGRAMMES_DIR, { recursive: true });
+/* ===================== FS utils robustes (Netlify-friendly) ===================== */
+const PROGRAMMES_DIR =
+  process.env.NODE_ENV === "production"
+    ? path.join("/tmp", "programmes")
+    : path.join(process.cwd(), "data", "programmes");
 
+function ensureDirSafe(dir = PROGRAMMES_DIR) {
+  try {
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function safeFileName(email: string) {
+  return email.replace(/[^a-z0-9._-]+/gi, "_").toLowerCase();
+}
+
+/* ===================== Sauvegarde / chargement ===================== */
 export type SavedProgramme = {
   email: string;
   week: number;
@@ -331,17 +347,28 @@ export type SavedProgramme = {
 };
 
 export async function saveProgrammeForUser(email: string, programme: AiProgramme, week = 0) {
-  const filePath = path.join(PROGRAMMES_DIR, `${email}.json`);
-  const payload: SavedProgramme = { email, week, programme, createdAt: new Date().toISOString() };
-  fs.writeFileSync(filePath, JSON.stringify(payload, null, 2));
-  return true;
+  try {
+    ensureDirSafe();
+    const filePath = path.join(PROGRAMMES_DIR, `${safeFileName(email)}.json`);
+    const payload: SavedProgramme = { email, week, programme, createdAt: new Date().toISOString() };
+    fs.writeFileSync(filePath, JSON.stringify(payload, null, 2));
+    return true;
+  } catch (err) {
+    console.error("saveProgrammeForUser failed:", err);
+    return false;
+  }
 }
 
 export async function loadProgrammeForUser(email: string): Promise<SavedProgramme | null> {
-  const filePath = path.join(PROGRAMMES_DIR, `${email}.json`);
-  if (!fs.existsSync(filePath)) return null;
-  const raw = fs.readFileSync(filePath, "utf-8");
-  return JSON.parse(raw) as SavedProgramme;
+  try {
+    const filePath = path.join(PROGRAMMES_DIR, `${safeFileName(email)}.json`);
+    if (!fs.existsSync(filePath)) return null;
+    const raw = fs.readFileSync(filePath, "utf-8");
+    return JSON.parse(raw) as SavedProgramme;
+  } catch (err) {
+    console.error("loadProgrammeForUser failed:", err);
+    return null;
+  }
 }
 
 export async function generateNextWeekForUser(email: string, answers: Answers) {
@@ -356,10 +383,15 @@ export async function generateNextWeekForUser(email: string, answers: Answers) {
 
 // 📌 Simule la récupération des réponses client
 export async function getAnswersForEmail(email: string): Promise<Record<string, string> | null> {
-  const filePath = path.join(process.cwd(), "data", "mock-answers.json");
-  if (!fs.existsSync(filePath)) return null;
-  const data = JSON.parse(fs.readFileSync(filePath, "utf-8"));
-  return data[email] || null;
+  try {
+    const filePath = path.join(process.cwd(), "data", "mock-answers.json");
+    if (!fs.existsSync(filePath)) return null;
+    const data = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+    return data[email] || null;
+  } catch (err) {
+    console.error("getAnswersForEmail failed:", err);
+    return null;
+  }
 }
 
 // 📌 Construit un profil minimal à partir des réponses
@@ -378,6 +410,6 @@ export async function getAiSessions(input: string | AiProgramme) {
   if (typeof input === "string") {
     const saved = await loadProgrammeForUser(input);
     return saved?.programme?.sessions || [];
-    }
+  }
   return input.sessions || [];
 }
