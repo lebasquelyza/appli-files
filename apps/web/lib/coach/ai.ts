@@ -89,9 +89,15 @@ export type Profile = {
 const API_BASE =
   process.env.FILES_COACHING_API_BASE || "https://files-coaching.com";
 const API_KEY = process.env.FILES_COACHING_API_KEY || "";
-const SHEET_ID = process.env.SHEET_ID || "";
+
+/**
+ * Fallbacks codés en dur avec tes valeurs.
+ * Les variables d'env (si présentes) restent prioritaires.
+ */
+const SHEET_ID =
+  process.env.SHEET_ID || "1XH-BOUj4tXAVy49ONBIdLiWM97hQ-Fg8h5-OTRGvHC4";
 const SHEET_RANGE = process.env.SHEET_RANGE || "Réponses!A1:K";
-const SHEET_GID = process.env.SHEET_GID || "";
+const SHEET_GID = process.env.SHEET_GID || "1160551014";
 
 /* ===================== Utils ===================== */
 export function norm(s: string) {
