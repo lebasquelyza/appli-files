@@ -1,3 +1,4 @@
+// apps/web/app/api/food/off/route.ts
 import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -19,49 +20,105 @@ type Candidate = {
   details?: string;
 };
 
-async function fetchOFFByBarcode(barcode: string): Promise<Candidate | null> {
-  const url = `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json`;
-  const r = await fetch(url, { headers: { "user-agent": "files-coaching/1.0" }, cache: "no-store" });
-  if (!r.ok) return null;
-  const j = await r.json().catch(() => null);
-  const p = j?.product;
+const UA = { "user-agent": "files-coaching/1.0 (+https://files.coach)" };
+
+/** Helpers communs */
+function normNum(v: any) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : undefined;
+}
+function makeCandidate(p: any): Candidate | null {
   if (!p) return null;
-  const kcal100 = p.nutriments?.["energy-kcal_100g"];
+  const kcal100 = p.nutriments?.["energy-kcal_100g"] ?? p.nutriments?.energy_kcal_100g ?? p.nutriments?.energy_kcal_value;
   const prot100 = p.nutriments?.["proteins_100g"];
-  const name = p.product_name || p.generic_name || p.brands || "Produit OFF";
+  const label =
+    p.product_name ||
+    p.generic_name ||
+    p.brands ||
+    p.categories?.split(",")?.[0] ||
+    p._keywords?.[0] ||
+    "Produit OFF";
+
   if (kcal100 == null && prot100 == null) return null;
+
   return {
-    label: String(name),
-    kcal_per_100g: Math.round(Number(kcal100 ?? 0)),
-    proteins_g_per_100g: prot100 != null ? Number(prot100) : null,
+    label: String(label),
+    kcal_per_100g: Math.round(normNum(kcal100) ?? 0),
+    proteins_g_per_100g: prot100 != null ? normNum(prot100)! : null,
     source: "OFF",
     details: p.brands ? `Marque: ${p.brands}` : undefined,
   };
 }
 
-async function searchOFFByName(q: string): Promise<Candidate[]> {
-  const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(q)}&search_simple=1&action=process&json=1&page_size=5`;
-  const r = await fetch(url, { headers: { "user-agent": "files-coaching/1.0" }, cache: "no-store" });
-  if (!r.ok) return [];
+/** Requêtes OFF */
+async function fetchByBarcode(barcode: string): Promise<Candidate | null> {
+  const url = `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json`;
+  const r = await fetch(url, { headers: UA, cache: "no-store" });
+  if (!r.ok) return null;
   const j = await r.json().catch(() => null);
-  const out: Candidate[] = [];
-  for (const p of j?.products ?? []) {
-    const kcal100 = p.nutriments?.["energy-kcal_100g"];
-    const prot100 = p.nutriments?.["proteins_100g"];
-    const name = p.product_name || p.generic_name || p.brands || p.categories?.split(",")?.[0] || q;
-    if (kcal100 != null || prot100 != null) {
-      out.push({
-        label: String(name),
-        kcal_per_100g: Math.round(Number(kcal100 ?? 0)),
-        proteins_g_per_100g: prot100 != null ? Number(prot100) : null,
-        source: "OFF",
-        details: p.brands ? `Marque: ${p.brands}` : undefined,
-      });
-    }
-  }
-  return out.slice(0, 5);
+  return makeCandidate(j?.product) || null;
 }
 
+async function searchPl(domain: "world" | "fr", q: string, size = 20): Promise<Candidate[]> {
+  const url = `https://${domain}.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(q)}&search_simple=1&action=process&json=1&page_size=${size}&sort_by=unique_scans_n`;
+  const r = await fetch(url, { headers: UA, cache: "no-store" });
+  if (!r.ok) return [];
+  const j = await r.json().catch(() => null);
+  const arr = (j?.products || []) as any[];
+  const out: Candidate[] = [];
+  for (const p of arr) {
+    const c = makeCandidate(p);
+    if (c) out.push(c);
+  }
+  return out;
+}
+
+async function searchV2(domain: "world" | "fr", q: string, size = 20): Promise<Candidate[]> {
+  const fields = [
+    "product_name",
+    "generic_name",
+    "brands",
+    "categories",
+    "nutriments.energy-kcal_100g",
+    "nutriments.proteins_100g",
+  ].join(",");
+  const url = `https://${domain}.openfoodfacts.org/api/v2/search?search_text=${encodeURIComponent(q)}&page_size=${size}&fields=${encodeURIComponent(fields)}&sort_by=unique_scans_n`;
+  const r = await fetch(url, { headers: UA, cache: "no-store" });
+  if (!r.ok) return [];
+  const j = await r.json().catch(() => null);
+  const arr = (j?.products || []) as any[];
+  const out: Candidate[] = [];
+  for (const p of arr) {
+    const c = makeCandidate(p);
+    if (c) out.push(c);
+  }
+  return out;
+}
+
+/** Traductions simples FR→EN si 0 résultat */
+function translateQueryIfNeeded(q: string): string[] {
+  const base = q.trim();
+  const lower = base.toLowerCase();
+
+  const map: Array<[RegExp, string]> = [
+    [/^riz basmati$/, "basmati rice"],
+    [/^riz jasmine$/, "jasmine rice"],
+    [/^riz$/, "rice"],
+    [/poulet/g, "chicken"],
+    [/boeuf|bœuf/g, "beef"],
+    [/saumon/g, "salmon"],
+    [/yaourt/g, "yogurt"],
+    [/fromage/g, "cheese"],
+  ];
+
+  let en = lower;
+  for (const [re, rep] of map) en = en.replace(re, rep);
+
+  const uniq = Array.from(new Set([base, en])).filter(Boolean);
+  return uniq;
+}
+
+/** Handler */
 export async function POST(req: NextRequest) {
   try {
     const ct = (req.headers.get("content-type") || "").toLowerCase();
@@ -73,14 +130,44 @@ export async function POST(req: NextRequest) {
 
     if (!barcode && !query) return jsonError(400, "barcode ou query requis");
 
+    // 1) Barcode direct
     if (barcode) {
-      const one = await fetchOFFByBarcode(barcode);
+      const one = await fetchByBarcode(barcode);
       return NextResponse.json({ candidates: one ? [one] : [] }, { headers: { "Cache-Control": "no-store" } });
-    } else {
-      const list = await searchOFFByName(query);
-      return NextResponse.json({ candidates: list }, { headers: { "Cache-Control": "no-store" } });
     }
+
+    // 2) Recherche par nom — on tente plusieurs variantes/domains/endpoints
+    const queries = translateQueryIfNeeded(query);
+    const bag: Candidate[] = [];
+
+    for (const q of queries) {
+      // world + fr, search.pl puis api v2
+      const r1 = await searchPl("world", q);
+      bag.push(...r1);
+      if (bag.length >= 5) break;
+
+      const r2 = await searchPl("fr", q);
+      bag.push(...r2);
+      if (bag.length >= 5) break;
+
+      const r3 = await searchV2("world", q);
+      bag.push(...r3);
+      if (bag.length >= 5) break;
+
+      const r4 = await searchV2("fr", q);
+      bag.push(...r4);
+      if (bag.length >= 5) break;
+    }
+
+    // Déduplique grossièrement par (label,kcal,prot)
+    const key = (c: Candidate) => `${c.label}::${c.kcal_per_100g}::${c.proteins_g_per_100g ?? -1}`;
+    const uniqMap = new Map<string, Candidate>();
+    for (const c of bag) if (!uniqMap.has(key(c))) uniqMap.set(key(c), c);
+    const uniq = Array.from(uniqMap.values()).slice(0, 10);
+
+    return NextResponse.json({ candidates: uniq }, { headers: { "Cache-Control": "no-store" } });
   } catch (e: any) {
     return jsonError(500, e?.message || "internal_error");
   }
 }
+
