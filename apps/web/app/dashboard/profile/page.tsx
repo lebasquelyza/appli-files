@@ -275,18 +275,6 @@ export default async function Page({
         </div>
       </section>
 
-      {/* ===== Bloc PS ===== */}
-      <section className="section" style={{ marginTop: 12 }}>
-        <div className="card text-sm" style={{ lineHeight: 1.5 }}>
-          <b>PS&nbsp;:</b>{" "}
-          Si les infos ci-dessus ne sont pas à jour, mets à jour le{" "}
-          <a href={questionnaireUrl} className="underline">
-            questionnaire
-          </a>{" "}
-          pour affiner ton programme… ;)
-        </div>
-      </section>
-
       {/* ===== Mon programme (IA SEULEMENT) ===== */}
       <section className="section" style={{ marginTop: 12 }}>
         <div
@@ -376,6 +364,30 @@ export default async function Page({
             })}
           </ul>
         )}
+      </section>
+
+      {/* ===== Bloc pas (steps) — bas de page ===== */}
+      <section className="section" style={{ marginTop: 16 }}>
+        <div className="card">
+          <h3 className="text-sm" style={{ fontWeight: 700, marginBottom: 8 }}>Étapes</h3>
+          <ol className="list-none m-0 p-0 flex flex-col sm:flex-row gap-3 sm:gap-6">
+            <li className="flex items-start gap-2">
+              <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-gray-200 bg-white text-xs font-medium">1</span>
+              <span className="text-sm">
+                Remplis (ou mets à jour) le{" "}
+                <a href={questionnaireUrl} className="underline">questionnaire</a>.
+              </span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-gray-200 bg-white text-xs font-medium">2</span>
+              <span className="text-sm">Clique sur <b>⚙️ Générer</b> pour créer/mettre à jour ton programme.</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-gray-200 bg-white text-xs font-medium">3</span>
+              <span className="text-sm">Ouvre une séance et suis les consignes. Bonne session !</span>
+            </li>
+          </ol>
+        </div>
       </section>
     </div>
   );
