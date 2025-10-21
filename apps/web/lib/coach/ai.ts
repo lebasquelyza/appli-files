@@ -298,7 +298,7 @@ export async function getAnswersForEmail(email: string): Promise<Record<string, 
   return data[email] || null;
 }
 
-/* ===================== Profile Builder corrigé ===================== */
+/* ===================== Profile Builder ===================== */
 export function buildProfileFromAnswers(answers: Record<string, string>) {
   const locationRaw = (answers["lieu"] || "").toLowerCase();
   let equipLevel: EquipLevel = "full";
@@ -333,26 +333,41 @@ export function buildProfileFromAnswers(answers: Record<string, string>) {
   };
 }
 
-/* ===================== getAiSessions + Next Week ===================== */
+/* ===================== getAiSessions + Next Week (sécurisé) ===================== */
 export async function getAiSessions(input?: string | AiProgramme) {
-  if (!input) {
-    const email = process.env.DEFAULT_TEST_EMAIL || "test@example.com";
-    const saved = await loadProgrammeForUser(email);
-    return saved?.programme?.sessions || [];
-  }
+  try {
+    if (!input) {
+      const email = process.env.DEFAULT_TEST_EMAIL || "test@example.com";
+      const saved = await loadProgrammeForUser(email);
+      return saved?.programme?.sessions || [];
+    }
 
-  if (typeof input === "string") {
-    const saved = await loadProgrammeForUser(input);
-    return saved?.programme?.sessions || [];
-  }
+    if (typeof input === "string") {
+      if (!input || !input.includes("@")) return [];
+      const saved = await loadProgrammeForUser(input);
+      return saved?.programme?.sessions || [];
+    }
 
-  return input.sessions || [];
+    if (input && Array.isArray(input.sessions)) {
+      return input.sessions;
+    }
+
+    return [];
+  } catch (err) {
+    console.error("[getAiSessions] ERREUR :", err);
+    return [];
+  }
 }
 
 export async function generateNextWeekForUser(email: string, answers: Answers) {
-  const saved = await loadProgrammeForUser(email);
-  const nextWeek = saved ? saved.week + 1 : 0;
-  const newProg = generateProgrammeFromAnswers(answers, nextWeek);
-  await saveProgrammeForUser(email, newProg, nextWeek);
-  return newProg;
+  try {
+    const saved = await loadProgrammeForUser(email);
+    const nextWeek = saved ? saved.week + 1 : 0;
+    const newProg = generateProgrammeFromAnswers(answers, nextWeek);
+    await saveProgrammeForUser(email, newProg, nextWeek);
+    return newProg;
+  } catch (err) {
+    console.error("[generateNextWeekForUser] ERREUR :", err);
+    return null;
+  }
 }
