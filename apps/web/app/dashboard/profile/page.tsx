@@ -39,7 +39,7 @@ function getBaseUrlFromHeaders() {
   return `${proto}://${host}`;
 }
 
-/** =============== Email depuis la connexion (NextAuth) =============== */
+/** =============== Email via NextAuth (session) =============== */
 async function getSignedInEmail(): Promise<string> {
   try {
     // @ts-ignore optional deps
@@ -49,10 +49,7 @@ async function getSignedInEmail(): Promise<string> {
     const session = await getServerSession(authOptions as any);
     const mail = (session as any)?.user?.email as string | undefined;
     if (mail) return mail;
-  } catch {
-    // pas de next-auth installé/configuré => on continue
-  }
-  // fallback cookie si pas de session
+  } catch {}
   return cookies().get("app_email")?.value || "";
 }
 
@@ -62,7 +59,7 @@ async function doAutogenAction(formData: FormData) {
 
   const c = cookies();
   const user = c.get("fc_uid")?.value || "me";
-  // On privilégie l'email de session, sinon cookie
+
   let email = "";
   try {
     // @ts-ignore
@@ -97,10 +94,10 @@ async function doAutogenAction(formData: FormData) {
   redirect("/dashboard/profile?success=programme");
 }
 
-/** ================= Helpers: chargement depuis l’API ================= */
+/** ================= Helpers: chargement depuis l'API ================= */
 type ProgrammeFromApi = {
   sessions: AiSessionT[];
-  profile?: Partial<ProfileT> & { email?: string };
+  profile?: Partial<ProfileT> & { email?: string; objectif?: string; lieu?: string };
 };
 
 async function fetchProgrammeFromApi(email?: string): Promise<ProgrammeFromApi | null> {
@@ -128,37 +125,37 @@ export default async function Page({
   searchParams?: { success?: string; error?: string };
 }) {
   // 0) Email prioritaire = connexion
-  const signedEmail = await getSignedInEmail();
+  const emailBySession = await getSignedInEmail();
   const cookieEmail = cookies().get("app_email")?.value || "";
-  const email = signedEmail || cookieEmail;
+  const email = emailBySession || cookieEmail;
 
   // 1) Récupérer le programme IA (et profil) via l’API
   const prog = await fetchProgrammeFromApi(email);
 
   // 2) Profil : API -> si incomplet, on complète via Sheets (email de session)
-  let profile: Partial<ProfileT> & { email?: string } = (prog?.profile ?? {}) as any;
+  let profile: Partial<ProfileT> & { email?: string; objectif?: string; lieu?: string } =
+    (prog?.profile ?? {}) as any;
 
   if (email) {
-    // si profil incomplet, on enrichit avec Sheets
     const needPrenom = !(typeof profile?.prenom === "string" && profile.prenom && !/\d/.test(profile.prenom));
     const needAge = !(typeof profile?.age === "number" && profile.age > 0);
     const needGoal = !((profile as any)?.goal || (profile as any)?.objectif);
+    const needLieu = !(typeof (profile as any)?.lieu === "string" && (profile as any)?.lieu);
 
-    if (needPrenom || needAge || needGoal) {
+    if (needPrenom || needAge || needGoal || needLieu || !profile?.email) {
       try {
         const answers = await getAnswersForEmail(email);
         if (answers) {
-          const built = buildProfileFromAnswers(answers);
+          const built = buildProfileFromAnswers(answers); // ✅ mappe prénom, age, objectif, lieu, email…
           profile = { ...built, ...profile, email: built.email || email };
         }
       } catch {}
     }
 
-    // s'il n'y a toujours pas d'email dans le profil, on met celui de la session
     if (!profile?.email) profile = { ...profile, email };
   }
 
-  // 3) Séances IA à afficher : API -> fallback Sheets -> fallback store
+  // 3) Séances IA à afficher : API -> fallback lib (Sheets) -> fallback getAiSessions
   let aiSessions: AiSessionT[] = Array.isArray(prog?.sessions) ? prog!.sessions : [];
 
   if ((!aiSessions || aiSessions.length === 0) && email) {
@@ -176,7 +173,7 @@ export default async function Page({
     } catch {}
   }
 
-  // 🔒 filet de sécurité : au pire, une séance IA générique pour ne pas afficher vide
+  // 🔒 filet de sécurité
   if (!aiSessions || aiSessions.length === 0) {
     aiSessions = [
       {
@@ -195,14 +192,14 @@ export default async function Page({
     ];
   }
 
-  // ====== Affichage "Mes infos"
+  // ====== Affichage "Mes infos" (toutes les colonnes utiles)
   const clientPrenom =
     typeof profile?.prenom === "string" && profile.prenom && !/\d/.test(profile.prenom) ? profile.prenom : "";
   const clientAge = typeof profile?.age === "number" && profile.age > 0 ? profile.age : undefined;
   const clientEmailDisplay = String(profile?.email || email || "");
 
+  const rawGoal = String((profile as any)?.goal || (profile as any)?.objectif || "").toLowerCase();
   const goalLabel = (() => {
-    const raw = String((profile as any)?.goal || (profile as any)?.objectif || "").toLowerCase();
     const map: Record<string, string> = {
       hypertrophy: "Hypertrophie / Esthétique",
       fatloss: "Perte de gras",
@@ -213,11 +210,18 @@ export default async function Page({
       maintenance: "Maintien / Santé",
       hero: "WOD Héros",
       marathon: "Course (semi / marathon)",
+      "prise de masse": "Hypertrophie / Esthétique",
+      "perte de poid": "Perte de gras",
+      "perte de poids": "Perte de gras",
+      "prise de bras": "Objectif spécifique bras",
+      "retrouver de la vitalité": "Vitalité / Bien-être",
     };
-    if (map[raw]) return map[raw];
-    if (!raw) return "Non défini";
-    return raw;
+    if (map[rawGoal]) return map[rawGoal];
+    if (!rawGoal) return "Non défini";
+    return rawGoal;
   })();
+
+  const clientLieu = (profile as any)?.lieu || "";
 
   const questionnaireUrl = (() => {
     const qp = new URLSearchParams();
@@ -289,6 +293,9 @@ export default async function Page({
             <span>
               <b>Objectif actuel :</b> {goalLabel || <i className="text-gray-400">Non défini</i>}
             </span>
+            <span>
+              <b>Lieu :</b> {(clientLieu && String(clientLieu)) || <i className="text-gray-400">Non renseigné</i>}
+            </span>
           </div>
 
           <div
@@ -328,7 +335,7 @@ export default async function Page({
             </p>
           </div>
 
-          {/* Bouton : Générer dans le bloc Programme */}
+          {/* Bouton : Générer */}
           <form action={doAutogenAction}>
             <button
               type="submit"
