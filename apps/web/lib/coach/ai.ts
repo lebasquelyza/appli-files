@@ -209,32 +209,25 @@ export function generateProgrammeFromAnswers(answers: Answers, week = 0): AiProg
   };
 
   // Exercices de base (simplifiés)
-  const pushNone = [{ name: "Pompes", sets: 4, reps: "max–2", rest: "90s" }];
-  const pullNone = [{ name: "Superman hold", sets: 3, reps: "30s", rest: "60s" }];
-  const legsNone = [{ name: "Air squat", sets: 4, reps: "20", rest: "60s" }];
-
   const fullBodyNone = [
     { name: "Pompes", sets: 3, reps: "max–2", rest: "90s" },
     { name: "Squats", sets: 3, reps: "15–20", rest: "90s" },
   ];
-
   const cardio = [{ name: "Intervalles 4×4 min Z3", reps: "4×4 min", rest: "2 min" }];
   const hero = [{ name: "Murph modifié", reps: "1 mile run + 100 pompes + 200 squats + 100 tractions + 1 mile run" }];
   const marathon = [{ name: "Course tempo", reps: "30 min" }];
   const mobility = [{ name: "Flow hanches 90/90", reps: "10 min" }];
-
-  const getFullBody = () => fullBodyNone;
 
   const sessions: AiSession[] = [];
 
   switch (goal) {
     case "hypertrophy":
     case "strength":
-      sessions.push(makeSession("Full Body", "muscu", getFullBody(), 0));
+      sessions.push(makeSession("Full Body", "muscu", fullBodyNone, 0));
       break;
     case "fatloss":
     case "maintenance":
-      for (let i = 0; i < freq; i++) sessions.push(makeSession(`Full Body #${i + 1}`, "muscu", getFullBody(), i));
+      for (let i = 0; i < freq; i++) sessions.push(makeSession(`Full Body #${i + 1}`, "muscu", fullBodyNone, i));
       break;
     case "endurance":
       for (let i = 0; i < freq; i++) sessions.push(makeSession(`Cardio #${i + 1}`, "cardio", cardio, i));
@@ -249,7 +242,7 @@ export function generateProgrammeFromAnswers(answers: Answers, week = 0): AiProg
       for (let i = 0; i < freq; i++) sessions.push(makeSession(`Mobilité #${i + 1}`, "mobilité", mobility, i));
       break;
     default:
-      for (let i = 0; i < freq; i++) sessions.push(makeSession(`Full Body #${i + 1}`, "muscu", getFullBody(), i));
+      for (let i = 0; i < freq; i++) sessions.push(makeSession(`Full Body #${i + 1}`, "muscu", fullBodyNone, i));
   }
 
   return {
@@ -297,14 +290,6 @@ export async function loadProgrammeForUser(email: string): Promise<SavedProgramm
   return JSON.parse(raw) as SavedProgramme;
 }
 
-export async function generateNextWeekForUser(email: string, answers: Answers) {
-  const saved = await loadProgrammeForUser(email);
-  const nextWeek = saved ? saved.week + 1 : 0;
-  const newProg = generateProgrammeFromAnswers(answers, nextWeek);
-  await saveProgrammeForUser(email, newProg, nextWeek);
-  return newProg;
-}
-
 /* ===================== Legacy helpers (pour build) ===================== */
 
 export async function getAnswersForEmail(email: string): Promise<Record<string, string> | null> {
@@ -343,11 +328,19 @@ export function buildProfileFromAnswers(answers: Record<string, string>) {
   };
 }
 
-export async function getAiSessions(input: string | AiProgramme) {
+// 📌 getAiSessions avec paramètre facultatif
+export async function getAiSessions(input?: string | AiProgramme) {
+  // Aucun argument → fallback email par défaut ou vide
+  if (!input) {
+    const email = process.env.DEFAULT_TEST_EMAIL || "test@example.com";
+    const saved = await loadProgrammeForUser(email);
+    return saved?.programme?.sessions || [];
+  }
+
   if (typeof input === "string") {
     const saved = await loadProgrammeForUser(input);
     return saved?.programme?.sessions || [];
   }
+
   return input.sessions || [];
 }
-
