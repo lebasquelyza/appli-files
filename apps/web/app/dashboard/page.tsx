@@ -62,7 +62,7 @@ export default async function Page() {
         <KpiCard
           title="Steps du jour"
           value={`${stepsToday}`}
-          href="/dashboard/progres"
+          href="/dashboard/progress"
           manageLabel="Gérer"
         />
         <KpiCard
