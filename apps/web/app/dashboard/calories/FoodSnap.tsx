@@ -1,35 +1,26 @@
 "use client";
 import * as React from "react";
 
-type AnalyzeItem = { label: string; grams: number; kcal_per_100g: number; proteins_g_per_100g?: number | null };
-type AnalyzeResponse =
-  | {
-      // Produit emballé
-      food: string;
-      confidence: number;
-      kcal_per_100g: number;
-      net_weight_g?: number | null;
-      nutrition?: {
-        carbs_g_per_100g?: number | null;
-        sugars_g_per_100g?: number | null;
-        proteins_g_per_100g?: number | null;
-        fats_g_per_100g?: number | null;
-        fiber_g_per_100g?: number | null;
-        salt_g_per_100g?: number | null;
-      };
-      items?: undefined;
-      total_kcal?: undefined;
-    }
-  | {
-      // Assiette (multi-ingrédients)
-      items: AnalyzeItem[];
-      total_kcal: number;
-      food?: undefined;
-      confidence?: undefined;
-      kcal_per_100g?: undefined;
-      net_weight_g?: undefined;
-      nutrition?: undefined;
-    };
+/** Types alignés sur l’API hybride */
+type Candidate = {
+  label: string;
+  kcal_per_100g: number;
+  proteins_g_per_100g: number | null;
+  source: "OFF" | "IA" | "DICT";
+  details?: string;
+  confidence?: number;
+};
+type ProductResult = {
+  top: Candidate;
+  candidates: Candidate[];
+  net_weight_g?: number | null;
+  barcode?: string | null;
+  warnings?: string[];
+};
+type PlateItem = { label: string; grams: number; kcal_per_100g: number; proteins_g_per_100g?: number | null; source?: "OFF" | "IA" | "DICT" };
+type PlateResult = { items: PlateItem[]; total_kcal: number; total_proteins_g: number | null; warnings?: string[] };
+
+type AnalyzeResponse = ProductResult | PlateResult;
 
 type Props = { today: string; onSave?: (formData: FormData) => Promise<void> };
 
@@ -40,23 +31,25 @@ export default function FoodSnap({ today, onSave }: Props) {
   const [result, setResult] = React.useState<AnalyzeResponse | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
-  // État produit
+  // Produit (unitaires)
   const [portion, setPortion] = React.useState<number>(250);
-  const [portionAuto, setPortionAuto] = React.useState<null | number>(null);
   const [kcal100, setKcal100] = React.useState<string>("");
-  const [prot100, setProt100] = React.useState<string>(""); // ← protéines / 100 g
+  const [prot100, setProt100] = React.useState<string>("");
+  const [source, setSource] = React.useState<"OFF" | "IA" | "DICT">("IA");
+  const [label, setLabel] = React.useState<string>("");
 
-  // État assiette
-  const [items, setItems] = React.useState<AnalyzeItem[]>([]);
+  // Assiette
+  const [items, setItems] = React.useState<PlateItem[]>([]);
 
   const inputRef = React.useRef<HTMLInputElement>(null);
 
-  function onPick() { inputRef.current?.click(); }
   function resetAll() {
     setFile(null); setPreview(null); setResult(null); setError(null);
-    setPortion(250); setPortionAuto(null); setKcal100(""); setProt100("");
+    setPortion(250); setKcal100(""); setProt100(""); setSource("IA"); setLabel("");
     setItems([]);
   }
+
+  function onPick() { inputRef.current?.click(); }
   function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (!f) return;
@@ -67,27 +60,25 @@ export default function FoodSnap({ today, onSave }: Props) {
 
   async function analyze() {
     if (!file) return;
-    setLoading(true);
-    setError(null);
+    setLoading(true); setError(null);
     try {
-      const body = new FormData();
-      body.append("image", file);
+      const body = new FormData(); body.append("image", file);
       const res = await fetch("/api/food/analyze", { method: "POST", body });
       if (!res.ok) throw new Error((await res.text().catch(()=> "")) || "Analyse impossible");
-
       const data: AnalyzeResponse = await res.json();
       setResult(data);
 
-      if ("items" in data && Array.isArray(data.items)) {
-        // Mode ASSIETTE
+      if ("items" in data) {
+        // ASSIETTE
         setItems(data.items);
       } else {
-        // Mode PRODUIT
-        setKcal100(String((data as any).kcal_per_100g || ""));
-        const p100 = (data as any)?.nutrition?.proteins_g_per_100g;
-        setProt100(p100 != null ? String(p100) : "");
-        const auto = (data as any).net_weight_g;
-        if (typeof auto === "number" && auto > 0) { setPortion(auto); setPortionAuto(auto); }
+        // PRODUIT
+        const top = data.top;
+        setLabel(top.label);
+        setKcal100(String(top.kcal_per_100g ?? ""));
+        setProt100(top.proteins_g_per_100g != null ? String(top.proteins_g_per_100g) : "");
+        setSource(top.source);
+        if (data.net_weight_g && data.net_weight_g > 0) setPortion(data.net_weight_g);
       }
     } catch (e: any) {
       setError(e?.message || "Erreur inconnue");
@@ -107,22 +98,19 @@ export default function FoodSnap({ today, onSave }: Props) {
     if (!result) return null;
     if ("items" in result) {
       const sum = items.reduce((s, it) => s + (it.grams * (Number(it.proteins_g_per_100g || 0))) / 100, 0);
-      return Math.round(sum * 10) / 10; // 1 déc.
+      return Math.round(sum * 10) / 10;
     }
     const p = Number((prot100 || "").trim()); if (!Number.isFinite(p) || p < 0) return null;
     return Math.round(((p * (portion || 0)) / 100) * 10) / 10;
   }
 
-  // Note courte pour l’action serveur (ton action tronque à 120 chars)
   function buildNote(): string {
     if (!result) return "Photo: aliment";
     if ("items" in result) {
       const parts = items.slice(0, 4).map(it => `${it.label} ${it.grams}g`);
       return (`Assiette: ` + parts.join(" + ")).slice(0, 120);
     }
-    const conf = typeof (result as any).confidence === "number" ? ` (${Math.round(((result as any).confidence) * 100)}%)` : "";
-    const label = (result as any).food || "aliment";
-    return `Photo: ${label} ~${portion}g @${kcal100 || "?"}kcal/100g${conf}`.slice(0, 120);
+    return `Photo: ${label || "aliment"} ~${portion}g @${kcal100 || "?"}kcal/100g (${source})`.slice(0, 120);
   }
 
   function injectToMainForm() {
@@ -139,8 +127,8 @@ export default function FoodSnap({ today, onSave }: Props) {
     <div className="card" style={{ border: "1px dashed #d1d5db", padding: 12 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
         <div>
-          <div style={{ fontWeight: 600 }}>Prendre une photo d’un aliment / assiette</div>
-          <div className="text-xs" style={{ color: "#6b7280" }}>Étiquette (kcal & protéines) ou assiette (décomposition).</div>
+          <div style={{ fontWeight: 600 }}>Photo d’un aliment / assiette</div>
+          <div className="text-xs" style={{ color: "#6b7280" }}>Lecture OFF quand possible, sinon estimation IA (ajustable).</div>
         </div>
         <button className="btn" onClick={onPick} style={{ fontSize: 13 }}>📸 Prendre/Choisir</button>
         <input ref={inputRef} type="file" accept="image/*" capture="environment" onChange={onFile} hidden />
@@ -160,16 +148,21 @@ export default function FoodSnap({ today, onSave }: Props) {
 
       {result && (
         <div style={{ marginTop: 10, display: "grid", gap: 12 }}>
-          {/* ===== Cas ASSIETTE ===== */}
           {"items" in result ? (
             <>
-              <div style={{ fontWeight: 600 }}>Décomposition de l’assiette (éditable)</div>
+              {/* ===== ASSIETTE ===== */}
+              {result.warnings?.length ? (
+                <div className="text-xs" style={{ color: "#92400e", background: "#fef3c7", border: "1px solid #f59e0b55", padding: 8, borderRadius: 6 }}>
+                  {result.warnings.join(" · ")}
+                </div>
+              ) : null}
+              <div style={{ fontWeight: 600 }}>Décomposition (éditable)</div>
               <div style={{ display: "grid", gap: 8 }}>
                 {items.map((it, idx) => {
                   const kcal = Math.round((it.grams * it.kcal_per_100g) / 100);
                   const prot = Math.round(((it.grams * (Number(it.proteins_g_per_100g || 0))) / 100) * 10) / 10;
                   return (
-                    <div key={idx} className="card" style={{ padding: 8, display: "grid", gridTemplateColumns: "1fr 110px 110px 110px 120px 36px", alignItems: "center", gap: 8 }}>
+                    <div key={idx} className="card" style={{ padding: 8, display: "grid", gridTemplateColumns: "1fr 110px 110px 110px 160px 36px", alignItems: "center", gap: 8 }}>
                       <div style={{ fontSize: 14 }}>{it.label}</div>
                       <label className="label" style={{ margin: 0 }}>Grammes
                         <input className="input" type="number" min={1} step={1} value={it.grams}
@@ -183,6 +176,9 @@ export default function FoodSnap({ today, onSave }: Props) {
                         <input className="input" type="number" min={0} step="0.1" value={it.proteins_g_per_100g ?? 0}
                           onChange={(e) => setItems(b => b.map((x,i)=> i===idx ? { ...x, proteins_g_per_100g: Number(e.target.value) } : x))} />
                       </label>
+                      <div className="text-xs" style={{ color: "#6b7280" }}>
+                        Source : {it.source || "IA"}
+                      </div>
                       <div style={{ textAlign: "right", fontFamily: "tabular-nums" }}>
                         {kcal} kcal · {prot} g prot
                       </div>
@@ -196,38 +192,65 @@ export default function FoodSnap({ today, onSave }: Props) {
               </div>
             </>
           ) : (
-            // ===== Cas PRODUIT =====
             <>
-              <div style={{ fontSize: 14, lineHeight: 1.4 }}>
-                <div><strong>Aliment</strong> : {(result as any).food}</div>
-                <div><strong>Confiance</strong> : {typeof (result as any).confidence === "number" ? `${Math.round(((result as any).confidence) * 100)}%` : "—"}</div>
-              </div>
-
-              {/* Ligne de champs: Portion, kcal/100g, Prot/100g */}
-              <div style={{ display: "grid", gap: 8, gridTemplateColumns: "1fr 1fr 1fr", alignItems: "end" }}>
-                <label className="label">Portion (g)
-                  <input className="input" type="number" min={1} step={1} value={portion} onChange={(e) => setPortion(Number(e.target.value))} />
-                </label>
-                <label className="label">kcal / 100 g
-                  <input className="input" type="number" min={1} step={1} value={kcal100} onChange={(e) => setKcal100(e.target.value)} />
-                </label>
-                <label className="label">Prot / 100 g
-                  <input className="input" type="number" min={0} step="0.1" value={prot100} onChange={(e) => setProt100(e.target.value)} />
-                </label>
-                <div className="text-xs" style={{ color: "#6b7280" }}>
-                  {portionAuto ? <>Détecté depuis l’étiquette : <strong>{portionAuto} g</strong></> : "Régle la portion si besoin"}
+              {/* ===== PRODUIT ===== */}
+              {result.warnings?.length ? (
+                <div className="text-xs" style={{ color: "#92400e", background: "#fef3c7", border: "1px solid #f59e0b55", padding: 8, borderRadius: 6 }}>
+                  {result.warnings.join(" · ")}
                 </div>
-              </div>
+              ) : null}
 
-              {/* Totaux visibles juste sous les champs */}
-              <div style={{ fontSize: 18, fontWeight: 700 }}>
-                Total : {totalKcal() ?? "—"} kcal · {totalProteins() ?? "—"} g protéines
+              <div style={{ display: "grid", gap: 8 }}>
+                <div style={{ fontSize: 14 }}><strong>Aliment</strong> : {label}</div>
+                <div className="text-xs" style={{ color: "#6b7280" }}>
+                  Source : <strong>{source}</strong> {("candidates" in result) && "· change ci-dessous si besoin"}
+                </div>
+
+                {/* Sélecteur de candidat (OFF / IA / DICT) */}
+                {"candidates" in result && result.candidates?.length > 1 && (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    {result.candidates.map((c, i) => (
+                      <button
+                        key={i}
+                        className="btn"
+                        onClick={() => {
+                          setLabel(c.label);
+                          setKcal100(String(c.kcal_per_100g ?? ""));
+                          setProt100(c.proteins_g_per_100g != null ? String(c.proteins_g_per_100g) : "");
+                          setSource(c.source);
+                        }}
+                        type="button"
+                        style={{ fontSize: 12 }}
+                      >
+                        {c.source} · {c.kcal_per_100g || "?"} kcal / {c.proteins_g_per_100g ?? "?"} g prot
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Ligne de champs: Portion, kcal/100g, Prot/100g */}
+                <div style={{ display: "grid", gap: 8, gridTemplateColumns: "1fr 1fr 1fr", alignItems: "end" }}>
+                  <label className="label">Portion (g)
+                    <input className="input" type="number" min={1} step={1} value={portion} onChange={(e) => setPortion(Number(e.target.value))} />
+                  </label>
+                  <label className="label">kcal / 100 g
+                    <input className="input" type="number" min={1} step={1} value={kcal100} onChange={(e) => setKcal100(e.target.value)} />
+                  </label>
+                  <label className="label">Prot / 100 g
+                    <input className="input" type="number" min={0} step="0.1" value={prot100} onChange={(e) => setProt100(e.target.value)} />
+                  </label>
+                </div>
+
+                <div style={{ fontSize: 18, fontWeight: 700 }}>
+                  Total : {totalKcal() ?? "—"} kcal · {totalProteins() ?? "—"} g protéines
+                </div>
               </div>
             </>
           )}
 
-          <div className="text-sm" style={{ color: "#6b7280" }}>
-            Les valeurs sont des **estimations** : si l’étiquette est lisible, on lit les vraies infos ; sinon, l’IA utilise des moyennes (recette/cuisson peuvent faire varier).
+          <div className="text-xs" style={{ color: "#6b7280" }}>
+            <strong>Valeurs estimées :</strong> si l’étiquette est trouvée (OFF), ce sont les vraies valeurs par 100 g. Sinon, l’IA propose une moyenne (ajustable).  
+            Pense à vérifier <em>cru vs cuit</em> et les sauces/huile qui peuvent augmenter les kcal.
           </div>
 
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
