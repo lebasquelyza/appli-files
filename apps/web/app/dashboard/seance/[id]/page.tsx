@@ -83,7 +83,19 @@ function genericFallback(type: WorkoutType): NormalizedExercise[] {
   ];
 }
 
-type ProfileT = ReturnType<typeof buildProfileFromAnswers>;
+/* ───── Correction: étendre le type avec les champs utilisés dans le JSX ───── */
+type ProfileT = ReturnType<typeof buildProfileFromAnswers> & {
+  timePerSession?: number;
+  equipLevel?: "none" | "limited" | "full";
+  equipItems?: string[];
+  injuries?: string[];
+  // variantes possibles côté questionnaire (déjà gérées plus bas)
+  goal?: string;
+  primaryGoal?: string;
+  objective?: string;
+  mainObjective?: string;
+  currentGoal?: string;
+};
 
 export const dynamic = "force-dynamic";
 
@@ -371,7 +383,7 @@ async function loadData(
     const email = await getSignedInEmail();
     if (email) {
       const answers = await getAnswersForEmail(email);
-      if (answers) profile = buildProfileFromAnswers(answers);
+      if (answers) profile = buildProfileFromAnswers(answers) as ProfileT;
     }
   } catch (e) {
     console.warn("build profile failed", e);
