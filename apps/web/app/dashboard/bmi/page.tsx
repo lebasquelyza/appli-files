@@ -48,6 +48,11 @@ export default function Page() {
             </div>
           </div>
         </div>
+
+        {/* Note sous le bloc */}
+        <p className="text-xs mt-3" style={{ color: "#6b7280" }}>
+          N’oublie pas&nbsp;: l’IMC et le poids ne sont que des chiffres ;)
+        </p>
       </Section>
     </div>
   );
