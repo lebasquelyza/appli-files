@@ -208,7 +208,7 @@ export function generateProgrammeFromAnswers(answers: Answers, week = 0): AiProg
     };
   };
 
-  // Exercices de base (simplifiés)
+  // Exercices de base
   const fullBodyNone = [
     { name: "Pompes", sets: 3, reps: "max–2", rest: "90s" },
     { name: "Squats", sets: 3, reps: "15–20", rest: "90s" },
@@ -290,8 +290,7 @@ export async function loadProgrammeForUser(email: string): Promise<SavedProgramm
   return JSON.parse(raw) as SavedProgramme;
 }
 
-/* ===================== Legacy helpers (pour build) ===================== */
-
+/* ===================== Legacy helpers ===================== */
 export async function getAnswersForEmail(email: string): Promise<Record<string, string> | null> {
   const filePath = path.join(process.cwd(), "data", "mock-answers.json");
   if (!fs.existsSync(filePath)) return null;
@@ -328,6 +327,8 @@ export function buildProfileFromAnswers(answers: Record<string, string>) {
   };
 }
 
+/* ===================== getAiSessions + Next Week ===================== */
+
 // 📌 getAiSessions avec paramètre facultatif
 export async function getAiSessions(input?: string | AiProgramme) {
   // Aucun argument → fallback email par défaut ou vide
@@ -343,4 +344,13 @@ export async function getAiSessions(input?: string | AiProgramme) {
   }
 
   return input.sessions || [];
+}
+
+// 📌 Génération de la semaine suivante avec progression IA
+export async function generateNextWeekForUser(email: string, answers: Answers) {
+  const saved = await loadProgrammeForUser(email);
+  const nextWeek = saved ? saved.week + 1 : 0;
+  const newProg = generateProgrammeFromAnswers(answers, nextWeek);
+  await saveProgrammeForUser(email, newProg, nextWeek);
+  return newProg;
 }
