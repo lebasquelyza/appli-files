@@ -130,7 +130,7 @@ const PageView: React.FC<PageViewProps> = (props) => {
       {/* top bar */}
       <div className="mb-2 flex items-center justify-between no-print" style={{ paddingInline: 12 }}>
         <a
-          href="/dashboard/seances"
+          href="/dashboard/progress" // ⬅️ MODIF: retour vers progress
           className="inline-flex items-center rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm font-medium text-neutral-800 hover:bg-neutral-50"
         >
           ← Retour
@@ -469,7 +469,7 @@ export default async function Page({
       ? "Pics d’intensité courts, technique impeccable."
       : "Amplitude confortable, respiration calme, zéro douleur nette.";
 
-  // Objectif actuel du client depuis le profil (tolérant aux variations de clés)
+  // Objectif actuel du client (tolérant aux variations de clés)
   const goalText =
     (profile as any)?.goal ||
     (profile as any)?.primaryGoal ||
