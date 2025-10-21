@@ -319,3 +319,28 @@ export async function generateNextWeekForUser(email: string, answers: Answers) {
   return newProg;
 }
 
+/* ===================== Legacy helpers (pour build) ===================== */
+// 📌 Simule la récupération des réponses client
+export async function getAnswersForEmail(email: string): Promise<Record<string, string> | null> {
+  const filePath = path.join(process.cwd(), "data", "mock-answers.json");
+  if (!fs.existsSync(filePath)) return null;
+  const data = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+  return data[email] || null;
+}
+
+// 📌 Construit un profil minimal à partir des réponses
+export function buildProfileFromAnswers(answers: Record<string, string>) {
+  return {
+    email: answers["email"] || "",
+    prenom: answers["prenom"] || answers["prénom"] || "Coaché",
+    age: answers["age"] ? parseInt(answers["age"]) : undefined,
+    objectif: answers["objectif"] || "",
+    lieu: answers["lieu"] || "",
+  };
+}
+
+// 📌 Fournit la liste de séances du programme généré
+export function getAiSessions(programme: AiProgramme) {
+  return programme.sessions || [];
+}
+
