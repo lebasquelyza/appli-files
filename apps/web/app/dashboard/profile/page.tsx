@@ -44,7 +44,7 @@ function getBaseUrlFromHeaders() {
 // -----------------------------------------------------------------------------
 // EMAIL HELPERS
 // -----------------------------------------------------------------------------
-/** Remplace par ta vraie lecture Supabase côté serveur */
+/** Remplace par ta vraie lecture Supabase côté serveur si tu veux */
 async function getEmailFromSupabaseSession(): Promise<string> {
   // EXEMPLE (à adapter) :
   // import { createServerClient } from "@supabase/ssr";
