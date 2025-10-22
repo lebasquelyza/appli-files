@@ -171,7 +171,7 @@ export async function getAnswersForEmail(email: string): Promise<RawAnswer | nul
     if (!r || r.length <= Math.max(IDX.ts, IDX.email)) continue;
 
     const tsStr = r[IDX.ts] || "";
-       const ts = parseFrenchDateTime(tsStr) || new Date(tsStr || Date.now());
+    const ts = parseFrenchDateTime(tsStr) || new Date(tsStr || Date.now());
     const prenom = (r[IDX.prenom] || "").trim();
     const age = toNumberSafe(r[IDX.age]);
     const objectifBrut = (r[IDX.objectif] || "").trim();
@@ -212,4 +212,25 @@ export async function getAiSessions(_email: string): Promise<AiSession[]> {
 }
 export async function getUserProfileByEmail(_email: string): Promise<{ email: string; prenom?: string | null } | null> {
   return null;
+}
+
+/** ====== Stub pour sign-in : upsertUserProfileByEmail ======
+ *  Compat avec app/signin/server-actions.ts
+ *  (no-op en mode Sheets only, renvoie un profil minimal)
+ */
+export type UpsertUserProfileInput = {
+  email: string;
+  prenom?: string | null;
+  age?: number | null;
+  objectif?: string | null;
+  // ajoute d’autres champs si ton server-actions.ts les passe
+};
+
+export async function upsertUserProfileByEmail(
+  email: string,
+  patch?: Partial<UpsertUserProfileInput>
+): Promise<{ email: string; prenom?: string | null } | null> {
+  const e = (email || patch?.email || "").trim().toLowerCase();
+  if (!e) return null;
+  return { email: e, prenom: patch?.prenom ?? null };
 }
