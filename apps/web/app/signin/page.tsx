@@ -1,10 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { getSupabase } from "../../lib/supabaseClient";
 import { Eye, EyeOff } from "lucide-react";
+import { upsertOnSignIn } from "./server-actions"; // ✅ appelle la server action
 
 export default function SigninPage() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -40,8 +43,17 @@ export default function SigninPage() {
       });
       if (error) throw error;
 
+      // ✅ Après login Supabase, on upsert le profil + set cookie "app_email" côté serveur
+      try {
+        await upsertOnSignIn(emailTrim);
+      } catch (err: any) {
+        // On ne bloque pas la connexion si l'upsert échoue — mais on logge l'erreur
+        console.error("upsertOnSignIn failed:", err?.message || err);
+      }
+
       setMessage("Connexion réussie ✅");
-      window.location.href = "/dashboard";
+      // ✅ Redirection vers le profil pour voir l’e-mail affiché
+      router.push("/dashboard/profile");
     } catch (err: any) {
       const msg = String(err?.message || "");
       if (msg.toLowerCase().includes("invalid login credentials")) {
@@ -77,7 +89,6 @@ export default function SigninPage() {
     }
   };
 
-  // Permet de renvoyer le mail de confirmation si le compte n'est pas confirmé
   const handleResendConfirmation = async () => {
     const emailTrim = email.trim().toLowerCase();
     if (!emailTrim) {
@@ -89,7 +100,6 @@ export default function SigninPage() {
     setError(null);
     try {
       const supabase = getSupabase();
-      // Supabase JS v2
       const { error } = await supabase.auth.resend({
         type: "signup",
         email: emailTrim,
@@ -181,7 +191,6 @@ export default function SigninPage() {
             Mot de passe oublié ?
           </button>
 
-          {/* Nouveau : renvoi de l’e-mail de confirmation */}
           <button
             type="button"
             onClick={handleResendConfirmation}
