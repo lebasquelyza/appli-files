@@ -5,10 +5,15 @@ import {
   getAnswersForEmail,
   generateProgrammeFromAnswers,
   buildProfileFromAnswers,
-  type AiProgramme,
+  type AiSession,
+  type Profile,
 } from "../../../lib/coach/ai";
 
 export const runtime = "nodejs";
+
+/** Type local : programme généré + profil (optionnel quand pas de réponses) */
+type GeneratedProgramme = ReturnType<typeof generateProgrammeFromAnswers>; // { sessions: AiSession[] }
+type AiProgramme = GeneratedProgramme & { profile?: Profile | null };
 
 /* ===================== GET =====================
 Supporte:
@@ -27,7 +32,7 @@ export async function GET(req: Request) {
 
     if (!email) {
       // Objet vide mais valide (pas de 500 côté client)
-      return NextResponse.json({ sessions: [], profile: null }, { status: 200 });
+      return NextResponse.json({ sessions: [], profile: null } satisfies AiProgramme, { status: 200 });
     }
 
     if (autogen) {
@@ -36,18 +41,20 @@ export async function GET(req: Request) {
       if (!answers) {
         // Rien trouvé dans Sheets → profil minimal + 0 séance
         const p = buildProfileFromAnswers({ email } as any);
-        return NextResponse.json({ sessions: [], profile: p }, { status: 200 });
+        const empty: AiProgramme = { sessions: [], profile: p };
+        return NextResponse.json(empty, { status: 200 });
       }
       const prog = generateProgrammeFromAnswers(answers); // IA sur les dernières réponses
-      return NextResponse.json(prog, { status: 200 });
+      return NextResponse.json(prog satisfies GeneratedProgramme, { status: 200 });
     }
 
     // Pas d'autogen → renvoi “vide” (tu pourras ajouter une persistance plus tard)
-    return NextResponse.json({ sessions: [], profile: null }, { status: 200 });
+    return NextResponse.json({ sessions: [], profile: null } satisfies AiProgramme, { status: 200 });
   } catch (err) {
     console.error("[API /programme GET] ERREUR:", err);
     // On renvoie tout de même un JSON valide pour éviter les 500 côté client
-    return NextResponse.json({ sessions: [], profile: null }, { status: 200 });
+    const safe: AiProgramme = { sessions: [], profile: null };
+    return NextResponse.json(safe, { status: 200 });
   }
 }
 
@@ -66,24 +73,20 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: "NO_EMAIL" }, { status: 400 });
     }
 
-    let programme: AiProgramme | null = null;
-
     if (body.autogen) {
       const answers = await getAnswersForEmail(email);
       if (!answers) {
         const p = buildProfileFromAnswers({ email } as any);
-        return NextResponse.json(
-          { ok: true, programme: { sessions: [], profile: p } },
-          { status: 200 }
-        );
+        const programme: AiProgramme = { sessions: [], profile: p };
+        return NextResponse.json({ ok: true, programme }, { status: 200 });
       }
-      programme = generateProgrammeFromAnswers(answers);
+      const programme = generateProgrammeFromAnswers(answers) as GeneratedProgramme;
       return NextResponse.json({ ok: true, programme }, { status: 200 });
     }
 
     if (body.programme) {
       // Ici tu pourrais persister si tu ajoutes un stockage (Redis/FS/DB).
-      programme = body.programme as AiProgramme;
+      const programme = body.programme as AiProgramme;
       return NextResponse.json({ ok: true, programme }, { status: 200 });
     }
 
@@ -94,4 +97,3 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "INTERNAL" }, { status: 200 });
   }
 }
-
