@@ -26,6 +26,10 @@ export type NormalizedExercise = {
   durationSec?: number;
   distance?: string;
   weight?: string | number;
+
+  // Champs lus par /dashboard/seance/[id]/page.tsx
+  load?: string | number;   // ex: "2x10kg", "Bodyweight", 60
+  rir?: number;             // Reps In Reserve (0..4)
 };
 
 export type Profile = {
@@ -80,7 +84,7 @@ function toNumberSafe(v: any): number | undefined {
   return Number.isFinite(n) && n > 0 ? n : undefined;
 }
 function parseFrenchDateTime(v: string): Date | null {
-  // "dd/MM/yyyy HH:mm:ss"
+  // "dd/MM/yyyy HH:mm:ss" (format Forms/Sheets FR courant)
   const m = v?.match?.(/^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2}):(\d{2})$/);
   if (!m) return null;
   const [, dd, mm, yyyy, HH, MM, SS] = m;
@@ -108,7 +112,9 @@ function goalLabelFromKey(k?: Profile["goal"]) {
   }[k];
 }
 
-/** ========= Mini parser CSV (RFC4180 light) ========= */
+/** ========= Mini parser CSV (RFC4180 light) =========
+ *  Gère: ',', guillemets doubles, "" échappés, LF/CRLF.
+ */
 function parseCsv(text: string): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];
@@ -140,6 +146,7 @@ function parseCsv(text: string): string[][] {
 
 /** ========= Index des colonnes (0-based) selon A:J =========
  *  A: horodatage | B: prénom | C: âge | G: objectif brut | J: email
+ *  ⚠️ adapte ces index si la structure de l’onglet change.
  */
 const IDX = { ts: 0, prenom: 1, age: 2, objectif: 6, email: 9 };
 
@@ -156,7 +163,7 @@ export async function getAnswersForEmail(email: string): Promise<RawAnswer | nul
   if (!rows.length) return null;
 
   const matches: RawAnswer[] = [];
-  for (let i = 1; i < rows.length; i++) { // saute l'entête
+  for (let i = 1; i < rows.length; i++) { // saute l’entête
     const r = rows[i];
     if (!r || r.length <= Math.max(IDX.ts, IDX.email)) continue;
 
@@ -186,7 +193,9 @@ export function buildProfileFromAnswers(ans: RawAnswer): Profile {
   };
 }
 
-/** ====== Programme IA (stub compatible) ====== */
+/** ====== Programme IA (stub compatible) ======
+ *  Si tu veux générer des séances à partir de `ans`, fais-le ici.
+ */
 export function generateProgrammeFromAnswers(_ans: RawAnswer): AiProgramme {
   return {
     sessions: [],
@@ -194,6 +203,10 @@ export function generateProgrammeFromAnswers(_ans: RawAnswer): AiProgramme {
   };
 }
 
-/** ====== Stubs supplémentaires ====== */
-export async function getAiSessions(_email: string): Promise<AiSession[]> { return []; }
-export async function getUserProfileByEmail(_email: string): Promise<{ email: string; prenom?: string | null } | null> { return null; }
+/** ====== Stubs supplémentaires (compat ailleurs) ====== */
+export async function getAiSessions(_email: string): Promise<AiSession[]> {
+  return [];
+}
+export async function getUserProfileByEmail(_email: string): Promise<{ email: string; prenom?: string | null } | null> {
+  return null;
+}
