@@ -109,10 +109,9 @@ async function doAutogenAction(formData: FormData) {
 // DATA LOADERS
 // -----------------------------------------------------------------------------
 /** MES INFOS = **Uniquement** depuis le Sheet public (dernière réponse)
- *  + Mode test: ?blank=1 (ou ?empty=1) force l’affichage vide.
+ *  + Mode test: ?blank=1 (ou ?empty=1) force l’affichage vide (sans placeholders).
  */
 async function loadProfile(searchParams?: Record<string, string | string[] | undefined>) {
-  // 🔧 Mode test: forcer le bloc "Mes infos" à vide via ?blank=1 (ou ?empty=1)
   const forceBlank = ["1", "true", "yes"].includes(
     String(searchParams?.blank || searchParams?.empty || "").toLowerCase()
   );
@@ -142,7 +141,8 @@ async function loadProfile(searchParams?: Record<string, string | string[] | und
         sheetHit: false,
         reason: "Force blank via ?blank=1",
       },
-    };
+      forceBlank,
+    } as const;
   }
 
   // 2) Préparer profil & debug (mode normal)
@@ -151,7 +151,7 @@ async function loadProfile(searchParams?: Record<string, string | string[] | und
 
   if (!email) {
     debugInfo.reason = "Aucun email trouvé (ni ?email=, ni cookie, ni session Supabase)";
-    return { profile, email, debugInfo };
+    return { profile, email, debugInfo, forceBlank } as const;
   }
 
   // 3) Lecture **exclusivement** depuis Google Sheet public (dernière réponse)
@@ -172,7 +172,7 @@ async function loadProfile(searchParams?: Record<string, string | string[] | und
 
   // 4) Pas de fallback DB: **Sheets only**
   profile.email = profile.email || email;
-  return { profile, email, debugInfo };
+  return { profile, email, debugInfo, forceBlank } as const;
 }
 
 /** Séances IA (optionnel) — tente génération locale via réponses; sinon lit source secondaire */
@@ -217,8 +217,11 @@ export default async function Page({
 }: {
   searchParams?: { success?: string; error?: string; email?: string; debug?: string; blank?: string; empty?: string };
 }) {
-  const { profile, email, debugInfo } = await loadProfile(searchParams);
+  const { profile, email, debugInfo, forceBlank } = await loadProfile(searchParams);
   const aiSessions = await loadSessions(email);
+
+  // 📌 en blank mode, on n’affiche pas de placeholders
+  const showPlaceholders = !forceBlank;
 
   const clientPrenom =
     typeof profile?.prenom === "string" && profile.prenom && !/\d/.test(profile.prenom) ? profile.prenom : "";
@@ -235,7 +238,7 @@ export default async function Page({
       mobility: "Mobilité / Souplesse",
       general: "Forme générale",
     };
-    if (!g) return "Non défini";
+    if (!g) return "";
     return map[g] || g;
   })();
 
@@ -262,6 +265,7 @@ export default async function Page({
             <div className="text-xs" style={{ marginTop: 4, color: "#6b7280" }}>
               <b>Debug:</b> email détecté = <code>{debugInfo.email || "—"}</code>{" "}
               {debugInfo.sheetHit ? "· Sheet OK" : `· ${debugInfo.reason || "Sheet KO"}`}
+              {forceBlank ? " · BLANK MODE" : ""}
             </div>
           )}
         </div>
@@ -303,32 +307,50 @@ export default async function Page({
 
         <div className="card">
           <div className="text-sm" style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-            <span>
-              <b>Prénom :</b> {clientPrenom || <i className="text-gray-400">Non renseigné</i>}
-            </span>
-            <span>
-              <b>Âge :</b>{" "}
-              {typeof clientAge === "number" ? `${clientAge} ans` : <i className="text-gray-400">Non renseigné</i>}
-            </span>
-            <span>
-              <b>Objectif actuel :</b> {goalLabel || <i className="text-gray-400">Non défini</i>}
-            </span>
-          </div>
+            {/* Prénom */}
+            {(clientPrenom || showPlaceholders) && (
+              <span>
+                <b>Prénom :</b>{" "}
+                {clientPrenom || (showPlaceholders ? <i className="text-gray-400">Non renseigné</i> : null)}
+              </span>
+            )}
 
-          <div
-            className="text-sm"
-            style={{ marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
-            title={clientEmailDisplay || "Non renseigné"}
-          >
-            <b>Mail :</b>{" "}
-            {clientEmailDisplay ? (
-              <a href={`mailto:${clientEmailDisplay}`} className="underline">
-                {clientEmailDisplay}
-              </a>
-            ) : (
-              <span className="text-gray-400">Non renseigné</span>
+            {/* Âge */}
+            {(typeof clientAge === "number" || showPlaceholders) && (
+              <span>
+                <b>Âge :</b>{" "}
+                {typeof clientAge === "number"
+                  ? `${clientAge} ans`
+                  : (showPlaceholders ? <i className="text-gray-400">Non renseigné</i> : null)}
+              </span>
+            )}
+
+            {/* Objectif */}
+            {(goalLabel || showPlaceholders) && (
+              <span>
+                <b>Objectif actuel :</b>{" "}
+                {goalLabel || (showPlaceholders ? <i className="text-gray-400">Non défini</i> : null)}
+              </span>
             )}
           </div>
+
+          {/* Mail */}
+          {(clientEmailDisplay || showPlaceholders) && (
+            <div
+              className="text-sm"
+              style={{ marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
+              title={clientEmailDisplay || (showPlaceholders ? "Non renseigné" : "")}
+            >
+              <b>Mail :</b>{" "}
+              {clientEmailDisplay ? (
+                <a href={`mailto:${clientEmailDisplay}`} className="underline">
+                  {clientEmailDisplay}
+                </a>
+              ) : (
+                showPlaceholders ? <span className="text-gray-400">Non renseigné</span> : null
+              )}
+            </div>
+          )}
 
           <div className="text-sm" style={{ marginTop: 10 }}>
             <a href={questionnaireUrl} className="underline">
