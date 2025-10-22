@@ -11,7 +11,7 @@
     "@radix-ui/react-dialog": "^1.0.5",
     "@radix-ui/react-separator": "^1.1.7",
     "@supabase/supabase-js": "^2.0.0",
-    "@supabase/ssr": "^0.5.0",               // 👈 AJOUT
+    "@supabase/ssr": "^0.5.0",               
     "axios": "^1.7.2",
     "clsx": "^2.1.0",
     "fast-xml-parser": "^4.3.2",
