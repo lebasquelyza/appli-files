@@ -1,6 +1,4 @@
 // lib/coach/ai.ts
-import { parse } from "csv-parse/sync";
-
 /** ========= Types ========= */
 export type Profile = {
   email: string;
@@ -29,10 +27,9 @@ type RawAnswer = {
 };
 
 /** ========= ENV =========
- *  Utilise SNAKE_CASE comme convenu
  *  SHEET_ID : id du doc
  *  SHEET_GID: gid numérique de l’onglet
- *  SHEET_RANGE: ex "A:J" (indicatif, sert juste de repère pour les index)
+ *  SHEET_RANGE: ex "A:J" (indicatif, juste pour doc)
  */
 const SHEET_ID = process.env.SHEET_ID!;
 const SHEET_GID = process.env.SHEET_GID!;
@@ -78,6 +75,56 @@ function goalLabelFromKey(k?: Profile["goal"]) {
   }[k];
 }
 
+/** ========= Mini parser CSV (RFC4180 light) =========
+ *  Gère: séparateur ',', guillemets doubles, échappement "" à l’intérieur d’un champ,
+ *  CRLF/LF. Suffisant pour Google Sheets export CSV.
+ */
+function parseCsv(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+
+    if (inQuotes) {
+      if (ch === '"') {
+        const next = text[i + 1];
+        if (next === '"') { // échappement ""
+          cell += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        cell += ch;
+      }
+    } else {
+      if (ch === '"') {
+        inQuotes = true;
+      } else if (ch === ",") {
+        row.push(cell);
+        cell = "";
+      } else if (ch === "\n") {
+        row.push(cell);
+        rows.push(row);
+        row = [];
+        cell = "";
+      } else if (ch === "\r") {
+        // ignore
+      } else {
+        cell += ch;
+      }
+    }
+  }
+  // dernière cellule/ligne si fichier ne finit pas par newline
+  row.push(cell);
+  rows.push(row);
+
+  return rows;
+}
+
 /** ========= Index des colonnes (0-based) selon A:J =========
  *  Adapte si ton onglet change :
  *  A: horodatage | B: prénom | C: âge | G: objectif brut | J: email
@@ -93,7 +140,7 @@ export async function getAnswersForEmail(email: string): Promise<RawAnswer | nul
   if (!res.ok) throw new Error(`CSV fetch failed: ${res.status}`);
   const text = await res.text();
 
-  const rows: string[][] = parse(text, { skip_empty_lines: true });
+  const rows: string[][] = parseCsv(text);
   if (!rows.length) return null;
 
   const matches: RawAnswer[] = [];
@@ -134,7 +181,6 @@ export function generateProgrammeFromAnswers(_ans: RawAnswer): { sessions: AiSes
 export async function getAiSessions(_email: string): Promise<AiSession[]> {
   return []; // adapte si tu as une source secondaire
 }
-// Si tu avais des fonctions DB avant, garde des stubs vides :
 export async function getUserProfileByEmail(_email: string): Promise<{ email: string; prenom?: string | null } | null> {
   return null;
 }
