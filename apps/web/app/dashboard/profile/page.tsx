@@ -50,9 +50,7 @@ async function getEmailFromSupabaseSession(): Promise<string> {
   // import { createServerClient } from "@supabase/ssr";
   // const cookieStore = cookies();
   // const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
-  //   cookies: {
-  //     get(name: string) { return cookieStore.get(name)?.value; },
-  //   },
+  //   cookies: { get(name: string) { return cookieStore.get(name)?.value; } },
   // });
   // const { data: { user } } = await supabase.auth.getUser();
   // return user?.email?.trim().toLowerCase() || "";
@@ -110,9 +108,16 @@ async function doAutogenAction(formData: FormData) {
 // -----------------------------------------------------------------------------
 // DATA LOADERS
 // -----------------------------------------------------------------------------
-/** MES INFOS = **Uniquement** depuis le Sheet public (dernière réponse) */
+/** MES INFOS = **Uniquement** depuis le Sheet public (dernière réponse)
+ *  + Mode test: ?blank=1 (ou ?empty=1) force l’affichage vide.
+ */
 async function loadProfile(searchParams?: Record<string, string | string[] | undefined>) {
-  // 1) Identifier l'email
+  // 🔧 Mode test: forcer le bloc "Mes infos" à vide via ?blank=1 (ou ?empty=1)
+  const forceBlank = ["1", "true", "yes"].includes(
+    String(searchParams?.blank || searchParams?.empty || "").toLowerCase()
+  );
+
+  // 1) Identifier l'email (pour usage normal)
   let email = pickEmail(searchParams);
   if (!email) {
     email = await getEmailFromSupabaseSession();
@@ -127,7 +132,20 @@ async function loadProfile(searchParams?: Record<string, string | string[] | und
     }
   }
 
-  // 2) Préparer profil & debug
+  // ➜ En mode test on renvoie explicitement un profil vide + email vide
+  if (forceBlank) {
+    return {
+      profile: {}, // rien de renseigné
+      email: "",   // empêche l’affichage du mail
+      debugInfo: {
+        email: email || "",
+        sheetHit: false,
+        reason: "Force blank via ?blank=1",
+      },
+    };
+  }
+
+  // 2) Préparer profil & debug (mode normal)
   let profile: Partial<ProfileT> & { email?: string } = {};
   const debugInfo: { email: string; sheetHit: boolean; reason?: string } = { email: email || "", sheetHit: false };
 
@@ -197,7 +215,7 @@ async function loadSessions(email?: string): Promise<AiSessionT[]> {
 export default async function Page({
   searchParams,
 }: {
-  searchParams?: { success?: string; error?: string; email?: string; debug?: string };
+  searchParams?: { success?: string; error?: string; email?: string; debug?: string; blank?: string; empty?: string };
 }) {
   const { profile, email, debugInfo } = await loadProfile(searchParams);
   const aiSessions = await loadSessions(email);
