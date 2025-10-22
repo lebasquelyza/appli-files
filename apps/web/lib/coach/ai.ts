@@ -18,6 +18,11 @@ export type AiSession = {
   exercises?: Array<{ name: string; sets: number; reps: string; rest: string; block?: string }>;
 };
 
+export type AiProgramme = {
+  sessions: AiSession[];
+  meta?: { generatedAt: string };
+};
+
 type RawAnswer = {
   ts: Date;
   prenom?: string;
@@ -47,7 +52,7 @@ function toNumberSafe(v: any): number | undefined {
   return Number.isFinite(n) && n > 0 ? n : undefined;
 }
 function parseFrenchDateTime(v: string): Date | null {
-  // "dd/MM/yyyy HH:mm:ss" (format Google Form FR habituel)
+  // "dd/MM/yyyy HH:mm:ss"
   const m = v?.match?.(/^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2}):(\d{2})$/);
   if (!m) return null;
   const [, dd, mm, yyyy, HH, MM, SS] = m;
@@ -75,10 +80,7 @@ function goalLabelFromKey(k?: Profile["goal"]) {
   }[k];
 }
 
-/** ========= Mini parser CSV (RFC4180 light) =========
- *  Gère: séparateur ',', guillemets doubles, échappement "" à l’intérieur d’un champ,
- *  CRLF/LF. Suffisant pour Google Sheets export CSV.
- */
+/** ========= Mini parser CSV (RFC4180 light) ========= */
 function parseCsv(text: string): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];
@@ -91,42 +93,25 @@ function parseCsv(text: string): string[][] {
     if (inQuotes) {
       if (ch === '"') {
         const next = text[i + 1];
-        if (next === '"') { // échappement ""
-          cell += '"';
-          i++;
-        } else {
-          inQuotes = false;
-        }
+        if (next === '"') { cell += '"'; i++; }
+        else { inQuotes = false; }
       } else {
         cell += ch;
       }
     } else {
-      if (ch === '"') {
-        inQuotes = true;
-      } else if (ch === ",") {
-        row.push(cell);
-        cell = "";
-      } else if (ch === "\n") {
-        row.push(cell);
-        rows.push(row);
-        row = [];
-        cell = "";
-      } else if (ch === "\r") {
-        // ignore
-      } else {
-        cell += ch;
-      }
+      if (ch === '"') inQuotes = true;
+      else if (ch === ",") { row.push(cell); cell = ""; }
+      else if (ch === "\n") { row.push(cell); rows.push(row); row = []; cell = ""; }
+      else if (ch === "\r") { /* skip */ }
+      else { cell += ch; }
     }
   }
-  // dernière cellule/ligne si fichier ne finit pas par newline
   row.push(cell);
   rows.push(row);
-
   return rows;
 }
 
 /** ========= Index des colonnes (0-based) selon A:J =========
- *  Adapte si ton onglet change :
  *  A: horodatage | B: prénom | C: âge | G: objectif brut | J: email
  */
 const IDX = { ts: 0, prenom: 1, age: 2, objectif: 6, email: 9 };
@@ -174,12 +159,18 @@ export function buildProfileFromAnswers(ans: RawAnswer): Profile {
   };
 }
 
-/** ====== Stubs compatibles avec le reste de ton app ====== */
-export function generateProgrammeFromAnswers(_ans: RawAnswer): { sessions: AiSession[] } {
-  return { sessions: [] }; // adapte si tu veux générer des séances depuis les réponses
+/** ====== Programme IA (stub compatible avec route.ts) ====== */
+export function generateProgrammeFromAnswers(_ans: RawAnswer): AiProgramme {
+  // Tu peux générer ici à partir des réponses; on renvoie un stub valide pour le build.
+  return {
+    sessions: [],
+    meta: { generatedAt: new Date().toISOString() },
+  };
 }
+
+/** ====== Stubs supplémentaires pour compat ====== */
 export async function getAiSessions(_email: string): Promise<AiSession[]> {
-  return []; // adapte si tu as une source secondaire
+  return [];
 }
 export async function getUserProfileByEmail(_email: string): Promise<{ email: string; prenom?: string | null } | null> {
   return null;
