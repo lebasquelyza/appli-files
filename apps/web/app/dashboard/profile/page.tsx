@@ -6,16 +6,21 @@ import { revalidatePath } from "next/cache";
 import {
   getAnswersForEmail,
   buildProfileFromAnswers,
-  generateProgrammeFromAnswers,
-  getAiSessions,
-  getUserProfileByEmail,
+  generateProgrammeFromAnswers, // peut être un stub si non utilisé
+  getAiSessions,                // peut être un stub si non utilisé
   type AiSession as AiSessionT,
   type Profile as ProfileT,
 } from "../../../lib/coach/ai";
 
+// -----------------------------------------------------------------------------
+// CONFIG
+// -----------------------------------------------------------------------------
 const QUESTIONNAIRE_BASE = "https://questionnaire.files-coaching.com";
 type WorkoutType = "muscu" | "cardio" | "hiit" | "mobilité";
 
+// -----------------------------------------------------------------------------
+// UI HELPERS
+// -----------------------------------------------------------------------------
 function typeBadgeClass(t: WorkoutType) {
   switch (t) {
     case "muscu":
@@ -36,17 +41,21 @@ function getBaseUrlFromHeaders() {
   return `${proto}://${host}`;
 }
 
-/** Email helpers */
-async function getEmailFromSession(): Promise<string> {
-  try {
-    // @ts-ignore optional
-    const { getServerSession } = await import("next-auth");
-    // @ts-ignore optional
-    const { authOptions } = await import("../../../lib/auth");
-    const session = await getServerSession(authOptions as any);
-    const mail = (session as any)?.user?.email as string | undefined;
-    if (mail) return mail.trim().toLowerCase();
-  } catch {}
+// -----------------------------------------------------------------------------
+// EMAIL HELPERS
+// -----------------------------------------------------------------------------
+/** Remplace par ta vraie lecture Supabase côté serveur */
+async function getEmailFromSupabaseSession(): Promise<string> {
+  // EXEMPLE (à adapter) :
+  // import { createServerClient } from "@supabase/ssr";
+  // const cookieStore = cookies();
+  // const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+  //   cookies: {
+  //     get(name: string) { return cookieStore.get(name)?.value; },
+  //   },
+  // });
+  // const { data: { user } } = await supabase.auth.getUser();
+  // return user?.email?.trim().toLowerCase() || "";
   return "";
 }
 
@@ -59,20 +68,19 @@ function pickEmail(searchParams?: Record<string, string | string[] | undefined>)
   return "";
 }
 
-/** Server Action: Générer */
+// -----------------------------------------------------------------------------
+// SERVER ACTION: Générer (programme IA)
+// -----------------------------------------------------------------------------
 async function doAutogenAction(formData: FormData) {
   "use server";
   const c = cookies();
   const user = c.get("fc_uid")?.value || "me";
   let email = c.get("app_email")?.value || "";
+
+  // Si besoin, tente Supabase (optionnel)
   if (!email) {
     try {
-      // @ts-ignore
-      const { getServerSession } = await import("next-auth");
-      // @ts-ignore
-      const { authOptions } = await import("../../../lib/auth");
-      const session = await getServerSession(authOptions as any);
-      email = ((session as any)?.user?.email as string | undefined) || "";
+      email = (await getEmailFromSupabaseSession()) || "";
     } catch {}
   }
 
@@ -99,38 +107,36 @@ async function doAutogenAction(formData: FormData) {
   redirect("/dashboard/profile?success=programme");
 }
 
-/** Loaders */
+// -----------------------------------------------------------------------------
+// DATA LOADERS
+// -----------------------------------------------------------------------------
+/** MES INFOS = **Uniquement** depuis le Sheet public (dernière réponse) */
 async function loadProfile(searchParams?: Record<string, string | string[] | undefined>) {
+  // 1) Identifier l'email
   let email = pickEmail(searchParams);
-
   if (!email) {
-    email = await getEmailFromSession();
+    email = await getEmailFromSupabaseSession();
     if (email) {
       cookies().set("app_email", email, {
         path: "/",
         httpOnly: true,
         sameSite: "lax",
-        secure: process.env.NODE_ENV === "production", // ✅ OK local & prod
+        secure: process.env.NODE_ENV === "production",
         maxAge: 60 * 60 * 24 * 365,
       });
     }
   }
 
+  // 2) Préparer profil & debug
   let profile: Partial<ProfileT> & { email?: string } = {};
-  let debugInfo: { email: string; sheetHit: boolean; reason?: string } = { email: email || "", sheetHit: false };
+  const debugInfo: { email: string; sheetHit: boolean; reason?: string } = { email: email || "", sheetHit: false };
 
   if (!email) {
-    debugInfo.reason = "Aucun email trouvé (ni ?email=, ni cookie, ni session)";
+    debugInfo.reason = "Aucun email trouvé (ni ?email=, ni cookie, ni session Supabase)";
     return { profile, email, debugInfo };
   }
 
-  // Base: identité minimale depuis “DB” (stub) — non bloquant
-  let dbProfile: { email: string; prenom?: string | null } | null = null;
-  try {
-    dbProfile = await getUserProfileByEmail(email);
-  } catch {}
-
-  // Enrichissement via Google Sheets
+  // 3) Lecture **exclusivement** depuis Google Sheet public (dernière réponse)
   try {
     const answers = await getAnswersForEmail(email);
     if (answers) {
@@ -139,20 +145,19 @@ async function loadProfile(searchParams?: Record<string, string | string[] | und
       debugInfo.sheetHit = true;
     } else {
       profile = { email };
-      debugInfo.reason = "Aucune réponse trouvée pour cet email dans Sheets";
+      debugInfo.reason = "Aucune réponse trouvée pour cet email dans le Sheet";
     }
   } catch (e: any) {
     profile = { email };
-    debugInfo.reason = `Erreur lecture Sheets: ${String(e?.message || e)}`;
+    debugInfo.reason = `Erreur lecture Sheet: ${String(e?.message || e)}`;
   }
 
-  if (dbProfile?.email && !profile.email) profile.email = dbProfile.email;
-  if (dbProfile?.prenom && !profile.prenom) profile.prenom = dbProfile.prenom || undefined;
+  // 4) Pas de fallback DB: **Sheets only**
   profile.email = profile.email || email;
-
   return { profile, email, debugInfo };
 }
 
+/** Séances IA (optionnel) — tente génération locale via réponses; sinon lit source secondaire */
 async function loadSessions(email?: string): Promise<AiSessionT[]> {
   let aiSessions: AiSessionT[] = [];
   if (email) {
@@ -186,7 +191,9 @@ async function loadSessions(email?: string): Promise<AiSessionT[]> {
   return aiSessions;
 }
 
-/** Page */
+// -----------------------------------------------------------------------------
+// PAGE
+// -----------------------------------------------------------------------------
 export default async function Page({
   searchParams,
 }: {
@@ -402,3 +409,4 @@ export default async function Page({
     </div>
   );
 }
+
