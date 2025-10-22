@@ -89,7 +89,7 @@ type ProfileT = ReturnType<typeof buildProfileFromAnswers> & {
   equipLevel?: "none" | "limited" | "full";
   equipItems?: string[];
   injuries?: string[];
-  // variantes possibles côté questionnaire (déjà gérées plus bas)
+  // variantes possibles côté questionnaire
   goal?: string;
   primaryGoal?: string;
   objective?: string;
@@ -235,7 +235,11 @@ const PageView: React.FC<PageViewProps> = (props) => {
               <div className="grid gap-3">
                 {list.map((ex, i) => {
                   const reps = ex.reps ? String(ex.reps) : ex.durationSec ? `${ex.durationSec}s` : "";
-                  const load = ex.load || (typeof ex.rir === "number" ? `RIR ${ex.rir}` : "");
+                  // ✅ force en string (corrige l'erreur de type Chip.value)
+                  const loadStr =
+                    ex.load !== undefined && ex.load !== null
+                      ? String(ex.load)
+                      : (typeof ex.rir === "number" ? `RIR ${ex.rir}` : "");
                   return (
                     <article key={`${k}-${i}`} className="compact-card">
                       <div className="flex items-start justify-between gap-3">
@@ -252,7 +256,7 @@ const PageView: React.FC<PageViewProps> = (props) => {
                         <Chip label="🧱" value={typeof ex.sets === "number" ? `${ex.sets} séries` : "—"} title="Séries" />
                         <Chip label="🔁" value={reps || "—"} title="Rép./Durée" />
                         <Chip label="⏲️" value={ex.rest || "—"} title="Repos" />
-                        <Chip label="🏋︎" value={load || "—"} title="Charge / RIR" />
+                        <Chip label="🏋︎" value={loadStr || "—"} title="Charge / RIR" />
                         {ex.tempo && <Chip label="🎚" value={ex.tempo} title="Tempo" />}
                       </div>
 
@@ -521,3 +525,4 @@ export default async function Page({
     />
   );
 }
+
