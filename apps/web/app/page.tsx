@@ -17,14 +17,43 @@ export default function HomePage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // --- helper cookie (lisible serveur + client) ---
+  function setAppEmailCookie(val: string) {
+    try {
+      const isHttps = typeof window !== "undefined" && window.location.protocol === "https:";
+      // cookie non-HttpOnly (lisible côté client ET côté serveur via headers)
+      document.cookie = [
+        `app_email=${encodeURIComponent(val)}`,
+        "Path=/",
+        "SameSite=Lax",
+        isHttps ? "Secure" : "",
+        "Max-Age=31536000" // 365 jours
+      ].filter(Boolean).join("; ");
+    } catch {}
+  }
+
   useEffect(() => {
     const t = setTimeout(() => {
       setInputsReady(true);
       if (typeof document !== "undefined") {
-        document.activeElement instanceof HTMLElement && document.activeElement.blur();
+        (document.activeElement instanceof HTMLElement) && document.activeElement.blur();
       }
     }, 300);
     return () => clearTimeout(t);
+  }, []);
+
+  // ✅ au chargement: si déjà connecté, synchronise le cookie app_email
+  useEffect(() => {
+    (async () => {
+      try {
+        const supabase = getSupabase();
+        const { data: { user } } = await supabase.auth.getUser();
+        const currentEmail = user?.email?.trim().toLowerCase();
+        if (currentEmail) {
+          setAppEmailCookie(currentEmail);
+        }
+      } catch {}
+    })();
   }, []);
 
   async function handleLogin(e: React.FormEvent) {
@@ -34,13 +63,24 @@ export default function HomePage() {
     setError(null);
     try {
       const supabase = getSupabase();
-      const { error } = await supabase.auth.signInWithPassword({
-        email: email.trim().toLowerCase(),
+      const emailTrim = email.trim().toLowerCase();
+
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: emailTrim,
         password: password.trim(),
       });
-      if (error) throw error;
+      if (signInError) throw signInError;
+
+      // ✅ récupère l’email “canonique” du user, et pose le cookie
+      const { data: { user } } = await supabase.auth.getUser();
+      const sessionEmail = (user?.email || emailTrim).trim().toLowerCase();
+      if (sessionEmail) {
+        setAppEmailCookie(sessionEmail);
+      }
+
       setMessage("Connexion réussie ✅");
-      window.location.href = "/dashboard";
+      // redirige vers le dashboard (ou directement /dashboard/profile si tu préfères)
+      window.location.href = "/dashboard/profile";
     } catch (err: any) {
       const msg = String(err?.message || "");
       setError(
@@ -121,11 +161,8 @@ export default function HomePage() {
         {/* ⬇️ Spacer blanc invisible + boutons centrés */}
         <section className="w-full grid grid-rows-[1fr_auto]">
           {/* Bloc blanc invisible qui pousse vers le bas */}
-          <div
-            aria-hidden="true"
-            className="bg-white invisible h-[45vh] sm:h-[55vh]"
-          />
-          {/* Boutons (design vert inchangé), centrés horizontalement */}
+          <div aria-hidden="true" className="bg-white invisible h-[45vh] sm:h-[55vh]" />
+          {/* Boutons */}
           <div className="justify-self-center flex flex-col sm:flex-row items-center gap-3 mb-10">
             <button
               type="button"
@@ -135,7 +172,7 @@ export default function HomePage() {
               className={`${pillClass} transition hover:-translate-y-0.5 active:translate-y-0`}
               style={{
                 ...pillStyle,
-                background: "#16a34a", // vert
+                background: "#16a34a",
                 boxShadow: "0 10px 22px rgba(22,163,74,.35)",
                 padding: "12px 22px",
               }}
@@ -149,7 +186,7 @@ export default function HomePage() {
               className={`${pillClass} transition hover:-translate-y-0.5 active:translate-y-0`}
               style={{
                 ...pillStyle,
-                background: "#16a34a", // vert
+                background: "#16a34a",
                 boxShadow: "0 10px 22px rgba(22,163,74,.35)",
                 padding: "12px 22px",
               }}
