@@ -1,4 +1,5 @@
 // lib/coach/ai.ts
+
 /** ========= Types ========= */
 export type WorkoutType = "muscu" | "cardio" | "hiit" | "mobilité";
 
@@ -9,7 +10,19 @@ export type NormalizedExercise = {
   rest?: string;
   tempo?: string;
   notes?: string;
-  block?: "échauffement" | "echauffement" | "principal" | "finition" | "accessoire" | "core" | "cardio" | "mobilité" | "mobilite" | string;
+  equipment?: string; // ex: "haltères", "poids du corps"
+  block?:
+    | "échauffement"
+    | "echauffement"
+    | "principal"
+    | "finition"
+    | "fin"
+    | "accessoire"
+    | "core"
+    | "cardio"
+    | "mobilité"
+    | "mobilite"
+    | string;
   durationSec?: number;
   distance?: string;
   weight?: string | number;
@@ -46,7 +59,11 @@ type RawAnswer = {
   email: string;
 };
 
-/** ========= ENV ========= */
+/** ========= ENV =========
+ *  SHEET_ID : id du doc
+ *  SHEET_GID: gid numérique de l’onglet
+ *  SHEET_RANGE: ex "A:J" (indicatif, juste pour doc)
+ */
 const SHEET_ID = process.env.SHEET_ID!;
 const SHEET_GID = process.env.SHEET_GID!;
 const SHEET_RANGE = process.env.SHEET_RANGE || "A:J";
@@ -100,6 +117,7 @@ function parseCsv(text: string): string[][] {
 
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
+
     if (inQuotes) {
       if (ch === '"') {
         const next = text[i + 1];
