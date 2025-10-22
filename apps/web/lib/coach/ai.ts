@@ -2,19 +2,6 @@
 import "server-only";
 import { cookies } from "next/headers";
 
-/* ========== Prisma optionnel (fallback si non présent) ========== */
-let _prisma: any | undefined; // cache de résolution
-async function ensurePrisma() {
-  if (_prisma !== undefined) return _prisma; // déjà résolu (null = absent)
-  try {
-    const mod: any = await import("@/lib/prisma");
-    _prisma = mod?.prisma ?? mod?.default ?? mod;
-  } catch {
-    _prisma = null; // pas de prisma dans ce projet
-  }
-  return _prisma;
-}
-
 /* ===================== Types partagés ===================== */
 export type WorkoutType = "muscu" | "cardio" | "hiit" | "mobilité";
 
@@ -75,7 +62,7 @@ export type SubGoal =
   | "rehab";
 export type EquipLevel = "full" | "limited" | "none";
 
-/** Profil minimal en base */
+/** Profil minimal (pas de DB) */
 export type UserProfile = {
   id: string;
   email: string;
@@ -521,12 +508,13 @@ export async function getAiSessions(email?: string): Promise<AiSession[]> {
   return prog?.sessions ?? [];
 }
 
-/* ===================== Accès profil (DB optionnelle) ===================== */
+/* ===================== Accès profil (SANS DB / SANS PRISMA) ===================== */
 
 /**
- * Upsert d'un profil utilisateur par email.
- * - Si Prisma est dispo: crée/maj en base.
- * - Sinon: pose juste le cookie "app_email" et retourne un profil minimal.
+ * Upsert factice par e-mail :
+ * - valide l'email
+ * - pose le cookie "app_email" (source de vérité locale)
+ * - renvoie un profil minimal
  */
 export async function upsertUserProfileByEmail(
   email: string,
@@ -535,58 +523,27 @@ export async function upsertUserProfileByEmail(
   const e = (email || "").trim().toLowerCase();
   if (!isEmail(e)) throw new Error("EMAIL_INVALID");
 
-  const prisma = await ensurePrisma();
-  if (prisma) {
-    const profile = await prisma.user.upsert({
-      where: { email: e },
-      update: { email: e, ...(extra ?? {}) },
-      create: { email: e, ...(extra ?? {}) },
-      select: { id: true, email: true, prenom: true },
-    });
-
-    try {
-      cookies().set("app_email", profile.email, {
-        httpOnly: true,
-        sameSite: "lax",
-        secure: true,
-        path: "/",
-        maxAge: 60 * 60 * 24 * 30,
-      });
-    } catch {}
-    return profile as UserProfile;
-  }
-
-  // Fallback sans Prisma
   try {
     cookies().set("app_email", e, {
       httpOnly: true,
       sameSite: "lax",
       secure: true,
       path: "/",
-      maxAge: 60 * 60 * 24 * 30,
+      maxAge: 60 * 60 * 24 * 30, // 30 jours
     });
-  } catch {}
+  } catch {
+    // contexte hors requête — ignorer
+  }
+
   return { id: e, email: e, prenom: extra?.prenom ?? null };
 }
 
 /**
- * Lecture d'un profil utilisateur par email.
- * - Si Prisma est dispo: lit en base.
- * - Sinon: retourne un profil minimal (email seulement) pour ne pas casser l'UI.
+ * Lecture factice du profil :
+ * - retourne un profil minimal basé sur l'email fourni
  */
 export async function getUserProfileByEmail(email: string): Promise<UserProfile | null> {
   const e = (email || "").trim().toLowerCase();
   if (!isEmail(e)) return null;
-
-  const prisma = await ensurePrisma();
-  if (prisma) {
-    const profile = await prisma.user.findUnique({
-      where: { email: e },
-      select: { id: true, email: true, prenom: true },
-    });
-    return profile as UserProfile | null;
-  }
-
-  // Fallback sans Prisma
   return { id: e, email: e, prenom: null };
 }
