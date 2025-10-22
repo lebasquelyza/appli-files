@@ -1,0 +1,11 @@
+0: horodatage       (ignoré)         ex: 29/08/2025 13:37:10
+1: prénom                              ex: Lyza
+2: âge                                  ex: 20
+3: poids (optionnel)                    ex: 68
+4: taille (optionnel)                   ex: 163
+5: intensité                            ex: faible | modere | pro
+6: objectif                             ex: pdm | perte de poids | force | etc.
+7: disponibilité                        ex: lundi et mardi | Toute la semaine | 3 jours
+8: matériel (optionnel)                 ex: rien | haltères | élastiques | tout l’équipement de la salle
+9: lieu                                 ex: maison | salle de sport | extérieur | box | mixte
+10: email                               ex: prenom.nom@gmail.com
