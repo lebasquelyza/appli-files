@@ -45,9 +45,7 @@ export async function addSessionAction(formData: FormData) {
   const title = (formData.get("title") || "").toString().trim();
   const type = (formData.get("type") || "muscu").toString() as WorkoutType;
   const date = (formData.get("date") || toYMD()).toString();
-  const plannedMinStr = (formData.get("plannedMin") || "")
-    .toString()
-    .replace(",", ".");
+  const plannedMinStr = (formData.get("plannedMin") || "").toString().replace(",", ".");
   const note = (formData.get("note") || "").toString().slice(0, 240);
   const startNow = (formData.get("startNow") || "").toString() === "1";
 
@@ -72,9 +70,13 @@ export async function addSessionAction(formData: FormData) {
   cookies().set("app_sessions", JSON.stringify(next), {
     path: "/",
     sameSite: "lax",
+    httpOnly: false, // OK: utilisé côté client
+    secure: process.env.NODE_ENV === "production",
     maxAge: 60 * 60 * 24 * 365,
-    httpOnly: false,
   });
 
-  redirect("/dashboard/profile?success=1");
+  // ✅ On préserve l’email connu pour garantir l’affichage dans “Mes infos”
+  const email = cookies().get("app_email")?.value;
+  const to = `/dashboard/profile?success=1${email ? `&email=${encodeURIComponent(email)}` : ""}`;
+  redirect(to);
 }
