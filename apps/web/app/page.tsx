@@ -1,8 +1,23 @@
+// apps/web/app/page.tsx  (ou apps/web/app/signin/page.tsx si ta route de login est /signin)
 "use client";
 
 import { useEffect, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { getSupabase } from "../lib/supabaseClient";
+
+// --- helper cookie (lisible serveur + client) ---
+function setAppEmailCookie(val: string) {
+  try {
+    const isHttps = typeof window !== "undefined" && window.location.protocol === "https:";
+    document.cookie = [
+      `app_email=${encodeURIComponent(val)}`,
+      "Path=/",
+      "SameSite=Lax",
+      isHttps ? "Secure" : "",
+      "Max-Age=31536000" // 365 jours
+    ].filter(Boolean).join("; ");
+  } catch {}
+}
 
 export default function HomePage() {
   // UI
@@ -17,41 +32,24 @@ export default function HomePage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // --- helper cookie (lisible serveur + client) ---
-  function setAppEmailCookie(val: string) {
-    try {
-      const isHttps = typeof window !== "undefined" && window.location.protocol === "https:";
-      // cookie non-HttpOnly (lisible côté client ET côté serveur via headers)
-      document.cookie = [
-        `app_email=${encodeURIComponent(val)}`,
-        "Path=/",
-        "SameSite=Lax",
-        isHttps ? "Secure" : "",
-        "Max-Age=31536000" // 365 jours
-      ].filter(Boolean).join("; ");
-    } catch {}
-  }
-
   useEffect(() => {
     const t = setTimeout(() => {
       setInputsReady(true);
       if (typeof document !== "undefined") {
-        (document.activeElement instanceof HTMLElement) && document.activeElement.blur();
+        document.activeElement instanceof HTMLElement && document.activeElement.blur();
       }
     }, 300);
     return () => clearTimeout(t);
   }, []);
 
-  // ✅ au chargement: si déjà connecté, synchronise le cookie app_email
+  // (facultatif) si déjà connecté, synchronise le cookie au mount
   useEffect(() => {
     (async () => {
       try {
         const supabase = getSupabase();
         const { data: { user } } = await supabase.auth.getUser();
         const currentEmail = user?.email?.trim().toLowerCase();
-        if (currentEmail) {
-          setAppEmailCookie(currentEmail);
-        }
+        if (currentEmail) setAppEmailCookie(currentEmail);
       } catch {}
     })();
   }, []);
@@ -71,16 +69,14 @@ export default function HomePage() {
       });
       if (signInError) throw signInError;
 
-      // ✅ récupère l’email “canonique” du user, et pose le cookie
+      // récupère l’email canonique et pose le cookie
       const { data: { user } } = await supabase.auth.getUser();
       const sessionEmail = (user?.email || emailTrim).trim().toLowerCase();
-      if (sessionEmail) {
-        setAppEmailCookie(sessionEmail);
-      }
+      if (sessionEmail) setAppEmailCookie(sessionEmail);
 
       setMessage("Connexion réussie ✅");
-      // redirige vers le dashboard (ou directement /dashboard/profile si tu préfères)
-      window.location.href = "/dashboard/profile";
+      // ✅ on garde ton flux: retour sur /dashboard
+      window.location.href = "/dashboard";
     } catch (err: any) {
       const msg = String(err?.message || "");
       setError(
@@ -158,11 +154,9 @@ export default function HomePage() {
           </ul>
         </section>
 
-        {/* ⬇️ Spacer blanc invisible + boutons centrés */}
+        {/* CTA */}
         <section className="w-full grid grid-rows-[1fr_auto]">
-          {/* Bloc blanc invisible qui pousse vers le bas */}
           <div aria-hidden="true" className="bg-white invisible h-[45vh] sm:h-[55vh]" />
-          {/* Boutons */}
           <div className="justify-self-center flex flex-col sm:flex-row items-center gap-3 mb-10">
             <button
               type="button"
@@ -197,7 +191,7 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* Login inline centré quand ouvert */}
+        {/* Login inline */}
         {showLogin && (
           <div id="login-panel" className="max-w-md mx-auto">
             <form onSubmit={handleLogin} className="space-y-4">
@@ -273,3 +267,4 @@ export default function HomePage() {
     </main>
   );
 }
+
