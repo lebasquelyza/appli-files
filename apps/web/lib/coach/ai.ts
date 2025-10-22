@@ -1,6 +1,7 @@
 // apps/web/lib/coach/ai.ts
 import "server-only";
 import { cookies } from "next/headers";
+import { prisma } from "@/lib/prisma"; // ✅ Assumé présent (adapter si besoin)
 
 /* ===================== Types partagés ===================== */
 export type WorkoutType = "muscu" | "cardio" | "hiit" | "mobilité";
@@ -61,6 +62,13 @@ export type SubGoal =
   | "core"
   | "rehab";
 export type EquipLevel = "full" | "limited" | "none";
+
+/** ✅ Profil minimal stocké en base via Prisma */
+export type UserProfile = {
+  id: string;
+  email: string;
+  prenom?: string | null;
+};
 
 export type Profile = {
   email: string;
@@ -499,4 +507,57 @@ export async function getAiSessions(email?: string): Promise<AiSession[]> {
   if (!e) return [];
   const prog = await getProgrammeForUser(e);
   return prog?.sessions ?? [];
+}
+
+/* ===================== ✅ Ajouts : accès profil en base ===================== */
+
+/**
+ * Upsert d'un profil utilisateur par email.
+ * - Crée si absent, met à jour si présent (peut recevoir des champs supplémentaires).
+ * - Pose aussi un cookie "app_email" pour harmoniser avec le reste du code.
+ */
+export async function upsertUserProfileByEmail(
+  email: string,
+  extra?: Partial<Pick<UserProfile, "prenom">>
+): Promise<UserProfile> {
+  const e = (email || "").trim().toLowerCase();
+  if (!isEmail(e)) throw new Error("EMAIL_INVALID");
+
+  const profile = await prisma.user.upsert({
+    where: { email: e },
+    update: { email: e, ...(extra ?? {}) },
+    create: { email: e, ...(extra ?? {}) },
+    select: { id: true, email: true, prenom: true },
+  });
+
+  // Optionnel : rendre l'email dispo au reste de l'app via cookie
+  try {
+    cookies().set("app_email", profile.email, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: true,
+      path: "/",
+      // 30 jours
+      maxAge: 60 * 60 * 24 * 30,
+    });
+  } catch {
+    // ignorer si on n'est pas dans un contexte request/response
+  }
+
+  return profile;
+}
+
+/**
+ * Récupère un profil utilisateur par email.
+ */
+export async function getUserProfileByEmail(email: string): Promise<UserProfile | null> {
+  const e = (email || "").trim().toLowerCase();
+  if (!isEmail(e)) return null;
+
+  const profile = await prisma.user.findUnique({
+    where: { email: e },
+    select: { id: true, email: true, prenom: true },
+  });
+
+  return profile;
 }
