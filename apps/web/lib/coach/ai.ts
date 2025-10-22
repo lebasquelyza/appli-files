@@ -1,8 +1,8 @@
+// apps/web/lib/coach/ai.ts
 import "server-only";
-import fs from "fs";
-import path from "path";
+import { cookies } from "next/headers";
 
-/* ===================== Types ===================== */
+/* ===================== Types partagés ===================== */
 export type WorkoutType = "muscu" | "cardio" | "hiit" | "mobilité";
 
 export type NormalizedExercise = {
@@ -28,30 +28,49 @@ export type AiSession = {
   type: WorkoutType;
   date: string;
   plannedMin?: number;
+  note?: string;
   intensity?: "faible" | "modérée" | "élevée";
+  recommendedBy?: string;
   exercises?: NormalizedExercise[];
+  blocks?: {
+    name: "echauffement" | "principal" | "fin" | "accessoires";
+    items: NormalizedExercise[];
+  }[];
+  plan?: any;
+  content?: any;
 };
+
+export type AiProgramme = { sessions: AiSession[] };
 
 export type Answers = Record<string, string>;
 export type Goal =
   | "hypertrophy"
   | "fatloss"
-  | "maintenance"
   | "strength"
   | "endurance"
   | "mobility"
-  | "hero"
-  | "marathon"
   | "general";
-
+export type SubGoal =
+  | "glutes"
+  | "legs"
+  | "chest"
+  | "back"
+  | "arms"
+  | "shoulders"
+  | "posture"
+  | "core"
+  | "rehab";
 export type EquipLevel = "full" | "limited" | "none";
 
 export type Profile = {
   email: string;
   prenom?: string;
   age?: number;
+  height?: number;
+  weight?: number;
+  imc?: number;
   goal: Goal;
-  subGoals: string[];
+  subGoals: SubGoal[];
   level: "debutant" | "intermediaire" | "avance";
   freq: number;
   timePerSession: number;
@@ -59,443 +78,425 @@ export type Profile = {
   equipItems: string[];
   gym: boolean;
   location: "gym" | "home" | "outdoor" | "mixed" | "box";
+  cardioPref?: "run" | "bike" | "row" | "walk" | "mixed";
   injuries: string[];
+  sleepOk?: boolean;
+  stressHigh?: boolean;
+  likesWOD?: boolean;
 };
 
-export type AiProgramme = {
-  sessions: AiSession[];
-  profile?: Profile;
+/* ===================== Config (Google Sheets) ===================== */
+const SHEET_ID = process.env.SHEET_ID || "";
+const SHEET_RANGE = process.env.SHEET_RANGE || "Réponses!A1:K";
+const SHEET_GID = process.env.SHEET_GID || "";
+
+/* ===================== Utils ===================== */
+export function norm(s: string) {
+  return String(s)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/œ/g, "oe")
+    .replace(/ç/g, "c")
+    .replace(/[’']/g, "'")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function readNum(s: string): number | undefined {
+  const cleaned = String(s).replace(/[^\d.,-]/g, "").replace(",", ".");
+  const n = Number(cleaned);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function isEmail(v: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v).trim());
+}
+
+/* ===================== Google Sheets ===================== */
+async function fetchValues(sheetId: string, range: string) {
+  const sheetName = (range.split("!")[0] || "").replace(/^'+|'+$/g, "");
+  if (!sheetId) throw new Error("SHEETS_CONFIG_MISSING");
+
+  const tries: string[] = [];
+  if (SHEET_GID) {
+    tries.push(
+      `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&id=${sheetId}&gid=${encodeURIComponent(
+        SHEET_GID
+      )}`
+    );
+  }
+  if (sheetName) {
+    tries.push(
+      `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(
+        sheetName
+      )}`
+    );
+  }
+
+  for (const url of tries) {
+    const res = await fetch(url, { cache: "no-store" });
+    const text = await res.text().catch(() => "");
+    if (!res.ok) continue;
+    if (text.trim().startsWith("<")) continue;
+
+    const rows: string[][] = [];
+    const lines = text.split(/\r?\n/).filter((l) => l.trim() !== "");
+    for (const line of lines) {
+      const cells: string[] = [];
+      let cur = "",
+        inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') {
+          if (inQuotes && line[i + 1] === '"') {
+            cur += '"';
+            i++;
+          } else {
+            inQuotes = !inQuotes;
+          }
+        } else if (ch === "," && !inQuotes) {
+          cells.push(cur);
+          cur = "";
+        } else {
+          cur += ch;
+        }
+      }
+      cells.push(cur);
+      rows.push(cells.map((c) => c.trim().replace(/^"|"$/g, "")));
+    }
+    return { values: rows };
+  }
+  throw new Error("SHEETS_FETCH_FAILED");
+}
+
+/* ========= Mapping par défaut (sans en-tête explicite) ========= */
+const NO_HEADER_COLS = {
+  prenom: 1,        // date/heure en col0, prénom en col1
+  nom: 1,
+  age: 2,           // âge en col2
+  poids: 3,         // poids en col3
+  taille: 4,
+  niveau: 5,
+  objectif: 6,
+  disponibilite: 7,
+  materiel: 8,
+  lieu: 9,
+  email: 10,
 };
 
-/* ===================== Helpers ===================== */
-function norm(s: string) {
-  return String(s).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+function guessEmailColumn(values: string[][]): number {
+  const width = Math.max(...values.map((r) => r.length));
+  let bestIdx = -1;
+  let bestScore = -1;
+  for (let j = 0; j < width; j++) {
+    let score = 0;
+    for (let i = 0; i < values.length; i++) {
+      const cell = (values[i]?.[j] || "").trim();
+      if (isEmail(cell)) score++;
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      bestIdx = j;
+    }
+  }
+  return bestIdx;
 }
 
-function safePrenom(str?: string) {
-  return str?.trim() ? str : "Coaché";
+function guessAgeFromRow(row: string[]): number | undefined {
+  for (const cell of row) {
+    const n = readNum(cell);
+    if (typeof n === "number" && n >= 8 && n <= 100 && Number.isInteger(n)) {
+      return n;
+    }
+  }
+  return undefined;
 }
+
+function guessFirstnameFromRow(row: string[], preferIdx?: number): string | undefined {
+  if (typeof preferIdx === "number" && row[preferIdx]) {
+    const v = row[preferIdx].trim();
+    if (v && !isEmail(v) && !/\d/.test(v)) return v;
+  }
+  for (let j = 0; j < row.length; j++) {
+    const v = (row[j] || "").trim();
+    if (!v) continue;
+    if (isEmail(v)) continue;
+    if (/\d/.test(v)) continue;
+    if (v.length >= 2 && v.length <= 30) return v;
+  }
+  return undefined;
+}
+
+export async function getAnswersForEmail(
+  email: string,
+  sheetId = SHEET_ID,
+  range = SHEET_RANGE
+): Promise<Answers | null> {
+  const data = await fetchValues(sheetId, range);
+  const values: string[][] = data.values || [];
+  if (values.length === 0) return null;
+
+  const firstRowNorm = values[0].map(norm);
+  const headerCandidates = ["adresse mail", "email", "e-mail", "mail"];
+  const hasHeader = firstRowNorm.some((h) => headerCandidates.includes(h));
+
+  let headers: string[] = [];
+  let idxEmail = -1;
+
+  if (hasHeader) {
+    headers = firstRowNorm;
+    idxEmail = headers.findIndex((h) => headerCandidates.includes(h));
+  } else {
+    const width = Math.max(values[0]?.length || 0, NO_HEADER_COLS.email + 1);
+    headers = Array.from({ length: width }, (_, i) => `col${i}`);
+    idxEmail = NO_HEADER_COLS.email;
+    if (idxEmail >= width) idxEmail = -1;
+    if (idxEmail === -1) {
+      idxEmail = guessEmailColumn(values);
+    }
+  }
+
+  if (idxEmail === -1) {
+    // scan brut si on n'a pas trouvé la colonne email
+    for (let i = values.length - 1; i >= 0; i--) {
+      const row = values[i] || [];
+      for (let j = 0; j < row.length; j++) {
+        if ((row[j] || "").trim().toLowerCase() === email.trim().toLowerCase()) {
+          idxEmail = j;
+          break;
+        }
+      }
+      if (idxEmail !== -1) break;
+    }
+  }
+
+  if (idxEmail === -1) return null;
+
+  const start = hasHeader ? 1 : 0;
+  for (let i = values.length - 1; i >= start; i--) {
+    const row = values[i] || [];
+    const cellAtEmailCol = (row[idxEmail] || "").trim().toLowerCase();
+    if (cellAtEmailCol !== email.trim().toLowerCase()) {
+      if (!hasHeader) {
+        const anyCell = row.find(
+          (c) => (c || "").trim().toLowerCase() === email.trim().toLowerCase()
+        );
+        if (!anyCell) continue;
+      } else {
+        continue;
+      }
+    }
+
+    const rec: Answers = {};
+    for (let j = 0; j < row.length; j++) {
+      const key = hasHeader ? (headers[j] || `col${j}`) : `col${j}`;
+      rec[key] = (row[j] ?? "").trim();
+    }
+
+    // Normalisation des champs clés
+    rec["email"] =
+      rec["email"] ||
+      rec["adresse mail"] ||
+      rec["e-mail"] ||
+      rec["mail"] ||
+      rec[`col${idxEmail}`] ||
+      rec[`col${NO_HEADER_COLS.email}`] ||
+      "";
+
+    rec["objectif"] =
+      rec["objectif"] || rec[`col${NO_HEADER_COLS.objectif}`] || "";
+
+    rec["niveau"] =
+      rec["niveau"] || rec[`col${NO_HEADER_COLS.niveau}`] || "";
+
+    rec["lieu"] =
+      rec["lieu"] || rec[`col${NO_HEADER_COLS.lieu}`] || "";
+
+    rec["as tu du materiel a ta disposition"] =
+      rec["as tu du materiel a ta disposition"] ||
+      rec["as-tu du materiel a ta disposition"] ||
+      rec["as-tu du matériel à ta disposition"] ||
+      rec[`col${NO_HEADER_COLS.materiel}`] ||
+      "";
+
+    rec["disponibilite"] =
+      rec["disponibilite"] ||
+      rec["disponibilité"] ||
+      rec[`col${NO_HEADER_COLS.disponibilite}`] ||
+      "";
+
+    rec["poids"] =
+      rec["poids"] || rec["weight"] || rec[`col${NO_HEADER_COLS.poids}`] || "";
+
+    rec["taille"] =
+      rec["taille"] || rec["height"] || rec[`col${NO_HEADER_COLS.taille}`] || "";
+
+    // ✅ prénom + âge (même sans en-tête)
+    rec["prenom"] =
+      rec["prenom"] ||
+      rec["prénom"] ||
+      rec[`col${NO_HEADER_COLS.prenom}`] ||
+      guessFirstnameFromRow(row, NO_HEADER_COLS.prenom) ||
+      "";
+
+    rec["age"] =
+      rec["age"] ||
+      rec[`col${NO_HEADER_COLS.age}`] ||
+      (guessAgeFromRow(row)?.toString() ?? "");
+
+    return rec;
+  }
+  return null;
+}
+
+/* ===================== Implémentations locales (identiques à avant) ===================== */
 
 function mapGoal(s?: string): Goal {
   const g = norm(s || "");
   if (g.includes("force")) return "strength";
   if (g.includes("hypert")) return "hypertrophy";
-  if (g.includes("pdm")) return "hypertrophy";
-  if (g.includes("perte") || g.includes("gras") || g.includes("minceur")) return "fatloss";
-  if (g.includes("maintien") || g.includes("forme")) return "maintenance";
-  if (g.includes("hero")) return "hero";
-  if (g.includes("marathon") || g.includes("semi")) return "marathon";
-  if (g.includes("cardio") || g.includes("endurance")) return "endurance";
-  if (g.includes("mobil") || g.includes("souplesse")) return "mobility"; // <-- fix
+  if (g.includes("gras") || g.includes("perte")) return "fatloss";
+  if (g.includes("endurance") || g.includes("cardio")) return "endurance";
+  if (g.includes("mobil")) return "mobility";
   return "general";
 }
 
-/* ===================== Durée/intensité auto ===================== */
-function computeSessionParams(goal: Goal, freq: number) {
-  let timePerSession = 45;
-  let intensity: "faible" | "modérée" | "élevée" = "modérée";
-
-  if (goal === "fatloss") {
-    timePerSession = freq <= 2 ? 35 : 50;
-    intensity = freq <= 2 ? "élevée" : "modérée";
-  } else if (goal === "hypertrophy" || goal === "strength") {
-    timePerSession = freq <= 2 ? 45 : 65;
-    intensity = "élevée";
-  } else if (goal === "maintenance") {
-    timePerSession = freq <= 2 ? 35 : 50;
-    intensity = "modérée";
-  } else if (goal === "endurance" || goal === "marathon") {
-    timePerSession = freq <= 2 ? 40 : 60;
-    intensity = "modérée";
-  } else if (goal === "mobility") {
-    timePerSession = 30;
-    intensity = "faible";
-  } else if (goal === "hero") {
-    timePerSession = 60;
-    intensity = "élevée";
-  }
-
-  return { timePerSession, intensity };
+function mapLevel(s?: string): Profile["level"] {
+  const l = norm(s || "");
+  if (l.startsWith("deb")) return "debutant";
+  if (l.startsWith("inter")) return "intermediaire";
+  if (l.startsWith("av")) return "avance";
+  return "debutant";
 }
 
-/* ===================== Progression ===================== */
-function applyProgression(
-  exercises: NormalizedExercise[],
-  goal: Goal,
-  week: number
-): NormalizedExercise[] {
-  const newExos = structuredClone(exercises);
-
-  for (const ex of newExos) {
-    if (goal === "hypertrophy" || goal === "strength") {
-      if (typeof ex.sets === "number") ex.sets += Math.floor(week / 2);
-      if (typeof ex.reps === "string" && /\d+/.test(ex.reps)) {
-        const base = parseInt(ex.reps.match(/\d+/)![0]);
-        ex.reps = `${base + week}-12`;
-      }
-    }
-
-    if (goal === "fatloss" || goal === "endurance" || goal === "marathon") {
-      if (typeof ex.reps === "string" && ex.reps.includes("min")) {
-        const add = Math.min(week * 2, 15);
-        ex.reps = ex.reps.replace(/\d+/, (m) => String(parseInt(m) + add));
-      }
-    }
-
-    if (goal === "mobility") {
-      if (typeof ex.reps === "string" && ex.reps.includes("min")) {
-        const add = Math.min(week, 5);
-        ex.reps = ex.reps.replace(/\d+/, (m) => String(parseInt(m) + add));
-      }
-    }
-
-    if (goal === "hero") {
-      if (typeof ex.reps === "string" && ex.reps.includes("mile")) {
-        const add = Math.min(week * 0.5, 2);
-        ex.reps = ex.reps.replace(/\d+/, (m) => String(parseFloat(m) + add));
-      }
-    }
-  }
-
-  return newExos;
+function mapEquipLevel(s?: string): EquipLevel {
+  const t = norm(s || "");
+  if (!t) return "none";
+  if (t.includes("barre") || t.includes("rack") || t.includes("complet"))
+    return "full";
+  if (t.includes("halter") || t.includes("kettle") || t.includes("elasti"))
+    return "limited";
+  return "none";
 }
 
-/* ===================== Génération IA ===================== */
-export function generateProgrammeFromAnswers(answers: Answers, week = 0): AiProgramme {
+export function buildProfileFromAnswers(answers: Answers): Profile {
+  const weight = readNum(answers["poids"] || answers["weight"] || "");
+  const height = readNum(answers["taille"] || answers["height"] || "");
+  const imc =
+    weight && height ? +(weight / Math.pow((height ?? 0) / 100, 2)).toFixed(1) : undefined;
+
+  const freq =
+    readNum(answers["disponibilite"] || answers["fréquence"] || "") ?? 3;
+
+  const timePerSession = readNum(
+    answers["temps par séance"] ||
+      answers["durée séance"] ||
+      answers["duree seance"] ||
+      ""
+  ) ?? 45;
+
+  const locationStr = norm(answers["lieu"] || "");
+  const location: Profile["location"] =
+    locationStr.includes("maison") || locationStr.includes("home")
+      ? "home"
+      : locationStr.includes("salle") || locationStr.includes("gym")
+      ? "gym"
+      : locationStr.includes("extérieur") || locationStr.includes("exterieur")
+      ? "outdoor"
+      : "mixed";
+
+  const equipItems = (answers["as tu du materiel a ta disposition"] || "")
+    .split(/[;,]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const ageParsed = readNum(answers["age"] || "");
+  const age =
+    typeof ageParsed === "number" && ageParsed > 0 ? Math.floor(ageParsed) : undefined;
+
+  return {
+    email: (answers["email"] || "").trim().toLowerCase(),
+    prenom: answers["prenom"] || answers["prénom"],
+    age,
+    height: height ?? undefined,
+    weight: weight ?? undefined,
+    imc,
+    goal: mapGoal(answers["objectif"]),
+    subGoals: [],
+    level: mapLevel(answers["niveau"]),
+    freq,
+    timePerSession,
+    equipLevel: mapEquipLevel(
+      answers["as tu du materiel a ta disposition"] || ""
+    ),
+    equipItems,
+    gym: location === "gym",
+    location,
+    injuries: (answers["blessures"] || "")
+      .split(/[;,]/)
+      .map((s) => s.trim())
+      .filter(Boolean),
+  };
+}
+
+export function generateProgrammeFromAnswers(answers: Answers): AiProgramme {
+  const p = buildProfileFromAnswers(answers);
   const today = new Date();
-  const email = (answers["email"] || "").trim().toLowerCase();
-  const goal = mapGoal(answers["objectif"]);
-  const prenom = safePrenom(answers["prenom"] || (answers as any)["prénom"]);
-  const freq = Math.max(1, Math.min(7, parseInt((answers["disponibilite"] || "3").toString()) || 3));
-  const { timePerSession, intensity } = computeSessionParams(goal, freq);
-
-  // 📍 lieu → équipement
-  const locStr = norm(answers["lieu"] || "");
-  let location: Profile["location"] = "gym";
-  if (locStr.includes("maison")) location = "home";
-  else if (locStr.includes("exter")) location = "outdoor";
-  else if (locStr.includes("box")) location = "box";
-  else if (locStr.includes("mix")) location = "mixed";
-
-  let inferredEquip: EquipLevel = "full";
-  if (location === "home") inferredEquip = "limited";
-  if (location === "outdoor") inferredEquip = "none";
-
-  const eq = norm(answers["as tu du materiel a ta disposition"] || "");
-  let equipLevel: EquipLevel = inferredEquip;
-  if (eq.includes("rack") || eq.includes("barre") || eq.includes("machine")) equipLevel = "full";
-  else if (eq.includes("halter") || eq.includes("elasti") || eq.includes("kettle")) equipLevel = "limited";
-  else if (eq.includes("aucun") || eq.includes("rien")) equipLevel = "none";
-
-  const makeSession = (title: string, type: WorkoutType, exos: NormalizedExercise[], offset = 0): AiSession => {
+  const sessions: AiSession[] = Array.from({ length: p.freq }).map((_, i) => {
     const d = new Date(today);
-    d.setDate(today.getDate() + offset);
+    d.setDate(today.getDate() + i);
+    const type: WorkoutType =
+      p.goal === "endurance"
+        ? "cardio"
+        : p.goal === "mobility"
+        ? "mobilité"
+        : "muscu";
     return {
-      id: `${email}-${d.toISOString().slice(0, 10)}-${title}`,
-      title,
+      id: `${p.email}-${d.toISOString().slice(0, 10)}`,
+      title:
+        type === "muscu"
+          ? "Full body"
+          : type === "cardio"
+          ? "Cardio structuré"
+          : "Mobilité",
       type,
       date: d.toISOString().slice(0, 10),
-      plannedMin: timePerSession,
-      intensity,
-      exercises: applyProgression(exos, goal, week),
+      plannedMin: p.timePerSession,
+      intensity:
+        p.goal === "fatloss" || p.goal === "strength" ? "modérée" : "faible",
+      exercises:
+        type === "muscu"
+          ? [
+              { name: "Squat goblet", sets: 3, reps: "10-12", rest: "60-90s", block: "principal" },
+              { name: "Rowing haltère", sets: 3, reps: "8-10", rest: "60-90s", block: "principal" },
+              { name: "Pompes", sets: 3, reps: "max-2", rest: "60s", block: "principal" },
+            ]
+          : type === "cardio"
+          ? [
+              { name: "Intervals 4x4", durationSec: 4 * 60 * 4, notes: "RPE 7-8", block: "principal" },
+            ]
+          : [
+              { name: "Flow hanches/chevilles", durationSec: 10 * 60, block: "principal" },
+            ],
     };
-  };
-
-  /* Exercices de base */
-  const pushFull: NormalizedExercise[] = [
-    { name: "Développé couché barre", sets: 4, reps: "6–10", rest: "90s", block: "principal" },
-  ];
-  const pushLimited: NormalizedExercise[] = [
-    { name: "Pompes lestées", sets: 4, reps: "8–12", rest: "90s", block: "principal" },
-  ];
-  const pushNone: NormalizedExercise[] = [
-    { name: "Pompes", sets: 4, reps: "max–2", rest: "90s", block: "principal" },
-  ];
-
-  const pullFull: NormalizedExercise[] = [
-    { name: "Tractions lestées", sets: 4, reps: "6–10", rest: "90s", block: "principal" },
-  ];
-  const pullLimited: NormalizedExercise[] = [
-    { name: "Rowing haltère", sets: 4, reps: "10–15", rest: "90s", block: "principal" },
-  ];
-  const pullNone: NormalizedExercise[] = [
-    { name: "Superman hold", sets: 3, reps: "30s", rest: "60s", block: "principal" },
-  ];
-
-  const legsFull: NormalizedExercise[] = [
-    { name: "Back squat", sets: 4, reps: "6–10", rest: "120s", block: "principal" },
-  ];
-  const legsLimited: NormalizedExercise[] = [
-    { name: "Goblet squat", sets: 4, reps: "10–12", rest: "90s", block: "principal" },
-  ];
-  const legsNone: NormalizedExercise[] = [
-    { name: "Air squat", sets: 4, reps: "20", rest: "60s", block: "principal" },
-  ];
-
-  const fullBodyFull: NormalizedExercise[] = [
-    { name: "Back squat", sets: 3, reps: "6–10", rest: "120s", block: "principal" },
-    { name: "Développé couché barre", sets: 3, reps: "6–10", rest: "90s", block: "principal" },
-    { name: "Rowing barre", sets: 3, reps: "8–12", rest: "90s", block: "principal" },
-  ];
-
-  const fullBodyLimited: NormalizedExercise[] = [
-    { name: "Goblet squat", sets: 3, reps: "12", rest: "90s", block: "principal" },
-    { name: "Pompes", sets: 3, reps: "max–2", rest: "90s", block: "principal" },
-  ];
-  const fullBodyNone: NormalizedExercise[] = [
-    { name: "Pompes", sets: 3, reps: "max–2", rest: "90s", block: "principal" },
-    { name: "Squats", sets: 3, reps: "15–20", rest: "90s", block: "principal" },
-  ];
-
-  const cardio: NormalizedExercise[] = [
-    { name: "Intervalles 4×4 min Z3", reps: "4×4 min", rest: "2 min", block: "principal" },
-  ];
-  const hero: NormalizedExercise[] = [
-    { name: "Murph modifié", reps: "1 mile run + 100 pompes + 200 squats + 100 tractions + 1 mile run" },
-  ];
-  const marathon: NormalizedExercise[] = [
-    { name: "Course tempo", reps: "30 min", block: "principal" },
-  ];
-  const mobility: NormalizedExercise[] = [
-    { name: "Flow hanches 90/90", reps: "10 min", block: "principal" },
-  ];
-
-  const getPush = () => (equipLevel === "full" ? pushFull : equipLevel === "limited" ? pushLimited : pushNone);
-  const getPull = () => (equipLevel === "full" ? pullFull : equipLevel === "limited" ? pullLimited : pullNone);
-  const getLegs = () => (equipLevel === "full" ? legsFull : equipLevel === "limited" ? legsLimited : legsNone);
-  const getFullBody = () =>
-    equipLevel === "full" ? fullBodyFull : equipLevel === "limited" ? fullBodyLimited : fullBodyNone;
-
-  const sessions: AiSession[] = [];
-
-  switch (goal) {
-    case "hypertrophy":
-    case "strength":
-      if (freq === 1) sessions.push(makeSession("Full Body", "muscu", getFullBody(), 0));
-      else {
-        sessions.push(makeSession("Push", "muscu", getPush(), 0));
-        if (freq > 1) sessions.push(makeSession("Pull", "muscu", getPull(), 1));
-        if (freq > 2) sessions.push(makeSession("Legs", "muscu", getLegs(), 2));
-      }
-      break;
-    case "fatloss":
-    case "maintenance":
-      for (let i = 0; i < freq; i++) sessions.push(makeSession(`Full Body #${i + 1}`, "muscu", getFullBody(), i));
-      break;
-    case "endurance":
-      for (let i = 0; i < freq; i++) sessions.push(makeSession(`Cardio #${i + 1}`, "cardio", cardio, i));
-      break;
-    case "marathon":
-      for (let i = 0; i < freq; i++) sessions.push(makeSession(`Course ${i + 1}`, "cardio", marathon, i));
-      break;
-    case "hero":
-      for (let i = 0; i < freq; i++) sessions.push(makeSession(`Hero WOD #${i + 1}`, "hiit", hero, i));
-      break;
-    case "mobility":
-      for (let i = 0; i < freq; i++) sessions.push(makeSession(`Mobilité #${i + 1}`, "mobilité", mobility, i));
-      break;
-    default:
-      for (let i = 0; i < freq; i++) sessions.push(makeSession(`Full Body #${i + 1}`, "muscu", getFullBody(), i));
-  }
-
-  return {
-    sessions,
-    profile: {
-      email,
-      prenom,
-      age: undefined,
-      goal,
-      subGoals: [],
-      level: "debutant",
-      freq,
-      timePerSession,
-      equipLevel,
-      equipItems: [],
-      gym: location === "gym",
-      location,
-      injuries: [],
-    },
-  };
+  });
+  return { sessions };
 }
 
-/* ===================== FS utils ===================== */
-const PROGRAMMES_DIR =
-  process.env.NODE_ENV === "production"
-    ? path.join("/tmp", "programmes")
-    : path.join(process.cwd(), "data", "programmes");
-
-function ensureDirSafe(dir = PROGRAMMES_DIR) {
-  try {
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    return true;
-  } catch {
-    return false;
-  }
+export async function getProgrammeForUser(email: string): Promise<AiProgramme | null> {
+  const ans = await getAnswersForEmail(email);
+  if (!ans) return null;
+  return generateProgrammeFromAnswers(ans);
 }
 
-function safeFileName(email: string) {
-  return email.replace(/[^a-z0-9._-]+/gi, "_").toLowerCase();
-}
+export async function getAiSessions(email?: string): Promise<AiSession[]> {
+  const e =
+    email ||
+    cookies().get("app_email")?.value || // cookie correct
+    "";
 
-/* ===================== Sauvegarde / chargement ===================== */
-export type SavedProgramme = {
-  email: string;
-  week: number;
-  programme: AiProgramme;
-  createdAt: string;
-};
-
-export async function saveProgrammeForUser(email: string, programme: AiProgramme, week = 0) {
-  try {
-    ensureDirSafe();
-    const filePath = path.join(PROGRAMMES_DIR, `${safeFileName(email)}.json`);
-    const payload: SavedProgramme = { email, week, programme, createdAt: new Date().toISOString() };
-    fs.writeFileSync(filePath, JSON.stringify(payload, null, 2));
-    return true;
-  } catch (err) {
-    console.error("saveProgrammeForUser failed:", err);
-    return false;
-  }
-}
-
-export async function loadProgrammeForUser(email: string): Promise<SavedProgramme | null> {
-  try {
-    const filePath = path.join(PROGRAMMES_DIR, `${safeFileName(email)}.json`);
-    if (!fs.existsSync(filePath)) return null;
-    const raw = fs.readFileSync(filePath, "utf-8");
-    return JSON.parse(raw) as SavedProgramme;
-  } catch (err) {
-    console.error("loadProgrammeForUser failed:", err);
-    return null;
-  }
-}
-
-export async function generateNextWeekForUser(email: string, answers: Answers) {
-  const saved = await loadProgrammeForUser(email);
-  const nextWeek = saved ? saved.week + 1 : 0;
-  const newProg = generateProgrammeFromAnswers(answers, nextWeek);
-  await saveProgrammeForUser(email, newProg, nextWeek);
-  return newProg;
-}
-
-/* ===================== Option A – CSV sans en-têtes ===================== */
-//  Place ton fichier à: apps/web/data/answers.csv
-//  Colonnes (sans en-têtes):
-//   0: timestamp (ignoré)
-//   1: prénom
-//   2: âge
-//   3: poids (opt.)
-//   4: taille (opt.)
-//   5: intensité
-//   6: objectif
-//   7: disponibilité (ex: 3 / “3 jours” / “lun-mer”)
-//   8: matériel (opt.)
-//   9: lieu (maison / salle de sport / extérieur / box / mixte)
-//  10: email
-
-export async function getAnswersForEmail(email: string): Promise<Record<string, string> | null> {
-  try {
-    const csvPath = path.join(process.cwd(), "data", "answers.csv");
-    if (!fs.existsSync(csvPath)) return null;
-    const raw = fs.readFileSync(csvPath, "utf-8");
-
-    const firstNonEmpty = raw.split(/\r?\n/).find((l) => l.trim().length > 0) || "";
-    const sep = firstNonEmpty.includes(";") ? ";" : ",";
-
-    function splitCsvLine(line: string, sepChar: string): string[] {
-      const out: string[] = [];
-      let cur = "";
-      let inQuotes = false;
-      for (let i = 0; i < line.length; i++) {
-        const ch = line[i];
-        if (ch === '"') {
-          if (inQuotes && line[i + 1] === '"') { cur += '"'; i++; }
-          else { inQuotes = !inQuotes; }
-        } else if (!inQuotes && ch === sepChar) {
-          out.push(cur); cur = "";
-        } else {
-          cur += ch;
-        }
-      }
-      out.push(cur);
-      return out.map((s) => s.trim());
-    }
-
-    const lines = raw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-    const target = email.trim().toLowerCase();
-
-    const KNOWN_LOCATIONS = new Set([
-      "maison", "salle de sport", "salle", "exterieur", "extérieur", "outdoor", "box", "mix", "mixte",
-    ]);
-    const _norm = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
-
-    for (const line of lines) {
-      const cols = splitCsvLine(line, sep);
-      if (cols.length < 6) continue;
-
-      const last = (cols[cols.length - 1] || "").toLowerCase();
-      const emailGuess = /\S+@\S+\.\S+/.test(last)
-        ? last
-        : (line.match(/\b\S+@\S+\.\S+\b/i)?.[0] || "").toLowerCase();
-      if (!emailGuess) continue;
-      if (emailGuess !== target) continue;
-
-      let prenom = cols[1] || "";
-      let age = cols[2] || "";
-      let objectif = cols[6] || "";
-      let dispo = cols[7] || "";
-      let materiel = cols[8] || "";
-      let lieu = cols[9] || "";
-
-      if (cols.length === 10) {
-        const c8 = _norm(cols[8] || "");
-        if (KNOWN_LOCATIONS.has(c8)) { lieu = cols[8]; materiel = ""; }
-        else { materiel = cols[8]; }
-      }
-
-      if (!lieu || !KNOWN_LOCATIONS.has(_norm(lieu))) {
-        for (const c of cols.slice(0, -1)) {
-          const n = _norm(c);
-          if (KNOWN_LOCATIONS.has(n)) { lieu = c; break; }
-        }
-      }
-
-      const out: Record<string, string> = {};
-      out["email"] = emailGuess;
-      out["prenom"] = prenom;
-      if (age && /^\d{1,2}$/.test(age)) out["age"] = age;
-      out["objectif"] = objectif;
-      out["lieu"] = lieu;
-      const dispoNum = parseInt(dispo.replace(/[^0-9]/g, "")) || parseInt(dispo) || 3;
-      out["disponibilite"] = String(dispoNum);
-      out["as tu du materiel a ta disposition"] = materiel;
-
-      return out;
-    }
-
-    return null;
-  } catch (err) {
-    console.error("getAnswersForEmail (CSV no-headers) failed:", err);
-    return null;
-  }
-}
-
-/* ===================== Profil minimal pour l’UI ===================== */
-export function buildProfileFromAnswers(answers: Record<string, string>) {
-  return {
-    email: answers["email"] || "",
-    prenom: answers["prenom"] || (answers as any)["prénom"] || "Coaché",
-    age: answers["age"] ? parseInt(answers["age"]) : undefined,
-    objectif: answers["objectif"] || "",
-    lieu: answers["lieu"] || "",
-  };
-}
-
-/* ===================== Séances depuis FS ou génération ===================== */
-export async function getAiSessions(input: string | AiProgramme) {
-  if (typeof input === "string") {
-    const saved = await loadProgrammeForUser(input);
-    return saved?.programme?.sessions || [];
-    }
-  return input.sessions || [];
+  if (!e) return [];
+  const prog = await getProgrammeForUser(e);
+  return prog?.sessions ?? [];
 }
