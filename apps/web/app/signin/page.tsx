@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { getSupabase } from "../../lib/supabaseClient";
 import { Eye, EyeOff } from "lucide-react";
-import { upsertOnSignIn } from "./server-actions"; // ✅ appelle la server action
+import { upsertOnSignIn } from "./server-actions";
 
 export default function SigninPage() {
   const router = useRouter();
@@ -43,17 +43,15 @@ export default function SigninPage() {
       });
       if (error) throw error;
 
-      // ✅ Après login Supabase, on upsert le profil + set cookie "app_email" côté serveur
       try {
         await upsertOnSignIn(emailTrim);
       } catch (err: any) {
-        // On ne bloque pas la connexion si l'upsert échoue — mais on logge l'erreur
         console.error("upsertOnSignIn failed:", err?.message || err);
       }
 
       setMessage("Connexion réussie ✅");
-      // ✅ Redirection vers le profil pour voir l’e-mail affiché
-      router.push("/dashboard/profile");
+      // ✅ Forcer l’affichage immédiat dans “Mes infos”
+      router.push(`/dashboard/profile?email=${encodeURIComponent(emailTrim)}`);
     } catch (err: any) {
       const msg = String(err?.message || "");
       if (msg.toLowerCase().includes("invalid login credentials")) {
@@ -207,3 +205,4 @@ export default function SigninPage() {
     </main>
   );
 }
+
