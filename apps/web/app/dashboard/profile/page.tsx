@@ -2,6 +2,7 @@
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { createServerClient } from "@supabase/ssr";
 
 import {
   getAnswersForEmail,
@@ -39,8 +40,33 @@ function getBaseUrlFromHeaders() {
   return `${proto}://${host}`;
 }
 
+/** =============== Supabase (SSR) : email depuis cookies sb-* =============== */
+async function getEmailFromSupabaseServer(): Promise<string> {
+  try {
+    const cookieStore = cookies();
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get: (name: string) => cookieStore.get(name)?.value,
+          // pas de set/remove ici : on ne modifie pas les cookies Supabase dans ce screen
+          set: () => {},
+          remove: () => {},
+        },
+      }
+    );
+    const { data, error } = await supabase.auth.getUser();
+    if (error || !data?.user?.email) return "";
+    return data.user.email.trim().toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
 /** =============== Email helpers =============== */
 async function getEmailFromSession(): Promise<string> {
+  // 1) (optionnel) NextAuth si présent
   try {
     // @ts-ignore optional deps
     const { getServerSession } = await import("next-auth");
@@ -50,6 +76,11 @@ async function getEmailFromSession(): Promise<string> {
     const mail = (session as any)?.user?.email as string | undefined;
     if (mail) return mail.trim().toLowerCase();
   } catch {}
+
+  // 2) Supabase SSR
+  const supa = await getEmailFromSupabaseServer();
+  if (supa) return supa;
+
   return "";
 }
 
@@ -72,7 +103,9 @@ async function doAutogenAction(formData: FormData) {
   const user = c.get("fc_uid")?.value || "me";
   // email de référence = cookie app_email (posé après login) ou session
   let email = c.get("app_email")?.value || "";
+
   if (!email) {
+    // tente NextAuth puis Supabase
     try {
       // @ts-ignore
       const { getServerSession } = await import("next-auth");
@@ -81,6 +114,9 @@ async function doAutogenAction(formData: FormData) {
       const session = await getServerSession(authOptions as any);
       email = ((session as any)?.user?.email as string | undefined) || "";
     } catch {}
+  }
+  if (!email) {
+    email = await getEmailFromSupabaseServer();
   }
 
   const qp = new URLSearchParams({ user, autogen: "1" });
@@ -108,12 +144,12 @@ async function doAutogenAction(formData: FormData) {
 
 /** ================= Loaders ================= */
 async function loadProfile(searchParams?: Record<string, string | string[] | undefined>) {
-  // 1) ordre de priorité : ?email= → cookie → session
+  // 1) ordre de priorité : ?email= → cookie → session/SSR
   let email = pickEmail(searchParams);
 
   if (!email) {
     email = await getEmailFromSession();
-    // si on a récupéré via session, persistons-le pour les prochains écrans
+    // si on a récupéré via session/SSR, persistons-le pour les prochains écrans
     if (email) {
       cookies().set("app_email", email, {
         path: "/",
@@ -144,7 +180,7 @@ async function loadProfile(searchParams?: Record<string, string | string[] | und
       debugInfo.reason = `Erreur lecture CSV: ${String(e?.message || e)}`;
     }
   } else {
-    debugInfo.reason = "Aucun email trouvé (ni ?email=, ni cookie, ni session)";
+    debugInfo.reason = "Aucun email trouvé (ni ?email=, ni cookie, ni session Supabase/NextAuth)";
   }
 
   return { profile, email, debugInfo };
@@ -209,6 +245,7 @@ export default async function Page({
       endurance: "Endurance / Cardio",
       mobility: "Mobilité / Souplesse",
       general: "Forme générale",
+      maintenance: "Entretien",
     };
     if (!g) return "Non défini";
     return map[g] || g;
@@ -410,3 +447,4 @@ export default async function Page({
     </div>
   );
 }
+
