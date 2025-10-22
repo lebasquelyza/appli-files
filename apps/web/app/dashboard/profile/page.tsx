@@ -8,18 +8,14 @@ import {
   buildProfileFromAnswers,
   generateProgrammeFromAnswers,
   getAiSessions,
-  getUserProfileByEmail, // ✅ NEW: lecture profil DB
+  getUserProfileByEmail,
   type AiSession as AiSessionT,
   type Profile as ProfileT,
 } from "../../../lib/coach/ai";
 
-/** ================= Constantes ================= */
 const QUESTIONNAIRE_BASE = "https://questionnaire.files-coaching.com";
-
-/** ================= Types locaux ================= */
 type WorkoutType = "muscu" | "cardio" | "hiit" | "mobilité";
 
-/** ================= Utils ================= */
 function typeBadgeClass(t: WorkoutType) {
   switch (t) {
     case "muscu":
@@ -40,13 +36,12 @@ function getBaseUrlFromHeaders() {
   return `${proto}://${host}`;
 }
 
-/** =============== Email helpers =============== */
+/** Email helpers */
 async function getEmailFromSession(): Promise<string> {
-  // Optionnel: NextAuth si présent
   try {
-    // @ts-ignore optional deps
+    // @ts-ignore optional
     const { getServerSession } = await import("next-auth");
-    // @ts-ignore optional deps
+    // @ts-ignore optional
     const { authOptions } = await import("../../../lib/auth");
     const session = await getServerSession(authOptions as any);
     const mail = (session as any)?.user?.email as string | undefined;
@@ -58,21 +53,17 @@ async function getEmailFromSession(): Promise<string> {
 function pickEmail(searchParams?: Record<string, string | string[] | undefined>): string {
   const qp = typeof searchParams?.email === "string" ? (searchParams!.email as string) : "";
   const qpEmail = qp?.trim().toLowerCase() || "";
-
   const cookieEmail = (cookies().get("app_email")?.value || "").trim().toLowerCase();
-
-  // Priorité : query param (utile pour tester), puis cookie
   if (qpEmail) return qpEmail;
   if (cookieEmail) return cookieEmail;
-  return ""; // session sera essayée juste après dans loadProfile
+  return "";
 }
 
-/** =============== Server Action: Générer (via l’API) =============== */
+/** Server Action: Générer */
 async function doAutogenAction(formData: FormData) {
   "use server";
   const c = cookies();
   const user = c.get("fc_uid")?.value || "me";
-  // email de référence = cookie app_email (posé après login) ou session
   let email = c.get("app_email")?.value || "";
   if (!email) {
     try {
@@ -108,26 +99,23 @@ async function doAutogenAction(formData: FormData) {
   redirect("/dashboard/profile?success=programme");
 }
 
-/** ================= Loaders ================= */
+/** Loaders */
 async function loadProfile(searchParams?: Record<string, string | string[] | undefined>) {
-  // 1) ordre de priorité : ?email= → cookie → session
   let email = pickEmail(searchParams);
 
   if (!email) {
     email = await getEmailFromSession();
-    // si on a récupéré via session, persistons-le pour les prochains écrans
     if (email) {
       cookies().set("app_email", email, {
         path: "/",
         httpOnly: true,
         sameSite: "lax",
-        secure: true,
+        secure: process.env.NODE_ENV === "production", // ✅ OK local & prod
         maxAge: 60 * 60 * 24 * 365,
       });
     }
   }
 
-  // Valeurs par défaut
   let profile: Partial<ProfileT> & { email?: string } = {};
   let debugInfo: { email: string; sheetHit: boolean; reason?: string } = { email: email || "", sheetHit: false };
 
@@ -136,21 +124,19 @@ async function loadProfile(searchParams?: Record<string, string | string[] | und
     return { profile, email, debugInfo };
   }
 
-  // 2) On essaie d'abord la DB (upsertée au login)
+  // Base: identité minimale depuis “DB” (stub) — non bloquant
   let dbProfile: { email: string; prenom?: string | null } | null = null;
   try {
     dbProfile = await getUserProfileByEmail(email);
-  } catch (e: any) {
-    // non bloquant
-  }
+  } catch {}
 
-  // 3) Ensuite, on essaie Sheets (pour enrichir les infos)
+  // Enrichissement via Google Sheets
   try {
     const answers = await getAnswersForEmail(email);
     if (answers) {
       const built = buildProfileFromAnswers(answers);
       profile = { ...built, email: built.email || email };
-      debugInfo.sheetHit = true; // ✅ Sheet OK
+      debugInfo.sheetHit = true;
     } else {
       profile = { email };
       debugInfo.reason = "Aucune réponse trouvée pour cet email dans Sheets";
@@ -160,15 +146,8 @@ async function loadProfile(searchParams?: Record<string, string | string[] | und
     debugInfo.reason = `Erreur lecture Sheets: ${String(e?.message || e)}`;
   }
 
-  // 4) Fusion intelligente : on garde DB comme source de vérité pour l'identité minimale
-  if (dbProfile?.email && !profile.email) {
-    profile.email = dbProfile.email;
-  }
-  if (dbProfile?.prenom && !profile.prenom) {
-    profile.prenom = dbProfile.prenom || undefined;
-  }
-
-  // si rien au final, on garde au moins l'email connu
+  if (dbProfile?.email && !profile.email) profile.email = dbProfile.email;
+  if (dbProfile?.prenom && !profile.prenom) profile.prenom = dbProfile.prenom || undefined;
   profile.email = profile.email || email;
 
   return { profile, email, debugInfo };
@@ -179,9 +158,7 @@ async function loadSessions(email?: string): Promise<AiSessionT[]> {
   if (email) {
     try {
       const answers = await getAnswersForEmail(email);
-      if (answers) {
-        aiSessions = generateProgrammeFromAnswers(answers).sessions;
-      }
+      if (answers) aiSessions = generateProgrammeFromAnswers(answers).sessions;
     } catch {}
   }
   if ((!aiSessions || aiSessions.length === 0) && email) {
@@ -209,7 +186,7 @@ async function loadSessions(email?: string): Promise<AiSessionT[]> {
   return aiSessions;
 }
 
-/** ================= Page ================= */
+/** Page */
 export default async function Page({
   searchParams,
 }: {
@@ -218,7 +195,6 @@ export default async function Page({
   const { profile, email, debugInfo } = await loadProfile(searchParams);
   const aiSessions = await loadSessions(email);
 
-  // Infos profil affichées (sans “Lieu”)
   const clientPrenom =
     typeof profile?.prenom === "string" && profile.prenom && !/\d/.test(profile.prenom) ? profile.prenom : "";
   const clientAge = typeof profile?.age === "number" && profile.age > 0 ? profile.age : undefined;
@@ -294,12 +270,9 @@ export default async function Page({
         )}
       </div>
 
-      {/* ===== Mes infos (sans Lieu) ===== */}
+      {/* ===== Mes infos ===== */}
       <section className="section" style={{ marginTop: 12 }}>
-        <div
-          className="section-head"
-          style={{ marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}
-        >
+        <div className="section-head" style={{ marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <h2>Mes infos</h2>
         </div>
 
@@ -332,7 +305,6 @@ export default async function Page({
             )}
           </div>
 
-          {/* Lien vers questionnaire */}
           <div className="text-sm" style={{ marginTop: 10 }}>
             <a href={questionnaireUrl} className="underline">
               Mettre à jour mes réponses au questionnaire
@@ -341,12 +313,9 @@ export default async function Page({
         </div>
       </section>
 
-      {/* ===== Mon programme (IA SEULEMENT) ===== */}
+      {/* ===== Mon programme ===== */}
       <section className="section" style={{ marginTop: 12 }}>
-        <div
-          className="section-head"
-          style={{ marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}
-        >
+        <div className="section-head" style={{ marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <div>
             <h2 style={{ marginBottom: 6 }}>Mon programme</h2>
             <p className="text-sm" style={{ color: "#6b7280" }}>
@@ -354,7 +323,6 @@ export default async function Page({
             </p>
           </div>
 
-          {/* Bouton : Générer (via l’API) */}
           <form action={doAutogenAction}>
             <button
               type="submit"
