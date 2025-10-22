@@ -1,5 +1,20 @@
 // lib/coach/ai.ts
 /** ========= Types ========= */
+export type WorkoutType = "muscu" | "cardio" | "hiit" | "mobilité";
+
+export type NormalizedExercise = {
+  name: string;
+  sets?: number;
+  reps?: string | number;
+  rest?: string;
+  tempo?: string;
+  notes?: string;
+  block?: "échauffement" | "echauffement" | "principal" | "finition" | "accessoire" | "core" | "cardio" | "mobilité" | "mobilite" | string;
+  durationSec?: number;
+  distance?: string;
+  weight?: string | number;
+};
+
 export type Profile = {
   email: string;
   prenom?: string;
@@ -11,11 +26,11 @@ export type Profile = {
 export type AiSession = {
   id: string;
   title: string;
-  type: "muscu" | "cardio" | "hiit" | "mobilité";
+  type: WorkoutType;
   date: string;            // YYYY-MM-DD
   plannedMin?: number;
   intensity?: string;
-  exercises?: Array<{ name: string; sets: number; reps: string; rest: string; block?: string }>;
+  exercises?: NormalizedExercise[];
 };
 
 export type AiProgramme = {
@@ -31,11 +46,7 @@ type RawAnswer = {
   email: string;
 };
 
-/** ========= ENV =========
- *  SHEET_ID : id du doc
- *  SHEET_GID: gid numérique de l’onglet
- *  SHEET_RANGE: ex "A:J" (indicatif, juste pour doc)
- */
+/** ========= ENV ========= */
 const SHEET_ID = process.env.SHEET_ID!;
 const SHEET_GID = process.env.SHEET_GID!;
 const SHEET_RANGE = process.env.SHEET_RANGE || "A:J";
@@ -89,12 +100,10 @@ function parseCsv(text: string): string[][] {
 
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
-
     if (inQuotes) {
       if (ch === '"') {
         const next = text[i + 1];
-        if (next === '"') { cell += '"'; i++; }
-        else { inQuotes = false; }
+        if (next === '"') { cell += '"'; i++; } else { inQuotes = false; }
       } else {
         cell += ch;
       }
@@ -159,19 +168,14 @@ export function buildProfileFromAnswers(ans: RawAnswer): Profile {
   };
 }
 
-/** ====== Programme IA (stub compatible avec route.ts) ====== */
+/** ====== Programme IA (stub compatible) ====== */
 export function generateProgrammeFromAnswers(_ans: RawAnswer): AiProgramme {
-  // Tu peux générer ici à partir des réponses; on renvoie un stub valide pour le build.
   return {
     sessions: [],
     meta: { generatedAt: new Date().toISOString() },
   };
 }
 
-/** ====== Stubs supplémentaires pour compat ====== */
-export async function getAiSessions(_email: string): Promise<AiSession[]> {
-  return [];
-}
-export async function getUserProfileByEmail(_email: string): Promise<{ email: string; prenom?: string | null } | null> {
-  return null;
-}
+/** ====== Stubs supplémentaires ====== */
+export async function getAiSessions(_email: string): Promise<AiSession[]> { return []; }
+export async function getUserProfileByEmail(_email: string): Promise<{ email: string; prenom?: string | null } | null> { return null; }
