@@ -109,7 +109,7 @@ async function doAutogenAction(formData: FormData) {
 // DATA LOADERS
 // -----------------------------------------------------------------------------
 /** MES INFOS = **Uniquement** depuis le Sheet public (dernière réponse)
- *  + Mode test: ?blank=1 (ou ?empty=1) force l’affichage vide (sans placeholders).
+ *  + Mode test: ?blank=1 (ou ?empty=1) force l’affichage vide.
  */
 async function loadProfile(searchParams?: Record<string, string | string[] | undefined>) {
   const forceBlank = ["1", "true", "yes"].includes(
@@ -131,18 +131,18 @@ async function loadProfile(searchParams?: Record<string, string | string[] | und
     }
   }
 
-  // ➜ En mode test on renvoie explicitement un profil vide + email vide
+  // ➜ En mode test on renvoie explicitement un profil vide + email vide (cast pour TS)
   if (forceBlank) {
     return {
-      profile: {}, // rien de renseigné
-      email: "",   // empêche l’affichage du mail
+      profile: {} as Partial<ProfileT>,
+      email: "",
       debugInfo: {
         email: email || "",
         sheetHit: false,
         reason: "Force blank via ?blank=1",
       },
       forceBlank,
-    } as const;
+    };
   }
 
   // 2) Préparer profil & debug (mode normal)
@@ -151,7 +151,7 @@ async function loadProfile(searchParams?: Record<string, string | string[] | und
 
   if (!email) {
     debugInfo.reason = "Aucun email trouvé (ni ?email=, ni cookie, ni session Supabase)";
-    return { profile, email, debugInfo, forceBlank } as const;
+    return { profile, email, debugInfo, forceBlank };
   }
 
   // 3) Lecture **exclusivement** depuis Google Sheet public (dernière réponse)
@@ -172,7 +172,7 @@ async function loadProfile(searchParams?: Record<string, string | string[] | und
 
   // 4) Pas de fallback DB: **Sheets only**
   profile.email = profile.email || email;
-  return { profile, email, debugInfo, forceBlank } as const;
+  return { profile, email, debugInfo, forceBlank };
 }
 
 /** Séances IA (optionnel) — tente génération locale via réponses; sinon lit source secondaire */
@@ -223,13 +223,16 @@ export default async function Page({
   // 📌 en blank mode, on n’affiche pas de placeholders
   const showPlaceholders = !forceBlank;
 
+  // ✅ "profile" peut être {}, on lisse via un Partial<ProfileT>
+  const p = (profile ?? {}) as Partial<ProfileT>;
+
   const clientPrenom =
-    typeof profile?.prenom === "string" && profile.prenom && !/\d/.test(profile.prenom) ? profile.prenom : "";
-  const clientAge = typeof profile?.age === "number" && profile.age > 0 ? profile.age : undefined;
-  const clientEmailDisplay = String(profile?.email || email || "");
+    typeof p?.prenom === "string" && p.prenom && !/\d/.test(p.prenom) ? p.prenom : "";
+  const clientAge = typeof p?.age === "number" && p.age > 0 ? p.age : undefined;
+  const clientEmailDisplay = String(p?.email || email || "");
 
   const goalLabel = (() => {
-    const g = String((profile as any)?.goal || (profile as any)?.objectif || "").toLowerCase();
+    const g = String((p as any)?.goal || (p as any)?.objectif || "").toLowerCase();
     const map: Record<string, string> = {
       hypertrophy: "Hypertrophie / Esthétique",
       fatloss: "Perte de gras",
