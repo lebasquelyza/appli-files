@@ -8,6 +8,7 @@ import {
   buildProfileFromAnswers,
   generateProgrammeFromAnswers,
   getAiSessions,
+  getUserProfileByEmail, // ✅ NEW: lecture profil DB
   type AiSession as AiSessionT,
   type Profile as ProfileT,
 } from "../../../lib/coach/ai";
@@ -126,27 +127,49 @@ async function loadProfile(searchParams?: Record<string, string | string[] | und
     }
   }
 
+  // Valeurs par défaut
   let profile: Partial<ProfileT> & { email?: string } = {};
   let debugInfo: { email: string; sheetHit: boolean; reason?: string } = { email: email || "", sheetHit: false };
 
-  if (email) {
-    try {
-      const answers = await getAnswersForEmail(email);
-      if (answers) {
-        const built = buildProfileFromAnswers(answers);
-        profile = { ...built, email: built.email || email };
-        debugInfo.sheetHit = true; // ✅ Sheet OK
-      } else {
-        profile = { email };
-        debugInfo.reason = "Aucune réponse trouvée pour cet email dans Sheets";
-      }
-    } catch (e: any) {
-      profile = { email };
-      debugInfo.reason = `Erreur lecture Sheets: ${String(e?.message || e)}`;
-    }
-  } else {
+  if (!email) {
     debugInfo.reason = "Aucun email trouvé (ni ?email=, ni cookie, ni session)";
+    return { profile, email, debugInfo };
   }
+
+  // 2) On essaie d'abord la DB (upsertée au login)
+  let dbProfile: { email: string; prenom?: string | null } | null = null;
+  try {
+    dbProfile = await getUserProfileByEmail(email);
+  } catch (e: any) {
+    // non bloquant
+  }
+
+  // 3) Ensuite, on essaie Sheets (pour enrichir les infos)
+  try {
+    const answers = await getAnswersForEmail(email);
+    if (answers) {
+      const built = buildProfileFromAnswers(answers);
+      profile = { ...built, email: built.email || email };
+      debugInfo.sheetHit = true; // ✅ Sheet OK
+    } else {
+      profile = { email };
+      debugInfo.reason = "Aucune réponse trouvée pour cet email dans Sheets";
+    }
+  } catch (e: any) {
+    profile = { email };
+    debugInfo.reason = `Erreur lecture Sheets: ${String(e?.message || e)}`;
+  }
+
+  // 4) Fusion intelligente : on garde DB comme source de vérité pour l'identité minimale
+  if (dbProfile?.email && !profile.email) {
+    profile.email = dbProfile.email;
+  }
+  if (dbProfile?.prenom && !profile.prenom) {
+    profile.prenom = dbProfile.prenom || undefined;
+  }
+
+  // si rien au final, on garde au moins l'email connu
+  profile.email = profile.email || email;
 
   return { profile, email, debugInfo };
 }
