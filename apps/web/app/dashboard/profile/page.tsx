@@ -137,11 +137,11 @@ async function loadProfile(searchParams?: Record<string, string | string[] | und
         debugInfo.sheetHit = true;
       } else {
         profile = { email };
-        debugInfo.reason = "Aucune réponse trouvée pour cet email dans Sheets";
+        debugInfo.reason = "Aucune réponse trouvée pour cet email (answers.csv)";
       }
     } catch (e: any) {
       profile = { email };
-      debugInfo.reason = `Erreur lecture Sheets: ${String(e?.message || e)}`;
+      debugInfo.reason = `Erreur lecture CSV: ${String(e?.message || e)}`;
     }
   } else {
     debugInfo.reason = "Aucun email trouvé (ni ?email=, ni cookie, ni session)";
@@ -236,7 +236,7 @@ export default async function Page({
           {showDebug && (
             <div className="text-xs" style={{ marginTop: 4, color: "#6b7280" }}>
               <b>Debug:</b> email détecté = <code>{debugInfo.email || "—"}</code>{" "}
-              {debugInfo.sheetHit ? "· Sheet OK" : `· ${debugInfo.reason || "Sheet KO"}`}
+              {debugInfo.sheetHit ? "· CSV OK" : `· ${debugInfo.reason || "CSV KO"}`}
             </div>
           )}
         </div>
