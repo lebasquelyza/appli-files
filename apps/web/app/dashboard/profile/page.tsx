@@ -12,9 +12,15 @@ import {
   type Profile as ProfileT,
 } from "../../../lib/coach/ai";
 
-const QUESTIONNAIRE_BASE = "https://questionnaire.files-coaching.com";
+// -----------------------------------------------------------------------------
+// CONFIG
+// -----------------------------------------------------------------------------
+const QUESTIONNAIRE_BASE = process.env.FILES_COACHING_QUESTIONNAIRE_BASE || "https://questionnaire.files-coaching.com";
 type WorkoutType = "muscu" | "cardio" | "hiit" | "mobilité";
 
+// -----------------------------------------------------------------------------
+// UI HELPERS
+// -----------------------------------------------------------------------------
 function typeBadgeClass(t: WorkoutType) {
   switch (t) {
     case "muscu":
@@ -35,35 +41,47 @@ function getBaseUrlFromHeaders() {
   return `${proto}://${host}`;
 }
 
-/** Email helpers */
+// -----------------------------------------------------------------------------
+// EMAIL (SESSION SUPABASE) — Mail affiché côté profil
+// -----------------------------------------------------------------------------
 async function getEmailFromSupabaseSession(): Promise<string> {
-  // branche ton vrai getUser supabase si besoin — ici on retourne vide
-  return "";
+  try {
+    const { createServerClient } = await import("@supabase/ssr");
+    const cookieStore = cookies();
+
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value;
+          },
+        },
+      }
+    );
+
+    const { data } = await supabase.auth.getUser();
+    const email = data?.user?.email?.trim().toLowerCase() || "";
+    return email;
+  } catch {
+    return "";
+  }
 }
 
-function pickEmail(searchParams?: Record<string, string | string[] | undefined>): string {
-  const qp = typeof searchParams?.email === "string" ? (searchParams!.email as string) : "";
-  const qpEmail = qp?.trim().toLowerCase() || "";
-  const cookieEmail = (cookies().get("app_email")?.value || "").trim().toLowerCase();
-  if (qpEmail) return qpEmail;
-  if (cookieEmail) return cookieEmail;
-  return "";
-}
-
-/** Server Action: Générer */
+// -----------------------------------------------------------------------------
+// SERVER ACTION: Générer (programme IA)
+// -----------------------------------------------------------------------------
 async function doAutogenAction(formData: FormData) {
   "use server";
   const c = cookies();
   const user = c.get("fc_uid")?.value || "me";
-  let email = c.get("app_email")?.value || "";
-  if (!email) {
-    try {
-      email = (await getEmailFromSupabaseSession()) || "";
-    } catch {}
-  }
+
+  // ⚠️ on force l'email depuis la session Supabase
+  const sessionEmail = await getEmailFromSupabaseSession();
 
   const qp = new URLSearchParams({ user, autogen: "1" });
-  if (email) qp.set("email", email);
+  if (sessionEmail) qp.set("email", sessionEmail);
 
   const url = `${getBaseUrlFromHeaders()}/api/programme?${qp.toString()}`;
 
@@ -85,32 +103,31 @@ async function doAutogenAction(formData: FormData) {
   redirect("/dashboard/profile?success=programme");
 }
 
-/** Loaders */
+// -----------------------------------------------------------------------------
+// DATA LOADERS
+// -----------------------------------------------------------------------------
+/**
+ * Règles:
+ * - Email affiché = session Supabase uniquement (pas de fallback query/cookie)
+ * - Profil (prenom/age/objectif) = uniquement depuis le Sheet public:
+ *     B = prénom, C = âge, G = objectif brut (mappé en label + key)
+ * - ?blank=1 (ou ?empty=1) masque tout pour test
+ */
 async function loadProfile(searchParams?: Record<string, string | string[] | undefined>) {
   const forceBlank = ["1", "true", "yes"].includes(
     String(searchParams?.blank || searchParams?.empty || "").toLowerCase()
   );
 
-  let email = pickEmail(searchParams);
-  if (!email) {
-    email = await getEmailFromSupabaseSession();
-    if (email) {
-      cookies().set("app_email", email, {
-        path: "/",
-        httpOnly: true,
-        sameSite: "lax",
-        secure: process.env.NODE_ENV === "production",
-        maxAge: 60 * 60 * 24 * 365,
-      });
-    }
-  }
+  // 1) Mail: session Supabase (source unique d'affichage)
+  const sessionEmail = await getEmailFromSupabaseSession();
 
+  // 2) Si blank: renvoyer vide (email non affiché, infos vides)
   if (forceBlank) {
     return {
+      sessionEmail: "",
       profile: {} as Partial<ProfileT>,
-      email: "",
       debugInfo: {
-        email: email || "",
+        email: sessionEmail || "",
         sheetHit: false,
         reason: "Force blank via ?blank=1",
       },
@@ -118,33 +135,39 @@ async function loadProfile(searchParams?: Record<string, string | string[] | und
     };
   }
 
+  // 3) Lire le Sheet UNIQUEMENT si on a un email de session
   let profile: Partial<ProfileT> & { email?: string } = {};
-  const debugInfo: { email: string; sheetHit: boolean; reason?: string } = { email: email || "", sheetHit: false };
+  const debugInfo: { email: string; sheetHit: boolean; reason?: string } = {
+    email: sessionEmail || "",
+    sheetHit: false,
+  };
 
-  if (!email) {
-    debugInfo.reason = "Aucun email trouvé (ni ?email=, ni cookie, ni session)";
-    return { profile, email, debugInfo, forceBlank };
+  if (!sessionEmail) {
+    debugInfo.reason = "Pas de session Supabase (email indisponible)";
+    return { sessionEmail: "", profile, debugInfo, forceBlank };
   }
 
   try {
-    const answers = await getAnswersForEmail(email);
+    const answers = await getAnswersForEmail(sessionEmail);
     if (answers) {
-      const built = buildProfileFromAnswers(answers);
-      profile = { ...built, email: built.email || email };
+      const built = buildProfileFromAnswers(answers); // mappe objectif G -> goal + objectif label
+      profile = { ...built, email: built.email || sessionEmail };
       debugInfo.sheetHit = true;
     } else {
-      profile = { email };
-      debugInfo.reason = "Aucune réponse trouvée pour cet email dans Sheets";
+      profile = { email: sessionEmail };
+      debugInfo.reason = "Aucune réponse trouvée pour cet email dans le Sheet";
     }
   } catch (e: any) {
-    profile = { email };
-    debugInfo.reason = `Erreur lecture Sheets: ${String(e?.message || e)}`;
+    profile = { email: sessionEmail };
+    debugInfo.reason = `Erreur lecture Sheet: ${String(e?.message || e)}`;
   }
 
-  profile.email = profile.email || email;
-  return { profile, email, debugInfo, forceBlank };
+  // 4) Pas de fallback DB
+  profile.email = sessionEmail;
+  return { sessionEmail, profile, debugInfo, forceBlank };
 }
 
+/** Séances IA (optionnel) — tente génération locale via réponses; sinon lit source secondaire */
 async function loadSessions(email?: string): Promise<AiSessionT[]> {
   let aiSessions: AiSessionT[] = [];
   if (email) {
@@ -178,24 +201,29 @@ async function loadSessions(email?: string): Promise<AiSessionT[]> {
   return aiSessions;
 }
 
-/** Page */
+// -----------------------------------------------------------------------------
+// PAGE
+// -----------------------------------------------------------------------------
 export default async function Page({
   searchParams,
 }: {
-  searchParams?: { success?: string; error?: string; email?: string; debug?: string; blank?: string; empty?: string };
+  searchParams?: { success?: string; error?: string; debug?: string; blank?: string; empty?: string };
 }) {
-  const { profile, email, debugInfo, forceBlank } = await loadProfile(searchParams);
-  const aiSessions = await loadSessions(email);
+  const { sessionEmail, profile, debugInfo, forceBlank } = await loadProfile(searchParams);
+  const aiSessions = await loadSessions(sessionEmail);
 
-  // on N’AFFICHE JAMAIS de placeholders ici
+  // placeholders actifs hors mode blank
+  const showPlaceholders = !forceBlank;
+
+  // profil (B,C,G du sheet)
   const p = (profile ?? {}) as Partial<ProfileT>;
-
-  const clientPrenom = typeof p?.prenom === "string" && p.prenom && !/\d/.test(p.prenom) ? p.prenom : "";
+  const clientPrenom =
+    typeof p?.prenom === "string" && p.prenom && !/\d/.test(p.prenom) ? p.prenom : "";
   const clientAge = typeof p?.age === "number" && p.age > 0 ? p.age : undefined;
-  const clientEmailDisplay = String(p?.email || email || "");
 
+  // objectif (G) : on privilégie le label FR quand dispo
   const goalLabel = (() => {
-    const g = String((p as any)?.goal || (p as any)?.objectif || "").toLowerCase();
+    const g = String((p as any)?.objectif || (p as any)?.goal || "").toLowerCase();
     const map: Record<string, string> = {
       hypertrophy: "Hypertrophie / Esthétique",
       fatloss: "Perte de gras",
@@ -205,12 +233,12 @@ export default async function Page({
       general: "Forme générale",
     };
     if (!g) return "";
-    return map[g] || g;
+    return map[g] || (p as any)?.objectif || "";
   })();
 
   const questionnaireUrl = (() => {
     const qp = new URLSearchParams();
-    if (clientEmailDisplay) qp.set("email", clientEmailDisplay);
+    if (sessionEmail) qp.set("email", sessionEmail);
     if (clientPrenom) qp.set("prenom", clientPrenom);
     const qs = qp.toString();
     return qs ? `${QUESTIONNAIRE_BASE}?${qs}` : QUESTIONNAIRE_BASE;
@@ -229,7 +257,7 @@ export default async function Page({
           </h1>
           {showDebug && (
             <div className="text-xs" style={{ marginTop: 4, color: "#6b7280" }}>
-              <b>Debug:</b> email détecté = <code>{debugInfo.email || "—"}</code>{" "}
+              <b>Debug:</b> sessionEmail = <code>{sessionEmail || "—"}</code>{" "}
               {debugInfo.sheetHit ? "· Sheet OK" : `· ${debugInfo.reason || "Sheet KO"}`}
               {forceBlank ? " · BLANK MODE" : ""}
             </div>
@@ -273,39 +301,48 @@ export default async function Page({
 
         <div className="card">
           <div className="text-sm" style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-            {/* Prénom — n’affiche que s’il existe */}
-            {clientPrenom && (
+            {/* Prénom (Sheet B) */}
+            {(clientPrenom || showPlaceholders) && (
               <span>
-                <b>Prénom :</b> {clientPrenom}
+                <b>Prénom :</b>{" "}
+                {clientPrenom || (showPlaceholders ? <i className="text-gray-400">Non renseigné</i> : null)}
               </span>
             )}
 
-            {/* Âge — n’affiche que s’il existe */}
-            {typeof clientAge === "number" && (
+            {/* Âge (Sheet C) */}
+            {(typeof clientAge === "number" || showPlaceholders) && (
               <span>
-                <b>Âge :</b> {clientAge} ans
+                <b>Âge :</b>{" "}
+                {typeof clientAge === "number"
+                  ? `${clientAge} ans`
+                  : (showPlaceholders ? <i className="text-gray-400">Non renseigné</i> : null)}
               </span>
             )}
 
-            {/* Objectif — n’affiche que s’il existe */}
-            {goalLabel && (
+            {/* Objectif (Sheet G) */}
+            {(goalLabel || showPlaceholders) && (
               <span>
-                <b>Objectif actuel :</b> {goalLabel}
+                <b>Objectif actuel :</b>{" "}
+                {goalLabel || (showPlaceholders ? <i className="text-gray-400">Non défini</i> : null)}
               </span>
             )}
           </div>
 
-          {/* Mail — n’affiche que s’il existe */}
-          {clientEmailDisplay && (
+          {/* Mail (session Supabase, pas de fallback) */}
+          {(sessionEmail || showPlaceholders) && (
             <div
               className="text-sm"
               style={{ marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
-              title={clientEmailDisplay}
+              title={sessionEmail || (showPlaceholders ? "Non renseigné" : "")}
             >
               <b>Mail :</b>{" "}
-              <a href={`mailto:${clientEmailDisplay}`} className="underline">
-                {clientEmailDisplay}
-              </a>
+              {sessionEmail ? (
+                <a href={`mailto:${sessionEmail}`} className="underline">
+                  {sessionEmail}
+                </a>
+              ) : (
+                showPlaceholders ? <span className="text-gray-400">Non renseigné</span> : null
+              )}
             </div>
           )}
 
@@ -327,24 +364,24 @@ export default async function Page({
             </p>
           </div>
 
-          <form action={doAutogenAction}>
-            <button
-              type="submit"
-              className="btn"
-              style={{
-                background: "#111827",
-                color: "#ffffff",
-                border: "1px solid #d1d5db",
-                fontWeight: 600,
-                padding: "6px 10px",
-                lineHeight: 1.2,
-                borderRadius: 8,
-              }}
-              title="Génère/Met à jour ton programme personnalisé"
-            >
-              ⚙️ Générer
-            </button>
-          </form>
+        <form action={doAutogenAction}>
+          <button
+            type="submit"
+            className="btn"
+            style={{
+              background: "#111827",
+              color: "#ffffff",
+              border: "1px solid #d1d5db",
+              fontWeight: 600,
+              padding: "6px 10px",
+              lineHeight: 1.2,
+              borderRadius: 8,
+            }}
+            title="Génère/Met à jour ton programme personnalisé"
+          >
+            ⚙️ Générer
+          </button>
+        </form>
         </div>
 
         {(!aiSessions || aiSessions.length === 0) ? (
