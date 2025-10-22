@@ -11,6 +11,14 @@ export type NormalizedExercise = {
   tempo?: string;
   notes?: string;
   equipment?: string; // ex: "haltères", "poids du corps"
+
+  // ➕ champs utilisés par /dashboard/seance/[id]/page.tsx
+  load?: string | number;   // ex: "2x10kg", "Bodyweight", 60
+  rir?: number;             // Reps In Reserve (0..4)
+  target?: string;          // ex: "Quadriceps / fessiers"
+  alt?: string;             // variante possible
+  videoUrl?: string;        // lien vidéo d'exécution
+
   block?:
     | "échauffement"
     | "echauffement"
@@ -23,13 +31,10 @@ export type NormalizedExercise = {
     | "mobilité"
     | "mobilite"
     | string;
+
   durationSec?: number;
   distance?: string;
   weight?: string | number;
-
-  // Champs lus par /dashboard/seance/[id]/page.tsx
-  load?: string | number;   // ex: "2x10kg", "Bodyweight", 60
-  rir?: number;             // Reps In Reserve (0..4)
 };
 
 export type Profile = {
@@ -84,7 +89,7 @@ function toNumberSafe(v: any): number | undefined {
   return Number.isFinite(n) && n > 0 ? n : undefined;
 }
 function parseFrenchDateTime(v: string): Date | null {
-  // "dd/MM/yyyy HH:mm:ss" (format Forms/Sheets FR courant)
+  // "dd/MM/yyyy HH:mm:ss"
   const m = v?.match?.(/^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2}):(\d{2})$/);
   if (!m) return null;
   const [, dd, mm, yyyy, HH, MM, SS] = m;
@@ -112,9 +117,7 @@ function goalLabelFromKey(k?: Profile["goal"]) {
   }[k];
 }
 
-/** ========= Mini parser CSV (RFC4180 light) =========
- *  Gère: ',', guillemets doubles, "" échappés, LF/CRLF.
- */
+/** ========= Mini parser CSV (RFC4180 light) ========= */
 function parseCsv(text: string): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];
@@ -168,7 +171,7 @@ export async function getAnswersForEmail(email: string): Promise<RawAnswer | nul
     if (!r || r.length <= Math.max(IDX.ts, IDX.email)) continue;
 
     const tsStr = r[IDX.ts] || "";
-    const ts = parseFrenchDateTime(tsStr) || new Date(tsStr || Date.now());
+       const ts = parseFrenchDateTime(tsStr) || new Date(tsStr || Date.now());
     const prenom = (r[IDX.prenom] || "").trim();
     const age = toNumberSafe(r[IDX.age]);
     const objectifBrut = (r[IDX.objectif] || "").trim();
