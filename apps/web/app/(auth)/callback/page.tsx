@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { getSupabase } from "../../lib/supabaseClient";
+import { getSupabase } from "../../../lib/supabaseClient";
 
 // petit helper pour ton cookie app_email
 function setAppEmailCookie(val: string) {
