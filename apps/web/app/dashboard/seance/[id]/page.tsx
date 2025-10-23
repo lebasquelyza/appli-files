@@ -142,7 +142,7 @@ const PageView: React.FC<PageViewProps> = (props) => {
       {/* top bar */}
       <div className="mb-2 flex items-center justify-between no-print" style={{ paddingInline: 12 }}>
         <a
-          href="/dashboard/progress"
+          href="/dashboard/profile" {/* ←← CHANGÉ : renvoie vers la page Profil */}
           className="inline-flex items-center rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm font-medium text-neutral-800 hover:bg-neutral-50"
         >
           ← Retour
@@ -525,4 +525,3 @@ export default async function Page({
     />
   );
 }
-
