@@ -258,17 +258,9 @@ export default async function Page({
               fontWeight: 600,
             }}
           >
-            {displayedSuccess === "programme" ? (
-              <>
-                <div>✓ Ton programme a été généré avec tes <b>dernières réponses</b> au questionnaire.</div>
-                <div className="text-xs" style={{ color: "#065f46", fontWeight: 500, marginTop: 4 }}>
-                  Tu peux regénérer à tout moment après avoir{" "}
-                  <a href={questionnaireUrl} className="underline">mis à jour tes réponses</a>.
-                </div>
-              </>
-            ) : (
-              "✓ Opération réussie."
-            )}
+            {displayedSuccess === "programme"
+              ? <>✓ Ton programme a été généré avec tes <b>dernières réponses</b> au questionnaire.</>
+              : "✓ Opération réussie."}
           </div>
         )}
 
