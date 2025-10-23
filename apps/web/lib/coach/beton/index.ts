@@ -1,32 +1,46 @@
 // apps/web/lib/coach/beton/index.ts
 import type { AiSession as AiSessionT, WorkoutType, NormalizedExercise } from "../ai";
 
+/* ========================= Types & Options ========================= */
 export type PlanOptions = {
   today?: Date;
-  maxSessions?: number; // ex: 3 à 5
+  maxSessions?: number; // 1..6 (jours/semaine)
 };
 
 type ProfileInput = {
   prenom?: string;
   age?: number;
-  objectif?: string; // libellé brut
-  goal?: string;     // clé normalisée: hypertrophy|fatloss|strength|endurance|mobility|general
+  objectif?: string;           // libellé brut (affichage)
+  goal?: string;               // clé normalisée: hypertrophy|fatloss|strength|endurance|mobility|general
   equipLevel?: "none" | "limited" | "full";
   timePerSession?: number;
   level?: "debutant" | "intermediaire" | "avance";
+  injuries?: string[];         // ex: ["dos", "epaules", "genoux"]
+  equipItems?: string[];       // ex: ["élastiques","kettlebell","trx"]
 };
 
+/* ========================= Public API ========================= */
 export function planProgrammeFromProfile(
   profile: ProfileInput,
   opts: PlanOptions = {}
 ): { sessions: AiSessionT[] } {
   const today = opts.today ?? new Date();
   const maxSessions = Math.max(1, Math.min(opts.maxSessions ?? 3, 6));
-  const time = clamp(profile.timePerSession ?? defaultTime(profile.goal), 20, 90);
+
+  const minutes = clamp(profile.timePerSession ?? defaultTime(profile.goal), 20, 90);
   const type = pickType(profile.goal, profile.age);
   const level = profile.level ?? inferLevel(profile.age);
   const equip = profile.equipLevel ?? "limited";
   const goalKey = (profile.goal ?? "general").toLowerCase();
+
+  const ctx: Ctx = {
+    level,
+    equip,
+    minutes,
+    goalKey,
+    injuries: normalizeInjuries(profile.injuries),
+    equipItems: normalizeItems(profile.equipItems),
+  };
 
   const sessions: AiSessionT[] = [];
   for (let i = 0; i < maxSessions; i++) {
@@ -45,19 +59,19 @@ export function planProgrammeFromProfile(
 
     const exos =
       type === "cardio"
-        ? buildCardioBlockset(time, variant)
+        ? buildCardio(ctx, variant)
         : type === "mobilité"
-        ? buildMobilityBlockset()
+        ? buildMobility(ctx)
         : type === "hiit"
-        ? buildHiitBlockset()
-        : buildStrengthBlockset({ level, equip, minutes: time, variantIdx: variant, goal: goalKey });
+        ? buildHiit(ctx)
+        : buildStrength(ctx, variant); // muscu
 
     sessions.push({
       id: `beton-${dateStr}-${i}-${Math.random().toString(36).slice(2, 7)}`,
       title,
       type,
       date: dateStr,
-      plannedMin: time,
+      plannedMin: minutes,
       intensity: type === "hiit" ? "élevée" : type === "cardio" ? "modérée" : "modérée",
       exercises: exos,
     } as AiSessionT);
@@ -66,7 +80,37 @@ export function planProgrammeFromProfile(
   return { sessions };
 }
 
-/* ---------------- Internals “coach” ---------------- */
+/* ========================= Contexte & utils ========================= */
+type Ctx = {
+  level: "debutant" | "intermediaire" | "avance";
+  equip: "none" | "limited" | "full";
+  minutes: number;
+  goalKey: string;
+  injuries: Injuries;       // set normalisé
+  equipItems: Items;        // set normalisé
+};
+
+type Injuries = {
+  back?: boolean;
+  shoulder?: boolean;
+  knee?: boolean;
+  wrist?: boolean;
+  hip?: boolean;
+  ankle?: boolean;
+  elbow?: boolean;
+};
+type Items = {
+  bands?: boolean;      // élastiques
+  kb?: boolean;         // kettlebell
+  trx?: boolean;
+  bench?: boolean;
+  bar?: boolean;
+  db?: boolean;         // haltères
+  bike?: boolean;
+  rower?: boolean;
+  treadmill?: boolean;
+};
+
 function clamp(n: number, a: number, b: number) { return Math.max(a, Math.min(b, n)); }
 function addDays(d: Date, n: number) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
 
@@ -100,24 +144,53 @@ function defaultTitle(t: WorkoutType, i: number) {
   return `${base} — ${abc}`;
 }
 
-/* ----------------- Cardio / Mobilité / HIIT ----------------- */
-function buildCardioBlockset(minutes: number, variantIdx: number): NormalizedExercise[] {
-  // alterne continu vs fractionné
-  if (variantIdx % 2 === 0) {
-    return [
-      { name: "Échauffement Z1", reps: "8–10 min", block: "echauffement" },
-      { name: "Z2 continu", reps: `${Math.max(15, minutes - 12)} min`, block: "principal" },
-      { name: "Retour au calme + mobilité", reps: "5–8 min", block: "fin" },
-    ];
-  }
-  return [
-    { name: "Échauffement Z1", reps: "8–10 min", block: "echauffement" },
-    { name: "Fractionné Z2/Z3", reps: "12×(1’/1’)", block: "principal" },
-    { name: "Retour au calme + mobilité", reps: "5–8 min", block: "fin" },
-  ];
+/* ========================= Normalisations ========================= */
+function normalizeInjuries(list?: string[]): Injuries {
+  const txt = (list || []).map(s => String(s || "").toLowerCase());
+  const has = (pat: RegExp) => txt.some(s => pat.test(s));
+  return {
+    back: has(/dos|lomb|rachis|back|spine/),
+    shoulder: has(/epaul|épaul|shoulder/),
+    knee: has(/genou|knee/),
+    wrist: has(/poignet|wrist/),
+    hip: has(/hanche|hip/),
+    ankle: has(/cheville|ankle/),
+    elbow: has(/coude|elbow/),
+  };
+}
+function normalizeItems(list?: string[]): Items {
+  const txt = (list || []).map(s => String(s || "").toLowerCase());
+  const has = (pat: RegExp) => txt.some(s => pat.test(s));
+  return {
+    bands: has(/elas|élast|band/),
+    kb: has(/kb|kettlebell/),
+    trx: has(/trx|suspens/),
+    bench: has(/banc|bench/),
+    bar: has(/barre|barbell/),
+    db: has(/halter|haltère|dumbbell|halt/),
+    bike: has(/velo|vélo|bike|spinning/),
+    rower: has(/rameur|row/),
+    treadmill: has(/tapis|tread/),
+  };
 }
 
-function buildMobilityBlockset(): NormalizedExercise[] {
+/* ========================= Builders par type ========================= */
+function buildCardio(ctx: Ctx, variantIdx: number): NormalizedExercise[] {
+  const { minutes, equipItems } = ctx;
+  const warm = { name: "Échauffement Z1", reps: "8–10 min", block: "echauffement" } as NormalizedExercise;
+  const cool = { name: "Retour au calme + mobilité", reps: "5–8 min", block: "fin" } as NormalizedExercise;
+
+  let main: NormalizedExercise;
+  if (variantIdx % 2 === 0) {
+    const dur = Math.max(15, minutes - 12);
+    main = { name: equipItems.bike ? "Vélo Z2 continu" : equipItems.rower ? "Rameur Z2 continu" : "Z2 continu", reps: `${dur} min`, block: "principal" };
+  } else {
+    main = { name: equipItems.treadmill ? "Fractionné Z2/Z3 sur tapis" : "Fractionné Z2/Z3", reps: "12×(1’/1’)", block: "principal" };
+  }
+  return [warm, main, cool];
+}
+
+function buildMobility(_ctx: Ctx): NormalizedExercise[] {
   return [
     { name: "Respiration diaphragmatique", reps: "2–3 min", block: "echauffement" },
     { name: "90/90 hanches", reps: "8–10/ côté", block: "principal" },
@@ -126,85 +199,165 @@ function buildMobilityBlockset(): NormalizedExercise[] {
   ];
 }
 
-function buildHiitBlockset(): NormalizedExercise[] {
-  return [
-    { name: "Air Squats", reps: "40s", rest: "20s", block: "principal" },
-    { name: "Mountain Climbers", reps: "40s", rest: "20s", block: "principal" },
-    { name: "Burpees", reps: "30–40s", rest: "30–40s", block: "principal" },
-  ];
+function buildHiit(ctx: Ctx): NormalizedExercise[] {
+  const out: NormalizedExercise[] = [];
+  out.push({ name: "Air Squats", reps: "40s", rest: "20s", block: "principal" });
+  out.push({ name: "Mountain Climbers", reps: "40s", rest: "20s", block: "principal" });
+  // Adapter si genoux sensibles → retrait des sauts
+  out.push(adjustForInjuries(ctx, { name: "Burpees (option sans saut)", reps: "30–40s", rest: "30–40s", block: "principal", notes: "Retire le saut/impact si genoux sensibles." }));
+  return out;
 }
 
-/* ----------------- Musculation (variantes A/B/C) ----------------- */
-function buildStrengthBlockset(params: {
-  level: "debutant" | "intermediaire" | "avance";
-  equip: "none" | "limited" | "full";
-  minutes: number;
-  variantIdx: number; // 0=A, 1=B, 2=C
-  goal: string;
-}): NormalizedExercise[] {
-  const { level, equip, variantIdx, goal } = params;
+/* ========================= Musculation (A/B/C) ========================= */
+function buildStrength(ctx: Ctx, variantIdx: number): NormalizedExercise[] {
+  const { equip } = ctx;
   const out: NormalizedExercise[] = [];
 
-  // Échauffement rapide
+  // Échauffement
   out.push({ name: "Mobilité dynamique (hanches/épaules)", reps: "3–5 min", block: "echauffement" });
-
-  const add = (ex: NormalizedExercise) => out.push(ex);
 
   if (equip === "full") {
     if (variantIdx === 0) {
-      // A — Jambes + Poussée
-      add(barbell("Back Squat", level, goal));
-      add(barbell("Bench Press", level, goal));
-      add(barbell("Row à la barre", level, goal));
+      out.push(adjustForInjuries(ctx, barbell("Back Squat", ctx)));
+      out.push(adjustForInjuries(ctx, barbell("Bench Press", ctx, "haut")));
+      out.push(adjustForInjuries(ctx, barbell("Row à la barre", ctx, "dos")));
     } else if (variantIdx === 1) {
-      // B — Soulevé + Tirage vertical + Poussée verticale
-      add(barbell("Soulevé de terre (technique)", level, goal));
-      add(machineOrCable("Tirage vertical", level, goal));
-      add(barbell("Développé militaire", level, goal));
+      out.push(adjustForInjuries(ctx, barbell("Soulevé de terre (technique)", ctx, "dos", { notes: "Charge modérée, technique propre." })));
+      out.push(adjustForInjuries(ctx, cableOrMachine("Tirage vertical", ctx, "dos")));
+      out.push(adjustForInjuries(ctx, barbell("Développé militaire", ctx, "haut")));
     } else {
-      // C — Front squat + Haltères + Tractions/Row
-      add(barbell("Front Squat", level, goal));
-      add(dumbbell("Développé haltères incliné", level, goal));
-      add(bodyOrCable("Tractions assistées / Tirage poulie", level, goal));
+      out.push(adjustForInjuries(ctx, barbell("Front Squat", ctx)));
+      out.push(adjustForInjuries(ctx, dumbbell("Développé haltères incliné", ctx, "haut")));
+      out.push(adjustForInjuries(ctx, cableOrMachine("Tractions assistées / Tirage poulie", ctx, "dos")));
     }
   } else if (equip === "limited") {
     if (variantIdx === 0) {
-      add(dumbbell("Goblet Squat", level, goal));
-      add(dumbbell("Développé haltères", level, goal));
-      add(dumbbell("Rowing unilatéral", level, goal, "10–12/ côté"));
+      out.push(adjustForInjuries(ctx, dumbbell("Goblet Squat", ctx)));
+      out.push(adjustForInjuries(ctx, dumbbell("Développé haltères", ctx, "haut")));
+      out.push(adjustForInjuries(ctx, dumbbell("Rowing unilatéral", ctx, "dos", { reps: "10–12/ côté" })));
     } else if (variantIdx === 1) {
-      add(dumbbell("Fente arrière", level, goal, "8–12/ côté"));
-      add(dumbbell("Élévations latérales", level, goal, "12–15"));
-      add(dumbbell("Rowing buste penché", level, goal));
+      out.push(adjustForInjuries(ctx, dumbbell("Fente arrière", ctx, undefined, { reps: "8–12/ côté" })));
+      out.push(adjustForInjuries(ctx, dumbbell("Élévations latérales", ctx, "haut", { reps: "12–15" })));
+      out.push(adjustForInjuries(ctx, dumbbell("Rowing buste penché", ctx, "dos")));
     } else {
-      add(dumbbell("Hip Thrust (haltère)", level, goal));
-      add(dumbbell("Pompes surélevées", level, goal, pickBodyweight(goal)));
-      add(dumbbell("Curl + Extension triceps", level, goal, "10–12"));
+      out.push(adjustForInjuries(ctx, dumbbell("Hip Thrust (haltère)", ctx)));
+      out.push(adjustForInjuries(ctx, bodyOrBand("Pompes surélevées", ctx, { reps: pickBodyweight(ctx.goalKey) })));
+      out.push(adjustForInjuries(ctx, dumbbell("Curl + Extension triceps", ctx, undefined, { reps: "10–12" })));
     }
   } else {
     // equip === "none" — poids du corps
     if (variantIdx === 0) {
-      add(body("Squat", level, goal));
-      add(body("Pompes", level, goal));
-      add(body("Row table / tirage élastique", level, goal));
+      out.push(adjustForInjuries(ctx, body("Squat", ctx)));
+      out.push(adjustForInjuries(ctx, body("Pompes", ctx)));
+      out.push(adjustForInjuries(ctx, bodyOrBand("Row table / tirage élastique", ctx)));
     } else if (variantIdx === 1) {
-      add(body("Fente arrière", level, goal, "10–15/ côté"));
-      add(body("Pompes diamant / genoux", level, goal, pickBodyweight(goal)));
-      add(body("Superman hold", level, goal, "20–30s"));
+      out.push(adjustForInjuries(ctx, body("Fente arrière", ctx, { reps: "10–15/ côté" })));
+      out.push(adjustForInjuries(ctx, body("Pompes diamant / genoux", ctx, { reps: pickBodyweight(ctx.goalKey) })));
+      out.push(adjustForInjuries(ctx, body("Superman hold", ctx, { reps: "20–30s" })));
     } else {
-      add(body("Squat sauté (technique)", level, goal, "8–10"));
-      add(body("Dips banc / chaise", level, goal, pickBodyweight(goal)));
-      add(body("Tirage élastique / serviette", level, goal, pickBodyweight(goal)));
+      out.push(adjustForInjuries(ctx, body("Squat sauté (technique)", ctx, { reps: "8–10" })));
+      out.push(adjustForInjuries(ctx, body("Dips banc / chaise", ctx, { reps: pickBodyweight(ctx.goalKey) })));
+      out.push(adjustForInjuries(ctx, bodyOrBand("Tirage élastique / serviette", ctx, { reps: pickBodyweight(ctx.goalKey) })));
     }
   }
 
   // Accessoires / tronc
-  out.push({ name: "Gainage planche", sets: 2, reps: "30–45s", rest: "45s", block: "fin" });
-
+  out.push(adjustForInjuries(ctx, { name: "Gainage planche", sets: 2, reps: "30–45s", rest: "45s", block: "fin" }));
   return out;
 }
 
-/* ---- Helpers exos ---- */
+/* ========================= Ajustements (blessures & items) ========================= */
+function adjustForInjuries(ctx: Ctx, ex: NormalizedExercise): NormalizedExercise {
+  const e = { ...ex };
+
+  // RIR et tempo adaptés selon objectif/niveau
+  if (e.sets && !e.rir) e.rir = rirFor(ctx.level);
+  if (e.sets && !e.tempo) e.tempo = tempoFor(ctx.goalKey);
+
+  // Contre-indications simples
+  // Dos sensible → éviter charges lourdes sur rachis: Back Squat, Deadlift; préférer Goblet, Hip Thrust, Split squat
+  if (ctx.injuries.back) {
+    if (/back squat|soulevé de terre|deadlift|row à la barre/i.test(e.name)) {
+      return swap(e, preferBackFriendly(e, ctx));
+    }
+    if (/superman/i.test(e.name)) {
+      e.notes = joinNotes(e.notes, "Si gêne au dos, réduire l’amplitude ou remplacer par Bird-Dog.");
+    }
+  }
+  // Epaules sensibles → éviter overhead strict, dips profonds; préférer développé incliné/haltères neutres, pompes surélevées
+  if (ctx.injuries.shoulder) {
+    if (/militaire|overhead|développé militaire|élevations latérales lourdes/i.test(e.name)) {
+      return swap(e, { name: "Développé haltères neutre", sets: e.sets ?? 3, reps: repsFor(ctx.goalKey), rest: "75s", block: e.block, equipment: "haltères", notes: "Prise neutre, amplitude confortable." });
+    }
+    if (/dips/i.test(e.name)) {
+      return swap(e, { name: "Pompes surélevées", sets: e.sets ?? 3, reps: pickBodyweight(ctx.goalKey), rest: "60–75s", block: e.block, equipment: "poids du corps" });
+    }
+  }
+  // Genoux sensibles → éviter sauts, flexions très profondes; préférer hip-dominant, fentes courtes
+  if (ctx.injuries.knee) {
+    if (/sauté|jump|burpee/i.test(e.name)) {
+      return swap(e, { name: "Marche rapide / step-ups bas", sets: e.sets ?? 3, reps: "10–12/ côté", rest: "60s", block: e.block, notes: "Hauteur basse, sans douleur." });
+    }
+    if (/squat(?!.*goblet)|fente/i.test(e.name)) {
+      e.notes = joinNotes(e.notes, "Amplitude contrôlée, pas de douleur, option appui/assistance.");
+    }
+  }
+  // Poignets → préférer poignées/pompes neutres
+  if (ctx.injuries.wrist && /pompes|push-up/i.test(e.name)) {
+    e.notes = joinNotes(e.notes, "Utiliser poignées de pompe ou poings fermés pour garder le poignet neutre.");
+  }
+  // Hanches → limiter amplitude extrême; privilégier hip thrust, glute bridge
+  if (ctx.injuries.hip && /squat|fente/i.test(e.name)) {
+    e.notes = joinNotes(e.notes, "Amplitude confortable, focus stabilité hanche.");
+  }
+  // Chevilles → limiter plyo et dorsiflexion extrême
+  if (ctx.injuries.ankle && /sauté|jump/i.test(e.name)) {
+    return swap(e, { name: "Marche rapide inclinée", sets: e.sets ?? 3, reps: "2–3 min", rest: "60s", block: e.block });
+  }
+
+  // Utilisation des équipements détaillés si dispo
+  if (/tirage élastique|row|tirage/i.test(e.name)) {
+    if (ctx.equipItems.bands) {
+      e.equipment = e.equipment || "élastiques";
+    }
+  }
+  if (/kettlebell|kb/i.test(e.name) && !ctx.equipItems.kb) {
+    // si KB proposé mais pas dispo -> swap vers haltère
+    return swap(e, { ...e, name: e.name.replace(/kettlebell|KB/i, "haltère"), equipment: "haltères" });
+  }
+  if (/trx|suspension/i.test(e.name) && !ctx.equipItems.trx) {
+    // alternative tirage
+    return swap(e, bodyOrBand("Tirage élastique / serviette", ctx, { reps: e.reps || pickBodyweight(ctx.goalKey) }));
+  }
+
+  return e;
+}
+
+function preferBackFriendly(ex: NormalizedExercise, ctx: Ctx): NormalizedExercise {
+  // alternatives “dos-friendly”
+  if (/back squat|front squat/i.test(ex.name)) {
+    return dumbbell("Goblet Squat", ctx);
+  }
+  if (/soulevé de terre/i.test(ex.name)) {
+    return dumbbell("Hip Thrust (haltère)", ctx);
+  }
+  if (/row à la barre/i.test(ex.name)) {
+    return dumbbell("Rowing unilatéral", ctx, "dos", { reps: "10–12/ côté" });
+  }
+  return ex;
+}
+
+function swap(_old: NormalizedExercise, replacement: NormalizedExercise): NormalizedExercise {
+  return { ...replacement };
+}
+
+function joinNotes(a?: string, b?: string) {
+  if (!a) return b || "";
+  if (!b) return a || "";
+  return `${a} ${b}`.trim();
+}
+
+/* ========================= Exercices helpers ========================= */
 function setsFor(level: "debutant" | "intermediaire" | "avance", bw = false) {
   if (bw) return level === "avance" ? 4 : 3;
   return level === "avance" ? 4 : level === "intermediaire" ? 3 : 2;
@@ -234,18 +387,65 @@ function pickBodyweight(goal: string) {
   return "10–15";
 }
 
-function barbell(name: string, level: any, goal: string, reps?: string): NormalizedExercise {
-  return { name, sets: setsFor(level), reps: reps || repsFor(goal), rest: "90s", tempo: tempoFor(goal), rir: rirFor(level), block: "principal", equipment: "barre" };
+/* ====== Factories ====== */
+function barbell(name: string, ctx: Ctx, area?: "bas" | "haut" | "dos", extra?: Partial<NormalizedExercise>): NormalizedExercise {
+  return {
+    name,
+    sets: setsFor(ctx.level),
+    reps: area ? repsFor(ctx.goalKey) : repsFor(ctx.goalKey),
+    rest: "90s",
+    tempo: tempoFor(ctx.goalKey),
+    rir: rirFor(ctx.level),
+    block: "principal",
+    equipment: "barre",
+    ...extra,
+  };
 }
-function dumbbell(name: string, level: any, goal: string, reps?: string): NormalizedExercise {
-  return { name, sets: setsFor(level), reps: reps || repsFor(goal), rest: "75s", tempo: tempoFor(goal), rir: rirFor(level), block: "principal", equipment: "haltères" };
+function dumbbell(name: string, ctx: Ctx, _area?: "bas" | "haut" | "dos", extra?: Partial<NormalizedExercise>): NormalizedExercise {
+  return {
+    name,
+    sets: setsFor(ctx.level),
+    reps: repsFor(ctx.goalKey),
+    rest: "75s",
+    tempo: tempoFor(ctx.goalKey),
+    rir: rirFor(ctx.level),
+    block: "principal",
+    equipment: "haltères",
+    ...extra,
+  };
 }
-function machineOrCable(name: string, level: any, goal: string, reps?: string): NormalizedExercise {
-  return { name, sets: setsFor(level), reps: reps || repsFor(goal), rest: "75–90s", tempo: tempoFor(goal), rir: rirFor(level), block: "principal", equipment: "machine/câble" };
+function cableOrMachine(name: string, ctx: Ctx, _area?: "bas" | "haut" | "dos", extra?: Partial<NormalizedExercise>): NormalizedExercise {
+  return {
+    name,
+    sets: setsFor(ctx.level),
+    reps: repsFor(ctx.goalKey),
+    rest: "75–90s",
+    tempo: tempoFor(ctx.goalKey),
+    rir: rirFor(ctx.level),
+    block: "principal",
+    equipment: "machine/câble",
+    ...extra,
+  };
 }
-function bodyOrCable(name: string, level: any, goal: string, reps?: string): NormalizedExercise {
-  return { name, sets: setsFor(level, true), reps: reps || pickBodyweight(goal), rest: "60–75s", block: "principal", equipment: "poids du corps / câble" };
+function bodyOrBand(name: string, ctx: Ctx, extra?: Partial<NormalizedExercise>): NormalizedExercise {
+  return {
+    name,
+    sets: setsFor(ctx.level, true),
+    reps: extra?.reps || pickBodyweight(ctx.goalKey),
+    rest: "60–75s",
+    block: "principal",
+    equipment: "poids du corps / élastiques",
+    ...extra,
+  };
 }
-function body(name: string, level: any, goal: string, reps?: string): NormalizedExercise {
-  return { name, sets: setsFor(level, true), reps: reps || pickBodyweight(goal), rest: "60s", block: "principal", equipment: "poids du corps" };
+function body(name: string, ctx: Ctx, extra?: Partial<NormalizedExercise>): NormalizedExercise {
+  return {
+    name,
+    sets: setsFor(ctx.level, true),
+    reps: extra?.reps || pickBodyweight(ctx.goalKey),
+    rest: "60s",
+    block: "principal",
+    equipment: "poids du corps",
+    ...extra,
+  };
 }
