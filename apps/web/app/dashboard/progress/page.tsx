@@ -191,7 +191,7 @@ export default async function Page({
 
   return (
     <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
-      {/* Header (mêmes tailles que “Recettes”) */}
+      {/* Header */}
       <div className="page-header">
         <div>
           <h1
@@ -207,13 +207,7 @@ export default async function Page({
             Ajoutez vos pas, vos charges et votre poids. Vos données restent en local (cookie).
           </p>
         </div>
-        <a
-          href="/dashboard"
-          className="btn btn-outline"
-          style={{ color: "#111", padding: "6px 10px", lineHeight: 1.2 }}
-        >
-          ← Retour
-        </a>
+        {/* ← Bouton Retour supprimé */}
       </div>
 
       {/* Messages */}
