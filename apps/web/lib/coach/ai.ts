@@ -50,8 +50,6 @@ const SHEET_GID = process.env.SHEET_GID || "";
 const SHEET_RANGE = process.env.SHEET_RANGE || ""; // ex: "A:Z" ou "A1:K999"
 
 function sheetCsvUrl(): string {
-  // CSV export de Google Sheets avec gid + range
-  // NB: range est optionnel; si vide, Google renvoie toute la feuille.
   const base = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(SHEET_ID)}/export?format=csv`;
   const qp = new URLSearchParams();
   if (SHEET_GID) qp.set("gid", SHEET_GID);
@@ -81,7 +79,7 @@ function parseCSV(text: string): string[][] {
     if (inQuotes) {
       if (ch === '"') {
         const next = text[i + 1];
-        if (next === '"') { cell += '"'; i += 2; continue; } // escaped quote
+        if (next === '"') { cell += '"'; i += 2; continue; }
         inQuotes = false; i++; continue;
       }
       cell += ch; i++; continue;
@@ -93,7 +91,6 @@ function parseCSV(text: string): string[][] {
     if (ch === "\n") { pushRow(); i++; continue; }
     cell += ch; i++;
   }
-  // dernière cellule/ligne si non terminée
   if (cell.length > 0 || cur.length > 0) pushRow();
   return rows;
 }
@@ -107,9 +104,7 @@ async function fetchSheetCSV(): Promise<string[][]> {
   }
   const url = sheetCsvUrl();
   const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) {
-    throw new Error(`CSV fetch failed (${res.status})`);
-  }
+  if (!res.ok) throw new Error(`CSV fetch failed (${res.status})`);
   const text = await res.text();
   (global as any)[GLOBAL_CACHE_KEY] = { at: now, text };
   return parseCSV(text);
@@ -118,12 +113,11 @@ async function fetchSheetCSV(): Promise<string[][]> {
 // --- Aide : accès colonne par nom ou index fallback ---
 type ColIdxMap = { [key: string]: number };
 
-// Par défaut si pas d’en-têtes: A=0, B=1, C=2, ... on veut B=1 (prenom), C=2 (age), G=6 (objectif), et email ~ J=9
-// ⚠️ Tu peux override par env: SHEET_EMAIL_COL="K" si l'email est en colonne K.
+// Par défaut si pas d’en-têtes: A=0, B=1, C=2, D=3, E=4, F=5, G=6, H=7, I=8, J=9, K=10
+// On veut B=1 (prenom), C=2 (age), G=6 (objectif), K=10 (email par défaut si override via env), etc.
 const DEFAULT_IDX: ColIdxMap = { prenom: 1, age: 2, objectif: 6, email: 9, ts: 0 };
 
 function toIndexFromLetter(letter: string): number {
-  // "A"->0, "B"->1, "AA"->26...
   let idx = 0;
   const s = letter.replace(/[^A-Za-z]/g, "").toUpperCase();
   for (let i = 0; i < s.length; i++) idx = idx * 26 + (s.charCodeAt(i) - 64);
@@ -133,7 +127,6 @@ function toIndexFromLetter(letter: string): number {
 function detectIndexes(rows: string[][]): ColIdxMap {
   if (!rows.length) return { ...DEFAULT_IDX };
   const header = rows[0].map((h) => (h || "").trim().toLowerCase());
-  // Si l’en-tête contient “email”, “prenom”, “âge/age”, “objectif”
   const map: ColIdxMap = { ...DEFAULT_IDX };
   const find = (keys: string[]) => header.findIndex((h) => keys.includes(h));
 
@@ -152,11 +145,10 @@ function detectIndexes(rows: string[][]): ColIdxMap {
   const tsIdx = find(["timestamp", "ts", "date", "submitted at"]);
   if (tsIdx >= 0) map.ts = tsIdx;
 
-  // Permettre override via env optionnelle SHEET_*_COL -> lettre (ex: "K")
+  // Override via lettres si défini (ex: SHEET_EMAIL_COL="K")
   const letterOverride = (envName: string) => {
     const v = (process.env[envName] || "").trim();
     return v ? toIndexFromLetter(v) : null;
-    // ex: SHEET_EMAIL_COL="K" -> 10
   };
   const oEmail = letterOverride("SHEET_EMAIL_COL");
   if (oEmail !== null) map.email = oEmail;
@@ -179,7 +171,6 @@ function normalizeGoal(input?: string): string {
 
   if (!s) return "";
 
-  // mappings fréquents
   if (/(hypertroph|esthetique|prise de muscle|prise de masse)/.test(s)) return "hypertrophy";
   if (/(perte|seche|gras|minceur|weight loss|fat)/.test(s)) return "fatloss";
   if (/(force|strength)/.test(s)) return "strength";
@@ -201,8 +192,6 @@ export async function getAnswersForEmail(email: string): Promise<Record<string, 
   if (!rows.length) return null;
 
   const idx = detectIndexes(rows);
-
-  // Si la première ligne est un header (probable) et contient "email", on la zappe pour la recherche
   const start = rows[0]?.[idx.email]?.toLowerCase() === "email" ? 1 : 0;
 
   let latest: { row: string[]; ts: number; i: number } | null = null;
@@ -213,7 +202,6 @@ export async function getAnswersForEmail(email: string): Promise<Record<string, 
     const rowMail = String(row[idx.email] || "").trim().toLowerCase();
     if (rowMail !== emailLc) continue;
 
-    // timestamp si dispo
     let tsNum = 0;
     const tsRaw = row[idx.ts];
     if (tsRaw) {
@@ -227,7 +215,6 @@ export async function getAnswersForEmail(email: string): Promise<Record<string, 
 
   if (!latest) return null;
 
-  // construire un objet réponse clé->valeur basé soit sur header, soit sur indices
   const headerRow = rows[0] || [];
   const hasHeader = headerRow[idx.email]?.toLowerCase() === "email";
   const obj: Record<string, any> = {};
@@ -238,49 +225,38 @@ export async function getAnswersForEmail(email: string): Promise<Record<string, 
       obj[key] = latest.row[c];
     }
   } else {
-    obj["col_B"] = latest.row[1] || ""; // prenom
-    obj["col_C"] = latest.row[2] || ""; // age
-    obj["col_G"] = latest.row[6] || ""; // objectif
+    // ⚙️ Fallback sans en-têtes : on expose B..K pour nos usages
+    obj["col_B"] = latest.row[1] || "";  // Prenom
+    obj["col_C"] = latest.row[2] || "";  // Age
+    obj["col_D"] = latest.row[3] || "";  // Niveau
+    obj["col_E"] = latest.row[4] || "";  // Matériel (none/limited/full)
+    obj["col_F"] = latest.row[5] || "";  // Durée (min)
+    obj["col_G"] = latest.row[6] || "";  // Objectif (libellé)
+    obj["col_H"] = latest.row[7] || "";  // Blessures
+    obj["col_I"] = latest.row[8] || "";  // Jours / semaine
+    obj["col_J"] = latest.row[9] || "";  // Équipements détaillés (liste)
+    obj["col_K"] = latest.row[10] || ""; // Email (si c'est là)
     obj["email"] = latest.row[idx.email] || emailLc;
     obj["ts"] = latest.row[idx.ts] || "";
   }
 
-  // Toujours refléter le mail clé 'email'
   obj["email"] = obj["email"] || emailLc;
 
   return obj;
 }
 
-// 2) Construire un profil depuis la ligne réponse
+// 2) Construire un profil depuis la ligne réponse (base: prenom/age/objectif/email)
 export function buildProfileFromAnswers(ans: Record<string, any>): Profile {
   if (!ans) return {};
 
-  // lecture souple: soit via noms d’en-tête, soit via col_* fallback
   const prenom =
-    ans["prenom"] ??
-    ans["prénom"] ??
-    ans["first name"] ??
-    ans["firstname"] ??
-    ans["col_B"] ??
-    "";
+    ans["prenom"] ?? ans["prénom"] ?? ans["first name"] ?? ans["firstname"] ?? ans["col_B"] ?? "";
 
-  const ageRaw =
-    ans["age"] ??
-    ans["âge"] ??
-    ans["col_C"] ??
-    "";
+  const ageRaw = ans["age"] ?? ans["âge"] ?? ans["col_C"] ?? "";
 
-  const objectifBrut =
-    ans["objectif"] ??
-    ans["goal"] ??
-    ans["col_G"] ??
-    "";
+  const objectifBrut = ans["objectif"] ?? ans["goal"] ?? ans["col_G"] ?? "";
 
-  const email =
-    ans["email"] ??
-    ans["mail"] ??
-    ans["e-mail"] ??
-    "";
+  const email = ans["email"] ?? ans["mail"] ?? ans["e-mail"] ?? ans["col_K"] ?? "";
 
   const age = typeof ageRaw === "number" ? ageRaw : Number(String(ageRaw).replace(/[^\d.-]/g, ""));
   const goal = normalizeGoal(String(objectifBrut));
@@ -297,40 +273,92 @@ export function buildProfileFromAnswers(ans: Record<string, any>): Profile {
 }
 
 /* ============================================================================
- *  3) Générer un programme (version “béton”)
- *  --------------------------------------------------------------------------
- *  On délègue la création des vraies séances au module coach/beton.
- *  Cette fonction conserve la même signature/export qu’avant.
+ *  3) Générer un programme (branché sur coach/beton)
  * ==========================================================================*/
 import { planProgrammeFromProfile } from "./beton";
+
+/* Helpers de normalisation pour champs étendus (D..J) */
+function normLevel(s: string | undefined) {
+  const v = String(s || "").toLowerCase();
+  if (/avanc/.test(v)) return "avance";
+  if (/inter/.test(v)) return "intermediaire";
+  if (/deb|déb/.test(v)) return "debutant";
+  return "" as any;
+}
+function normEquipLevel(s: string | undefined): "none" | "limited" | "full" {
+  const v = String(s || "").toLowerCase();
+  if (/none|aucun|sans/.test(v)) return "none";
+  if (/full|complet|salle|gym|machines|barres/.test(v)) return "full";
+  if (!v) return "limited";
+  return "limited";
+}
+function toNumber(x: any): number | undefined {
+  const n = Number(String(x ?? "").replace(/[^\d.-]/g, ""));
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+}
+function splitList(s: any): string[] | undefined {
+  const txt = String(s || "").trim();
+  if (!txt) return undefined;
+  return txt.split(/[;,/|]/).map((t) => t.trim()).filter(Boolean);
+}
 
 export function generateProgrammeFromAnswers(ans: Record<string, any>): { sessions: AiSession[] } {
   const profile = buildProfileFromAnswers(ans);
 
-  // Enrichissement possible depuis les réponses brutes
+  // Lecture “souple” des colonnes D..J (avec fallback col_D..col_J si pas d’en-têtes)
+  const level =
+    normLevel(
+      (ans["niveau"] ??
+        ans["level"] ??
+        ans["experience"] ??
+        ans["expérience"] ??
+        ans["col_D"]) as string | undefined
+    ) || undefined;
+
+  const equipLevel =
+    (normEquipLevel(
+      (ans["equipLevel"] ??
+        ans["matériel"] ??
+        ans["materiel"] ??
+        ans["equipment_level"] ??
+        ans["col_E"]) as string | undefined
+    ) || "limited") as "none" | "limited" | "full";
+
+  const timePerSession =
+    toNumber(ans["timePerSession"] ?? ans["durée"] ?? ans["duree"] ?? ans["col_F"]) ??
+    (profile.age && profile.age > 50 ? 35 : undefined) ??
+    45;
+
+  const injuries =
+    splitList(ans["injuries"] ?? ans["blessures"] ?? ans["col_H"]) || undefined;
+
+  const daysPerWeek =
+    Math.max(1, Math.min(6, toNumber(ans["daysPerWeek"] ?? ans["jours"] ?? ans["séances/semaine"] ?? ans["seances/semaine"] ?? ans["col_I"]) || 3));
+
+  const equipItems =
+    splitList(ans["equipItems"] ?? ans["équipements"] ?? ans["equipements"] ?? ans["col_J"]) || undefined;
+
+  // Payload enrichi pour le moteur “béton”
   const enriched = {
     prenom: profile.prenom,
     age: profile.age,
-    objectif: profile.objectif, // libellé brut (prioritaire pour l’affichage)
-    goal: profile.goal,         // clé normalisée (pour la logique interne)
-    equipLevel: (ans["equipLevel"] || ans["matériel"] || ans["equipment_level"] || "limited") as
-      | "none" | "limited" | "full",
-    timePerSession: Number(
-      ans["timePerSession"] || ans["durée"] || (profile.age && profile.age > 50 ? 35 : 45)
-    ),
-    level: (String(ans["niveau"] || ans["level"] || "") as string).toLowerCase() as
-      | "debutant"
-      | "intermediaire"
-      | "avance",
-  };
+    objectif: profile.objectif, // libellé brut -> affichage
+    goal: profile.goal,         // clé normalisée -> logique
+    equipLevel,
+    timePerSession,
+    level,
+    // Ces deux champs sont “bonus” pour futures évolutions du moteur
+    injuries,
+    equipItems,
+  } as any;
 
-  // ⚙️ Délégation au moteur “béton”
-  return planProgrammeFromProfile(enriched, { maxSessions: 3 });
+  // maxSessions = jours/semaine (1..6)
+  return planProgrammeFromProfile(enriched, { maxSessions: daysPerWeek });
 }
 
 // 4) Sessions “stockées” (stub) — ici on retourne vide pour laisser la génération locale prendre le relais
 export async function getAiSessions(_email: string): Promise<AiSession[]> {
-  // Tu peux brancher ici une DB/Supabase/Redis si tu veux stocker des programmes.
-  // Par défaut, on ne renvoie rien -> la page tentera generateProgrammeFromAnswers(answers).
+  // Branche ici une DB/Supabase si tu veux persister les programmes.
   return [];
 }
+
