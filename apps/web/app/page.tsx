@@ -92,7 +92,6 @@ export default function HomePage() {
       });
       if (signInError) throw signInError;
 
-      // récupère l’email canonique et pose le cookie
       const { data: { user } } = await supabase.auth.getUser();
       const sessionEmail = (user?.email || emailTrim).trim().toLowerCase();
       if (sessionEmail) setAppEmailCookie(sessionEmail);
@@ -121,42 +120,29 @@ export default function HomePage() {
       const emailTrim = emailSu.trim().toLowerCase();
       const pwd = passwordSu.trim();
 
-      // 1) Créer le compte → envoie l’e-mail de confirmation (paramétrage Supabase)
+      // 1) Créer le compte → envoie l’e-mail de confirmation
       const { data, error: signUpError } = await supabase.auth.signUp({
         email: emailTrim,
         password: pwd,
         options: {
-          // ✅ redirection après clic sur le lien de confirmation
-          emailRedirectTo: `${window.location.origin}/auth/callback?source=confirm`,
+          // redirection après clic sur le lien de confirmation
+          emailRedirectTo: `${window.location.origin}/callback?source=confirm`,
         },
       });
       if (signUpError) throw signUpError;
 
-      // Met le cookie d'email tout de suite (pratique pour les pages serveur)
+      // Option: on peut stocker l'email dans le cookie (utile pour des écrans non protégés)
+      // Si tu préfères ne rien stocker avant confirmation, commente la ligne suivante.
       if (emailTrim) setAppEmailCookie(emailTrim);
 
-      // 2) Si la session est déjà active (projet auto-confirm) → go dashboard
+      // 2) Ne PAS connecter immédiatement :
+      //    - Si le projet est en "auto-confirm", Supabase peut quand même renvoyer une session.
+      //    - On force donc la déconnexion pour imposer la confirmation par e-mail.
       if (data?.session) {
-        setMessage("Compte créé ✅");
-        window.location.href = "/dashboard";
-        return;
+        await supabase.auth.signOut();
       }
 
-      // 3) Sinon, on tente de connecter immédiatement (si la politique l’autorise)
-      const { error: signInAfter } = await supabase.auth.signInWithPassword({
-        email: emailTrim,
-        password: pwd,
-      });
-      if (!signInAfter) {
-        const { data: { user } } = await supabase.auth.getUser();
-        const sessionEmail = (user?.email || emailTrim).trim().toLowerCase();
-        if (sessionEmail) setAppEmailCookie(sessionEmail);
-        setMessage("Compte créé ✅");
-        window.location.href = "/dashboard";
-        return;
-      }
-
-      // 4) Fallback : connexion bloquée tant que l’e-mail n’est pas confirmé
+      // 3) Message clair et on bascule vers le panneau de connexion
       setMessage("Compte créé ✅ Vérifie tes e-mails pour confirmer ton inscription.");
       setShowSignup(false);
       setShowLogin(true);
