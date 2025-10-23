@@ -136,7 +136,7 @@ function detectIndexes(rows: string[][]): ColIdxMap {
   const map: ColIdxMap = { ...DEFAULT_IDX };
   const find = (keys: string[]) => header.findIndex((h) => keys.includes(h));
 
-  const emailIdx = find(["email", "e-mail", "mail"]);
+  const emailIdx = find(["email", "e-mail", "mail", "email address"]);
   if (emailIdx >= 0) map.email = emailIdx;
 
   const prenomIdx = find(["prenom", "prénom", "first name", "firstname"]);
@@ -186,6 +186,26 @@ function normalizeGoal(input?: string): string {
   return "general";
 }
 
+// --- Helpers ajoutés pour robustesse ---
+function parseFrTimestamp(s: string): number {
+  if (!s) return 0;
+  // Essai direct (ISO/US)
+  const iso = Date.parse(String(s));
+  if (!Number.isNaN(iso)) return iso;
+
+  // FR: "DD/MM/YYYY HH:mm[:ss]" ou "DD/MM/YYYY"
+  const m = String(s).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+  if (!m) return 0;
+  const dd = Number(m[1]), MM = Number(m[2]), yyyy = Number(m[3]);
+  const hh = Number(m[4] ?? 0), mi = Number(m[5] ?? 0), ss = Number(m[6] ?? 0);
+  return new Date(yyyy, MM - 1, dd, hh, mi, ss).getTime();
+}
+
+function looksLikeHeader(value: string | undefined): boolean {
+  const v = (value || "").trim().toLowerCase();
+  return ["email", "e-mail", "mail", "email address"].includes(v);
+}
+
 /** ============================================================================
  *  API publique consommée par les pages
  *  ==========================================================================*/
@@ -200,51 +220,53 @@ export async function getAnswersForEmail(email: string): Promise<Record<string, 
 
   const idx = detectIndexes(rows);
 
-  // Si la première ligne est un header (probable) et contient "email", on la zappe pour la recherche
-  const start = rows[0]?.[idx.email]?.toLowerCase() === "email" ? 1 : 0;
+  // Détection d’en-tête souple
+  const headerRow = rows[0] || [];
+  const hasHeader =
+    looksLikeHeader(headerRow[idx.email]) ||
+    headerRow.some((h) => ["email", "e-mail", "mail", "email address"].includes(String(h || "").trim().toLowerCase()));
+
+  const start = hasHeader ? 1 : 0;
 
   let latest: { row: string[]; ts: number; i: number } | null = null;
 
   for (let i = start; i < rows.length; i++) {
     const row = rows[i];
     if (!row || !row.length) continue;
+
     const rowMail = String(row[idx.email] || "").trim().toLowerCase();
     if (rowMail !== emailLc) continue;
 
-    // timestamp si dispo
-    let tsNum = 0;
     const tsRaw = row[idx.ts];
-    if (tsRaw) {
-      const t = new Date(tsRaw).getTime();
-      if (!Number.isNaN(t)) tsNum = t;
-    }
-    if (!latest || tsNum >= (latest.ts || 0) || i > (latest.i || -1)) {
+    const tsNum = parseFrTimestamp(String(tsRaw || ""));
+
+    if (!latest || tsNum > latest.ts || (tsNum === latest.ts && i > latest.i)) {
       latest = { row, ts: tsNum, i };
     }
   }
 
   if (!latest) return null;
 
-  // construire un objet réponse clé->valeur basé soit sur header, soit sur indices
-  const headerRow = rows[0] || [];
-  const hasHeader = headerRow[idx.email]?.toLowerCase() === "email";
   const obj: Record<string, any> = {};
 
   if (hasHeader) {
+    // Mappe par noms d’en-tête
     for (let c = 0; c < latest.row.length; c++) {
       const key = String(headerRow[c] || `col_${c}`).trim();
       obj[key] = latest.row[c];
     }
   } else {
-    obj["col_B"] = latest.row[1] || ""; // prenom
-    obj["col_C"] = latest.row[2] || ""; // age
-    obj["col_G"] = latest.row[6] || ""; // objectif
+    // Sans en-tête: on utilise les index détectés (évite le hardcode B/C/G)
     obj["email"] = latest.row[idx.email] || emailLc;
     obj["ts"] = latest.row[idx.ts] || "";
+
+    if (idx.prenom != null) obj["col_prenom"] = latest.row[idx.prenom] || "";
+    if (idx.age != null) obj["col_age"] = latest.row[idx.age] || "";
+    if (idx.objectif != null) obj["col_objectif"] = latest.row[idx.objectif] || "";
   }
 
-  // Toujours refléter le mail clé 'email'
-  obj["email"] = obj["email"] || emailLc;
+  // Toujours refléter le mail clé 'email' (logique d’email conservée)
+  obj["email"] = String(obj["email"] || emailLc).trim().toLowerCase();
 
   return obj;
 }
@@ -253,37 +275,34 @@ export async function getAnswersForEmail(email: string): Promise<Record<string, 
 export function buildProfileFromAnswers(ans: Record<string, any>): Profile {
   if (!ans) return {};
 
-  // lecture souple: soit via noms d’en-tête, soit via col_* fallback
+  const pick = (...keys: string[]) => {
+    for (const k of keys) {
+      if (ans[k] != null && String(ans[k]).trim() !== "") return ans[k];
+    }
+    return "";
+  };
+
+  // lecture souple: via noms d’en-tête OU via col_* fallback (déduits d’indexes)
   const prenom =
-    ans["prenom"] ??
-    ans["prénom"] ??
-    ans["first name"] ??
-    ans["firstname"] ??
-    ans["col_B"] ??
-    "";
+    pick("prenom", "prénom", "first name", "firstname", "col_prenom", "col_B");
 
   const ageRaw =
-    ans["age"] ??
-    ans["âge"] ??
-    ans["col_C"] ??
-    "";
+    pick("age", "âge", "col_age", "col_C");
 
   const objectifBrut =
-    ans["objectif"] ??
-    ans["goal"] ??
-    ans["col_G"] ??
-    "";
+    pick("objectif", "goal", "col_objectif", "col_G");
 
   const email =
-    ans["email"] ??
-    ans["mail"] ??
-    ans["e-mail"] ??
-    "";
+    pick("email", "mail", "e-mail");
 
-  const age = typeof ageRaw === "number" ? ageRaw : Number(String(ageRaw).replace(/[^\d.-]/g, ""));
+  const age = typeof ageRaw === "number"
+    ? ageRaw
+    : Number(String(ageRaw).replace(/[^\d.-]/g, ""));
+
   const goal = normalizeGoal(String(objectifBrut));
 
   const profile: Profile = {
+    // logique email conservée (trim + lowercase)
     email: String(email || "").trim().toLowerCase() || undefined,
     prenom: (typeof prenom === "string" ? prenom.trim() : "") || undefined,
     age: Number.isFinite(age) && age > 0 ? age : undefined,
