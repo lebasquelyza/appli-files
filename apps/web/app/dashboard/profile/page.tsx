@@ -252,11 +252,26 @@ export default async function Page({
         {!!displayedSuccess && (
           <div
             className="card"
-            style={{ border: "1px solid rgba(16,185,129,.35)", background: "rgba(16,185,129,.08)", fontWeight: 600 }}
+            style={{
+              border: "1px solid rgba(16,185,129,.35)",
+              background: "rgba(16,185,129,.08)",
+              fontWeight: 600,
+            }}
           >
-            {displayedSuccess === "programme" ? "✓ Programme IA mis à jour." : "✓ Opération réussie."}
+            {displayedSuccess === "programme" ? (
+              <>
+                <div>✓ Ton programme a été généré avec tes <b>dernières réponses</b> au questionnaire.</div>
+                <div className="text-xs" style={{ color: "#065f46", fontWeight: 500, marginTop: 4 }}>
+                  Tu peux regénérer à tout moment après avoir{" "}
+                  <a href={questionnaireUrl} className="underline">mis à jour tes réponses</a>.
+                </div>
+              </>
+            ) : (
+              "✓ Opération réussie."
+            )}
           </div>
         )}
+
         {!!displayedError && (
           <div
             className="card"
@@ -430,4 +445,3 @@ export default async function Page({
     </div>
   );
 }
-
