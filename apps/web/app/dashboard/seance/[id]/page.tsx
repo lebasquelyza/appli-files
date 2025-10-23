@@ -119,9 +119,15 @@ const styles = String.raw`
   @media print { .no-print { display: none !important; } }
 `;
 
-/* ======================== Goal label helper (comme sur le profil) ======================== */
+/* ======================== Goal label helper (aligné sur la page profil) ======================== */
 function goalLabelFromProfile(profile: any): string | undefined {
   if (!profile) return undefined;
+
+  // 1) Priorité au libellé brut du Sheet (comme dans "Mes infos")
+  const raw = String(profile?.objectif ?? "").trim();
+  if (raw) return raw;
+
+  // 2) Sinon fallback via la clé normalisée -> libellé FR
   const map: Record<string, string> = {
     hypertrophy: "Hypertrophie / Esthétique",
     fatloss: "Perte de gras",
@@ -131,7 +137,6 @@ function goalLabelFromProfile(profile: any): string | undefined {
     general: "Forme générale",
   };
 
-  // clé normalisée prioritaire (buildProfileFromAnswers -> profile.goal)
   const key = String(
     profile?.goal ??
       profile?.primaryGoal ??
@@ -141,11 +146,7 @@ function goalLabelFromProfile(profile: any): string | undefined {
       ""
   ).toLowerCase();
 
-  if (map[key]) return map[key];
-
-  // sinon libellé brut s'il existe (profile.objectif)
-  const raw = String(profile?.objectif ?? "").trim();
-  return raw || undefined;
+  return map[key] || undefined;
 }
 
 /* ======================== Types ======================== */
@@ -210,7 +211,7 @@ const PageView: React.FC<PageViewProps> = (props) => {
             <h2 className="section-title">Brief de séance</h2>
           </div>
           <div className="compact-card">
-            {/* Objectif actuel du client — libellé FR identique au profil */}
+            {/* Objectif actuel du client — libellé FR conforme à la page profil */}
             {goalLabel && (
               <div style={{ fontSize: 14, marginBottom: 8 }}>
                 🎯 <b>Objectif actuel</b> : {goalLabel}
