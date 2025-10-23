@@ -119,6 +119,7 @@ async function fetchSheetCSV(): Promise<string[][]> {
 type ColIdxMap = { [key: string]: number };
 
 // Par défaut si pas d’en-têtes: A=0, B=1, C=2, ... on veut B=1 (prenom), C=2 (age), G=6 (objectif), et email ~ J=9
+// ⚠️ Tu peux override par env: SHEET_EMAIL_COL="K" si l'email est en colonne K.
 const DEFAULT_IDX: ColIdxMap = { prenom: 1, age: 2, objectif: 6, email: 9, ts: 0 };
 
 function toIndexFromLetter(letter: string): number {
@@ -136,7 +137,7 @@ function detectIndexes(rows: string[][]): ColIdxMap {
   const map: ColIdxMap = { ...DEFAULT_IDX };
   const find = (keys: string[]) => header.findIndex((h) => keys.includes(h));
 
-  const emailIdx = find(["email", "e-mail", "mail", "email address"]);
+  const emailIdx = find(["email", "e-mail", "mail"]);
   if (emailIdx >= 0) map.email = emailIdx;
 
   const prenomIdx = find(["prenom", "prénom", "first name", "firstname"]);
@@ -151,10 +152,11 @@ function detectIndexes(rows: string[][]): ColIdxMap {
   const tsIdx = find(["timestamp", "ts", "date", "submitted at"]);
   if (tsIdx >= 0) map.ts = tsIdx;
 
-  // Permettre override via env optionnelle SHEET_EMAIL_COL="J" etc.
+  // Permettre override via env optionnelle SHEET_*_COL -> lettre (ex: "K")
   const letterOverride = (envName: string) => {
     const v = (process.env[envName] || "").trim();
     return v ? toIndexFromLetter(v) : null;
+    // ex: SHEET_EMAIL_COL="K" -> 10
   };
   const oEmail = letterOverride("SHEET_EMAIL_COL");
   if (oEmail !== null) map.email = oEmail;
@@ -182,28 +184,8 @@ function normalizeGoal(input?: string): string {
   if (/(perte|seche|gras|minceur|weight loss|fat)/.test(s)) return "fatloss";
   if (/(force|strength)/.test(s)) return "strength";
   if (/(endurance|cardio|z2|course|velo|vélo|run)/.test(s)) return "endurance";
-  if (/(mobilite|mobilite|souplesse|flexibilite)/.test(s)) return "mobility";
+  if (/(mobilite|mobilité|souplesse|flexibilite)/.test(s)) return "mobility";
   return "general";
-}
-
-// --- Helpers ajoutés pour robustesse ---
-function parseFrTimestamp(s: string): number {
-  if (!s) return 0;
-  // Essai direct (ISO/US)
-  const iso = Date.parse(String(s));
-  if (!Number.isNaN(iso)) return iso;
-
-  // FR: "DD/MM/YYYY HH:mm[:ss]" ou "DD/MM/YYYY"
-  const m = String(s).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
-  if (!m) return 0;
-  const dd = Number(m[1]), MM = Number(m[2]), yyyy = Number(m[3]);
-  const hh = Number(m[4] ?? 0), mi = Number(m[5] ?? 0), ss = Number(m[6] ?? 0);
-  return new Date(yyyy, MM - 1, dd, hh, mi, ss).getTime();
-}
-
-function looksLikeHeader(value: string | undefined): boolean {
-  const v = (value || "").trim().toLowerCase();
-  return ["email", "e-mail", "mail", "email address"].includes(v);
 }
 
 /** ============================================================================
@@ -220,53 +202,51 @@ export async function getAnswersForEmail(email: string): Promise<Record<string, 
 
   const idx = detectIndexes(rows);
 
-  // Détection d’en-tête souple
-  const headerRow = rows[0] || [];
-  const hasHeader =
-    looksLikeHeader(headerRow[idx.email]) ||
-    headerRow.some((h) => ["email", "e-mail", "mail", "email address"].includes(String(h || "").trim().toLowerCase()));
-
-  const start = hasHeader ? 1 : 0;
+  // Si la première ligne est un header (probable) et contient "email", on la zappe pour la recherche
+  const start = rows[0]?.[idx.email]?.toLowerCase() === "email" ? 1 : 0;
 
   let latest: { row: string[]; ts: number; i: number } | null = null;
 
   for (let i = start; i < rows.length; i++) {
     const row = rows[i];
     if (!row || !row.length) continue;
-
     const rowMail = String(row[idx.email] || "").trim().toLowerCase();
     if (rowMail !== emailLc) continue;
 
+    // timestamp si dispo
+    let tsNum = 0;
     const tsRaw = row[idx.ts];
-    const tsNum = parseFrTimestamp(String(tsRaw || ""));
-
-    if (!latest || tsNum > latest.ts || (tsNum === latest.ts && i > latest.i)) {
+    if (tsRaw) {
+      const t = new Date(tsRaw).getTime();
+      if (!Number.isNaN(t)) tsNum = t;
+    }
+    if (!latest || tsNum >= (latest.ts || 0) || i > (latest.i || -1)) {
       latest = { row, ts: tsNum, i };
     }
   }
 
   if (!latest) return null;
 
+  // construire un objet réponse clé->valeur basé soit sur header, soit sur indices
+  const headerRow = rows[0] || [];
+  const hasHeader = headerRow[idx.email]?.toLowerCase() === "email";
   const obj: Record<string, any> = {};
 
   if (hasHeader) {
-    // Mappe par noms d’en-tête
     for (let c = 0; c < latest.row.length; c++) {
       const key = String(headerRow[c] || `col_${c}`).trim();
       obj[key] = latest.row[c];
     }
   } else {
-    // Sans en-tête: on utilise les index détectés (évite le hardcode B/C/G)
+    obj["col_B"] = latest.row[1] || ""; // prenom
+    obj["col_C"] = latest.row[2] || ""; // age
+    obj["col_G"] = latest.row[6] || ""; // objectif
     obj["email"] = latest.row[idx.email] || emailLc;
     obj["ts"] = latest.row[idx.ts] || "";
-
-    if (idx.prenom != null) obj["col_prenom"] = latest.row[idx.prenom] || "";
-    if (idx.age != null) obj["col_age"] = latest.row[idx.age] || "";
-    if (idx.objectif != null) obj["col_objectif"] = latest.row[idx.objectif] || "";
   }
 
-  // Toujours refléter le mail clé 'email' (logique d’email conservée)
-  obj["email"] = String(obj["email"] || emailLc).trim().toLowerCase();
+  // Toujours refléter le mail clé 'email'
+  obj["email"] = obj["email"] || emailLc;
 
   return obj;
 }
@@ -275,34 +255,37 @@ export async function getAnswersForEmail(email: string): Promise<Record<string, 
 export function buildProfileFromAnswers(ans: Record<string, any>): Profile {
   if (!ans) return {};
 
-  const pick = (...keys: string[]) => {
-    for (const k of keys) {
-      if (ans[k] != null && String(ans[k]).trim() !== "") return ans[k];
-    }
-    return "";
-  };
-
-  // lecture souple: via noms d’en-tête OU via col_* fallback (déduits d’indexes)
+  // lecture souple: soit via noms d’en-tête, soit via col_* fallback
   const prenom =
-    pick("prenom", "prénom", "first name", "firstname", "col_prenom", "col_B");
+    ans["prenom"] ??
+    ans["prénom"] ??
+    ans["first name"] ??
+    ans["firstname"] ??
+    ans["col_B"] ??
+    "";
 
   const ageRaw =
-    pick("age", "âge", "col_age", "col_C");
+    ans["age"] ??
+    ans["âge"] ??
+    ans["col_C"] ??
+    "";
 
   const objectifBrut =
-    pick("objectif", "goal", "col_objectif", "col_G");
+    ans["objectif"] ??
+    ans["goal"] ??
+    ans["col_G"] ??
+    "";
 
   const email =
-    pick("email", "mail", "e-mail");
+    ans["email"] ??
+    ans["mail"] ??
+    ans["e-mail"] ??
+    "";
 
-  const age = typeof ageRaw === "number"
-    ? ageRaw
-    : Number(String(ageRaw).replace(/[^\d.-]/g, ""));
-
+  const age = typeof ageRaw === "number" ? ageRaw : Number(String(ageRaw).replace(/[^\d.-]/g, ""));
   const goal = normalizeGoal(String(objectifBrut));
 
   const profile: Profile = {
-    // logique email conservée (trim + lowercase)
     email: String(email || "").trim().toLowerCase() || undefined,
     prenom: (typeof prenom === "string" ? prenom.trim() : "") || undefined,
     age: Number.isFinite(age) && age > 0 ? age : undefined,
@@ -313,66 +296,40 @@ export function buildProfileFromAnswers(ans: Record<string, any>): Profile {
   return profile;
 }
 
-// 3) Générer un programme simple (stub) à partir des réponses
+/* ============================================================================
+ *  3) Générer un programme (version “béton”)
+ *  --------------------------------------------------------------------------
+ *  On délègue la création des vraies séances au module coach/beton.
+ *  Cette fonction conserve la même signature/export qu’avant.
+ * ==========================================================================*/
+import { planProgrammeFromProfile } from "./beton";
+
 export function generateProgrammeFromAnswers(ans: Record<string, any>): { sessions: AiSession[] } {
   const profile = buildProfileFromAnswers(ans);
-  const today = new Date();
-  const y = today.getFullYear();
-  const m = String(today.getMonth() + 1).padStart(2, "0");
-  const d = String(today.getDate()).padStart(2, "0");
-  const date = `${y}-${m}-${d}`;
 
-  const type: WorkoutType =
-    profile.goal === "endurance" ? "cardio"
-    : profile.goal === "mobility" ? "mobilité"
-    : profile.goal === "fatloss" && profile.age && profile.age > 45 ? "hiit"
-    : "muscu";
-
-  const plannedMin =
-    type === "cardio" ? 35 :
-    type === "hiit" ? 28 :
-    type === "mobilité" ? 25 : 45;
-
-  const base: AiSession = {
-    id: `auto-${Date.now()}`,
-    title: profile.prenom ? `Séance de ${profile.prenom}` : "Séance personnalisée",
-    type,
-    date,
-    plannedMin,
-    intensity: type === "hiit" ? "élevée" : type === "cardio" ? "modérée" : "modérée",
-    exercises:
-      type === "cardio"
-        ? [
-            { name: "Échauffement Z1", reps: "8–10 min", block: "echauffement" },
-            { name: "Cardio continu Z2", reps: "20–30 min", block: "principal" },
-            { name: "Retour au calme + mobilité", reps: "5–8 min", block: "fin" },
-          ]
-        : type === "mobilité"
-        ? [
-            { name: "Respiration diaphragmatique", reps: "2–3 min", block: "echauffement" },
-            { name: "90/90 hanches", reps: "8–10/ côté", block: "principal" },
-            { name: "T-spine rotations", reps: "8–10/ côté", block: "principal" },
-            { name: "Down-Dog → Cobra", reps: "6–8", block: "fin" },
-          ]
-        : type === "hiit"
-        ? [
-            { name: "Circuit 1: Air Squats", reps: "40s", rest: "20s", block: "principal" },
-            { name: "Circuit 2: Mountain Climbers", reps: "40s", rest: "20s", block: "principal" },
-            { name: "Circuit 3: Burpees", reps: "30–40s", rest: "30–40s", block: "principal" },
-          ]
-        : [
-            { name: "Goblet Squat", sets: 3, reps: "8–12", rest: "75s", equipment: "haltères", block: "principal" },
-            { name: "Développé haltères", sets: 3, reps: "8–12", rest: "75s", equipment: "haltères", block: "principal" },
-            { name: "Rowing unilatéral", sets: 3, reps: "10–12/ côté", rest: "75s", equipment: "haltères", block: "principal" },
-            { name: "Planche", sets: 2, reps: "30–45s", rest: "45s", equipment: "poids du corps", block: "fin" },
-          ],
+  // Enrichissement possible depuis les réponses brutes
+  const enriched = {
+    prenom: profile.prenom,
+    age: profile.age,
+    objectif: profile.objectif, // libellé brut (prioritaire pour l’affichage)
+    goal: profile.goal,         // clé normalisée (pour la logique interne)
+    equipLevel: (ans["equipLevel"] || ans["matériel"] || ans["equipment_level"] || "limited") as
+      | "none" | "limited" | "full",
+    timePerSession: Number(
+      ans["timePerSession"] || ans["durée"] || (profile.age && profile.age > 50 ? 35 : 45)
+    ),
+    level: (String(ans["niveau"] || ans["level"] || "") as string).toLowerCase() as
+      | "debutant"
+      | "intermediaire"
+      | "avance",
   };
 
-  return { sessions: [base] };
+  // ⚙️ Délégation au moteur “béton”
+  return planProgrammeFromProfile(enriched, { maxSessions: 3 });
 }
 
 // 4) Sessions “stockées” (stub) — ici on retourne vide pour laisser la génération locale prendre le relais
-export async function getAiSessions(email: string): Promise<AiSession[]> {
+export async function getAiSessions(_email: string): Promise<AiSession[]> {
   // Tu peux brancher ici une DB/Supabase/Redis si tu veux stocker des programmes.
   // Par défaut, on ne renvoie rien -> la page tentera generateProgrammeFromAnswers(answers).
   return [];
