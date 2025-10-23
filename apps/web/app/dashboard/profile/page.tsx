@@ -401,6 +401,13 @@ export default async function Page({
                 plannedMin: s.plannedMin ? String(s.plannedMin) : "",
               });
               const href = `/dashboard/seance/${encodeURIComponent(s.id)}?${qp.toString()}`;
+
+              // Affichage "Séances pour ..." au lieu de "Séance de ..."
+              const displayTitle = (() => {
+                const t = s.title || "";
+                return t.replace(/^(S[eé]ance)\s+de\b/i, "Séances pour");
+              })();
+
               return (
                 <li key={s.id} className="card p-3">
                   <div className="flex items-center justify-between gap-3">
@@ -409,9 +416,9 @@ export default async function Page({
                         href={href}
                         className="font-medium underline-offset-2 hover:underline truncate"
                         style={{ fontSize: 16, display: "inline-block", maxWidth: "100%" }}
-                        title={s.title}
+                        title={displayTitle}
                       >
-                        {s.title}
+                        {displayTitle}
                       </a>
                       <div className="text-xs mt-0.5 text-gray-500">
                         <span className="inline-flex items-center rounded-full border border-gray-200 bg-white px-1.5 py-0.5 mr-2">
