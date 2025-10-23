@@ -89,7 +89,7 @@ async function doAutogenAction(formData: FormData) {
 
 /* Loaders
  * - Mail affiché = cookie app_email > session Supabase
- * - Prenom/Âge/Objectif = UNIQUEMENT depuis le Sheet (B,C,G)
+ * - Prénom/Âge/Objectif = UNIQUEMENT depuis le Sheet (B,C,G)
  * - ?blank=1 masque tout
  */
 async function loadProfile(searchParams?: Record<string, string | string[] | undefined>) {
@@ -231,20 +231,7 @@ export default async function Page({
             </div>
           )}
         </div>
-        <a
-          href="/dashboard/progress"
-          className="btn"
-          style={{
-            background: "#ffffff",
-            color: "#111827",
-            border: "1px solid #d1d5db",
-            fontWeight: 500,
-            padding: "6px 10px",
-            lineHeight: 1.2,
-          }}
-        >
-          ← Retour
-        </a>
+        {/* ← Bouton Retour supprimé */}
       </div>
 
       {/* Alerts */}
@@ -252,18 +239,13 @@ export default async function Page({
         {!!displayedSuccess && (
           <div
             className="card"
-            style={{
-              border: "1px solid rgba(16,185,129,.35)",
-              background: "rgba(16,185,129,.08)",
-              fontWeight: 600,
-            }}
+            style={{ border: "1px solid rgba(16,185,129,.35)", background: "rgba(16,185,129,.08)", fontWeight: 600 }}
           >
             {displayedSuccess === "programme"
-              ? <>✓ Ton programme a été généré avec tes <b>dernières réponses</b> au questionnaire.</>
+              ? "✓ Programme IA mis à jour à partir de vos dernières réponses au questionnaire."
               : "✓ Opération réussie."}
           </div>
         )}
-
         {!!displayedError && (
           <div
             className="card"
@@ -402,10 +384,11 @@ export default async function Page({
               });
               const href = `/dashboard/seance/${encodeURIComponent(s.id)}?${qp.toString()}`;
 
-              // Affichage "Séances pour ..." au lieu de "Séance de ..."
+              // Affichage "Séances pour ..." (remplace "Séance de")
               const displayTitle = (() => {
                 const t = s.title || "";
-                return t.replace(/^(S[eé]ance)\s+de\b/i, "Séances pour");
+                const replaced = t.replace(/^(S[eé]ance)\s+de\b/i, "Séances pour");
+                return replaced;
               })();
 
               return (
