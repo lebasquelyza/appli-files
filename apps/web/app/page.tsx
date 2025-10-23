@@ -1,4 +1,4 @@
-// apps/web/app/page.tsx  (ou apps/web/app/signin/page.tsx si ta route de login est /signin)
+// apps/web/app/page.tsx  (ou apps/web/app/signin/page.tsx si ta route est /signin)
 "use client";
 
 import { useEffect, useState } from "react";
@@ -22,12 +22,18 @@ function setAppEmailCookie(val: string) {
 export default function HomePage() {
   // UI
   const [showLogin, setShowLogin] = useState(false);
+  const [showSignup, setShowSignup] = useState(false);
   const [inputsReady, setInputsReady] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [showPasswordSignup, setShowPasswordSignup] = useState(false);
 
-  // Auth
+  // Auth (login)
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  // Auth (signup)
+  const [emailSu, setEmailSu] = useState("");
+  const [passwordSu, setPasswordSu] = useState("");
+
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -54,6 +60,23 @@ export default function HomePage() {
     })();
   }, []);
 
+  function openLogin() {
+    setShowLogin((v) => {
+      const next = !v;
+      if (next) setShowSignup(false);
+      return next;
+    });
+    setMessage(null); setError(null);
+  }
+  function openSignup() {
+    setShowSignup((v) => {
+      const next = !v;
+      if (next) setShowLogin(false);
+      return next;
+    });
+    setMessage(null); setError(null);
+  }
+
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
@@ -75,7 +98,6 @@ export default function HomePage() {
       if (sessionEmail) setAppEmailCookie(sessionEmail);
 
       setMessage("Connexion réussie ✅");
-      // ✅ on garde ton flux: retour sur /dashboard
       window.location.href = "/dashboard";
     } catch (err: any) {
       const msg = String(err?.message || "");
@@ -83,6 +105,52 @@ export default function HomePage() {
         msg.toLowerCase().includes("invalid login credentials")
           ? "Identifiants invalides. Vérifie l’e-mail/mot de passe, ou confirme ton e-mail."
           : msg || "Impossible de se connecter"
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleSignup(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const supabase = getSupabase();
+      const emailTrim = emailSu.trim().toLowerCase();
+      const pwd = passwordSu.trim();
+
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email: emailTrim,
+        password: pwd,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+        },
+      });
+      if (signUpError) throw signUpError;
+
+      // Pose le cookie d'email tout de suite (pratique pour la suite)
+      if (emailTrim) setAppEmailCookie(emailTrim);
+
+      // Si la session est déjà active (config sans confirmation), on enchaîne
+      if (data?.session) {
+        setMessage("Compte créé ✅");
+        window.location.href = "/dashboard";
+        return;
+      }
+
+      // Sinon, on informe de confirmer l’e-mail
+      setMessage("Compte créé ✅ Vérifie tes e-mails pour confirmer ton inscription.");
+      setShowSignup(false);
+      setShowLogin(true);
+      setEmail(emailTrim);
+    } catch (err: any) {
+      const msg = String(err?.message || "");
+      setError(
+        /email|courriel/i.test(msg)
+          ? "E-mail invalide ou déjà utilisé."
+          : msg || "Impossible de créer le compte"
       );
     } finally {
       setLoading(false);
@@ -160,7 +228,7 @@ export default function HomePage() {
           <div className="justify-self-center flex flex-col sm:flex-row items-center gap-3 mb-10">
             <button
               type="button"
-              onClick={() => setShowLogin((v) => !v)}
+              onClick={openLogin}
               aria-expanded={showLogin}
               aria-controls="login-panel"
               className={`${pillClass} transition hover:-translate-y-0.5 active:translate-y-0`}
@@ -176,7 +244,9 @@ export default function HomePage() {
 
             <button
               type="button"
-              onClick={() => (window.location.href = "/signup")}
+              onClick={openSignup}
+              aria-expanded={showSignup}
+              aria-controls="signup-panel"
               className={`${pillClass} transition hover:-translate-y-0.5 active:translate-y-0`}
               style={{
                 ...pillStyle,
@@ -184,7 +254,6 @@ export default function HomePage() {
                 boxShadow: "0 10px 22px rgba(22,163,74,.35)",
                 padding: "12px 22px",
               }}
-              aria-label="Créer un compte"
             >
               Créer un compte
             </button>
@@ -256,6 +325,73 @@ export default function HomePage() {
                 disabled={!inputsReady}
               >
                 Mot de passe oublié ?
+              </button>
+
+              {message && <p className="text-sm text-emerald-600 mt-2 text-center">{message}</p>}
+              {error && <p className="text-sm text-red-600 mt-2 text-center">{error}</p>}
+            </form>
+          </div>
+        )}
+
+        {/* Signup inline */}
+        {showSignup && (
+          <div id="signup-panel" className="max-w-md mx-auto">
+            <form onSubmit={handleSignup} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Adresse e-mail</label>
+                <input
+                  type="email"
+                  inputMode="email"
+                  autoComplete="email"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  required
+                  disabled={!inputsReady}
+                  value={emailSu}
+                  onChange={(e) => setEmailSu(e.target.value)}
+                  className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-gray-100"
+                  placeholder="vous@exemple.com"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Mot de passe</label>
+                <div className="relative">
+                  <input
+                    type={showPasswordSignup ? "text" : "password"}
+                    inputMode="text"
+                    autoComplete="new-password"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    required
+                    disabled={!inputsReady}
+                    value={passwordSu}
+                    onChange={(e) => setPasswordSu(e.target.value)}
+                    className="w-full border rounded-lg px-3 py-2 pr-12 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-gray-100"
+                    placeholder="••••••••"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPasswordSignup(!showPasswordSignup)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-500 hover:text-gray-700"
+                    tabIndex={-1}
+                    aria-label={showPasswordSignup ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+                  >
+                    {showPasswordSignup ? <EyeOff size={20} /> : <Eye size={20} />}
+                  </button>
+                </div>
+                <p className="text-xs text-gray-600 mt-2">
+                  Le lien de confirmation sera envoyé à cette adresse.
+                </p>
+              </div>
+
+              <button
+                type="submit"
+                className={pillClass + " w-full"}
+                style={{ ...pillStyle, whiteSpace: "normal" }}
+                disabled={loading || !inputsReady}
+              >
+                {loading ? "Création du compte..." : "Créer mon compte"}
               </button>
 
               {message && <p className="text-sm text-emerald-600 mt-2 text-center">{message}</p>}
