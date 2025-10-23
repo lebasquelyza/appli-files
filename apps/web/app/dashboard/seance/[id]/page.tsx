@@ -83,7 +83,7 @@ function genericFallback(type: WorkoutType): NormalizedExercise[] {
   ];
 }
 
-/* ───── Correction: étendre le type avec les champs utilisés dans le JSX ───── */
+/* ───── Types étendus ───── */
 type ProfileT = ReturnType<typeof buildProfileFromAnswers> & {
   timePerSession?: number;
   equipLevel?: "none" | "limited" | "full";
@@ -119,6 +119,35 @@ const styles = String.raw`
   @media print { .no-print { display: none !important; } }
 `;
 
+/* ======================== Goal label helper (comme sur le profil) ======================== */
+function goalLabelFromProfile(profile: any): string | undefined {
+  if (!profile) return undefined;
+  const map: Record<string, string> = {
+    hypertrophy: "Hypertrophie / Esthétique",
+    fatloss: "Perte de gras",
+    strength: "Force",
+    endurance: "Endurance / Cardio",
+    mobility: "Mobilité / Souplesse",
+    general: "Forme générale",
+  };
+
+  // clé normalisée prioritaire (buildProfileFromAnswers -> profile.goal)
+  const key = String(
+    profile?.goal ??
+      profile?.primaryGoal ??
+      profile?.objective ??
+      profile?.mainObjective ??
+      profile?.currentGoal ??
+      ""
+  ).toLowerCase();
+
+  if (map[key]) return map[key];
+
+  // sinon libellé brut s'il existe (profile.objectif)
+  const raw = String(profile?.objectif ?? "").trim();
+  return raw || undefined;
+}
+
 /* ======================== Types ======================== */
 type PageViewProps = {
   base: AiSession;
@@ -127,14 +156,14 @@ type PageViewProps = {
   plannedMin: number;
   intensity: string;
   coachIntro: string;
-  goalText?: string | null;
+  goalLabel?: string;
   dataSource?: string;
   debug?: boolean;
 };
 
 /* ======================== View (JSX) ======================== */
 const PageView: React.FC<PageViewProps> = (props) => {
-  const { base, profile, groups, plannedMin, intensity, coachIntro, goalText, dataSource, debug } = props;
+  const { base, profile, groups, plannedMin, intensity, coachIntro, goalLabel, dataSource, debug } = props;
 
   return (
     <div>
@@ -181,10 +210,10 @@ const PageView: React.FC<PageViewProps> = (props) => {
             <h2 className="section-title">Brief de séance</h2>
           </div>
           <div className="compact-card">
-            {/* Objectif actuel du client (depuis le questionnaire) */}
-            {goalText && (
+            {/* Objectif actuel du client — libellé FR identique au profil */}
+            {goalLabel && (
               <div style={{ fontSize: 14, marginBottom: 8 }}>
-                🎯 <b>Objectif actuel</b> : {goalText}
+                🎯 <b>Objectif actuel</b> : {goalLabel}
               </div>
             )}
             <ul style={{ fontSize: 14, lineHeight: 1.5 }}>
@@ -236,7 +265,6 @@ const PageView: React.FC<PageViewProps> = (props) => {
               <div className="grid gap-3">
                 {list.map((ex, i) => {
                   const reps = ex.reps ? String(ex.reps) : ex.durationSec ? `${ex.durationSec}s` : "";
-                  // ✅ force en string (corrige l'erreur de type Chip.value)
                   const loadStr =
                     ex.load !== undefined && ex.load !== null
                       ? String(ex.load)
@@ -487,14 +515,8 @@ export default async function Page({
       ? "Pics d’intensité courts, technique impeccable."
       : "Amplitude confortable, respiration calme, zéro douleur nette.";
 
-  // Objectif actuel du client (tolérant aux variations de clés)
-  const goalText =
-    (profile as any)?.goal ||
-    (profile as any)?.primaryGoal ||
-    (profile as any)?.objective ||
-    (profile as any)?.mainObjective ||
-    (profile as any)?.currentGoal ||
-    null;
+  // Objectif actuel du client — libellé FR identique au profil
+  const goalLabel = goalLabelFromProfile(profile);
 
   const blockOrder = { echauffement: 0, principal: 1, accessoires: 2, fin: 3 } as const;
 
@@ -520,7 +542,7 @@ export default async function Page({
       plannedMin={plannedMin}
       intensity={intensity}
       coachIntro={coachIntro}
-      goalText={goalText}
+      goalLabel={goalLabel}
       dataSource={dataSource}
       debug={debug}
     />
