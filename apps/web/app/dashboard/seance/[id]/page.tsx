@@ -141,8 +141,9 @@ const PageView: React.FC<PageViewProps> = (props) => {
       <style dangerouslySetInnerHTML={{ __html: styles }} />
       {/* top bar */}
       <div className="mb-2 flex items-center justify-between no-print" style={{ paddingInline: 12 }}>
+        {/* Bouton retour → page Profil */}
         <a
-          href="/dashboard/profile" {/* ←← CHANGÉ : renvoie vers la page Profil */}
+          href="/dashboard/profile"
           className="inline-flex items-center rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm font-medium text-neutral-800 hover:bg-neutral-50"
         >
           ← Retour
