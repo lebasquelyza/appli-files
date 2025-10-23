@@ -121,26 +121,42 @@ export default function HomePage() {
       const emailTrim = emailSu.trim().toLowerCase();
       const pwd = passwordSu.trim();
 
+      // 1) Créer le compte → envoie l’e-mail de confirmation (paramétrage Supabase)
       const { data, error: signUpError } = await supabase.auth.signUp({
         email: emailTrim,
         password: pwd,
         options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          // ✅ redirection après clic sur le lien de confirmation
+          emailRedirectTo: `${window.location.origin}/auth/callback?source=confirm`,
         },
       });
       if (signUpError) throw signUpError;
 
-      // Pose le cookie d'email tout de suite (pratique pour la suite)
+      // Met le cookie d'email tout de suite (pratique pour les pages serveur)
       if (emailTrim) setAppEmailCookie(emailTrim);
 
-      // Si la session est déjà active (config sans confirmation), on enchaîne
+      // 2) Si la session est déjà active (projet auto-confirm) → go dashboard
       if (data?.session) {
         setMessage("Compte créé ✅");
         window.location.href = "/dashboard";
         return;
       }
 
-      // Sinon, on informe de confirmer l’e-mail
+      // 3) Sinon, on tente de connecter immédiatement (si la politique l’autorise)
+      const { error: signInAfter } = await supabase.auth.signInWithPassword({
+        email: emailTrim,
+        password: pwd,
+      });
+      if (!signInAfter) {
+        const { data: { user } } = await supabase.auth.getUser();
+        const sessionEmail = (user?.email || emailTrim).trim().toLowerCase();
+        if (sessionEmail) setAppEmailCookie(sessionEmail);
+        setMessage("Compte créé ✅");
+        window.location.href = "/dashboard";
+        return;
+      }
+
+      // 4) Fallback : connexion bloquée tant que l’e-mail n’est pas confirmé
       setMessage("Compte créé ✅ Vérifie tes e-mails pour confirmer ton inscription.");
       setShowSignup(false);
       setShowLogin(true);
@@ -380,9 +396,6 @@ export default function HomePage() {
                     {showPasswordSignup ? <EyeOff size={20} /> : <Eye size={20} />}
                   </button>
                 </div>
-                <p className="text-xs text-gray-600 mt-2">
-                  Le lien de confirmation sera envoyé à cette adresse.
-                </p>
               </div>
 
               <button
