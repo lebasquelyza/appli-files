@@ -179,7 +179,6 @@ export function planProgrammeFromProfile(
 }
 
 /* ========================= Génération depuis le Sheet (optionnel) ========================= */
-/** Extrait un texte de dispo depuis une ligne de réponses (scan large des valeurs texte). */
 function availabilityTextFromAnswers(answers: any): string | undefined {
   if (!answers) return undefined;
   const dayPat =
@@ -201,13 +200,12 @@ function availabilityTextFromAnswers(answers: any): string | undefined {
   return hits.length ? hits.join(" ; ") : undefined;
 }
 
-/** Génère via email → récupère la DERNIÈRE réponse + logique jours→séances */
 export async function planProgrammeFromEmail(
   email: string,
   opts: PlanOptions = {}
 ): Promise<{ sessions: AiSessionT[]; profile: Partial<ProfileT> }> {
   const cleanEmail = normalizeEmail(email);
-  const res = await _getAnswersForEmail(cleanEmail);
+  const res = await _getAnswersForEmail(cleanEmail, { fresh: true } as any);
   const last = Array.isArray(res)
     ? res.slice().sort((a, b) => extractTimestampAny(a) - extractTimestampAny(b)).at(-1) ?? res[0]
     : res;
@@ -229,7 +227,6 @@ export async function planProgrammeFromEmail(
   return { sessions, profile: built };
 }
 
-/** Génère si on a déjà l’objet answers (batch) */
 export function planProgrammeFromAnswers(
   answers: any,
   opts: PlanOptions = {}
@@ -254,24 +251,19 @@ function inferMaxSessions(text?: string | null): number | undefined {
   if (!text) return undefined;
   const s = String(text).toLowerCase();
 
-  // Ex: "6x", "6 x", "6 jours", "3 jours par semaine"
   const numMatch = s.match(/\b(\d{1,2})\s*(x|fois|jours?)\b/);
   if (numMatch) {
     const n = parseInt(numMatch[1], 10);
     if (!Number.isNaN(n)) return clamp(n, 1, 6);
   }
-
-  // "toute la semaine" / "tous les jours" → 6 (borne 6)
   if (/toute?\s+la\s+semaine|tous?\s+les\s+jours/.test(s)) return 6;
 
-  // Compte des jours explicites + week-end
   const days = extractDaysList(s);
   if (days.length) return clamp(days.length, 1, 6);
 
   return undefined;
 }
 
-/** Retourne la liste ordonnée des jours trouvés dans le texte (week-end → samedi+dimanche). */
 function extractDaysList(text?: string | null): string[] {
   if (!text) return [];
   const s = String(text).toLowerCase();
@@ -304,8 +296,8 @@ type Ctx = {
   equip: "none" | "limited" | "full";
   minutes: number;
   goalKey: string;
-  injuries: Injuries; // set normalisé
-  equipItems: Items; // set normalisé
+  injuries: Injuries;
+  equipItems: Items;
 };
 
 type Injuries = {
@@ -318,12 +310,12 @@ type Injuries = {
   elbow?: boolean;
 };
 type Items = {
-  bands?: boolean; // élastiques
-  kb?: boolean; // kettlebell
+  bands?: boolean;
+  kb?: boolean;
   trx?: boolean;
   bench?: boolean;
   bar?: boolean;
-  db?: boolean; // haltères
+  db?: boolean;
   bike?: boolean;
   rower?: boolean;
   treadmill?: boolean;
@@ -433,7 +425,6 @@ function buildHiit(ctx: Ctx): NormalizedExercise[] {
   const out: NormalizedExercise[] = [];
   out.push({ name: "Air Squats", reps: "40s", rest: "20s", block: "principal" });
   out.push({ name: "Mountain Climbers", reps: "40s", rest: "20s", block: "principal" });
-  // Adapter si genoux sensibles → retrait des sauts
   out.push(
     adjustForInjuries(ctx, {
       name: "Burpees (option sans saut)",
@@ -531,7 +522,6 @@ function estimateSetSeconds(goal: string) {
   if (g === "fatloss") return 25;
   return 28;
 }
-/** Estime la durée d’un exercice (min) = (sets * (tps par série + repos)) / 60 */
 function estimateExerciseMinutes(ex: NormalizedExercise, goal: string) {
   const sets = ex.sets ?? 3;
   const setSec = estimateSetSeconds(goal);
@@ -552,28 +542,16 @@ function hasEquipment(
   ctx: Ctx,
   need: "bar" | "db" | "bench" | "machine" | "kb" | "bands" | "trx"
 ) {
-  // Si "full", tout est dispo
   if (ctx.equip === "full") return true;
-
-  // Sinon, on ne compare plus à "full"
   switch (need) {
-    case "db":
-      return !!ctx.equipItems.db;
-    case "bar":
-      return !!ctx.equipItems.bar;
-    case "bench":
-      return !!ctx.equipItems.bench;
-    case "machine":
-      // sans "full", on considère les machines indisponibles
-      return false;
-    case "kb":
-      return !!ctx.equipItems.kb;
-    case "bands":
-      return !!ctx.equipItems.bands;
-    case "trx":
-      return !!ctx.equipItems.trx;
-    default:
-      return false;
+    case "db": return !!ctx.equipItems.db;
+    case "bar": return !!ctx.equipItems.bar;
+    case "bench": return !!ctx.equipItems.bench;
+    case "machine": return false;
+    case "kb": return !!ctx.equipItems.kb;
+    case "bands": return !!ctx.equipItems.bands;
+    case "trx": return !!ctx.equipItems.trx;
+    default: return false;
   }
 }
 
@@ -596,7 +574,6 @@ function buildStrengthFocused(
   const g = (goalKey || "general").toLowerCase();
   const out: NormalizedExercise[] = [];
 
-  // — Échauffement spécifique au focus —
   out.push({
     name: focus.startsWith("bas") ? "Activation hanches/chevilles" : "Activation épaules/omoplates",
     reps: "3–5 min",
@@ -605,27 +582,18 @@ function buildStrengthFocused(
 
   const likes = profile?.likes || [];
   const dislikes = profile?.dislikes || [];
-
-  // — Pool initial —
   const pool = (POOLS[focus] || []).slice();
 
-  // 1) Filtrage matériel + blessures + dislikes
   const filtered: PoolItem[] = pool.filter((p) => {
     if (p.contra?.(ctx.injuries)) return false;
     if (p.need && !p.need.every((n) => hasEquipment(ctx, n))) {
-      if (!p.fallback) return false; // pas d’alternative → exclu
+      if (!p.fallback) return false;
     }
     if (matchesPreference(p.name, dislikes)) return false;
     return true;
   });
 
-  // 2) Tri préférences (likes d’abord), puis main > assist > iso/core
-  const kindRank: Record<NonNullable<PoolItem["kind"]>, number> = {
-    main: 0,
-    assist: 1,
-    iso: 2,
-    core: 3,
-  };
+  const kindRank: Record<NonNullable<PoolItem["kind"]>, number> = { main: 0, assist: 1, iso: 2, core: 3 };
   filtered.sort((a, b) => {
     const likeA = matchesPreference(a.name, likes) ? -1 : 0;
     const likeB = matchesPreference(b.name, likes) ? -1 : 0;
@@ -633,7 +601,6 @@ function buildStrengthFocused(
     return (kindRank[a.kind || "assist"] ?? 9) - (kindRank[b.kind || "assist"] ?? 9);
   });
 
-  // 3) Construire jusqu’à remplir le budget temps
   const targetMin = clamp(ctx.minutes, 20, 90);
   let usedMin = 0;
 
@@ -641,7 +608,6 @@ function buildStrengthFocused(
     const usableName =
       p.need && !p.need.every((n) => hasEquipment(ctx, n)) ? p.fallback || p.name : p.name;
 
-    // Fabrique l’exo avec paramètres adaptés
     const isBW = /pompes|hollow|plank|pont|tirage élastique|traction|row.*serviette/i.test(usableName);
     const isMain = p.kind === "main";
 
@@ -656,7 +622,7 @@ function buildStrengthFocused(
     };
 
     const mins = estimateExerciseMinutes(base, g);
-    if (usedMin + mins > targetMin + 4) continue; // tolérance
+    if (usedMin + mins > targetMin + 4) continue;
 
     out.push(adjustForInjuries(ctx, base));
     usedMin += mins;
@@ -666,7 +632,6 @@ function buildStrengthFocused(
     ).length;
 
     if (usedMin >= targetMin * 0.7 && mains >= 3) {
-      // finisher core si on a encore 5’+
       if (targetMin - usedMin >= 5) {
         out.push(
           adjustForInjuries(ctx, {
@@ -683,7 +648,6 @@ function buildStrengthFocused(
     if (usedMin >= targetMin - 2) break;
   }
 
-  // Sécurité : si trop court, ajouter un core léger
   if (estimateTotalMinutes(out, g) < targetMin - 6) {
     out.push(
       adjustForInjuries(ctx, {
@@ -703,11 +667,9 @@ function buildStrengthFocused(
 function adjustForInjuries(ctx: Ctx, ex: NormalizedExercise): NormalizedExercise {
   const e: NormalizedExercise = { ...ex };
 
-  // RIR et tempo adaptés selon objectif/niveau
   if (e.sets && !e.rir) e.rir = rirFor(ctx.level);
   if (e.sets && !e.tempo) e.tempo = tempoFor(ctx.goalKey);
 
-  // Dos sensible
   if (ctx.injuries.back) {
     if (/back squat|soulevé de terre|deadlift|row à la barre/i.test(e.name)) {
       return swap(e, preferBackFriendly(e, ctx));
@@ -716,7 +678,6 @@ function adjustForInjuries(ctx: Ctx, ex: NormalizedExercise): NormalizedExercise
       e.notes = joinNotes(e.notes, "Si gêne au dos, réduire l’amplitude ou remplacer par Bird-Dog.");
     }
   }
-  // Épaules sensibles
   if (ctx.injuries.shoulder) {
     if (/militaire|overhead|développé militaire|élevations latérales lourdes/i.test(e.name)) {
       return swap(e, {
@@ -735,12 +696,11 @@ function adjustForInjuries(ctx: Ctx, ex: NormalizedExercise): NormalizedExercise
         sets: e.sets ?? 3,
         reps: pickBodyweight(ctx.goalKey),
         rest: "60–75s",
-        block: e.block,
+        block: "principal",
         equipment: "poids du corps",
       });
     }
   }
-  // Genoux sensibles
   if (ctx.injuries.knee) {
     if (/sauté|jump|burpee/i.test(e.name)) {
       return swap(e, {
@@ -756,20 +716,16 @@ function adjustForInjuries(ctx: Ctx, ex: NormalizedExercise): NormalizedExercise
       e.notes = joinNotes(e.notes, "Amplitude contrôlée, pas de douleur, option appui/assistance.");
     }
   }
-  // Poignets
   if (ctx.injuries.wrist && /pompes|push-up/i.test(e.name)) {
     e.notes = joinNotes(e.notes, "Utiliser poignées de pompe ou poings fermés pour garder le poignet neutre.");
   }
-  // Hanches
   if (ctx.injuries.hip && /squat|fente/i.test(e.name)) {
     e.notes = joinNotes(e.notes, "Amplitude confortable, focus stabilité hanche.");
   }
-  // Chevilles
   if (ctx.injuries.ankle && /sauté|jump/i.test(e.name)) {
     return swap(e, { name: "Marche rapide inclinée", sets: e.sets ?? 3, reps: "2–3 min", rest: "60s", block: "principal" });
   }
 
-  // Utilisation équipement si dispo
   if (/tirage élastique|row|tirage/i.test(e.name)) {
     if ((ctx.equipItems as any).bands) e.equipment = e.equipment || "élastiques";
   }
@@ -830,81 +786,20 @@ function pickBodyweight(goal: string) {
 }
 
 /* ====== Factories ====== */
-function barbell(
-  name: string,
-  ctx: Ctx,
-  _area?: "bas" | "haut" | "dos",
-  extra?: Partial<NormalizedExercise>
-): NormalizedExercise {
-  return {
-    name,
-    sets: setsFor(ctx.level),
-    reps: repsFor(ctx.goalKey),
-    rest: "90s",
-    tempo: tempoFor(ctx.goalKey),
-    rir: rirFor(ctx.level),
-    block: "principal",
-    equipment: "barre",
-    ...extra,
-  };
+function barbell(name: string, ctx: Ctx, _area?: "bas" | "haut" | "dos", extra?: Partial<NormalizedExercise>): NormalizedExercise {
+  return { name, sets: setsFor(ctx.level), reps: repsFor(ctx.goalKey), rest: "90s", tempo: tempoFor(ctx.goalKey), rir: rirFor(ctx.level), block: "principal", equipment: "barre", ...extra };
 }
-function dumbbell(
-  name: string,
-  ctx: Ctx,
-  _area?: "bas" | "haut" | "dos",
-  extra?: Partial<NormalizedExercise>
-): NormalizedExercise {
-  return {
-    name,
-    sets: setsFor(ctx.level),
-    reps: repsFor(ctx.goalKey),
-    rest: "75s",
-    tempo: tempoFor(ctx.goalKey),
-    rir: rirFor(ctx.level),
-    block: "principal",
-    equipment: "haltères",
-    ...extra,
-  };
+function dumbbell(name: string, ctx: Ctx, _area?: "bas" | "haut" | "dos", extra?: Partial<NormalizedExercise>): NormalizedExercise {
+  return { name, sets: setsFor(ctx.level), reps: repsFor(ctx.goalKey), rest: "75s", tempo: tempoFor(ctx.goalKey), rir: rirFor(ctx.level), block: "principal", equipment: "haltères", ...extra };
 }
-function cableOrMachine(
-  name: string,
-  ctx: Ctx,
-  _area?: "bas" | "haut" | "dos",
-  extra?: Partial<NormalizedExercise>
-): NormalizedExercise {
-  return {
-    name,
-    sets: setsFor(ctx.level),
-    reps: repsFor(ctx.goalKey),
-    rest: "75–90s",
-    tempo: tempoFor(ctx.goalKey),
-    rir: rirFor(ctx.level),
-    block: "principal",
-    equipment: "machine/câble",
-    ...extra,
-  };
+function cableOrMachine(name: string, ctx: Ctx, _area?: "bas" | "haut" | "dos", extra?: Partial<NormalizedExercise>): NormalizedExercise {
+  return { name, sets: setsFor(ctx.level), reps: repsFor(ctx.goalKey), rest: "75–90s", tempo: tempoFor(ctx.goalKey), rir: rirFor(ctx.level), block: "principal", equipment: "machine/câble", ...extra };
 }
 function bodyOrBand(name: string, ctx: Ctx, extra?: Partial<NormalizedExercise>): NormalizedExercise {
-  return {
-    name,
-    sets: setsFor(ctx.level, true),
-    reps: extra?.reps || pickBodyweight(ctx.goalKey),
-    rest: "60–75s",
-    block: "principal",
-    equipment: "poids du corps / élastiques",
-    ...extra,
-  };
+  return { name, sets: setsFor(ctx.level, true), reps: extra?.reps || pickBodyweight(ctx.goalKey), rest: "60–75s", block: "principal", equipment: "poids du corps / élastiques", ...extra };
 }
 function body(name: string, ctx: Ctx, extra?: Partial<NormalizedExercise>): NormalizedExercise {
-  return {
-    name,
-    sets: setsFor(ctx.level, true),
-    reps: extra?.reps || pickBodyweight(ctx.goalKey),
-    rest: "60s",
-    block: "principal",
-    equipment: "poids du corps",
-    ...extra,
-  };
+  return { name, sets: setsFor(ctx.level, true), reps: extra?.reps || pickBodyweight(ctx.goalKey), rest: "60s", block: "principal", equipment: "poids du corps", ...extra };
 }
 
 /* ========================= Divers utils (email/timestamp) ========================= */
@@ -919,17 +814,7 @@ function normalizeEmail(raw?: string | null) {
     .replace(/\s+/g, "");
 }
 function extractTimestampAny(a: any): number {
-  const candidates = [
-    a?.timestamp,
-    a?.ts,
-    a?.createdAt,
-    a?.date,
-    a?.Date,
-    a?.A,
-    a?.["A"],
-    a?.["Horodatage"],
-    a?.["horodatage"],
-  ];
+  const candidates = [a?.timestamp, a?.ts, a?.createdAt, a?.date, a?.Date, a?.A, a?.["A"], a?.["Horodatage"], a?.["horodatage"]];
   for (const v of candidates) {
     if (!v) continue;
     const d = typeof v === "number" ? new Date(v) : new Date(String(v));
@@ -938,3 +823,4 @@ function extractTimestampAny(a: any): number {
   }
   return 0;
 }
+
