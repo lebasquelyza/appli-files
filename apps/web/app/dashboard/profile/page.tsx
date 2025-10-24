@@ -84,7 +84,7 @@ async function doAutogenAction(_formData: FormData) {
   }
 
   revalidatePath("/dashboard/profile");
-  redirect("/dashboard/profile?success=programme`);
+  redirect("/dashboard/profile?success=programme");
 }
 
 /* Loaders
@@ -368,7 +368,7 @@ export default async function Page({
                 <a className="link underline" href={QUESTIONNAIRE_BASE}>
                   Remplissez le questionnaire
                 </a>{" "}
-                puis cliquez sur « Générer ».
+                  puis cliquez sur « Générer ».
               </span>
             </div>
           </div>
@@ -426,3 +426,4 @@ export default async function Page({
     </div>
   );
 }
+
