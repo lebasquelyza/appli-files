@@ -1,5 +1,13 @@
 // apps/web/lib/coach/beton/index.ts
-import type { AiSession as AiSessionT, WorkoutType, NormalizedExercise } from "../ai";
+import {
+  type AiSession as AiSessionT,
+  type WorkoutType,
+  type NormalizedExercise,
+  // nouveaux imports pour reproduire la logique “Mes infos”
+  getAnswersForEmail,
+  buildProfileFromAnswers,
+  type Profile as ProfileT,
+} from "../ai";
 
 /* ========================= Types & Options ========================= */
 export type PlanOptions = {
@@ -17,9 +25,78 @@ type ProfileInput = {
   level?: "debutant" | "intermediaire" | "avance";
   injuries?: string[];         // ex: ["dos", "epaules", "genoux"]
   equipItems?: string[];       // ex: ["élastiques","kettlebell","trx"]
+  email?: string;
 };
 
-/* ========================= Public API ========================= */
+/* ========================= Logique “Mes infos” (Sheet) ========================= */
+/** mêmes corrections rapides que côté profil */
+function normalizeEmail(raw?: string | null) {
+  const s = String(raw || "").trim().toLowerCase();
+  if (!s) return "";
+  return s
+    .replace(/@glmail\./g, "@gmail.")
+    .replace(/@gmai(l)?\./g, "@gmail.")
+    .replace(/@gnail\./g, "@gmail.")
+    .replace(/@hotnail\./g, "@hotmail.")
+    .replace(/\s+/g, "");
+}
+
+function extractTimestampAny(a: any): number {
+  const candidates = [
+    a?.timestamp, a?.ts, a?.createdAt, a?.date, a?.Date,
+    a?.A, a?.["A"], a?.["Horodatage"], a?.["horodatage"]
+  ];
+  for (const v of candidates) {
+    if (!v) continue;
+    const d = typeof v === "number" ? new Date(v) : new Date(String(v));
+    const t = d.getTime();
+    if (!Number.isNaN(t)) return t;
+  }
+  return 0;
+}
+
+/** Récupère la **dernière** réponse du Sheet pour un email donné. */
+export async function getLatestAnswersForEmail(email: string): Promise<any | null> {
+  const clean = normalizeEmail(email);
+  if (!clean) return null;
+  const res = await getAnswersForEmail(clean);
+  if (!res) return null;
+  if (Array.isArray(res)) {
+    if (res.length === 0) return null;
+    return res.slice().sort((a, b) => extractTimestampAny(a) - extractTimestampAny(b)).at(-1) ?? res[0];
+  }
+  return res;
+}
+
+/** Construit un profil à partir de la **dernière** ligne Sheet (même mapping que “Mes infos”). */
+export async function buildProfileFromEmail(email: string): Promise<Partial<ProfileT> & { email?: string }> {
+  const last = await getLatestAnswersForEmail(email);
+  if (!last) return { email: normalizeEmail(email) };
+  const built = buildProfileFromAnswers(last); // => B->prenom, C->age, G->objectif/goal, etc.
+  // Normalisations légères (sécurise les champs pour notre plan builder)
+  const p: Partial<ProfileT> & { email?: string } = {
+    ...built,
+    email: normalizeEmail(built?.email || email),
+  };
+  return p;
+}
+
+/* ========================= API “beton” depuis le Sheet ========================= */
+/** Génère un programme directement depuis l’email (Sheet) en reprenant la logique “Mes infos”. */
+export async function planProgrammeFromEmail(email: string, opts: PlanOptions = {}): Promise<{ sessions: AiSessionT[]; profile: Partial<ProfileT> }> {
+  const profileFromSheet = await buildProfileFromEmail(email);
+  const sessions = planProgrammeFromProfile(profileFromSheet as ProfileInput, opts).sessions;
+  return { sessions, profile: profileFromSheet };
+}
+
+/** Variante: si on a déjà un objet `answers` (p.ex. batch), on évite un 2e call. */
+export function planProgrammeFromAnswers(answers: any, opts: PlanOptions = {}): { sessions: AiSessionT[]; profile: Partial<ProfileT> } {
+  const built = buildProfileFromAnswers(answers);
+  const sessions = planProgrammeFromProfile(built as ProfileInput, opts).sessions;
+  return { sessions, profile: built };
+}
+
+/* ========================= Public API (historique) ========================= */
 export function planProgrammeFromProfile(
   profile: ProfileInput,
   opts: PlanOptions = {}
@@ -388,11 +465,11 @@ function pickBodyweight(goal: string) {
 }
 
 /* ====== Factories ====== */
-function barbell(name: string, ctx: Ctx, area?: "bas" | "haut" | "dos", extra?: Partial<NormalizedExercise>): NormalizedExercise {
+function barbell(name: string, ctx: Ctx, _area?: "bas" | "haut" | "dos", extra?: Partial<NormalizedExercise>): NormalizedExercise {
   return {
     name,
     sets: setsFor(ctx.level),
-    reps: area ? repsFor(ctx.goalKey) : repsFor(ctx.goalKey),
+    reps: repsFor(ctx.goalKey),
     rest: "90s",
     tempo: tempoFor(ctx.goalKey),
     rir: rirFor(ctx.level),
