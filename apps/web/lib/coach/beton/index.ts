@@ -1,18 +1,16 @@
-// apps/web/lib/coach/beton/index.ts
+// apps/web/lib/coach/beton/index.ts — logique "nb de séances = nb de jours annoncés"
+import type { AiSession as AiSessionT, WorkoutType, NormalizedExercise } from "../ai";
 import {
-  type AiSession as AiSessionT,
-  type WorkoutType,
-  type NormalizedExercise,
-  // nouveaux imports pour reproduire la logique “Mes infos”
-  getAnswersForEmail,
-  buildProfileFromAnswers,
+  // Ces imports ne sont nécessaires que si vous utilisez planProgrammeFromEmail/Answers (sheet)
+  getAnswersForEmail as _getAnswersForEmail,
+  buildProfileFromAnswers as _buildProfileFromAnswers,
   type Profile as ProfileT,
 } from "../ai";
 
 /* ========================= Types & Options ========================= */
 export type PlanOptions = {
   today?: Date;
-  maxSessions?: number; // 1..6 (jours/semaine)
+  maxSessions?: number; // 1..6 (jours/semaine) — surcharge manuelle
 };
 
 type ProfileInput = {
@@ -25,84 +23,30 @@ type ProfileInput = {
   level?: "debutant" | "intermediaire" | "avance";
   injuries?: string[];         // ex: ["dos", "epaules", "genoux"]
   equipItems?: string[];       // ex: ["élastiques","kettlebell","trx"]
+  /**
+   * Nouveau: texte libre en provenance du sheet (ex: "lundi mardi", "week-end",
+   * "6 jours par semaine", "samedi dimanche", etc.).
+   * Si présent, on infère automatiquement le nombre de séances/semaine.
+   */
+  availabilityText?: string;
   email?: string;
 };
 
-/* ========================= Logique “Mes infos” (Sheet) ========================= */
-/** mêmes corrections rapides que côté profil */
-function normalizeEmail(raw?: string | null) {
-  const s = String(raw || "").trim().toLowerCase();
-  if (!s) return "";
-  return s
-    .replace(/@glmail\./g, "@gmail.")
-    .replace(/@gmai(l)?\./g, "@gmail.")
-    .replace(/@gnail\./g, "@gmail.")
-    .replace(/@hotnail\./g, "@hotmail.")
-    .replace(/\s+/g, "");
-}
-
-function extractTimestampAny(a: any): number {
-  const candidates = [
-    a?.timestamp, a?.ts, a?.createdAt, a?.date, a?.Date,
-    a?.A, a?.["A"], a?.["Horodatage"], a?.["horodatage"]
-  ];
-  for (const v of candidates) {
-    if (!v) continue;
-    const d = typeof v === "number" ? new Date(v) : new Date(String(v));
-    const t = d.getTime();
-    if (!Number.isNaN(t)) return t;
-  }
-  return 0;
-}
-
-/** Récupère la **dernière** réponse du Sheet pour un email donné. */
-export async function getLatestAnswersForEmail(email: string): Promise<any | null> {
-  const clean = normalizeEmail(email);
-  if (!clean) return null;
-  const res = await getAnswersForEmail(clean);
-  if (!res) return null;
-  if (Array.isArray(res)) {
-    if (res.length === 0) return null;
-    return res.slice().sort((a, b) => extractTimestampAny(a) - extractTimestampAny(b)).at(-1) ?? res[0];
-  }
-  return res;
-}
-
-/** Construit un profil à partir de la **dernière** ligne Sheet (même mapping que “Mes infos”). */
-export async function buildProfileFromEmail(email: string): Promise<Partial<ProfileT> & { email?: string }> {
-  const last = await getLatestAnswersForEmail(email);
-  if (!last) return { email: normalizeEmail(email) };
-  const built = buildProfileFromAnswers(last); // => B->prenom, C->age, G->objectif/goal, etc.
-  // Normalisations légères (sécurise les champs pour notre plan builder)
-  const p: Partial<ProfileT> & { email?: string } = {
-    ...built,
-    email: normalizeEmail(built?.email || email),
-  };
-  return p;
-}
-
-/* ========================= API “beton” depuis le Sheet ========================= */
-/** Génère un programme directement depuis l’email (Sheet) en reprenant la logique “Mes infos”. */
-export async function planProgrammeFromEmail(email: string, opts: PlanOptions = {}): Promise<{ sessions: AiSessionT[]; profile: Partial<ProfileT> }> {
-  const profileFromSheet = await buildProfileFromEmail(email);
-  const sessions = planProgrammeFromProfile(profileFromSheet as ProfileInput, opts).sessions;
-  return { sessions, profile: profileFromSheet };
-}
-
-/** Variante: si on a déjà un objet `answers` (p.ex. batch), on évite un 2e call. */
-export function planProgrammeFromAnswers(answers: any, opts: PlanOptions = {}): { sessions: AiSessionT[]; profile: Partial<ProfileT> } {
-  const built = buildProfileFromAnswers(answers);
-  const sessions = planProgrammeFromProfile(built as ProfileInput, opts).sessions;
-  return { sessions, profile: built };
-}
-
-/* ========================= Public API (historique) ========================= */
+/* ========================= Public API ========================= */
 export function planProgrammeFromProfile(
   profile: ProfileInput,
   opts: PlanOptions = {}
 ): { sessions: AiSessionT[] } {
   const today = opts.today ?? new Date();
-  const maxSessions = Math.max(1, Math.min(opts.maxSessions ?? 3, 6));
+
+  // ⬇️ Nouveau: on détermine maxSessions automatiquement à partir des réponses client
+  const inferred = inferMaxSessions(profile.availabilityText);
+  const maxSessions = clamp(
+    // priorité: option explicite > inférence depuis disponibilités > défaut = 3
+    opts.maxSessions ?? inferred ?? 3,
+    1,
+    6
+  );
 
   const minutes = clamp(profile.timePerSession ?? defaultTime(profile.goal), 20, 90);
   const type = pickType(profile.goal, profile.age);
@@ -155,6 +99,106 @@ export function planProgrammeFromProfile(
   }
 
   return { sessions };
+}
+
+/* ========================= Génération depuis le Sheet (optionnel) ========================= */
+/**
+ * Analyse une réponse brute (objet du Sheet) pour en tirer le texte de disponibilités.
+ * On scanne chaque valeur texte et on concatène celles qui contiennent des jours/expressions.
+ */
+function availabilityTextFromAnswers(answers: any): string | undefined {
+  if (!answers) return undefined;
+  const dayPat = /(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|week\s*-?\s*end|weekend|jours?\s+par\s+semaine|\b\d+\s*(x|fois|jours?))/i;
+  const bits: string[] = [];
+  for (const k of Object.keys(answers)) {
+    const v = answers[k];
+    if (typeof v === "string" && dayPat.test(v)) bits.push(v);
+  }
+  return bits.length ? bits.join(" ; ") : undefined;
+}
+
+/**
+ * Exporte une API pratique: génère depuis email en prenant la DERNIÈRE ligne du Sheet
+ * et en appliquant la même logique d'inférence du nombre de séances.
+ */
+export async function planProgrammeFromEmail(
+  email: string,
+  opts: PlanOptions = {}
+): Promise<{ sessions: AiSessionT[]; profile: Partial<ProfileT> }> {
+  const cleanEmail = normalizeEmail(email);
+  const res = await _getAnswersForEmail(cleanEmail);
+  const last = Array.isArray(res)
+    ? res.slice().sort((a, b) => extractTimestampAny(a) - extractTimestampAny(b)).at(-1) ?? res[0]
+    : res;
+
+  let built: Partial<ProfileT> & { availabilityText?: string } = {};
+  if (last) {
+    built = _buildProfileFromAnswers(last) as Partial<ProfileT> & { availabilityText?: string };
+    // Fournir le texte de dispo au builder si non mappé par buildProfileFromAnswers
+    built.availabilityText = built.availabilityText || availabilityTextFromAnswers(last);
+  } else {
+    built = { email: cleanEmail } as Partial<ProfileT>;
+  }
+
+  // Infère le nombre de séances si l'option n'est pas donnée
+  const inferred = inferMaxSessions(built.availabilityText);
+  const maxSessions = clamp(opts.maxSessions ?? inferred ?? 3, 1, 6);
+
+  const { sessions } = planProgrammeFromProfile(built as ProfileInput, { ...opts, maxSessions });
+  return { sessions, profile: built };
+}
+
+/** Si vous avez déjà l'objet answers (batch), utilisez cette variante. */
+export function planProgrammeFromAnswers(
+  answers: any,
+  opts: PlanOptions = {}
+): { sessions: AiSessionT[]; profile: Partial<ProfileT> } {
+  const built = _buildProfileFromAnswers(answers) as Partial<ProfileT> & { availabilityText?: string };
+  const availability = built.availabilityText || availabilityTextFromAnswers(answers);
+  const inferred = inferMaxSessions(availability);
+  const maxSessions = clamp(opts.maxSessions ?? inferred ?? 3, 1, 6);
+  const { sessions } = planProgrammeFromProfile(built as ProfileInput, { ...opts, maxSessions });
+  return { sessions, profile: built };
+}
+
+/* ========================= Inférence du nb de séances ========================= */
+const DAYS = [
+  "lundi","mardi","mercredi","jeudi","vendredi","samedi","dimanche",
+];
+
+function inferMaxSessions(text?: string | null): number | undefined {
+  if (!text) return undefined;
+  const s = String(text).toLowerCase();
+
+  // 1) Cas numériques explicites: "6x", "6 x", "6 jours par semaine", "3 jours" etc.
+  const numMatch = s.match(/\b(\d{1,2})\s*(x|fois|jours?)\b/);
+  if (numMatch) {
+    const n = parseInt(numMatch[1], 10);
+    if (!Number.isNaN(n)) return clamp(n, 1, 6);
+  }
+
+  // 2) "toute la semaine" / "tous les jours" => 6 (on borne à 6/semaine)
+  if (/toute?\s+la\s+semaine|tous?\s+les\s+jours/.test(s)) return 6;
+
+  // 3) week-end => 2 (samedi + dimanche)
+  if (/week\s*-?\s*end|weekend/.test(s)) {
+    // Si d'autres jours sont aussi cités, on les comptera plus bas et on prendra l'union.
+  }
+
+  // 4) Compte des jours explicitement cités
+  const foundDays = new Set<string>();
+  for (const d of DAYS) {
+    if (new RegExp(`\\b${d}\\b`, "i").test(s)) foundDays.add(d);
+  }
+  if (/week\s*-?\s*end|weekend/.test(s)) {
+    foundDays.add("samedi");
+    foundDays.add("dimanche");
+  }
+
+  if (foundDays.size > 0) return clamp(foundDays.size, 1, 6);
+
+  // 5) Aucun indice clair → undefined (laissera le défaut/override s'appliquer)
+  return undefined;
 }
 
 /* ========================= Contexte & utils ========================= */
@@ -352,7 +396,6 @@ function adjustForInjuries(ctx: Ctx, ex: NormalizedExercise): NormalizedExercise
   if (e.sets && !e.tempo) e.tempo = tempoFor(ctx.goalKey);
 
   // Contre-indications simples
-  // Dos sensible → éviter charges lourdes sur rachis: Back Squat, Deadlift; préférer Goblet, Hip Thrust, Split squat
   if (ctx.injuries.back) {
     if (/back squat|soulevé de terre|deadlift|row à la barre/i.test(e.name)) {
       return swap(e, preferBackFriendly(e, ctx));
@@ -361,7 +404,6 @@ function adjustForInjuries(ctx: Ctx, ex: NormalizedExercise): NormalizedExercise
       e.notes = joinNotes(e.notes, "Si gêne au dos, réduire l’amplitude ou remplacer par Bird-Dog.");
     }
   }
-  // Epaules sensibles → éviter overhead strict, dips profonds; préférer développé incliné/haltères neutres, pompes surélevées
   if (ctx.injuries.shoulder) {
     if (/militaire|overhead|développé militaire|élevations latérales lourdes/i.test(e.name)) {
       return swap(e, { name: "Développé haltères neutre", sets: e.sets ?? 3, reps: repsFor(ctx.goalKey), rest: "75s", block: e.block, equipment: "haltères", notes: "Prise neutre, amplitude confortable." });
@@ -370,7 +412,6 @@ function adjustForInjuries(ctx: Ctx, ex: NormalizedExercise): NormalizedExercise
       return swap(e, { name: "Pompes surélevées", sets: e.sets ?? 3, reps: pickBodyweight(ctx.goalKey), rest: "60–75s", block: e.block, equipment: "poids du corps" });
     }
   }
-  // Genoux sensibles → éviter sauts, flexions très profondes; préférer hip-dominant, fentes courtes
   if (ctx.injuries.knee) {
     if (/sauté|jump|burpee/i.test(e.name)) {
       return swap(e, { name: "Marche rapide / step-ups bas", sets: e.sets ?? 3, reps: "10–12/ côté", rest: "60s", block: e.block, notes: "Hauteur basse, sans douleur." });
@@ -379,31 +420,25 @@ function adjustForInjuries(ctx: Ctx, ex: NormalizedExercise): NormalizedExercise
       e.notes = joinNotes(e.notes, "Amplitude contrôlée, pas de douleur, option appui/assistance.");
     }
   }
-  // Poignets → préférer poignées/pompes neutres
   if (ctx.injuries.wrist && /pompes|push-up/i.test(e.name)) {
     e.notes = joinNotes(e.notes, "Utiliser poignées de pompe ou poings fermés pour garder le poignet neutre.");
   }
-  // Hanches → limiter amplitude extrême; privilégier hip thrust, glute bridge
   if (ctx.injuries.hip && /squat|fente/i.test(e.name)) {
     e.notes = joinNotes(e.notes, "Amplitude confortable, focus stabilité hanche.");
   }
-  // Chevilles → limiter plyo et dorsiflexion extrême
   if (ctx.injuries.ankle && /sauté|jump/i.test(e.name)) {
     return swap(e, { name: "Marche rapide inclinée", sets: e.sets ?? 3, reps: "2–3 min", rest: "60s", block: e.block });
   }
 
-  // Utilisation des équipements détaillés si dispo
   if (/tirage élastique|row|tirage/i.test(e.name)) {
     if (ctx.equipItems.bands) {
       e.equipment = e.equipment || "élastiques";
     }
   }
   if (/kettlebell|kb/i.test(e.name) && !ctx.equipItems.kb) {
-    // si KB proposé mais pas dispo -> swap vers haltère
     return swap(e, { ...e, name: e.name.replace(/kettlebell|KB/i, "haltère"), equipment: "haltères" });
   }
   if (/trx|suspension/i.test(e.name) && !ctx.equipItems.trx) {
-    // alternative tirage
     return swap(e, bodyOrBand("Tirage élastique / serviette", ctx, { reps: e.reps || pickBodyweight(ctx.goalKey) }));
   }
 
@@ -411,7 +446,6 @@ function adjustForInjuries(ctx: Ctx, ex: NormalizedExercise): NormalizedExercise
 }
 
 function preferBackFriendly(ex: NormalizedExercise, ctx: Ctx): NormalizedExercise {
-  // alternatives “dos-friendly”
   if (/back squat|front squat/i.test(ex.name)) {
     return dumbbell("Goblet Squat", ctx);
   }
@@ -525,4 +559,26 @@ function body(name: string, ctx: Ctx, extra?: Partial<NormalizedExercise>): Norm
     equipment: "poids du corps",
     ...extra,
   };
+}
+
+/* ========================= Utils spécifiques sheet ========================= */
+function normalizeEmail(raw?: string | null) {
+  const s = String(raw || "").trim().toLowerCase();
+  if (!s) return "";
+  return s
+    .replace(/@glmail\./g, "@gmail.")
+    .replace(/@gmai(l)?\./g, "@gmail.")
+    .replace(/@gnail\./g, "@gmail.")
+    .replace(/@hotnail\./g, "@hotmail.")
+    .replace(/\s+/g, "");
+}
+function extractTimestampAny(a: any): number {
+  const candidates = [a?.timestamp, a?.ts, a?.createdAt, a?.date, a?.Date, a?.A, a?.["A"], a?.["Horodatage"], a?.["horodatage"]];
+  for (const v of candidates) {
+    if (!v) continue;
+    const d = typeof v === "number" ? new Date(v) : new Date(String(v));
+    const t = d.getTime();
+    if (!Number.isNaN(t)) return t;
+  }
+  return 0;
 }
