@@ -59,7 +59,7 @@ const GLOBAL_CACHE_KEY = "__ai_sheet_cache__";
 const CACHE_TTL_MS = Number(process.env.SHEET_CACHE_TTL_MS || 5000); // 5s par défaut
 type CacheT = { at: number; text: string };
 
-declare global { // eslint-disable-line no-var
+declare global {
   // @ts-ignore
   var __ai_sheet_cache__: CacheT | undefined;
 }
@@ -151,8 +151,8 @@ function detectIndexes(rows: string[][]): ColIdxMap {
     "ts",
     "date",
     "submitted at",
-    "horodatage",         // FR Google Forms
-    "date de soumission", // FR variante
+    "horodatage",
+    "date de soumission",
   ]);
   if (tsIdx >= 0) map.ts = tsIdx;
 
@@ -160,7 +160,7 @@ function detectIndexes(rows: string[][]): ColIdxMap {
   const letterOverride = (envName: string) => {
     const v = (process.env[envName] || "").trim();
     return v ? toIndexFromLetter(v) : null;
-    };
+  };
   const oEmail = letterOverride("SHEET_EMAIL_COL");
   if (oEmail !== null) map.email = oEmail;
   const oPrenom = letterOverride("SHEET_PRENOM_COL");
