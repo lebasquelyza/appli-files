@@ -1,5 +1,3 @@
-// apps/web/lib/coach/ai.ts
-
 /** ---------------------------------------------------------------------------
  *  Public Google Sheet (CSV)
  *  - Env requis: SHEET_ID, SHEET_GID, SHEET_RANGE
@@ -41,7 +39,6 @@ export type Profile = {
   age?: number;
   objectif?: string; // libellé FR brut (colonne G)
   goal?: string;     // clé normalisée (hypertrophy/fatloss/strength/endurance/mobility/general)
-  // autres champs éventuels à l’avenir
 };
 
 // --- ENV & URL helpers ---
@@ -57,9 +54,11 @@ function sheetCsvUrl(): string {
   return `${base}&${qp.toString()}`;
 }
 
-// --- Petit cache mémoire (60s) pour éviter de spammer le CSV ---
+// --- Petit cache mémoire (TTL) ---
 const GLOBAL_CACHE_KEY = "__ai_sheet_cache__";
+const CACHE_TTL_MS = Number(process.env.SHEET_CACHE_TTL_MS || 5000); // 5s par défaut
 type CacheT = { at: number; text: string };
+
 declare global { // eslint-disable-line no-var
   // @ts-ignore
   var __ai_sheet_cache__: CacheT | undefined;
@@ -95,17 +94,22 @@ function parseCSV(text: string): string[][] {
   return rows;
 }
 
-async function fetchSheetCSV(): Promise<string[][]> {
+// --- CSV fetch avec option fresh ---
+async function fetchSheetCSVRaw(): Promise<string> {
   if (!SHEET_ID || !SHEET_GID) throw new Error("SHEET_ID et SHEET_GID requis.");
-  const now = Date.now();
-  const cached: CacheT | undefined = (global as any)[GLOBAL_CACHE_KEY];
-  if (cached && now - cached.at < 60_000) {
-    return parseCSV(cached.text);
-  }
   const url = sheetCsvUrl();
   const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) throw new Error(`CSV fetch failed (${res.status})`);
-  const text = await res.text();
+  return res.text();
+}
+async function fetchSheetCSV(fresh = false): Promise<string[][]> {
+  const now = Date.now();
+  const cached: CacheT | undefined = (global as any)[GLOBAL_CACHE_KEY];
+
+  if (!fresh && cached && now - cached.at < CACHE_TTL_MS) {
+    return parseCSV(cached.text);
+  }
+  const text = await fetchSheetCSVRaw();
   (global as any)[GLOBAL_CACHE_KEY] = { at: now, text };
   return parseCSV(text);
 }
@@ -142,14 +146,21 @@ function detectIndexes(rows: string[][]): ColIdxMap {
   const objIdx = find(["objectif", "goal", "objectif (g)"]);
   if (objIdx >= 0) map.objectif = objIdx;
 
-  const tsIdx = find(["timestamp", "ts", "date", "submitted at"]);
+  const tsIdx = find([
+    "timestamp",
+    "ts",
+    "date",
+    "submitted at",
+    "horodatage",         // FR Google Forms
+    "date de soumission", // FR variante
+  ]);
   if (tsIdx >= 0) map.ts = tsIdx;
 
   // Override via lettres si défini (ex: SHEET_EMAIL_COL="K")
   const letterOverride = (envName: string) => {
     const v = (process.env[envName] || "").trim();
     return v ? toIndexFromLetter(v) : null;
-  };
+    };
   const oEmail = letterOverride("SHEET_EMAIL_COL");
   if (oEmail !== null) map.email = oEmail;
   const oPrenom = letterOverride("SHEET_PRENOM_COL");
@@ -179,45 +190,25 @@ function normalizeGoal(input?: string): string {
   return "general";
 }
 
-/* ============================================================================
- *  Helpers de disponibilités (texte) pour la logique jours → séances
- * ==========================================================================*/
-function availabilityTextFromAnswers(ans: Record<string, any>): string | undefined {
-  if (!ans) return undefined;
-  const dayPat = /(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|week\s*-?\s*end|weekend|jours?\s+par\s+semaine|\b\d+\s*(x|fois|jours?))/i;
-
-  // Colonne “I” (fallback) en priorité si présente
-  const candidates: any[] = [
-    ans["daysPerWeek"], ans["jours"], ans["séances/semaine"], ans["seances/semaine"], ans["col_I"]
-  ];
-
-  // Puis on scanne toutes les valeurs texte pour attraper “lundi mardi”, “week-end”, “6 jours…”
-  for (const k of Object.keys(ans)) {
-    const v = ans[k];
-    if (typeof v === "string") candidates.push(v);
-  }
-
-  const hits = candidates
-    .map((v) => String(v ?? "").trim())
-    .filter((v) => v && dayPat.test(v));
-
-  return hits.length ? hits.join(" ; ") : undefined;
-}
-
 /** ============================================================================
  *  API publique consommée par les pages
  *  ==========================================================================*/
 
 // 1) Lire toutes les réponses et retourner la DERNIÈRE pour un email donné
-export async function getAnswersForEmail(email: string): Promise<Record<string, any> | null> {
+export async function getAnswersForEmail(
+  email: string,
+  opts?: { fresh?: boolean }
+): Promise<Record<string, any> | null> {
   const emailLc = String(email || "").trim().toLowerCase();
   if (!emailLc) return null;
 
-  const rows = await fetchSheetCSV();
+  const rows = await fetchSheetCSV(!!opts?.fresh);
   if (!rows.length) return null;
 
   const idx = detectIndexes(rows);
-  const start = rows[0]?.[idx.email]?.toLowerCase() === "email" ? 1 : 0;
+  const header = rows[0] || [];
+  const hasHeader = (header[idx.email] || "").toString().toLowerCase() === "email";
+  const start = hasHeader ? 1 : 0;
 
   let latest: { row: string[]; ts: number; i: number } | null = null;
 
@@ -233,20 +224,18 @@ export async function getAnswersForEmail(email: string): Promise<Record<string, 
       const t = new Date(tsRaw).getTime();
       if (!Number.isNaN(t)) tsNum = t;
     }
-    if (!latest || tsNum >= (latest.ts || 0) || i > (latest.i || -1)) {
+    // si pas de timestamp exploitable → on prend la dernière occurrence
+    if (!latest || tsNum > latest.ts || (tsNum === latest.ts && i > latest.i)) {
       latest = { row, ts: tsNum, i };
     }
   }
 
   if (!latest) return null;
 
-  const headerRow = rows[0] || [];
-  const hasHeader = headerRow[idx.email]?.toLowerCase() === "email";
   const obj: Record<string, any> = {};
-
   if (hasHeader) {
     for (let c = 0; c < latest.row.length; c++) {
-      const key = String(headerRow[c] || `col_${c}`).trim();
+      const key = String(header[c] || `col_${c}`).trim();
       obj[key] = latest.row[c];
     }
   } else {
@@ -357,19 +346,8 @@ export function generateProgrammeFromAnswers(ans: Record<string, any>): { sessio
   const injuries =
     splitList(ans["injuries"] ?? ans["blessures"] ?? ans["col_H"]) || undefined;
 
-  // 1) Nombre explicite (ex: “3”, “6”) — borne 1..6
-  const numericDays =
-    toNumber(
-      ans["daysPerWeek"] ??
-      ans["jours"] ??
-      ans["séances/semaine"] ??
-      ans["seances/semaine"] ??
-      ans["col_I"]
-    );
-  const daysPerWeek = numericDays ? Math.max(1, Math.min(6, numericDays)) : undefined;
-
-  // 2) Texte de dispos (ex: “lundi mardi”, “week-end”, “6 jours par semaine”)
-  const availabilityText = availabilityTextFromAnswers(ans);
+  const daysPerWeek =
+    Math.max(1, Math.min(6, toNumber(ans["daysPerWeek"] ?? ans["jours"] ?? ans["séances/semaine"] ?? ans["seances/semaine"] ?? ans["col_I"]) || 3));
 
   const equipItems =
     splitList(ans["equipItems"] ?? ans["équipements"] ?? ans["equipements"] ?? ans["col_J"]) || undefined;
@@ -383,22 +361,13 @@ export function generateProgrammeFromAnswers(ans: Record<string, any>): { sessio
     equipLevel,
     timePerSession,
     level,
+    // Ces deux champs sont “bonus” pour futures évolutions du moteur
     injuries,
     equipItems,
-    // ⬇️ Clé utilisée par le moteur béton pour inférer le nombre de séances (jours nommés, week-end, 6x...)
-    availabilityText,
   } as any;
 
-  // Priorité: si on a un NOMBRE → on l’applique; sinon, le moteur infèrera depuis availabilityText
-  const res = planProgrammeFromProfile(enriched, { maxSessions: daysPerWeek });
-
-  // ✅ Fix de typage: on force `type` dans l’union littérale WorkoutType
-  return {
-    sessions: res.sessions.map((s) => ({
-      ...s,
-      type: s.type as WorkoutType,
-    })),
-  };
+  // maxSessions = jours/semaine (1..6)
+  return planProgrammeFromProfile(enriched, { maxSessions: daysPerWeek });
 }
 
 // 4) Sessions “stockées” (stub) — ici on retourne vide pour laisser la génération locale prendre le relais
