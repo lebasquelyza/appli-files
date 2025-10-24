@@ -29,6 +29,10 @@ type ProfileInput = {
   /** Texte libre de dispo: “lundi mardi”, “week-end”, “6 jours par semaine”, “3x”, etc. */
   availabilityText?: string;
   email?: string;
+
+  // préférences (facultatif si non présent dans le Sheet)
+  likes?: string[];    // ex: ["pompes","kettlebell","tractions"]
+  dislikes?: string[]; // ex: ["back squat","burpees"]
 };
 
 /* ====== Focus par séance (split) ====== */
@@ -158,7 +162,7 @@ export function planProgrammeFromProfile(
         ? buildMobility(ctx)
         : type === "hiit"
         ? buildHiit(ctx)
-        : buildStrengthFocused(ctx, focus ?? "full", goalKey); // ✅ muscu ultra-ciblée par objectif
+        : buildStrengthFocused(ctx, focus ?? "full", goalKey, profile); // ✅ muscu ultra personnalisée
 
     sessions.push({
       id: `beton-${dateStr}-${i}-${Math.random().toString(36).slice(2, 7)}`,
@@ -392,7 +396,7 @@ function normalizeItems(list?: string[]): Items {
   };
 }
 
-/* ========================= Builders par type ========================= */
+/* ========================= Cardio/Mobility/HIIT ========================= */
 function buildCardio(ctx: Ctx, variantIdx: number): NormalizedExercise[] {
   const { minutes, equipItems } = ctx;
   const warm = { name: "Échauffement Z1", reps: "8–10 min", block: "echauffement" } as NormalizedExercise;
@@ -442,101 +446,236 @@ function buildHiit(ctx: Ctx): NormalizedExercise[] {
   return out;
 }
 
-/* ========================= Musculation ultra-ciblée ========================= */
-function buildStrengthFocused(ctx: Ctx, focus: StrengthFocus, goalKey: string): NormalizedExercise[] {
+/* ========================= Sélection dynamique Muscu ========================= */
+type PoolItem = {
+  name: string;
+  need?: ("bar" | "db" | "bench" | "machine" | "kb" | "bands" | "trx")[];
+  fallback?: string;
+  area?: "bas" | "haut" | "dos";
+  kind?: "main" | "assist" | "iso" | "core";
+  contra?: (inj: Injuries) => boolean; // si true → exclure
+};
+
+const POOLS: Record<StrengthFocus, PoolItem[]> = {
+  full: [
+    { name: "Goblet Squat", need: ["db"], area: "bas", kind: "main" },
+    { name: "Tirage vertical", need: ["machine", "bands"], area: "dos", kind: "main", fallback: "Tirage élastique" },
+    { name: "Développé haltères", need: ["db"], area: "haut", kind: "assist", fallback: "Pompes surélevées" },
+    { name: "Élévations latérales", need: ["db", "bands"], area: "haut", kind: "iso" },
+    { name: "Curl biceps (élastique/haltères)", need: ["db", "bands"], area: "haut", kind: "iso" },
+  ],
+  bas_quads: [
+    { name: "Front Squat", need: ["bar"], area: "bas", kind: "main", fallback: "Goblet Squat", contra: (i) => !!i.back },
+    { name: "Presse à cuisses", need: ["machine"], area: "bas", kind: "assist", fallback: "Fente arrière" },
+    { name: "Fente arrière", area: "bas", kind: "assist" },
+    { name: "Leg Extension (élastique/machine)", need: ["machine", "bands"], area: "bas", kind: "iso", fallback: "Squat partiel" },
+  ],
+  bas_iscios_glutes: [
+    { name: "Hip Thrust (barre/haltère)", need: ["bench"], area: "bas", kind: "main", fallback: "Hip Thrust au sol" },
+    { name: "Soulevé de terre roumain", need: ["bar"], area: "bas", kind: "main", fallback: "RDL haltères", contra: (i) => !!i.back },
+    { name: "Good Morning haltères", need: ["db"], area: "bas", kind: "assist", fallback: "Pont fessier" },
+    { name: "Leg Curl (élastique)", need: ["bands"], area: "bas", kind: "iso", fallback: "Nordic curl assisté" },
+    { name: "Abduction hanches (élastique)", need: ["bands"], area: "bas", kind: "iso" },
+  ],
+  haut_push: [
+    { name: "Bench Press", need: ["bar", "bench"], area: "haut", kind: "main", fallback: "Développé haltères", contra: (i) => !!i.shoulder },
+    { name: "Développé haltères incliné", need: ["db"], area: "haut", kind: "main", fallback: "Pompes surélevées" },
+    { name: "Élévations latérales", need: ["db", "bands"], area: "haut", kind: "iso" },
+    { name: "Triceps extension (poulie/élastique)", need: ["machine", "bands"], area: "haut", kind: "iso", fallback: "Extension triceps haltères" },
+    { name: "Écartés (haltères/élastique)", need: ["db", "bands"], area: "haut", kind: "iso" },
+  ],
+  haut_pull: [
+    { name: "Tractions / Tirage vertical", need: ["machine", "bands"], area: "dos", kind: "main", fallback: "Tirage élastique" },
+    { name: "Rowing unilatéral", need: ["db"], area: "dos", kind: "main", fallback: "Row avec serviette/table" },
+    { name: "Face Pull (câble/élastique)", need: ["machine", "bands"], area: "dos", kind: "assist", fallback: "Tirage horizontal élastique" },
+    { name: "Curl biceps (haltères/élastique)", need: ["db", "bands"], area: "haut", kind: "iso" },
+  ],
+  haut_mix: [
+    { name: "Développé haltères", need: ["db"], area: "haut", kind: "main", fallback: "Pompes surélevées" },
+    { name: "Rowing buste penché", need: ["db"], area: "dos", kind: "main", fallback: "Tirage élastique" },
+    { name: "Pompes surélevées", area: "haut", kind: "assist" },
+    { name: "Élévations latérales", need: ["db", "bands"], area: "haut", kind: "iso" },
+    { name: "Curl incliné (haltères)", need: ["db"], area: "haut", kind: "iso" },
+  ],
+  bras_core: [
+    { name: "Curl biceps (haltères/élastique)", need: ["db", "bands"], area: "haut", kind: "iso" },
+    { name: "Extension triceps (poulie/élastique)", need: ["machine", "bands"], area: "haut", kind: "iso", fallback: "Extension triceps haltères" },
+    { name: "Hollow Hold", area: "haut", kind: "core" },
+    { name: "Side Plank (gauche/droite)", area: "haut", kind: "core" },
+  ],
+};
+
+/* ===== Estimation du temps & normalisation ===== */
+function baseRest(goal: string) {
+  const g = (goal || "general").toLowerCase();
+  if (g === "strength") return 120;
+  if (g === "hypertrophy") return 75;
+  if (g === "fatloss") return 45;
+  return 60;
+}
+function defaultSets(level: Ctx["level"], isBW = false) {
+  if (isBW) return level === "avance" ? 4 : 3;
+  return level === "avance" ? 4 : level === "intermediaire" ? 3 : 2;
+}
+function defaultReps(goal: string, main = false) {
+  const g = (goal || "general").toLowerCase();
+  if (g === "strength") return main ? "3–5" : "4–6";
+  if (g === "hypertrophy") return main ? "6–10" : "10–15";
+  if (g === "fatloss") return main ? "10–12" : "12–20";
+  return main ? "6–10" : "8–12";
+}
+function estimateSetSeconds(goal: string) {
+  const g = (goal || "general").toLowerCase();
+  if (g === "strength") return 25;
+  if (g === "hypertrophy") return 30;
+  if (g === "fatloss") return 25;
+  return 28;
+}
+/** Estime la durée d’un exercice (min) = (sets * (tps par série + repos)) / 60 */
+function estimateExerciseMinutes(ex: NormalizedExercise, goal: string) {
+  const sets = ex.sets ?? 3;
+  const setSec = estimateSetSeconds(goal);
+  const restSec = parseRestToSec(ex.rest) || baseRest(goal);
+  return (sets * (setSec + restSec)) / 60;
+}
+function parseRestToSec(r?: string) {
+  if (!r) return 0;
+  const m = r.match(/(\d+)\s*-\s*(\d+)s/);
+  if (m) return (Number(m[1]) + Number(m[2])) / 2;
+  const s = r.match(/(\d+)\s*s/);
+  if (s) return Number(s[1]);
+  return 0;
+}
+function hasEquipment(ctx: Ctx, need: "bar" | "db" | "bench" | "machine" | "kb" | "bands" | "trx") {
+  if (ctx.equip === "full") return true;
+  if (need === "db") return !!ctx.equipItems.db;
+  if (need === "bar") return ctx.equip === "full" || !!ctx.equipItems.bar;
+  if (need === "bench") return !!ctx.equipItems.bench;
+  if (need === "machine") return ctx.equip === "full";
+  if (need === "kb") return !!ctx.equipItems.kb;
+  if (need === "bands") return !!ctx.equipItems.bands;
+  if (need === "trx") return !!ctx.equipItems.trx;
+  return false;
+}
+function matchesPreference(name: string, list?: string[]) {
+  if (!list || list.length === 0) return false;
+  const n = name.toLowerCase();
+  return list.some((k) => n.includes(k.toLowerCase()));
+}
+function estimateTotalMinutes(list: NormalizedExercise[], goal: string) {
+  return list.reduce((sum, e) => sum + estimateExerciseMinutes(e, goal), 0);
+}
+
+/* ========================= Musculation ultra-personnalisée ========================= */
+function buildStrengthFocused(
+  ctx: Ctx,
+  focus: StrengthFocus,
+  goalKey: string,
+  profile?: ProfileInput
+): NormalizedExercise[] {
   const g = (goalKey || "general").toLowerCase();
   const out: NormalizedExercise[] = [];
 
-  // Échauffement commun
-  out.push({ name: "Mobilité dynamique (hanches/épaules)", reps: "3–5 min", block: "echauffement" });
+  // — Échauffement spécifique au focus —
+  out.push({
+    name: focus.startsWith("bas") ? "Activation hanches/chevilles" : "Activation épaules/omoplates",
+    reps: "3–5 min",
+    block: "echauffement",
+  });
 
-  // Helpers locaux
-  const add = (ex: NormalizedExercise) => out.push(adjustForInjuries(ctx, ex));
-  const addIso = (name: string, area?: "bas" | "haut" | "dos", extra?: Partial<NormalizedExercise>) =>
-    add(dumbbell(name, ctx, area, { reps: g === "hypertrophy" ? "10–15" : "8–12", ...extra }));
+  const likes = profile?.likes || [];
+  const dislikes = profile?.dislikes || [];
 
-  const heavy = (ex: NormalizedExercise) => {
-    if (g === "strength") {
-      ex.reps = "3–5";
-      ex.rest = "120–150s";
+  // — Pool initial —
+  const pool = (POOLS[focus] || []).slice();
+
+  // 1) Filtrage matériel + blessures + dislikes
+  const filtered: PoolItem[] = pool.filter((p) => {
+    if (p.contra?.(ctx.injuries)) return false;
+    if (p.need && !p.need.every((n) => hasEquipment(ctx, n))) {
+      if (!p.fallback) return false; // pas d’alternative → exclu
     }
-    return ex;
+    if (matchesPreference(p.name, dislikes)) return false;
+    return true;
+  });
+
+  // 2) Tri préférences (likes d’abord), puis main > assist > iso/core
+  const kindRank: Record<NonNullable<PoolItem["kind"]>, number> = {
+    main: 0,
+    assist: 1,
+    iso: 2,
+    core: 3,
   };
+  filtered.sort((a, b) => {
+    const likeA = matchesPreference(a.name, likes) ? -1 : 0;
+    const likeB = matchesPreference(b.name, likes) ? -1 : 0;
+    if (likeA !== likeB) return likeA - likeB;
+    return (kindRank[a.kind || "assist"] ?? 9) - (kindRank[b.kind || "assist"] ?? 9);
+  });
 
-  const density = (ex: NormalizedExercise) => {
-    if (g === "fatloss") {
-      ex.rest = "45–60s";
-      if (!ex.sets) ex.sets = setsFor(ctx.level);
-    }
-    return ex;
-  };
+  // 3) Construire jusqu’à remplir le budget temps
+  const targetMin = clamp(ctx.minutes, 20, 90);
+  let usedMin = 0;
 
-  switch (focus) {
-    case "bas_quads": {
-      add(heavy(dumbbell("Goblet Squat", ctx)));
-      add(heavy(barbell("Front Squat", ctx)));
-      add(density(dumbbell("Fente arrière", ctx, undefined, { reps: g === "strength" ? "6–8/ côté" : "8–12/ côté" })));
-      if (g === "hypertrophy") addIso("Leg Extension (élastique ou machine)", "bas", { reps: "12–15" });
-      break;
-    }
-    case "bas_iscios_glutes": {
-      add(heavy(dumbbell("Hip Thrust (haltère)", ctx)));
-      add(heavy(barbell("Soulevé de terre roumain", ctx)));
-      add(density(dumbbell("Good Morning haltères", ctx, undefined, { reps: g === "strength" ? "6–8" : "10–12" })));
-      if (g === "hypertrophy") {
-        addIso("Leg Curl (élastique)", "bas", { reps: "12–15" });
-        addIso("Abduction hanches (élastique)", "bas", { reps: "12–20" });
+  for (const p of filtered) {
+    const usableName =
+      p.need && !p.need.every((n) => hasEquipment(ctx, n)) ? p.fallback || p.name : p.name;
+
+    // Fabrique l’exo avec paramètres adaptés
+    const isBW = /pompes|hollow|plank|pont|tirage élastique|traction|row.*serviette/i.test(usableName);
+    const isMain = p.kind === "main";
+
+    const base: NormalizedExercise = {
+      name: usableName,
+      sets: defaultSets(ctx.level, isBW),
+      reps: defaultReps(g, isMain),
+      rest: g === "strength" ? "120–150s" : g === "fatloss" ? "45–60s" : isMain ? "75–90s" : "60–75s",
+      tempo: tempoFor(ctx.goalKey),
+      rir: rirFor(ctx.level),
+      block: "principal",
+    };
+
+    const mins = estimateExerciseMinutes(base, g);
+    if (usedMin + mins > targetMin + 4) continue; // tolérance
+
+    out.push(adjustForInjuries(ctx, base));
+    usedMin += mins;
+
+    const mains = out.filter((e) =>
+      /Squat|Presse|Soulevé|Développé|Row(?!.*serviette)|Tirage|Tractions|Hip Thrust|Bench/i.test(e.name)
+    ).length;
+
+    if (usedMin >= targetMin * 0.7 && mains >= 3) {
+      // finisher core si on a encore 5’+
+      if (targetMin - usedMin >= 5) {
+        out.push(
+          adjustForInjuries(ctx, {
+            name: "Gainage planche",
+            sets: 2,
+            reps: "30–45s",
+            rest: g === "fatloss" ? "30–45s" : "45–60s",
+            block: "fin",
+          })
+        );
       }
       break;
     }
-    case "haut_push": {
-      add(heavy(barbell("Bench Press", ctx, "haut")));
-      add(heavy(dumbbell("Développé haltères incliné", ctx, "haut")));
-      add(density(dumbbell("Élévations latérales", ctx, "haut", { reps: g === "strength" ? "6–10" : "12–15" })));
-      if (g === "hypertrophy") {
-        addIso("Écartés (haltères/élastique)", "haut", { reps: "12–15" });
-        addIso("Triceps extension (poulie/élastique)", "haut", { reps: "10–15" });
-      }
-      break;
-    }
-    case "haut_pull": {
-      add(heavy(cableOrMachine("Tirage vertical", ctx, "dos")));
-      add(heavy(dumbbell("Rowing unilatéral", ctx, "dos", { reps: g === "strength" ? "6–8/ côté" : "10–12/ côté" })));
-      add(density(cableOrMachine("Face Pull (câble/élastique)", ctx, "dos", { reps: g === "strength" ? "8–12" : "12–15" })));
-      if (g === "hypertrophy") addIso("Curl biceps (haltères/élastique)", "haut", { reps: "10–15" });
-      break;
-    }
-    case "haut_mix": {
-      add(dumbbell("Développé haltères", ctx, "haut"));
-      add(dumbbell("Rowing buste penché", ctx, "dos"));
-      add(bodyOrBand("Pompes surélevées", ctx, { reps: pickBodyweight(ctx.goalKey) }));
-      if (g === "hypertrophy") {
-        addIso("Élévations latérales", "haut", { reps: "12–15" });
-        addIso("Curl incliné (haltères)", "haut", { reps: "10–12" });
-      }
-      break;
-    }
-    case "bras_core": {
-      addIso("Curl biceps (haltères/élastique)", "haut", { reps: "10–15" });
-      addIso("Extension triceps (poulie/élastique)", "haut", { reps: "10–15" });
-      add(body("Hollow Hold", ctx, { reps: "20–30s", rest: "45–60s", sets: 3, block: "principal" }));
-      add(body("Side Plank (gauche/droite)", ctx, { reps: "20–30s/ côté", rest: "45–60s", sets: 2, block: "principal" }));
-      break;
-    }
-    default: { // full
-      add(heavy(dumbbell("Goblet Squat", ctx)));
-      add(heavy(cableOrMachine("Tirage vertical", ctx, "dos")));
-      add(density(dumbbell("Développé haltères", ctx, "haut")));
-      if (g === "hypertrophy") {
-        addIso("Élévations latérales", "haut", { reps: "12–15" });
-        addIso("Curl biceps (élastique/haltères)", "haut", { reps: "10–12" });
-      }
-      break;
-    }
+    if (usedMin >= targetMin - 2) break;
   }
 
-  // Accessoires / tronc — fin
-  out.push(adjustForInjuries(ctx, { name: "Gainage planche", sets: 2, reps: "30–45s", rest: "45s", block: "fin" }));
+  // Sécurité : si trop court, ajouter un core léger
+  if (estimateTotalMinutes(out, g) < targetMin - 6) {
+    out.push(
+      adjustForInjuries(ctx, {
+        name: "Side Plank (gauche/droite)",
+        sets: 2,
+        reps: "20–30s/ côté",
+        rest: "45s",
+        block: "fin",
+      })
+    );
+  }
+
   return out;
 }
 
@@ -589,7 +728,7 @@ function adjustForInjuries(ctx: Ctx, ex: NormalizedExercise): NormalizedExercise
         sets: e.sets ?? 3,
         reps: "10–12/ côté",
         rest: "60s",
-        block: e.block,
+        block: "principal",
         notes: "Hauteur basse, sans douleur.",
       });
     }
@@ -607,17 +746,17 @@ function adjustForInjuries(ctx: Ctx, ex: NormalizedExercise): NormalizedExercise
   }
   // Chevilles
   if (ctx.injuries.ankle && /sauté|jump/i.test(e.name)) {
-    return swap(e, { name: "Marche rapide inclinée", sets: e.sets ?? 3, reps: "2–3 min", rest: "60s", block: e.block });
+    return swap(e, { name: "Marche rapide inclinée", sets: e.sets ?? 3, reps: "2–3 min", rest: "60s", block: "principal" });
   }
 
   // Utilisation équipement si dispo
   if (/tirage élastique|row|tirage/i.test(e.name)) {
-    if (ctx.equipItems.bands) e.equipment = e.equipment || "élastiques";
+    if ((ctx.equipItems as any).bands) e.equipment = e.equipment || "élastiques";
   }
-  if (/kettlebell|kb/i.test(e.name) && !ctx.equipItems.kb) {
+  if (/kettlebell|kb/i.test(e.name) && !(ctx.equipItems as any).kb) {
     return swap(e, { ...e, name: e.name.replace(/kettlebell|KB/i, "haltère"), equipment: "haltères" });
   }
-  if (/trx|suspension/i.test(e.name) && !ctx.equipItems.trx) {
+  if (/trx|suspension/i.test(e.name) && !(ctx.equipItems as any).trx) {
     return swap(e, bodyOrBand("Tirage élastique / serviette", ctx, { reps: e.reps || pickBodyweight(ctx.goalKey) }));
   }
 
@@ -779,4 +918,3 @@ function extractTimestampAny(a: any): number {
   }
   return 0;
 }
-
