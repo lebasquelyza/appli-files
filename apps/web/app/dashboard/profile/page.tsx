@@ -55,7 +55,7 @@ async function getEmailFromSupabaseSession(): Promise<string> {
 }
 
 /* Server Action */
-async function doAutogenAction(formData: FormData) {
+async function doAutogenAction(_formData: FormData) {
   "use server";
   const c = cookies();
   const user = c.get("fc_uid")?.value || "me";
@@ -84,7 +84,7 @@ async function doAutogenAction(formData: FormData) {
   }
 
   revalidatePath("/dashboard/profile");
-  redirect("/dashboard/profile?success=programme");
+  redirect("/dashboard/profile?success=programme`);
 }
 
 /* Loaders
@@ -122,9 +122,9 @@ async function loadProfile(searchParams?: Record<string, string | string[] | und
   }
 
   try {
-    const answers = await getAnswersForEmail(emailForDisplay);
+    // ✅ always fetch fresh to show the very latest submission
+    const answers = await getAnswersForEmail(emailForDisplay, { fresh: true });
     if (answers) {
-      // buildProfileFromAnswers doit mapper B->prenom, C->age, G->objectif/goal
       const built = buildProfileFromAnswers(answers);
       profile = { ...built, email: built.email || emailForDisplay };
       debugInfo.sheetHit = true;
@@ -145,7 +145,7 @@ async function loadSessions(email?: string): Promise<AiSessionT[]> {
   let aiSessions: AiSessionT[] = [];
   if (email) {
     try {
-      const answers = await getAnswersForEmail(email);
+      const answers = await getAnswersForEmail(email, { fresh: true });
       if (answers) aiSessions = generateProgrammeFromAnswers(answers).sessions;
     } catch {}
   }
@@ -231,7 +231,6 @@ export default async function Page({
             </div>
           )}
         </div>
-        {/* ← Bouton Retour supprimé */}
       </div>
 
       {/* Alerts */}
