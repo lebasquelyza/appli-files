@@ -179,6 +179,31 @@ function normalizeGoal(input?: string): string {
   return "general";
 }
 
+/* ============================================================================
+ *  Helpers de disponibilités (texte) pour la logique jours → séances
+ * ==========================================================================*/
+function availabilityTextFromAnswers(ans: Record<string, any>): string | undefined {
+  if (!ans) return undefined;
+  const dayPat = /(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|week\s*-?\s*end|weekend|jours?\s+par\s+semaine|\b\d+\s*(x|fois|jours?))/i;
+
+  // Colonne “I” (fallback) en priorité si présente
+  const candidates: any[] = [
+    ans["daysPerWeek"], ans["jours"], ans["séances/semaine"], ans["seances/semaine"], ans["col_I"]
+  ];
+
+  // Puis on scanne toutes les valeurs texte pour attraper “lundi mardi”, “week-end”, “6 jours…”
+  for (const k of Object.keys(ans)) {
+    const v = ans[k];
+    if (typeof v === "string") candidates.push(v);
+  }
+
+  const hits = candidates
+    .map((v) => String(v ?? "").trim())
+    .filter((v) => v && dayPat.test(v));
+
+  return hits.length ? hits.join(" ; ") : undefined;
+}
+
 /** ============================================================================
  *  API publique consommée par les pages
  *  ==========================================================================*/
@@ -332,8 +357,19 @@ export function generateProgrammeFromAnswers(ans: Record<string, any>): { sessio
   const injuries =
     splitList(ans["injuries"] ?? ans["blessures"] ?? ans["col_H"]) || undefined;
 
-  const daysPerWeek =
-    Math.max(1, Math.min(6, toNumber(ans["daysPerWeek"] ?? ans["jours"] ?? ans["séances/semaine"] ?? ans["seances/semaine"] ?? ans["col_I"]) || 3));
+  // 1) Nombre explicite (ex: “3”, “6”) — borne 1..6
+  const numericDays =
+    toNumber(
+      ans["daysPerWeek"] ??
+      ans["jours"] ??
+      ans["séances/semaine"] ??
+      ans["seances/semaine"] ??
+      ans["col_I"]
+    );
+  const daysPerWeek = numericDays ? Math.max(1, Math.min(6, numericDays)) : undefined;
+
+  // 2) Texte de dispos (ex: “lundi mardi”, “week-end”, “6 jours par semaine”)
+  const availabilityText = availabilityTextFromAnswers(ans);
 
   const equipItems =
     splitList(ans["equipItems"] ?? ans["équipements"] ?? ans["equipements"] ?? ans["col_J"]) || undefined;
@@ -347,13 +383,22 @@ export function generateProgrammeFromAnswers(ans: Record<string, any>): { sessio
     equipLevel,
     timePerSession,
     level,
-    // Ces deux champs sont “bonus” pour futures évolutions du moteur
     injuries,
     equipItems,
+    // ⬇️ Clé utilisée par le moteur béton pour inférer le nombre de séances (jours nommés, week-end, 6x...)
+    availabilityText,
   } as any;
 
-  // maxSessions = jours/semaine (1..6)
-  return planProgrammeFromProfile(enriched, { maxSessions: daysPerWeek });
+  // Priorité: si on a un NOMBRE → on l’applique; sinon, le moteur infèrera depuis availabilityText
+  const res = planProgrammeFromProfile(enriched, { maxSessions: daysPerWeek });
+
+  // ✅ Fix de typage: on force `type` dans l’union littérale WorkoutType
+  return {
+    sessions: res.sessions.map((s) => ({
+      ...s,
+      type: s.type as WorkoutType,
+    })),
+  };
 }
 
 // 4) Sessions “stockées” (stub) — ici on retourne vide pour laisser la génération locale prendre le relais
@@ -361,4 +406,3 @@ export async function getAiSessions(_email: string): Promise<AiSession[]> {
   // Branche ici une DB/Supabase si tu veux persister les programmes.
   return [];
 }
-
