@@ -1,24 +1,29 @@
-// apps/web/app/api/programme/route.ts
+// apps/web/app/api/programme/route.ts — MAJ pour respecter la logique
+// "1 jour = 1 séance", "week-end = 2", "6x/6 jours = 6", etc.
+
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+
+// On utilise maintenant le builder du module béton, qui applique l'inférence
+// du nombre de séances depuis les réponses du Sheet.
 import {
-  getAnswersForEmail,
-  generateProgrammeFromAnswers,
+  planProgrammeFromEmail,
+  planProgrammeFromAnswers,
+} from "../../../lib/coach/beton";
+
+import {
+  getAnswersForEmail, // on le garde pour POST (quand answers déjà connus) et pour fallback
   buildProfileFromAnswers,
-  type AiSession,
-  type Profile,
 } from "../../../lib/coach/ai";
 
 export const runtime = "nodejs";
 
-/** Type local : programme généré + profil (optionnel quand pas de réponses) */
-type GeneratedProgramme = ReturnType<typeof generateProgrammeFromAnswers>; // { sessions: AiSession[] }
-type AiProgramme = GeneratedProgramme & { profile?: Profile | null };
+type AiProgramme = { sessions: any[]; profile?: any | null };
 
 /* ===================== GET =====================
 Supporte:
-- ?email=... : renvoie un programme (si autogen=1, il est généré depuis les dernières réponses)
-- ?autogen=1 : force la génération depuis les réponses (Sheets) pour cet email
+- ?email=... : renvoie un programme
+- ?autogen=1 : force la génération depuis la **dernière** réponse du Sheet en appliquant la logique
 ================================================= */
 export async function GET(req: Request) {
   try {
@@ -31,28 +36,20 @@ export async function GET(req: Request) {
       .toLowerCase();
 
     if (!email) {
-      // Objet vide mais valide (pas de 500 côté client)
+      // Objet vide mais valide
       return NextResponse.json({ sessions: [], profile: null } satisfies AiProgramme, { status: 200 });
     }
 
     if (autogen) {
-      // Toujours repartir des DERNIÈRES réponses associées à cet email
-      const answers = await getAnswersForEmail(email);
-      if (!answers) {
-        // Rien trouvé dans Sheets → profil minimal + 0 séance
-        const p = buildProfileFromAnswers({ email } as any);
-        const empty: AiProgramme = { sessions: [], profile: p };
-        return NextResponse.json(empty, { status: 200 });
-      }
-      const prog = generateProgrammeFromAnswers(answers); // IA sur les dernières réponses
-      return NextResponse.json(prog satisfies GeneratedProgramme, { status: 200 });
+      // ⚙️ Génère depuis la DERNIÈRE ligne du Sheet **avec** la logique jours→séances
+      const { sessions, profile } = await planProgrammeFromEmail(email, {});
+      return NextResponse.json({ sessions, profile } satisfies AiProgramme, { status: 200 });
     }
 
-    // Pas d'autogen → renvoi “vide” (tu pourras ajouter une persistance plus tard)
+    // Pas d'autogen → renvoi “vide” (placeholder). Tu peux brancher une persistance ici si besoin.
     return NextResponse.json({ sessions: [], profile: null } satisfies AiProgramme, { status: 200 });
   } catch (err) {
     console.error("[API /programme GET] ERREUR:", err);
-    // On renvoie tout de même un JSON valide pour éviter les 500 côté client
     const safe: AiProgramme = { sessions: [], profile: null };
     return NextResponse.json(safe, { status: 200 });
   }
@@ -60,8 +57,11 @@ export async function GET(req: Request) {
 
 /* ===================== POST =====================
 Body:
-- { email, autogen: true } → génère à partir des dernières réponses (comme GET autogen)
-- { email, programme }     → (placeholder) renvoie ce que tu passes, à brancher sur un stockage si besoin
+- { email, autogen: true } → génère depuis la DERNIÈRE réponse (comme GET autogen),
+  en appliquant la logique jours→séances.
+- { email, answers }       → (optionnel) si tu as déjà les réponses (batch),
+  on évite un call sheet et on applique la même logique.
+- { email, programme }     → renvoie tel quel (placeholder persistance)
 ================================================= */
 export async function POST(req: Request) {
   try {
@@ -74,26 +74,35 @@ export async function POST(req: Request) {
     }
 
     if (body.autogen) {
-      const answers = await getAnswersForEmail(email);
-      if (!answers) {
-        const p = buildProfileFromAnswers({ email } as any);
-        const programme: AiProgramme = { sessions: [], profile: p };
-        return NextResponse.json({ ok: true, programme }, { status: 200 });
-      }
-      const programme = generateProgrammeFromAnswers(answers) as GeneratedProgramme;
-      return NextResponse.json({ ok: true, programme }, { status: 200 });
+      // Même logique que GET autogen, mais on renvoie ok:true
+      const { sessions, profile } = await planProgrammeFromEmail(email, {});
+      return NextResponse.json({ ok: true, programme: { sessions, profile } }, { status: 200 });
+    }
+
+    if (body.answers) {
+      // Si le client t'envoie déjà l'objet answers → pas besoin d'appeler le Sheet
+      const { sessions, profile } = planProgrammeFromAnswers(body.answers, {});
+      return NextResponse.json({ ok: true, programme: { sessions, profile } }, { status: 200 });
     }
 
     if (body.programme) {
-      // Ici tu pourrais persister si tu ajoutes un stockage (Redis/FS/DB).
+      // Ici tu peux persister (DB/Redis/FS) si tu ajoutes un stockage.
       const programme = body.programme as AiProgramme;
       return NextResponse.json({ ok: true, programme }, { status: 200 });
     }
 
-    return NextResponse.json({ ok: false, error: "NO_PROGRAMME" }, { status: 400 });
+    // Fallback: si rien n'est fourni, on tente quand même de générer depuis le Sheet (ancienne habitude)
+    const answers = await getAnswersForEmail(email);
+    if (answers) {
+      const { sessions, profile } = planProgrammeFromAnswers(answers, {});
+      return NextResponse.json({ ok: true, programme: { sessions, profile } }, { status: 200 });
+    }
+
+    // Rien trouvé → profil minimal
+    const p = buildProfileFromAnswers({ email } as any);
+    return NextResponse.json({ ok: true, programme: { sessions: [], profile: p } }, { status: 200 });
   } catch (err) {
     console.error("[API /programme POST] ERREUR:", err);
-    // Renvoi “ok:false” mais sans 500 pour ne pas casser le front
     return NextResponse.json({ ok: false, error: "INTERNAL" }, { status: 200 });
   }
 }
