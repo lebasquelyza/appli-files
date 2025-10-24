@@ -546,17 +546,37 @@ function parseRestToSec(r?: string) {
   if (s) return Number(s[1]);
   return 0;
 }
-function hasEquipment(ctx: Ctx, need: "bar" | "db" | "bench" | "machine" | "kb" | "bands" | "trx") {
+
+/** ✅ FIX TS: plus de comparaison avec "full" après narrowing */
+function hasEquipment(
+  ctx: Ctx,
+  need: "bar" | "db" | "bench" | "machine" | "kb" | "bands" | "trx"
+) {
+  // Si "full", tout est dispo
   if (ctx.equip === "full") return true;
-  if (need === "db") return !!ctx.equipItems.db;
-  if (need === "bar") return ctx.equip === "full" || !!ctx.equipItems.bar;
-  if (need === "bench") return !!ctx.equipItems.bench;
-  if (need === "machine") return ctx.equip === "full";
-  if (need === "kb") return !!ctx.equipItems.kb;
-  if (need === "bands") return !!ctx.equipItems.bands;
-  if (need === "trx") return !!ctx.equipItems.trx;
-  return false;
+
+  // Sinon, on ne compare plus à "full"
+  switch (need) {
+    case "db":
+      return !!ctx.equipItems.db;
+    case "bar":
+      return !!ctx.equipItems.bar;
+    case "bench":
+      return !!ctx.equipItems.bench;
+    case "machine":
+      // sans "full", on considère les machines indisponibles
+      return false;
+    case "kb":
+      return !!ctx.equipItems.kb;
+    case "bands":
+      return !!ctx.equipItems.bands;
+    case "trx":
+      return !!ctx.equipItems.trx;
+    default:
+      return false;
+  }
 }
+
 function matchesPreference(name: string, list?: string[]) {
   if (!list || list.length === 0) return false;
   const n = name.toLowerCase();
