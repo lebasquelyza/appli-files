@@ -31,6 +31,69 @@ type ProfileInput = {
   email?: string;
 };
 
+/* ====== Focus par séance (split) ====== */
+type StrengthFocus =
+  | "full"
+  | "bas_quads"
+  | "bas_iscios_glutes"
+  | "haut_push"
+  | "haut_pull"
+  | "haut_mix"
+  | "bras_core"; // pour hypertrophy 5–6 jours
+
+const FOCUS_LABEL: Record<StrengthFocus, string> = {
+  full: "Full body",
+  bas_quads: "Bas (quadris)",
+  bas_iscios_glutes: "Bas (ischios/fessiers)",
+  haut_push: "Haut (poussée)",
+  haut_pull: "Haut (tirage)",
+  haut_mix: "Haut (mix)",
+  bras_core: "Bras & Core",
+};
+
+/** Plan de split en fonction du nb de séances/sem. et de l’objectif */
+function makeFocusPlan(n: number, goalKey: string): StrengthFocus[] {
+  const g = (goalKey || "general").toLowerCase();
+
+  // Hypertrophie → plus d'iso, journée Bras/Core si 5–6 jours
+  if (g === "hypertrophy") {
+    if (n <= 1) return ["full"];
+    if (n === 2) return ["bas_iscios_glutes", "haut_mix"];
+    if (n === 3) return ["bas_quads", "haut_push", "haut_pull"];
+    if (n === 4) return ["bas_quads", "haut_push", "bas_iscios_glutes", "haut_pull"];
+    if (n === 5) return ["bas_quads", "haut_push", "bas_iscios_glutes", "haut_pull", "bras_core"];
+    return ["bas_quads", "haut_push", "bas_iscios_glutes", "haut_pull", "bras_core", "full"];
+  }
+
+  // Force → gros polyarticulaires, 3–5 reps, repos long
+  if (g === "strength") {
+    if (n <= 1) return ["full"];
+    if (n === 2) return ["bas_quads", "haut_push"];
+    if (n === 3) return ["bas_quads", "haut_pull", "haut_push"];
+    if (n === 4) return ["bas_quads", "haut_push", "bas_iscios_glutes", "haut_pull"];
+    if (n === 5) return ["bas_quads", "haut_push", "bas_iscios_glutes", "haut_pull", "full"];
+    return ["bas_quads", "haut_push", "bas_iscios_glutes", "haut_pull", "full", "full"];
+  }
+
+  // Perte de gras → densité/rotation upper-lower
+  if (g === "fatloss") {
+    if (n <= 1) return ["full"];
+    if (n === 2) return ["bas_iscios_glutes", "haut_mix"];
+    if (n === 3) return ["full", "haut_mix", "bas_quads"];
+    if (n === 4) return ["bas_quads", "haut_mix", "bas_iscios_glutes", "haut_pull"];
+    if (n === 5) return ["bas_quads", "haut_mix", "bas_iscios_glutes", "haut_pull", "full"];
+    return ["bas_quads", "haut_mix", "bas_iscios_glutes", "haut_pull", "full", "full"];
+  }
+
+  // Général (fallback)
+  if (n <= 1) return ["full"];
+  if (n === 2) return ["bas_iscios_glutes", "haut_mix"];
+  if (n === 3) return ["bas_quads", "haut_push", "haut_pull"];
+  if (n === 4) return ["bas_quads", "haut_push", "bas_iscios_glutes", "haut_pull"];
+  if (n === 5) return ["bas_quads", "haut_push", "bas_iscios_glutes", "haut_pull", "full"];
+  return ["bas_quads", "haut_push", "bas_iscios_glutes", "haut_pull", "full", "haut_mix"];
+}
+
 /* ========================= API principale ========================= */
 export function planProgrammeFromProfile(
   profile: ProfileInput = {},
@@ -60,6 +123,9 @@ export function planProgrammeFromProfile(
   // Jours explicites à afficher dans les titres (Lundi, Mardi...), sinon fallback A/B/C
   const daysList = extractDaysList(profile.availabilityText);
 
+  // Plan de focus si muscu (dépend aussi de l’objectif)
+  const focusPlan = type === "muscu" ? makeFocusPlan(maxSessions, goalKey) : [];
+
   const sessions: AiSessionT[] = [];
   for (let i = 0; i < maxSessions; i++) {
     const d = addDays(today, i);
@@ -68,20 +134,22 @@ export function planProgrammeFromProfile(
     const day = String(d.getDate()).padStart(2, "0");
     const dateStr = `${y}-${m}-${day}`;
 
-    const variant = i % 3; // A/B/C
+    const variant = i % 3; // A/B/C (fallback visuel)
     const labelABC = ["A", "B", "C"][variant];
 
     // Titre logique
     const dayLabel = daysList[i] ? capitalize(daysList[i]) : labelABC;
     const singleNoDay = maxSessions === 1 && daysList.length === 0;
+    const focus: StrengthFocus | undefined = type === "muscu" ? focusPlan[i % focusPlan.length] : undefined;
+    const focusSuffix = focus ? ` · ${FOCUS_LABEL[focus]}` : "";
 
     const title = profile.prenom
       ? singleNoDay
-        ? `Séance pour ${profile.prenom}`
-        : `Séance pour ${profile.prenom} — ${dayLabel}`
+        ? `Séance pour ${profile.prenom}${focusSuffix}`
+        : `Séance pour ${profile.prenom} — ${dayLabel}${focusSuffix}`
       : singleNoDay
-      ? defaultBaseTitle(type)
-      : `${defaultBaseTitle(type)} — ${dayLabel}`;
+      ? `${defaultBaseTitle(type)}${focusSuffix}`
+      : `${defaultBaseTitle(type)} — ${dayLabel}${focusSuffix}`;
 
     const exos =
       type === "cardio"
@@ -90,7 +158,7 @@ export function planProgrammeFromProfile(
         ? buildMobility(ctx)
         : type === "hiit"
         ? buildHiit(ctx)
-        : buildStrength(ctx, variant); // muscu
+        : buildStrengthFocused(ctx, focus ?? "full", goalKey); // ✅ muscu ultra-ciblée par objectif
 
     sessions.push({
       id: `beton-${dateStr}-${i}-${Math.random().toString(36).slice(2, 7)}`,
@@ -114,12 +182,10 @@ function availabilityTextFromAnswers(answers: any): string | undefined {
     /(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|week\s*-?\s*end|weekend|jours?\s+par\s+semaine|\b\d+\s*(x|fois|jours?))/i;
 
   const candidates: string[] = [];
-  // prioriser colonnes “classiques”
   for (const k of ["daysPerWeek", "jours", "séances/semaine", "seances/semaine", "col_I"]) {
     const v = answers[k];
     if (typeof v === "string") candidates.push(v);
   }
-  // puis scanner toutes les valeurs texte
   for (const k of Object.keys(answers)) {
     const v = answers[k];
     if (typeof v === "string") candidates.push(v);
@@ -376,62 +442,100 @@ function buildHiit(ctx: Ctx): NormalizedExercise[] {
   return out;
 }
 
-/* ========================= Musculation (A/B/C) ========================= */
-function buildStrength(ctx: Ctx, variantIdx: number): NormalizedExercise[] {
-  const { equip } = ctx;
+/* ========================= Musculation ultra-ciblée ========================= */
+function buildStrengthFocused(ctx: Ctx, focus: StrengthFocus, goalKey: string): NormalizedExercise[] {
+  const g = (goalKey || "general").toLowerCase();
   const out: NormalizedExercise[] = [];
 
-  // Échauffement
+  // Échauffement commun
   out.push({ name: "Mobilité dynamique (hanches/épaules)", reps: "3–5 min", block: "echauffement" });
 
-  if (equip === "full") {
-    if (variantIdx === 0) {
-      out.push(adjustForInjuries(ctx, barbell("Back Squat", ctx)));
-      out.push(adjustForInjuries(ctx, barbell("Bench Press", ctx, "haut")));
-      out.push(adjustForInjuries(ctx, barbell("Row à la barre", ctx, "dos")));
-    } else if (variantIdx === 1) {
-      out.push(
-        adjustForInjuries(ctx, barbell("Soulevé de terre (technique)", ctx, "dos", { notes: "Charge modérée, technique propre." }))
-      );
-      out.push(adjustForInjuries(ctx, cableOrMachine("Tirage vertical", ctx, "dos")));
-      out.push(adjustForInjuries(ctx, barbell("Développé militaire", ctx, "haut")));
-    } else {
-      out.push(adjustForInjuries(ctx, barbell("Front Squat", ctx)));
-      out.push(adjustForInjuries(ctx, dumbbell("Développé haltères incliné", ctx, "haut")));
-      out.push(adjustForInjuries(ctx, cableOrMachine("Tractions assistées / Tirage poulie", ctx, "dos")));
+  // Helpers locaux
+  const add = (ex: NormalizedExercise) => out.push(adjustForInjuries(ctx, ex));
+  const addIso = (name: string, area?: "bas" | "haut" | "dos", extra?: Partial<NormalizedExercise>) =>
+    add(dumbbell(name, ctx, area, { reps: g === "hypertrophy" ? "10–15" : "8–12", ...extra }));
+
+  const heavy = (ex: NormalizedExercise) => {
+    if (g === "strength") {
+      ex.reps = "3–5";
+      ex.rest = "120–150s";
     }
-  } else if (equip === "limited") {
-    if (variantIdx === 0) {
-      out.push(adjustForInjuries(ctx, dumbbell("Goblet Squat", ctx)));
-      out.push(adjustForInjuries(ctx, dumbbell("Développé haltères", ctx, "haut")));
-      out.push(adjustForInjuries(ctx, dumbbell("Rowing unilatéral", ctx, "dos", { reps: "10–12/ côté" })));
-    } else if (variantIdx === 1) {
-      out.push(adjustForInjuries(ctx, dumbbell("Fente arrière", ctx, undefined, { reps: "8–12/ côté" })));
-      out.push(adjustForInjuries(ctx, dumbbell("Élévations latérales", ctx, "haut", { reps: "12–15" })));
-      out.push(adjustForInjuries(ctx, dumbbell("Rowing buste penché", ctx, "dos")));
-    } else {
-      out.push(adjustForInjuries(ctx, dumbbell("Hip Thrust (haltère)", ctx)));
-      out.push(adjustForInjuries(ctx, bodyOrBand("Pompes surélevées", ctx, { reps: pickBodyweight(ctx.goalKey) })));
-      out.push(adjustForInjuries(ctx, dumbbell("Curl + Extension triceps", ctx, undefined, { reps: "10–12" })));
+    return ex;
+  };
+
+  const density = (ex: NormalizedExercise) => {
+    if (g === "fatloss") {
+      ex.rest = "45–60s";
+      if (!ex.sets) ex.sets = setsFor(ctx.level);
     }
-  } else {
-    // equip === "none" — poids du corps
-    if (variantIdx === 0) {
-      out.push(adjustForInjuries(ctx, body("Squat", ctx)));
-      out.push(adjustForInjuries(ctx, body("Pompes", ctx)));
-      out.push(adjustForInjuries(ctx, bodyOrBand("Row table / tirage élastique", ctx)));
-    } else if (variantIdx === 1) {
-      out.push(adjustForInjuries(ctx, body("Fente arrière", ctx, { reps: "10–15/ côté" })));
-      out.push(adjustForInjuries(ctx, body("Pompes diamant / genoux", ctx, { reps: pickBodyweight(ctx.goalKey) })));
-      out.push(adjustForInjuries(ctx, body("Superman hold", ctx, { reps: "20–30s" })));
-    } else {
-      out.push(adjustForInjuries(ctx, body("Squat sauté (technique)", ctx, { reps: "8–10" })));
-      out.push(adjustForInjuries(ctx, body("Dips banc / chaise", ctx, { reps: pickBodyweight(ctx.goalKey) })));
-      out.push(adjustForInjuries(ctx, bodyOrBand("Tirage élastique / serviette", ctx, { reps: pickBodyweight(ctx.goalKey) })));
+    return ex;
+  };
+
+  switch (focus) {
+    case "bas_quads": {
+      add(heavy(dumbbell("Goblet Squat", ctx)));
+      add(heavy(barbell("Front Squat", ctx)));
+      add(density(dumbbell("Fente arrière", ctx, undefined, { reps: g === "strength" ? "6–8/ côté" : "8–12/ côté" })));
+      if (g === "hypertrophy") addIso("Leg Extension (élastique ou machine)", "bas", { reps: "12–15" });
+      break;
+    }
+    case "bas_iscios_glutes": {
+      add(heavy(dumbbell("Hip Thrust (haltère)", ctx)));
+      add(heavy(barbell("Soulevé de terre roumain", ctx)));
+      add(density(dumbbell("Good Morning haltères", ctx, undefined, { reps: g === "strength" ? "6–8" : "10–12" })));
+      if (g === "hypertrophy") {
+        addIso("Leg Curl (élastique)", "bas", { reps: "12–15" });
+        addIso("Abduction hanches (élastique)", "bas", { reps: "12–20" });
+      }
+      break;
+    }
+    case "haut_push": {
+      add(heavy(barbell("Bench Press", ctx, "haut")));
+      add(heavy(dumbbell("Développé haltères incliné", ctx, "haut")));
+      add(density(dumbbell("Élévations latérales", ctx, "haut", { reps: g === "strength" ? "6–10" : "12–15" })));
+      if (g === "hypertrophy") {
+        addIso("Écartés (haltères/élastique)", "haut", { reps: "12–15" });
+        addIso("Triceps extension (poulie/élastique)", "haut", { reps: "10–15" });
+      }
+      break;
+    }
+    case "haut_pull": {
+      add(heavy(cableOrMachine("Tirage vertical", ctx, "dos")));
+      add(heavy(dumbbell("Rowing unilatéral", ctx, "dos", { reps: g === "strength" ? "6–8/ côté" : "10–12/ côté" })));
+      add(density(cableOrMachine("Face Pull (câble/élastique)", ctx, "dos", { reps: g === "strength" ? "8–12" : "12–15" })));
+      if (g === "hypertrophy") addIso("Curl biceps (haltères/élastique)", "haut", { reps: "10–15" });
+      break;
+    }
+    case "haut_mix": {
+      add(dumbbell("Développé haltères", ctx, "haut"));
+      add(dumbbell("Rowing buste penché", ctx, "dos"));
+      add(bodyOrBand("Pompes surélevées", ctx, { reps: pickBodyweight(ctx.goalKey) }));
+      if (g === "hypertrophy") {
+        addIso("Élévations latérales", "haut", { reps: "12–15" });
+        addIso("Curl incliné (haltères)", "haut", { reps: "10–12" });
+      }
+      break;
+    }
+    case "bras_core": {
+      addIso("Curl biceps (haltères/élastique)", "haut", { reps: "10–15" });
+      addIso("Extension triceps (poulie/élastique)", "haut", { reps: "10–15" });
+      add(body("Hollow Hold", ctx, { reps: "20–30s", rest: "45–60s", sets: 3, block: "principal" }));
+      add(body("Side Plank (gauche/droite)", ctx, { reps: "20–30s/ côté", rest: "45–60s", sets: 2, block: "principal" }));
+      break;
+    }
+    default: { // full
+      add(heavy(dumbbell("Goblet Squat", ctx)));
+      add(heavy(cableOrMachine("Tirage vertical", ctx, "dos")));
+      add(density(dumbbell("Développé haltères", ctx, "haut")));
+      if (g === "hypertrophy") {
+        addIso("Élévations latérales", "haut", { reps: "12–15" });
+        addIso("Curl biceps (élastique/haltères)", "haut", { reps: "10–12" });
+      }
+      break;
     }
   }
 
-  // Accessoires / tronc
+  // Accessoires / tronc — fin
   out.push(adjustForInjuries(ctx, { name: "Gainage planche", sets: 2, reps: "30–45s", rest: "45s", block: "fin" }));
   return out;
 }
@@ -675,3 +779,4 @@ function extractTimestampAny(a: any): number {
   }
   return 0;
 }
+
