@@ -1,26 +1,41 @@
-// apps/web/app/api/programme/route.ts — corrigé pour éviter les erreurs de build
-// "1 jour = 1 séance", "week-end = 2", "6x/6 jours = 6", etc.
-
+// apps/web/app/api/programme/route.ts — corrigé
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 
-// ✅ On utilise maintenant la seule fonction exportée du module béton
 import { planProgrammeFromProfile } from "../../../lib/coach/beton";
-
-import {
-  getAnswersForEmail, // on le garde pour POST (quand answers déjà connus) et pour fallback
-  buildProfileFromAnswers,
-} from "../../../lib/coach/ai";
+import { getAnswersForEmail, buildProfileFromAnswers } from "../../../lib/coach/ai";
 
 export const runtime = "nodejs";
 
 type AiProgramme = { sessions: any[]; profile?: any | null };
 
-/* ===================== GET =====================
-Supporte:
-- ?email=... : renvoie un programme
-- ?autogen=1 : force la génération depuis la **dernière** réponse du Sheet en appliquant la logique
-================================================= */
+/** Petite aide locale : reconstitue availabilityText depuis les réponses
+ *  (détection chiffres 1–7, “x/fois/jours”, jours nommés, week-end, etc.)
+ */
+function availabilityFromAnswers(answers: Record<string, any> | null | undefined): string | undefined {
+  if (!answers) return undefined;
+
+  const dayPat =
+    /(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|week\s*-?\s*end|weekend|jours?\s+par\s+semaine|\b[1-7]\s*(x|fois|jours?)?)/i;
+
+  const candidates: string[] = [];
+  for (const k of ["daysPerWeek", "jours", "séances/semaine", "seances/semaine", "col_I"]) {
+    const v = answers[k as keyof typeof answers];
+    if (typeof v === "string" || typeof v === "number") candidates.push(String(v));
+  }
+  for (const k of Object.keys(answers)) {
+    const v = (answers as any)[k];
+    if (typeof v === "string" || typeof v === "number") candidates.push(String(v));
+  }
+
+  const hits = candidates
+    .map((v) => String(v ?? "").trim())
+    .filter((v) => v && dayPat.test(v));
+
+  return hits.length ? hits.join(" ; ") : undefined;
+}
+
+/* ===================== GET ===================== */
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -32,18 +47,33 @@ export async function GET(req: Request) {
       .toLowerCase();
 
     if (!email) {
-      // Objet vide mais valide
-      return NextResponse.json({ sessions: [], profile: null } satisfies AiProgramme, { status: 200 });
+      return NextResponse.json(
+        { sessions: [], profile: null } satisfies AiProgramme,
+        { status: 200 }
+      );
     }
 
     if (autogen) {
-      // ⚙️ Génère depuis la DERNIÈRE ligne du Sheet **avec** la logique jours→séances
-      const { sessions, profile } = await planProgrammeFromProfile({ email });
+      // On lit la dernière ligne du Sheet, on construit un profil,
+      // on y ajoute availabilityText (avec détection des chiffres),
+      // puis on génère les séances.
+      const answers = await getAnswersForEmail(email, { fresh: true } as any);
+      if (!answers) {
+        return NextResponse.json(
+          { sessions: [], profile: { email } } satisfies AiProgramme,
+          { status: 200 }
+        );
+      }
+      const profile = buildProfileFromAnswers(answers) as any;
+      profile.availabilityText = availabilityFromAnswers(answers);
+      const { sessions } = planProgrammeFromProfile(profile);
       return NextResponse.json({ sessions, profile } satisfies AiProgramme, { status: 200 });
     }
 
-    // Pas d'autogen → renvoi “vide” (placeholder). Tu peux brancher une persistance ici si besoin.
-    return NextResponse.json({ sessions: [], profile: null } satisfies AiProgramme, { status: 200 });
+    return NextResponse.json(
+      { sessions: [], profile: null } satisfies AiProgramme,
+      { status: 200 }
+    );
   } catch (err) {
     console.error("[API /programme GET] ERREUR:", err);
     const safe: AiProgramme = { sessions: [], profile: null };
@@ -51,50 +81,55 @@ export async function GET(req: Request) {
   }
 }
 
-/* ===================== POST =====================
-Body:
-- { email, autogen: true } → génère depuis la DERNIÈRE réponse (comme GET autogen),
-  en appliquant la logique jours→séances.
-- { email, answers }       → (optionnel) si tu as déjà les réponses (batch),
-  on évite un call sheet et on applique la même logique.
-- { email, programme }     → renvoie tel quel (placeholder persistance)
-================================================= */
+/* ===================== POST ===================== */
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
     const email = String(body.email || cookies().get("app_email")?.value || "")
       .trim()
       .toLowerCase();
+
     if (!email) {
       return NextResponse.json({ ok: false, error: "NO_EMAIL" }, { status: 400 });
     }
 
     if (body.autogen) {
-      // Même logique que GET autogen, mais on renvoie ok:true
-      const { sessions, profile } = await planProgrammeFromProfile({ email });
+      const answers = await getAnswersForEmail(email, { fresh: true } as any);
+      if (!answers) {
+        return NextResponse.json(
+          { ok: true, programme: { sessions: [], profile: { email } } },
+          { status: 200 }
+        );
+      }
+      const profile = buildProfileFromAnswers(answers) as any;
+      profile.availabilityText = availabilityFromAnswers(answers);
+      const { sessions } = planProgrammeFromProfile(profile);
       return NextResponse.json({ ok: true, programme: { sessions, profile } }, { status: 200 });
     }
 
     if (body.answers) {
-      // Si le client t'envoie déjà l'objet answers → pas besoin d'appeler le Sheet
-      const { sessions, profile } = planProgrammeFromProfile(body.answers);
+      // Si on reçoit déjà les réponses, même traitement local
+      const answers = body.answers as Record<string, any>;
+      const profile = buildProfileFromAnswers(answers) as any;
+      profile.availabilityText = availabilityFromAnswers(answers);
+      const { sessions } = planProgrammeFromProfile(profile);
       return NextResponse.json({ ok: true, programme: { sessions, profile } }, { status: 200 });
     }
 
     if (body.programme) {
-      // Ici tu peux persister (DB/Redis/FS) si tu ajoutes un stockage.
       const programme = body.programme as AiProgramme;
       return NextResponse.json({ ok: true, programme }, { status: 200 });
     }
 
-    // Fallback: si rien n'est fourni, on tente quand même de générer depuis le Sheet (ancienne habitude)
+    // Fallback : on tente une génération standard à partir du Sheet
     const answers = await getAnswersForEmail(email);
     if (answers) {
-      const { sessions, profile } = planProgrammeFromProfile(answers);
+      const profile = buildProfileFromAnswers(answers) as any;
+      profile.availabilityText = availabilityFromAnswers(answers);
+      const { sessions } = planProgrammeFromProfile(profile);
       return NextResponse.json({ ok: true, programme: { sessions, profile } }, { status: 200 });
     }
 
-    // Rien trouvé → profil minimal
     const p = buildProfileFromAnswers({ email } as any);
     return NextResponse.json({ ok: true, programme: { sessions: [], profile: p } }, { status: 200 });
   } catch (err) {
@@ -102,4 +137,3 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "INTERNAL" }, { status: 200 });
   }
 }
-
