@@ -99,17 +99,33 @@ export function planProgrammeFromProfile(
 
     const targetKey = detectedTargets[i % Math.max(1, detectedTargets.length)];
 
+    // ✅ Remplace defaultBaseTitle par une logique simple
+    const baseTitle =
+      type === "cardio"
+        ? "Cardio"
+        : type === "mobilité"
+        ? "Mobilité"
+        : type === "hiit"
+        ? "HIIT"
+        : "Séance";
+
     let title = "";
     let exos: NormalizedExercise[] = [];
 
     if (type !== "muscu") {
       title = profile.prenom
-        ? singleNoDay ? `${defaultBaseTitle(type)}` : `${defaultBaseTitle(type)} — ${dayLabel}`
-        : singleNoDay ? `${defaultBaseTitle(type)}` : `${defaultBaseTitle(type)} — ${dayLabel}`;
+        ? singleNoDay
+          ? `${baseTitle}`
+          : `${baseTitle} — ${dayLabel}`
+        : singleNoDay
+        ? `${baseTitle}`
+        : `${baseTitle} — ${dayLabel}`;
       exos =
-        type === "cardio" ? buildCardio(ctx, variant)
-        : type === "mobilité" ? buildMobility(ctx)
-        : buildHiit(ctx);
+        type === "cardio"
+          ? buildCardio(ctx, variant)
+          : type === "mobilité"
+          ? buildMobility(ctx)
+          : buildHiit(ctx);
     } else if (targetKey) {
       const targetLabel = TARGET_LABEL[targetKey] || targetKey;
       title = profile.prenom
@@ -117,19 +133,19 @@ export function planProgrammeFromProfile(
           ? `Séance pour ${profile.prenom} — ${targetLabel}`
           : `Séance pour ${profile.prenom} — ${dayLabel} · ${targetLabel}`
         : singleNoDay
-          ? `Séance — ${targetLabel}`
-          : `Séance — ${dayLabel} · ${targetLabel}`;
+        ? `Séance — ${targetLabel}`
+        : `Séance — ${dayLabel} · ${targetLabel}`;
       exos = buildStrengthTargeted(ctx, targetKey, goalKey, profile);
     } else {
-      const focus: StrengthFocus | undefined = undefined; // 👈 plus de référence à makeFocusPlan
+      const focus: StrengthFocus | undefined = undefined;
       const focusSuffix = focus ? ` · ${FOCUS_LABEL[focus]}` : "";
       title = profile.prenom
         ? singleNoDay
           ? `Séance pour ${profile.prenom}${focusSuffix}`
           : `Séance pour ${profile.prenom} — ${dayLabel}${focusSuffix}`
         : singleNoDay
-          ? `${defaultBaseTitle(type)}${focusSuffix}`
-          : `${defaultBaseTitle(type)} — ${dayLabel}${focusSuffix}`;
+        ? `${baseTitle}${focusSuffix}`
+        : `${baseTitle} — ${dayLabel}${focusSuffix}`;
       exos = buildStrengthFocused(ctx, focus ?? "full", goalKey, profile);
     }
 
@@ -182,7 +198,7 @@ function extractDaysList(text?: string | null): string[] {
   return out;
 }
 
-function availabilityTextFromAnswers(answers: any): string | undefined {
+export function availabilityTextFromAnswers(answers: any): string | undefined {
   if (!answers) return undefined;
 
   // ✅ Détection chiffres 1 à 7 + jours/semaine
@@ -206,21 +222,7 @@ function availabilityTextFromAnswers(answers: any): string | undefined {
   return hits.length ? hits.join(" ; ") : undefined;
 }
 
-// 📝 le reste du fichier (buildCardio, buildMobility, buildHiit, muscu, etc.)
-// reste **inchangé** ✅
-
-/* ========================= Contexte & utils ========================= */
-type Ctx = {
-  level: "debutant" | "intermediaire" | "avance";
-  equip: "none" | "limited" | "full";
-  minutes: number;
-  goalKey: string;
-  injuries: Injuries;
-  equipItems: Items;
-};
-type Injuries = { back?: boolean; shoulder?: boolean; knee?: boolean; wrist?: boolean; hip?: boolean; ankle?: boolean; elbow?: boolean; };
-type Items = { bands?: boolean; kb?: boolean; trx?: boolean; bench?: boolean; bar?: boolean; db?: boolean; bike?: boolean; rower?: boolean; treadmill?: boolean; };
-
+/* ========================= Fonctions utilitaires ========================= */
 function clamp(n: number, a: number, b: number) { return Math.max(a, Math.min(b, n)); }
 function addDays(d: Date, n: number) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
 function defaultTime(goal?: string) {
@@ -244,6 +246,8 @@ function inferLevel(age?: number): "debutant" | "intermediaire" | "avance" {
   if (age > 50) return "debutant";
   return "intermediaire";
 }
+
+// 🔸 le reste du fichier (buildCardio, buildMobility, buildHiit, buildStrengthTargeted, buildStrengthFocused, etc.) reste inchangé
 
 /* ========================= Normalisations ========================= */
 function normalizeInjuries(list?: string[]): Injuries {
