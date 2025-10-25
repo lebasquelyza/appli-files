@@ -4,12 +4,8 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 
-// On utilise maintenant le builder du module béton, qui applique l'inférence
-// du nombre de séances depuis les réponses du Sheet.
-import {
-  planProgrammeFromEmail,
-  planProgrammeFromAnswers,
-} from "../../../lib/coach/beton";
+import { planProgrammeFromProfile } from "../../../lib/coach/beton";
+
 
 import {
   getAnswersForEmail, // on le garde pour POST (quand answers déjà connus) et pour fallback
