@@ -54,40 +54,6 @@ const FOCUS_LABEL: Record<StrengthFocus, string> = {
   bras_core: "Bras & Core",
 };
 
-function makeFocusPlan(n: number, goalKey: string): StrengthFocus[] {
-  const g = (goalKey || "general").toLowerCase();
-  if (g === "hypertrophy") {
-    if (n <= 1) return ["full"];
-    if (n === 2) return ["bas_iscios_glutes", "haut_mix"];
-    if (n === 3) return ["bas_quads", "haut_push", "haut_pull"];
-    if (n === 4) return ["bas_quads", "haut_push", "bas_iscios_glutes", "haut_pull"];
-    if (n === 5) return ["bas_quads", "haut_push", "bas_iscios_glutes", "haut_pull", "bras_core"];
-    return ["bas_quads", "haut_push", "bas_iscios_glutes", "haut_pull", "bras_core", "full"];
-  }
-  if (g === "strength") {
-    if (n <= 1) return ["full"];
-    if (n === 2) return ["bas_quads", "haut_push"];
-    if (n === 3) return ["bas_quads", "haut_pull", "haut_push"];
-    if (n === 4) return ["bas_quads", "haut_push", "bas_iscios_glutes", "haut_pull"];
-    if (n === 5) return ["bas_quads", "haut_push", "bas_iscios_glutes", "haut_pull", "full"];
-    return ["bas_quads", "haut_push", "bas_iscios_glutes", "haut_pull", "full", "full"];
-  }
-  if (g === "fatloss") {
-    if (n <= 1) return ["full"];
-    if (n === 2) return ["bas_iscios_glutes", "haut_mix"];
-    if (n === 3) return ["full", "haut_mix", "bas_quads"];
-    if (n === 4) return ["bas_quads", "haut_mix", "bas_iscios_glutes", "haut_pull"];
-    if (n === 5) return ["bas_quads", "haut_mix", "bas_iscios_glutes", "haut_pull", "full"];
-    return ["bas_quads", "haut_mix", "bas_iscios_glutes", "haut_pull", "full", "full"];
-  }
-  if (n <= 1) return ["full"];
-  if (n === 2) return ["bas_iscios_glutes", "haut_mix"];
-  if (n === 3) return ["bas_quads", "haut_push", "haut_pull"];
-  if (n === 4) return ["bas_quads", "haut_push", "bas_iscios_glutes", "haut_pull"];
-  if (n === 5) return ["bas_quads", "haut_push", "bas_iscios_glutes", "haut_pull", "full"];
-  return ["bas_quads", "haut_push", "bas_iscios_glutes", "haut_pull", "full", "haut_mix"];
-}
-
 /* ========================= API principale ========================= */
 export function planProgrammeFromProfile(
   profile: ProfileInput = {},
@@ -184,21 +150,24 @@ export function planProgrammeFromProfile(
   return { sessions };
 }
 
-/* ========================= Génération depuis le Sheet (optionnel) ========================= */
+/* ========================= Génération depuis le Sheet (ajout detection chiffres) ========================= */
 function availabilityTextFromAnswers(answers: any): string | undefined {
   if (!answers) return undefined;
+
+  // ✅ Ajout : détection des chiffres seuls, ex: "5", "5x", "5 jours"
   const dayPat =
-    /(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|week\s*-?\s*end|weekend|jours?\s+par\s+semaine|\b\d+\s*(x|fois|jours?))/i;
+    /(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|week\s*-?\s*end|weekend|jours?\s+par\s+semaine|\b\d+\s*(x|fois|jours?)?)/i;
 
   const candidates: string[] = [];
   for (const k of ["daysPerWeek", "jours", "séances/semaine", "seances/semaine", "col_I"]) {
     const v = answers[k];
-    if (typeof v === "string") candidates.push(v);
+    if (typeof v === "string" || typeof v === "number") candidates.push(String(v));
   }
   for (const k of Object.keys(answers)) {
     const v = answers[k];
-    if (typeof v === "string") candidates.push(v);
+    if (typeof v === "string" || typeof v === "number") candidates.push(String(v));
   }
+
   const hits = candidates
     .map((v) => String(v ?? "").trim())
     .filter((v) => v && dayPat.test(v));
@@ -206,99 +175,26 @@ function availabilityTextFromAnswers(answers: any): string | undefined {
   return hits.length ? hits.join(" ; ") : undefined;
 }
 
-export async function planProgrammeFromEmail(
-  email: string,
-  opts: PlanOptions = {}
-): Promise<{ sessions: AiSessionT[]; profile: Partial<ProfileT> }> {
-  const cleanEmail = normalizeEmail(email);
-  const res = await _getAnswersForEmail(cleanEmail, { fresh: true } as any);
-  const last = Array.isArray(res)
-    ? res.slice().sort((a, b) => extractTimestampAny(a) - extractTimestampAny(b)).at(-1) ?? res[0]
-    : res;
-
-  let built: Partial<ProfileT> & { availabilityText?: string } = {};
-  if (last) {
-    built = (_buildProfileFromAnswers(last) || {}) as Partial<ProfileT> & { availabilityText?: string };
-    built.availabilityText = built.availabilityText || availabilityTextFromAnswers(last);
-  } else {
-    built = { email: cleanEmail } as Partial<ProfileT>;
-  }
-
-  // NEW: cibles détectées
-  const targets = parseTargetsFromText((built as any)?.objectif || (built as any)?.goal || "");
-  (built as any).targets = targets;
-
-  const inferred = inferMaxSessions(built.availabilityText);
-  const maxSessions = clamp(opts.maxSessions ?? inferred ?? 3, 1, 6);
-  const { sessions } = planProgrammeFromProfile(built as unknown as ProfileInput, {
-    ...opts,
-    maxSessions,
-  });
-  return { sessions, profile: built };
-}
-
-export function planProgrammeFromAnswers(
-  answers: any,
-  opts: PlanOptions = {}
-): { sessions: AiSessionT[]; profile: Partial<ProfileT> } {
-  const built = (_buildProfileFromAnswers(answers) || {}) as Partial<ProfileT> & {
-    availabilityText?: string;
-  };
-  const availability = built.availabilityText || availabilityTextFromAnswers(answers);
-
-  // NEW: cibles détectées
-  (built as any).targets = parseTargetsFromText((built as any)?.objectif || (built as any)?.goal || "");
-
-  const inferred = inferMaxSessions(availability);
-  const maxSessions = clamp(opts.maxSessions ?? inferred ?? 3, 1, 6);
-  const { sessions } = planProgrammeFromProfile(built as unknown as ProfileInput, {
-    ...opts,
-    maxSessions,
-  });
-  return { sessions, profile: built };
-}
-
-/* ========================= Inférence du nb de séances & Jours ========================= */
+/* ========================= Inférence du nb de séances & Jours (ajout detection chiffres) ========================= */
 const DAYS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"];
 
 function inferMaxSessions(text?: string | null): number | undefined {
   if (!text) return undefined;
   const s = String(text).toLowerCase();
 
-  // ✅ Détection aussi des chiffres seuls ou avec suffixes
+  // ✅ Ajout : détection aussi des chiffres seuls
   const numMatch = s.match(/\b(\d{1,2})\s*(x|fois|jours?)?\b/);
   if (numMatch) {
     const n = parseInt(numMatch[1], 10);
     if (!Number.isNaN(n)) return clamp(n, 1, 6);
   }
 
-  // ✅ Cas “toute la semaine” ou “tous les jours”
   if (/toute?\s+la\s+semaine|tous?\s+les\s+jours/.test(s)) return 6;
 
-  // ✅ Détection des jours de la semaine
   const days = extractDaysList(s);
   if (days.length) return clamp(days.length, 1, 6);
 
   return undefined;
-}
-
-function extractDaysList(text?: string | null): string[] {
-  if (!text) return [];
-  const s = String(text).toLowerCase();
-  const out: string[] = [];
-  const push = (d: string) => { if (!out.includes(d)) out.push(d); };
-
-  if (/week\s*-?\s*end|weekend/.test(s)) { push("samedi"); push("dimanche"); }
-  for (const d of DAYS) if (new RegExp(`\\b${d}\\b`, "i").test(s)) push(d);
-  return out;
-}
-
-function capitalize(str: string) {
-  return str ? str.charAt(0).toUpperCase() + str.slice(1) : str;
-}
-
-function defaultBaseTitle(t: WorkoutType) {
-  return t === "cardio" ? "Cardio" : t === "mobilité" ? "Mobilité" : t === "hiit" ? "HIIT" : "Muscu";
 }
 
 /* ========================= Contexte & utils ========================= */
