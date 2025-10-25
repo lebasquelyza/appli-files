@@ -85,7 +85,7 @@ export function planProgrammeFromProfile(
       : parseTargetsFromText(profile.objectif || profile.goal || "");
 
   const daysList = extractDaysList(profile.availabilityText);
-  const focusPlan = type === "muscu" ? makeFocusPlan(maxSessions, goalKey) : [];
+ const focusPlanData = type === "muscu" ? focusPlan(maxSessions, goalKey) : [];
 
   const sessions: AiSessionT[] = [];
   for (let i = 0; i < maxSessions; i++) {
