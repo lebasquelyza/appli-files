@@ -9,6 +9,11 @@ import {
   getAnswersForEmail as _getAnswersForEmail,
   buildProfileFromAnswers as _buildProfileFromAnswers,
 } from "../ai";
+function makeFocusPlan(maxSessions: number, goalKey: string) {
+  const target = goalKey || "full";
+  return Array.from({ length: maxSessions }, () => target);
+}
+
 
 /* ========================= Types & Options ========================= */
 export type PlanOptions = {
