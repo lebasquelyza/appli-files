@@ -154,9 +154,9 @@ export function planProgrammeFromProfile(
 function availabilityTextFromAnswers(answers: any): string | undefined {
   if (!answers) return undefined;
 
-  // ✅ Ajout : détection des chiffres seuls, ex: "5", "5x", "5 jours"
+  // ✅ Détection chiffres 1 à 7 + jours/semaine
   const dayPat =
-    /(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|week\s*-?\s*end|weekend|jours?\s+par\s+semaine|\b\d+\s*(x|fois|jours?)?)/i;
+    /(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|week\s*-?\s*end|weekend|jours?\s+par\s+semaine|\b[1-7]\s*(x|fois|jours?)?)/i;
 
   const candidates: string[] = [];
   for (const k of ["daysPerWeek", "jours", "séances/semaine", "seances/semaine", "col_I"]) {
@@ -173,7 +173,7 @@ function availabilityTextFromAnswers(answers: any): string | undefined {
     .filter((v) => v && dayPat.test(v));
 
   return hits.length ? hits.join(" ; ") : undefined;
-}
+}  // 👈 fermeture correcte ici
 
 /* ========================= Inférence du nb de séances & Jours ========================= */
 const DAYS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"];
@@ -198,6 +198,7 @@ function inferMaxSessions(text?: string | null): number | undefined {
 
   return undefined;
 }
+
 
 function extractDaysList(text?: string | null): string[] {
   if (!text) return [];
