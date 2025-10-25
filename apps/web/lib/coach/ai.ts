@@ -1,7 +1,8 @@
+// apps/web/lib/coach/ai.ts
 /** ---------------------------------------------------------------------------
  *  Public Google Sheet (CSV)
  *  - Env requis: SHEET_ID, SHEET_GID, SHEET_RANGE
- *  - On télécharge le CSV export et on parse sans lib externe.
+ *  - Télécharge le CSV export, parse sans lib, et retourne la DERNIÈRE ligne.
  *  -------------------------------------------------------------------------*/
 
 export type WorkoutType = "muscu" | "cardio" | "hiit" | "mobilité";
@@ -9,12 +10,12 @@ export type WorkoutType = "muscu" | "cardio" | "hiit" | "mobilité";
 export type NormalizedExercise = {
   name: string;
   sets?: number;
-  reps?: string;            // ex: "8–12" ou "10–12/ côté"
-  durationSec?: number;     // alternative à reps
-  rest?: string;            // "60–90s"
-  tempo?: string;           // "3011"
-  rir?: number;             // reps in reserve
-  load?: string | number;   // "léger" / "modéré" / 20kg ...
+  reps?: string;
+  durationSec?: number;
+  rest?: string;
+  tempo?: string;
+  rir?: number;
+  load?: string | number;
   block?: "echauffement" | "principal" | "accessoires" | "fin";
   equipment?: string;
   target?: string;
@@ -46,12 +47,14 @@ const SHEET_ID = process.env.SHEET_ID || "";
 const SHEET_GID = process.env.SHEET_GID || "";
 const SHEET_RANGE = process.env.SHEET_RANGE || ""; // ex: "A:Z" ou "A1:K999"
 
-function sheetCsvUrl(): string {
+function sheetCsvUrl(cacheBust?: boolean): string {
   const base = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(SHEET_ID)}/export?format=csv`;
   const qp = new URLSearchParams();
   if (SHEET_GID) qp.set("gid", SHEET_GID);
   if (SHEET_RANGE) qp.set("range", SHEET_RANGE);
-  return `${base}&${qp.toString()}`;
+  if (cacheBust) qp.set("_", String(Date.now())); // ✅ bust cache Google
+  const qs = qp.toString();
+  return qs ? `${base}&${qs}` : base;
 }
 
 // --- Petit cache mémoire (TTL) ---
@@ -95,9 +98,9 @@ function parseCSV(text: string): string[][] {
 }
 
 // --- CSV fetch avec option fresh ---
-async function fetchSheetCSVRaw(): Promise<string> {
+async function fetchSheetCSVRaw(fresh = false): Promise<string> {
   if (!SHEET_ID || !SHEET_GID) throw new Error("SHEET_ID et SHEET_GID requis.");
-  const url = sheetCsvUrl();
+  const url = sheetCsvUrl(!!fresh);
   const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) throw new Error(`CSV fetch failed (${res.status})`);
   return res.text();
@@ -109,7 +112,7 @@ async function fetchSheetCSV(fresh = false): Promise<string[][]> {
   if (!fresh && cached && now - cached.at < CACHE_TTL_MS) {
     return parseCSV(cached.text);
   }
-  const text = await fetchSheetCSVRaw();
+  const text = await fetchSheetCSVRaw(!!fresh);
   (global as any)[GLOBAL_CACHE_KEY] = { at: now, text };
   return parseCSV(text);
 }
@@ -118,7 +121,6 @@ async function fetchSheetCSV(fresh = false): Promise<string[][]> {
 type ColIdxMap = { [key: string]: number };
 
 // Par défaut si pas d’en-têtes: A=0, B=1, C=2, D=3, E=4, F=5, G=6, H=7, I=8, J=9, K=10
-// On veut B=1 (prenom), C=2 (age), G=6 (objectif), K=10 (email par défaut si override via env), etc.
 const DEFAULT_IDX: ColIdxMap = { prenom: 1, age: 2, objectif: 6, email: 9, ts: 0 };
 
 function toIndexFromLetter(letter: string): number {
@@ -134,7 +136,7 @@ function detectIndexes(rows: string[][]): ColIdxMap {
   const map: ColIdxMap = { ...DEFAULT_IDX };
   const find = (keys: string[]) => header.findIndex((h) => keys.includes(h));
 
-  const emailIdx = find(["email", "e-mail", "mail"]);
+  const emailIdx = find(["email", "e-mail", "mail", "adresse e-mail", "adresse email"]);
   if (emailIdx >= 0) map.email = emailIdx;
 
   const prenomIdx = find(["prenom", "prénom", "first name", "firstname"]);
@@ -153,6 +155,7 @@ function detectIndexes(rows: string[][]): ColIdxMap {
     "submitted at",
     "horodatage",
     "date de soumission",
+    "date/heure",
   ]);
   if (tsIdx >= 0) map.ts = tsIdx;
 
@@ -190,6 +193,36 @@ function normalizeGoal(input?: string): string {
   return "general";
 }
 
+/* ===================== Horodatage robuste ===================== */
+function parseTimestampLoose(input: any): number {
+  if (!input) return 0;
+  const s = String(input).trim();
+
+  // 1) Essai natif
+  let t = Date.parse(s);
+  if (!Number.isNaN(t)) return t;
+
+  // 2) Formats FR : "DD/MM/YYYY HH:mm[:ss]" ou "DD-MM-YYYY HH:mm"
+  const m = s.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+  if (m) {
+    const [, d, mo, y, hh = "0", mm = "0", ss = "0"] = m;
+    const Y = Number((y.length === 2 ? "20" + y : y));
+    const date = new Date(
+      Y,
+      Number(mo) - 1,
+      Number(d),
+      Number(hh),
+      Number(mm),
+      Number(ss)
+    );
+    const tt = date.getTime();
+    if (!Number.isNaN(tt)) return tt;
+  }
+
+  // 3) Fallback
+  return 0;
+}
+
 /** ============================================================================
  *  API publique consommée par les pages
  *  ==========================================================================*/
@@ -207,7 +240,9 @@ export async function getAnswersForEmail(
 
   const idx = detectIndexes(rows);
   const header = rows[0] || [];
-  const hasHeader = (header[idx.email] || "").toString().toLowerCase() === "email";
+  const hasHeader = (header[idx.email] || "").toString().toLowerCase() === "email"
+    || (header[idx.email] || "").toString().toLowerCase() === "adresse e-mail"
+    || (header[idx.email] || "").toString().toLowerCase() === "adresse email";
   const start = hasHeader ? 1 : 0;
 
   let latest: { row: string[]; ts: number; i: number } | null = null;
@@ -218,13 +253,9 @@ export async function getAnswersForEmail(
     const rowMail = String(row[idx.email] || "").trim().toLowerCase();
     if (rowMail !== emailLc) continue;
 
-    let tsNum = 0;
-    const tsRaw = row[idx.ts];
-    if (tsRaw) {
-      const t = new Date(tsRaw).getTime();
-      if (!Number.isNaN(t)) tsNum = t;
-    }
-    // si pas de timestamp exploitable → on prend la dernière occurrence
+    const tsNum = parseTimestampLoose(row[idx.ts]);
+
+    // Règle: timestamp le plus récent, et si égalité → la ligne la plus basse (i le plus grand)
     if (!latest || tsNum > latest.ts || (tsNum === latest.ts && i > latest.i)) {
       latest = { row, ts: tsNum, i };
     }
@@ -361,7 +392,6 @@ export function generateProgrammeFromAnswers(ans: Record<string, any>): { sessio
     equipLevel,
     timePerSession,
     level,
-    // Ces deux champs sont “bonus” pour futures évolutions du moteur
     injuries,
     equipItems,
   } as any;
@@ -372,6 +402,5 @@ export function generateProgrammeFromAnswers(ans: Record<string, any>): { sessio
 
 // 4) Sessions “stockées” (stub) — ici on retourne vide pour laisser la génération locale prendre le relais
 export async function getAiSessions(_email: string): Promise<AiSession[]> {
-  // Branche ici une DB/Supabase si tu veux persister les programmes.
   return [];
 }
