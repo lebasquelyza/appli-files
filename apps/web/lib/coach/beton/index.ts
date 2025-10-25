@@ -24,15 +24,14 @@ type ProfileInput = {
   equipLevel?: "none" | "limited" | "full";
   timePerSession?: number;
   level?: "debutant" | "intermediaire" | "avance";
-  injuries?: string[]; // ex: ["dos","epaules","genoux"]
-  equipItems?: string[]; // ex: ["élastiques","kettlebell","trx"]
-  /** Texte libre de dispo: “lundi mardi”, “week-end”, “6 jours par semaine”, “3x”, etc. */
+  injuries?: string[];
+  equipItems?: string[];
   availabilityText?: string;
   email?: string;
-
-  // préférences (facultatif si non présent dans le Sheet)
-  likes?: string[];    // ex: ["pompes","kettlebell","tractions"]
-  dislikes?: string[]; // ex: ["back squat","burpees"]
+  likes?: string[];
+  dislikes?: string[];
+  // NEW: cibles explicites détectées dans l'objectif (optionnel)
+  targets?: string[];
 };
 
 /* ====== Focus par séance (split) ====== */
@@ -43,7 +42,7 @@ type StrengthFocus =
   | "haut_push"
   | "haut_pull"
   | "haut_mix"
-  | "bras_core"; // pour hypertrophy 5–6 jours
+  | "bras_core";
 
 const FOCUS_LABEL: Record<StrengthFocus, string> = {
   full: "Full body",
@@ -55,11 +54,8 @@ const FOCUS_LABEL: Record<StrengthFocus, string> = {
   bras_core: "Bras & Core",
 };
 
-/** Plan de split en fonction du nb de séances/sem. et de l’objectif */
 function makeFocusPlan(n: number, goalKey: string): StrengthFocus[] {
   const g = (goalKey || "general").toLowerCase();
-
-  // Hypertrophie → plus d'iso, journée Bras/Core si 5–6 jours
   if (g === "hypertrophy") {
     if (n <= 1) return ["full"];
     if (n === 2) return ["bas_iscios_glutes", "haut_mix"];
@@ -68,8 +64,6 @@ function makeFocusPlan(n: number, goalKey: string): StrengthFocus[] {
     if (n === 5) return ["bas_quads", "haut_push", "bas_iscios_glutes", "haut_pull", "bras_core"];
     return ["bas_quads", "haut_push", "bas_iscios_glutes", "haut_pull", "bras_core", "full"];
   }
-
-  // Force → gros polyarticulaires, 3–5 reps, repos long
   if (g === "strength") {
     if (n <= 1) return ["full"];
     if (n === 2) return ["bas_quads", "haut_push"];
@@ -78,8 +72,6 @@ function makeFocusPlan(n: number, goalKey: string): StrengthFocus[] {
     if (n === 5) return ["bas_quads", "haut_push", "bas_iscios_glutes", "haut_pull", "full"];
     return ["bas_quads", "haut_push", "bas_iscios_glutes", "haut_pull", "full", "full"];
   }
-
-  // Perte de gras → densité/rotation upper-lower
   if (g === "fatloss") {
     if (n <= 1) return ["full"];
     if (n === 2) return ["bas_iscios_glutes", "haut_mix"];
@@ -88,8 +80,6 @@ function makeFocusPlan(n: number, goalKey: string): StrengthFocus[] {
     if (n === 5) return ["bas_quads", "haut_mix", "bas_iscios_glutes", "haut_pull", "full"];
     return ["bas_quads", "haut_mix", "bas_iscios_glutes", "haut_pull", "full", "full"];
   }
-
-  // Général (fallback)
   if (n <= 1) return ["full"];
   if (n === 2) return ["bas_iscios_glutes", "haut_mix"];
   if (n === 3) return ["bas_quads", "haut_push", "haut_pull"];
@@ -104,8 +94,6 @@ export function planProgrammeFromProfile(
   opts?: PlanOptions
 ): { sessions: AiSessionT[] } {
   const { today = new Date(), maxSessions: maxOpt } = opts ?? {};
-
-  // Inférer le nb de séances depuis le texte de disponibilités si maxSessions non fourni
   const inferred = inferMaxSessions(profile.availabilityText);
   const maxSessions = clamp(maxOpt ?? inferred ?? 3, 1, 6);
 
@@ -124,10 +112,13 @@ export function planProgrammeFromProfile(
     equipItems: normalizeItems(profile.equipItems),
   };
 
-  // Jours explicites à afficher dans les titres (Lundi, Mardi...), sinon fallback A/B/C
-  const daysList = extractDaysList(profile.availabilityText);
+  // NEW: cibles détectées dans l’objectif (optionnel)
+  const detectedTargets =
+    (profile.targets && profile.targets.length)
+      ? normalizeTargets(profile.targets)
+      : parseTargetsFromText(profile.objectif || profile.goal || "");
 
-  // Plan de focus si muscu (dépend aussi de l’objectif)
+  const daysList = extractDaysList(profile.availabilityText);
   const focusPlan = type === "muscu" ? makeFocusPlan(maxSessions, goalKey) : [];
 
   const sessions: AiSessionT[] = [];
@@ -138,31 +129,46 @@ export function planProgrammeFromProfile(
     const day = String(d.getDate()).padStart(2, "0");
     const dateStr = `${y}-${m}-${day}`;
 
-    const variant = i % 3; // A/B/C (fallback visuel)
+    const variant = i % 3;
     const labelABC = ["A", "B", "C"][variant];
-
-    // Titre logique
     const dayLabel = daysList[i] ? capitalize(daysList[i]) : labelABC;
     const singleNoDay = maxSessions === 1 && daysList.length === 0;
-    const focus: StrengthFocus | undefined = type === "muscu" ? focusPlan[i % focusPlan.length] : undefined;
-    const focusSuffix = focus ? ` · ${FOCUS_LABEL[focus]}` : "";
 
-    const title = profile.prenom
-      ? singleNoDay
-        ? `Séance pour ${profile.prenom}${focusSuffix}`
-        : `Séance pour ${profile.prenom} — ${dayLabel}${focusSuffix}`
-      : singleNoDay
-      ? `${defaultBaseTitle(type)}${focusSuffix}`
-      : `${defaultBaseTitle(type)} — ${dayLabel}${focusSuffix}`;
+    const targetKey = detectedTargets[i % Math.max(1, detectedTargets.length)];
 
-    const exos =
-      type === "cardio"
-        ? buildCardio(ctx, variant)
-        : type === "mobilité"
-        ? buildMobility(ctx)
-        : type === "hiit"
-        ? buildHiit(ctx)
-        : buildStrengthFocused(ctx, focus ?? "full", goalKey, profile); // ✅ muscu ultra personnalisée
+    let title = "";
+    let exos: NormalizedExercise[] = [];
+
+    if (type !== "muscu") {
+      title = profile.prenom
+        ? singleNoDay ? `${defaultBaseTitle(type)}` : `${defaultBaseTitle(type)} — ${dayLabel}`
+        : singleNoDay ? `${defaultBaseTitle(type)}` : `${defaultBaseTitle(type)} — ${dayLabel}`;
+      exos =
+        type === "cardio" ? buildCardio(ctx, variant)
+        : type === "mobilité" ? buildMobility(ctx)
+        : buildHiit(ctx);
+    } else if (targetKey) {
+      const targetLabel = TARGET_LABEL[targetKey] || capitalize(targetKey);
+      title = profile.prenom
+        ? singleNoDay
+          ? `Séance pour ${profile.prenom} — ${targetLabel}`
+          : `Séance pour ${profile.prenom} — ${dayLabel} · ${targetLabel}`
+        : singleNoDay
+          ? `Séance — ${targetLabel}`
+          : `Séance — ${dayLabel} · ${targetLabel}`;
+      exos = buildStrengthTargeted(ctx, targetKey, goalKey, profile);
+    } else {
+      const focus: StrengthFocus | undefined = focusPlan[i % focusPlan.length];
+      const focusSuffix = focus ? ` · ${FOCUS_LABEL[focus]}` : "";
+      title = profile.prenom
+        ? singleNoDay
+          ? `Séance pour ${profile.prenom}${focusSuffix}`
+          : `Séance pour ${profile.prenom} — ${dayLabel}${focusSuffix}`
+        : singleNoDay
+          ? `${defaultBaseTitle(type)}${focusSuffix}`
+          : `${defaultBaseTitle(type)} — ${dayLabel}${focusSuffix}`;
+      exos = buildStrengthFocused(ctx, focus ?? "full", goalKey, profile);
+    }
 
     sessions.push({
       id: `beton-${dateStr}-${i}-${Math.random().toString(36).slice(2, 7)}`,
@@ -218,6 +224,10 @@ export async function planProgrammeFromEmail(
     built = { email: cleanEmail } as Partial<ProfileT>;
   }
 
+  // NEW: cibles détectées
+  const targets = parseTargetsFromText((built as any)?.objectif || (built as any)?.goal || "");
+  (built as any).targets = targets;
+
   const inferred = inferMaxSessions(built.availabilityText);
   const maxSessions = clamp(opts.maxSessions ?? inferred ?? 3, 1, 6);
   const { sessions } = planProgrammeFromProfile(built as unknown as ProfileInput, {
@@ -235,6 +245,10 @@ export function planProgrammeFromAnswers(
     availabilityText?: string;
   };
   const availability = built.availabilityText || availabilityTextFromAnswers(answers);
+
+  // NEW: cibles détectées
+  (built as any).targets = parseTargetsFromText((built as any)?.objectif || (built as any)?.goal || "");
+
   const inferred = inferMaxSessions(availability);
   const maxSessions = clamp(opts.maxSessions ?? inferred ?? 3, 1, 6);
   const { sessions } = planProgrammeFromProfile(built as unknown as ProfileInput, {
@@ -263,29 +277,17 @@ function inferMaxSessions(text?: string | null): number | undefined {
 
   return undefined;
 }
-
 function extractDaysList(text?: string | null): string[] {
   if (!text) return [];
   const s = String(text).toLowerCase();
   const out: string[] = [];
-  const push = (d: string) => {
-    if (!out.includes(d)) out.push(d);
-  };
+  const push = (d: string) => { if (!out.includes(d)) out.push(d); };
 
-  if (/week\s*-?\s*end|weekend/.test(s)) {
-    push("samedi");
-    push("dimanche");
-  }
-  for (const d of DAYS) {
-    if (new RegExp(`\\b${d}\\b`, "i").test(s)) push(d);
-  }
+  if (/week\s*-?\s*end|weekend/.test(s)) { push("samedi"); push("dimanche"); }
+  for (const d of DAYS) if (new RegExp(`\\b${d}\\b`, "i").test(s)) push(d);
   return out;
 }
-
-function capitalize(str: string) {
-  return str ? str.charAt(0).toUpperCase() + str.slice(1) : str;
-}
-
+function capitalize(str: string) { return str ? str.charAt(0).toUpperCase() + str.slice(1) : str; }
 function defaultBaseTitle(t: WorkoutType) {
   return t === "cardio" ? "Cardio" : t === "mobilité" ? "Mobilité" : t === "hiit" ? "HIIT" : "Muscu";
 }
@@ -299,50 +301,19 @@ type Ctx = {
   injuries: Injuries;
   equipItems: Items;
 };
+type Injuries = { back?: boolean; shoulder?: boolean; knee?: boolean; wrist?: boolean; hip?: boolean; ankle?: boolean; elbow?: boolean; };
+type Items = { bands?: boolean; kb?: boolean; trx?: boolean; bench?: boolean; bar?: boolean; db?: boolean; bike?: boolean; rower?: boolean; treadmill?: boolean; };
 
-type Injuries = {
-  back?: boolean;
-  shoulder?: boolean;
-  knee?: boolean;
-  wrist?: boolean;
-  hip?: boolean;
-  ankle?: boolean;
-  elbow?: boolean;
-};
-type Items = {
-  bands?: boolean;
-  kb?: boolean;
-  trx?: boolean;
-  bench?: boolean;
-  bar?: boolean;
-  db?: boolean;
-  bike?: boolean;
-  rower?: boolean;
-  treadmill?: boolean;
-};
-
-function clamp(n: number, a: number, b: number) {
-  return Math.max(a, Math.min(b, n));
-}
-function addDays(d: Date, n: number) {
-  const x = new Date(d);
-  x.setDate(x.getDate() + n);
-  return x;
-}
-
+function clamp(n: number, a: number, b: number) { return Math.max(a, Math.min(b, n)); }
+function addDays(d: Date, n: number) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
 function defaultTime(goal?: string) {
   switch ((goal ?? "").toLowerCase()) {
-    case "endurance":
-      return 35;
-    case "mobility":
-      return 25;
-    case "fatloss":
-      return 35;
-    default:
-      return 45;
+    case "endurance": return 35;
+    case "mobility": return 25;
+    case "fatloss": return 35;
+    default: return 45;
   }
 }
-
 function pickType(goal?: string, age?: number): WorkoutType {
   const g = (goal ?? "").toLowerCase();
   if (g === "endurance") return "cardio";
@@ -350,7 +321,6 @@ function pickType(goal?: string, age?: number): WorkoutType {
   if (g === "fatloss" && (age ?? 0) > 45) return "hiit";
   return "muscu";
 }
-
 function inferLevel(age?: number): "debutant" | "intermediaire" | "avance" {
   if (!age) return "intermediaire";
   if (age < 25) return "intermediaire";
@@ -411,7 +381,6 @@ function buildCardio(ctx: Ctx, variantIdx: number): NormalizedExercise[] {
   }
   return [warm, main, cool];
 }
-
 function buildMobility(_ctx: Ctx): NormalizedExercise[] {
   return [
     { name: "Respiration diaphragmatique", reps: "2–3 min", block: "echauffement" },
@@ -420,31 +389,22 @@ function buildMobility(_ctx: Ctx): NormalizedExercise[] {
     { name: "Down-Dog → Cobra", reps: "6–8", block: "fin" },
   ];
 }
-
 function buildHiit(ctx: Ctx): NormalizedExercise[] {
   const out: NormalizedExercise[] = [];
   out.push({ name: "Air Squats", reps: "40s", rest: "20s", block: "principal" });
   out.push({ name: "Mountain Climbers", reps: "40s", rest: "20s", block: "principal" });
-  out.push(
-    adjustForInjuries(ctx, {
-      name: "Burpees (option sans saut)",
-      reps: "30–40s",
-      rest: "30–40s",
-      block: "principal",
-      notes: "Retire le saut/impact si genoux sensibles.",
-    })
-  );
+  out.push(adjustForInjuries(ctx, { name: "Burpees (option sans saut)", reps: "30–40s", rest: "30–40s", block: "principal", notes: "Retire le saut/impact si genoux sensibles." }));
   return out;
 }
 
-/* ========================= Sélection dynamique Muscu ========================= */
+/* ========================= Sélection dynamique Muscu (SPLIT existant) ========================= */
 type PoolItem = {
   name: string;
   need?: ("bar" | "db" | "bench" | "machine" | "kb" | "bands" | "trx")[];
   fallback?: string;
   area?: "bas" | "haut" | "dos";
   kind?: "main" | "assist" | "iso" | "core";
-  contra?: (inj: Injuries) => boolean; // si true → exclure
+  contra?: (inj: Injuries) => boolean;
 };
 
 const POOLS: Record<StrengthFocus, PoolItem[]> = {
@@ -537,7 +497,7 @@ function parseRestToSec(r?: string) {
   return 0;
 }
 
-/** ✅ FIX TS: plus de comparaison avec "full" après narrowing */
+/** Equipements */
 function hasEquipment(
   ctx: Ctx,
   need: "bar" | "db" | "bench" | "machine" | "kb" | "bands" | "trx"
@@ -554,7 +514,6 @@ function hasEquipment(
     default: return false;
   }
 }
-
 function matchesPreference(name: string, list?: string[]) {
   if (!list || list.length === 0) return false;
   const n = name.toLowerCase();
@@ -564,7 +523,184 @@ function estimateTotalMinutes(list: NormalizedExercise[], goal: string) {
   return list.reduce((sum, e) => sum + estimateExerciseMinutes(e, goal), 0);
 }
 
-/* ========================= Musculation ultra-personnalisée ========================= */
+/* ========================= MUSCU ciblée par muscle (NOUVEAU) ========================= */
+type TargetKey = "shoulders"|"quads"|"hams_glutes"|"back"|"chest"|"biceps"|"triceps"|"core"|"calves"|"full";
+export const TARGET_LABEL: Record<TargetKey,string> = {
+  shoulders: "Épaules",
+  quads: "Quadriceps",
+  hams_glutes: "Fessiers/Ischios",
+  back: "Dos",
+  chest: "Pectoraux",
+  biceps: "Biceps",
+  triceps: "Triceps",
+  core: "Abdos/Core",
+  calves: "Mollets",
+  full: "Full body",
+};
+
+// banque d’exos par cible (style simple, proche de ton exemple)
+type TP = { name: string; need?: ("bar"|"db"|"bands"|"machine"|"bench"|"trx")[]; kind?: "main"|"assist"|"iso"; fallback?: string; };
+const TARGET_POOLS: Record<TargetKey, TP[]> = {
+  shoulders: [
+    { name: "Développé militaire", need:["bar","bench"], kind:"main", fallback:"Développé haltères" },
+    { name: "Développé haltères", need:["db"], kind:"main", fallback:"Pompes surélevées" },
+    { name: "Élévations latérales", need:["db","bands"], kind:"iso" },
+    { name: "Oiseau haltères", need:["db"], kind:"iso", fallback:"Tirage élastique arrière" },
+    { name: "Face Pull (élastique)", need:["bands"], kind:"assist" },
+  ],
+  quads: [
+    { name: "Back Squat", need:["bar","bench"], kind:"main", fallback:"Goblet Squat" },
+    { name: "Front Squat", need:["bar"], kind:"main", fallback:"Goblet Squat" },
+    { name: "Leg Extension", need:["machine","bands"], kind:"iso", fallback:"Squat partiel" },
+    { name: "Fente avant", kind:"assist" },
+    { name: "Presse à cuisses", need:["machine"], kind:"assist", fallback:"Fente arrière" },
+  ],
+  hams_glutes: [
+    { name: "Hip Thrust (barre/haltère)", need:["bench"], kind:"main", fallback:"Hip Thrust au sol" },
+    { name: "Soulevé de terre roumain", need:["bar"], kind:"main", fallback:"RDL haltères" },
+    { name: "Good Morning haltères", need:["db"], kind:"assist", fallback:"Pont fessier" },
+    { name: "Leg Curl (élastique)", need:["bands"], kind:"iso", fallback:"Nordic curl assisté" },
+  ],
+  back: [
+    { name: "Tractions / Tirage vertical", need:["machine","bands"], kind:"main", fallback:"Tirage élastique" },
+    { name: "Rowing unilatéral", need:["db"], kind:"main", fallback:"Row avec serviette/table" },
+    { name: "Face Pull (élastique)", need:["bands"], kind:"assist", fallback:"Tirage horizontal élastique" },
+  ],
+  chest: [
+    { name: "Bench Press", need:["bar","bench"], kind:"main", fallback:"Développé haltères" },
+    { name: "Développé haltères incliné", need:["db"], kind:"main", fallback:"Pompes surélevées" },
+    { name: "Écartés haltères", need:["db"], kind:"iso", fallback:"Écartés élastique" },
+    { name: "Pompes surélevées", kind:"assist" },
+  ],
+  biceps: [
+    { name: "Curl barre", need:["bar"], kind:"main", fallback:"Curl haltères" },
+    { name: "Curl incliné (haltères)", need:["db"], kind:"iso" },
+    { name: "Curl marteau", need:["db"], kind:"iso" },
+  ],
+  triceps: [
+    { name: "Dips banc", need:["bench"], kind:"main", fallback:"Pompes serrées" },
+    { name: "Extension triceps (poulie/élastique)", need:["machine","bands"], kind:"iso", fallback:"Extension triceps haltères" },
+    { name: "Barre front", need:["bar"], kind:"assist", fallback:"Kickback haltère" },
+  ],
+  core: [
+    { name: "Gainage planche", kind:"iso" },
+    { name: "Hollow Hold", kind:"iso" },
+    { name: "Side Plank (gauche/droite)", kind:"iso" },
+    { name: "Dead Bug", kind:"assist" },
+  ],
+  calves: [
+    { name: "Mollets debout", kind:"iso" },
+    { name: "Mollets assis", kind:"iso", fallback:"Mollets debout" },
+    { name: "Sauts corde (option)", kind:"assist", fallback:"Montées sur pointes" },
+  ],
+  full: [
+    { name: "Goblet Squat", need:["db"], kind:"main" },
+    { name: "Développé haltères", need:["db"], kind:"assist", fallback:"Pompes surélevées" },
+    { name: "Rowing unilatéral", need:["db"], kind:"main", fallback:"Tirage serviette" },
+    { name: "Élévations latérales", need:["db","bands"], kind:"iso" },
+  ],
+};
+
+function normalizeTargets(list: string[]): TargetKey[] {
+  const set = new Set<TargetKey>();
+  for (const raw of list) {
+    const t = String(raw || "").toLowerCase();
+    if (/epaules|épaules|shoulder/.test(t)) set.add("shoulders");
+    else if (/quadri|quadriceps|quads?/.test(t)) set.add("quads");
+    else if (/ischio|fessier|glute|ham/.test(t)) set.add("hams_glutes");
+    else if (/dos|back|tirage/.test(t)) set.add("back");
+    else if (/pec|pectoral|chest/.test(t)) set.add("chest");
+    else if (/biceps/.test(t)) set.add("biceps");
+    else if (/triceps/.test(t)) set.add("triceps");
+    else if (/abdo|core|gainage/.test(t)) set.add("core");
+    else if (/mollet|calves?/.test(t)) set.add("calves");
+    else if (/full|tout le corps/i.test(t)) set.add("full");
+  }
+  return Array.from(set);
+}
+function parseTargetsFromText(txt: string): TargetKey[] {
+  const s = String(txt || "").toLowerCase();
+  const hits: string[] = [];
+  const add = (k: string) => hits.push(k);
+  if (/epaul|épaul|shoulder/.test(s)) add("shoulders");
+  if (/quadri|quadriceps|quads?/.test(s)) add("quads");
+  if (/ischio|fessier|glute|ham/.test(s)) add("hams_glutes");
+  if (/dos|back|tirage/.test(s)) add("back");
+  if (/pec|pector|chest/.test(s)) add("chest");
+  if (/biceps/.test(s)) add("biceps");
+  if (/triceps/.test(s)) add("triceps");
+  if (/abdo|core|gainage/.test(s)) add("core");
+  if (/mollet|calves?/.test(s)) add("calves");
+  if (/full|tout le corps/.test(s)) add("full");
+  return normalizeTargets(hits);
+}
+
+/** Génération d'une séance 100% ciblée */
+function buildStrengthTargeted(
+  ctx: Ctx,
+  target: TargetKey,
+  goalKey: string,
+  profile?: ProfileInput
+): NormalizedExercise[] {
+  const likes = profile?.likes || [];
+  const dislikes = profile?.dislikes || [];
+  const pool = (TARGET_POOLS[target] || []).slice();
+
+  const filtered = pool.filter(p => {
+    if (p.need && !p.need.every(n => hasEquipment(ctx, n as any))) {
+      if (!p.fallback) return false;
+    }
+    if (matchesPreference(p.name, dislikes)) return false;
+    return true;
+  });
+
+  // tri: préférés en premier, puis main > assist > iso
+  const kindRank: Record<NonNullable<TP["kind"]>, number> = { main: 0, assist: 1, iso: 2 };
+  filtered.sort((a, b) => {
+    const likeA = matchesPreference(a.name, likes) ? -1 : 0;
+    const likeB = matchesPreference(b.name, likes) ? -1 : 0;
+    if (likeA !== likeB) return likeA - likeB;
+    return (kindRank[a.kind || "assist"] ?? 9) - (kindRank[b.kind || "assist"] ?? 9);
+  });
+
+  const out: NormalizedExercise[] = [];
+  out.push({ name: "Activation spécifique", reps: "3–5 min", block: "echauffement" });
+
+  const targetMin = clamp(ctx.minutes, 20, 90);
+  let usedMin = 0;
+
+  for (const p of filtered) {
+    const usable = p.need && !p.need.every(n => hasEquipment(ctx, n as any)) ? (p.fallback || p.name) : p.name;
+
+    const isBW = /pompes|gainage|plank|hollow|serviette|élastique/i.test(usable);
+    const isMain = p.kind === "main";
+
+    const ex: NormalizedExercise = {
+      name: usable,
+      sets: defaultSets(ctx.level, isBW),
+      reps: defaultReps(goalKey, isMain),
+      rest: goalKey === "strength" ? "120–150s" : goalKey === "fatloss" ? "45–60s" : isMain ? "75–90s" : "60–75s",
+      tempo: tempoFor(ctx.goalKey),
+      rir: rirFor(ctx.level),
+      block: "principal",
+    };
+
+    const mins = estimateExerciseMinutes(ex, goalKey);
+    if (usedMin + mins > targetMin + 4) continue;
+
+    out.push(adjustForInjuries(ctx, ex));
+    usedMin += mins;
+
+    if (usedMin >= targetMin - 2) break;
+  }
+
+  if (estimateTotalMinutes(out, goalKey) < targetMin - 6) {
+    out.push(adjustForInjuries(ctx, { name: "Gainage planche", sets: 2, reps: "30–45s", rest: goalKey === "fatloss" ? "30–45s" : "45–60s", block: "fin" }));
+  }
+  return out;
+}
+
+/* ========================= MUSCU (sélection existante) ========================= */
 function buildStrengthFocused(
   ctx: Ctx,
   focus: StrengthFocus,
@@ -574,11 +710,7 @@ function buildStrengthFocused(
   const g = (goalKey || "general").toLowerCase();
   const out: NormalizedExercise[] = [];
 
-  out.push({
-    name: focus.startsWith("bas") ? "Activation hanches/chevilles" : "Activation épaules/omoplates",
-    reps: "3–5 min",
-    block: "echauffement",
-  });
+  out.push({ name: focus.startsWith("bas") ? "Activation hanches/chevilles" : "Activation épaules/omoplates", reps: "3–5 min", block: "echauffement" });
 
   const likes = profile?.likes || [];
   const dislikes = profile?.dislikes || [];
@@ -605,8 +737,7 @@ function buildStrengthFocused(
   let usedMin = 0;
 
   for (const p of filtered) {
-    const usableName =
-      p.need && !p.need.every((n) => hasEquipment(ctx, n)) ? p.fallback || p.name : p.name;
+    const usableName = p.need && !p.need.every((n) => hasEquipment(ctx, n)) ? p.fallback || p.name : p.name;
 
     const isBW = /pompes|hollow|plank|pont|tirage élastique|traction|row.*serviette/i.test(usableName);
     const isMain = p.kind === "main";
@@ -633,15 +764,7 @@ function buildStrengthFocused(
 
     if (usedMin >= targetMin * 0.7 && mains >= 3) {
       if (targetMin - usedMin >= 5) {
-        out.push(
-          adjustForInjuries(ctx, {
-            name: "Gainage planche",
-            sets: 2,
-            reps: "30–45s",
-            rest: g === "fatloss" ? "30–45s" : "45–60s",
-            block: "fin",
-          })
-        );
+        out.push(adjustForInjuries(ctx, { name: "Gainage planche", sets: 2, reps: "30–45s", rest: g === "fatloss" ? "30–45s" : "45–60s", block: "fin" }));
       }
       break;
     }
@@ -649,21 +772,12 @@ function buildStrengthFocused(
   }
 
   if (estimateTotalMinutes(out, g) < targetMin - 6) {
-    out.push(
-      adjustForInjuries(ctx, {
-        name: "Side Plank (gauche/droite)",
-        sets: 2,
-        reps: "20–30s/ côté",
-        rest: "45s",
-        block: "fin",
-      })
-    );
+    out.push(adjustForInjuries(ctx, { name: "Side Plank (gauche/droite)", sets: 2, reps: "20–30s/ côté", rest: "45s", block: "fin" }));
   }
-
   return out;
 }
 
-/* ========================= Ajustements (blessures & items) ========================= */
+/* ========================= Ajustements blessures & items ========================= */
 function adjustForInjuries(ctx: Ctx, ex: NormalizedExercise): NormalizedExercise {
   const e: NormalizedExercise = { ...ex };
 
@@ -680,37 +794,15 @@ function adjustForInjuries(ctx: Ctx, ex: NormalizedExercise): NormalizedExercise
   }
   if (ctx.injuries.shoulder) {
     if (/militaire|overhead|développé militaire|élevations latérales lourdes/i.test(e.name)) {
-      return swap(e, {
-        name: "Développé haltères neutre",
-        sets: e.sets ?? 3,
-        reps: repsFor(ctx.goalKey),
-        rest: "75s",
-        block: e.block,
-        equipment: "haltères",
-        notes: "Prise neutre, amplitude confortable.",
-      });
+      return swap(e, { name: "Développé haltères neutre", sets: e.sets ?? 3, reps: repsFor(ctx.goalKey), rest: "75s", block: e.block, equipment: "haltères", notes: "Prise neutre, amplitude confortable." });
     }
     if (/dips/i.test(e.name)) {
-      return swap(e, {
-        name: "Pompes surélevées",
-        sets: e.sets ?? 3,
-        reps: pickBodyweight(ctx.goalKey),
-        rest: "60–75s",
-        block: "principal",
-        equipment: "poids du corps",
-      });
+      return swap(e, { name: "Pompes surélevées", sets: e.sets ?? 3, reps: pickBodyweight(ctx.goalKey), rest: "60–75s", block: "principal", equipment: "poids du corps" });
     }
   }
   if (ctx.injuries.knee) {
     if (/sauté|jump|burpee/i.test(e.name)) {
-      return swap(e, {
-        name: "Marche rapide / step-ups bas",
-        sets: e.sets ?? 3,
-        reps: "10–12/ côté",
-        rest: "60s",
-        block: "principal",
-        notes: "Hauteur basse, sans douleur.",
-      });
+      return swap(e, { name: "Marche rapide / step-ups bas", sets: e.sets ?? 3, reps: "10–12/ côté", rest: "60s", block: "principal", notes: "Hauteur basse, sans douleur." });
     }
     if (/squat(?!.*goblet)|fente/i.test(e.name)) {
       e.notes = joinNotes(e.notes, "Amplitude contrôlée, pas de douleur, option appui/assistance.");
@@ -738,31 +830,21 @@ function adjustForInjuries(ctx: Ctx, ex: NormalizedExercise): NormalizedExercise
 
   return e;
 }
-
 function preferBackFriendly(ex: NormalizedExercise, ctx: Ctx): NormalizedExercise {
   if (/back squat|front squat/i.test(ex.name)) return dumbbell("Goblet Squat", ctx);
   if (/soulevé de terre/i.test(ex.name)) return dumbbell("Hip Thrust (haltère)", ctx);
   if (/row à la barre/i.test(ex.name)) return dumbbell("Rowing unilatéral", ctx, "dos", { reps: "10–12/ côté" });
   return ex;
 }
-
-function swap(_old: NormalizedExercise, replacement: NormalizedExercise): NormalizedExercise {
-  return { ...replacement };
-}
-function joinNotes(a?: string, b?: string) {
-  if (!a) return b || "";
-  if (!b) return a || "";
-  return `${a} ${b}`.trim();
-}
+function swap(_old: NormalizedExercise, replacement: NormalizedExercise): NormalizedExercise { return { ...replacement }; }
+function joinNotes(a?: string, b?: string) { if (!a) return b || ""; if (!b) return a || ""; return `${a} ${b}`.trim(); }
 
 /* ========================= Exercices helpers ========================= */
 function setsFor(level: "debutant" | "intermediaire" | "avance", bw = false) {
   if (bw) return level === "avance" ? 4 : 3;
   return level === "avance" ? 4 : level === "intermediaire" ? 3 : 2;
 }
-function rirFor(level: "debutant" | "intermediaire" | "avance") {
-  return level === "avance" ? 1 : 2;
-}
+function rirFor(level: "debutant" | "intermediaire" | "avance") { return level === "avance" ? 1 : 2; }
 function tempoFor(goal: string) {
   const g = goal.toLowerCase();
   if (g === "hypertrophy") return "3011";
@@ -823,4 +905,3 @@ function extractTimestampAny(a: any): number {
   }
   return 0;
 }
-
