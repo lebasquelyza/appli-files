@@ -265,18 +265,23 @@ function inferMaxSessions(text?: string | null): number | undefined {
   if (!text) return undefined;
   const s = String(text).toLowerCase();
 
-  const numMatch = s.match(/\b(\d{1,2})\s*(x|fois|jours?)\b/);
+  // ✅ Détection aussi des chiffres seuls ou avec suffixes
+  const numMatch = s.match(/\b(\d{1,2})\s*(x|fois|jours?)?\b/);
   if (numMatch) {
     const n = parseInt(numMatch[1], 10);
     if (!Number.isNaN(n)) return clamp(n, 1, 6);
   }
+
+  // ✅ Cas “toute la semaine” ou “tous les jours”
   if (/toute?\s+la\s+semaine|tous?\s+les\s+jours/.test(s)) return 6;
 
+  // ✅ Détection des jours de la semaine
   const days = extractDaysList(s);
   if (days.length) return clamp(days.length, 1, 6);
 
   return undefined;
 }
+
 function extractDaysList(text?: string | null): string[] {
   if (!text) return [];
   const s = String(text).toLowerCase();
@@ -287,7 +292,11 @@ function extractDaysList(text?: string | null): string[] {
   for (const d of DAYS) if (new RegExp(`\\b${d}\\b`, "i").test(s)) push(d);
   return out;
 }
-function capitalize(str: string) { return str ? str.charAt(0).toUpperCase() + str.slice(1) : str; }
+
+function capitalize(str: string) {
+  return str ? str.charAt(0).toUpperCase() + str.slice(1) : str;
+}
+
 function defaultBaseTitle(t: WorkoutType) {
   return t === "cardio" ? "Cardio" : t === "mobilité" ? "Mobilité" : t === "hiit" ? "HIIT" : "Muscu";
 }
