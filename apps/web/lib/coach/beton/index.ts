@@ -9,16 +9,6 @@ import {
   getAnswersForEmail as _getAnswersForEmail,
   buildProfileFromAnswers as _buildProfileFromAnswers,
 } from "../ai";
-function makeFocusPlan(maxSessions: number, goalKey: string) {
-  const target = goalKey || "full";
-  return Array.from({ length: maxSessions }, () => target);
-}
-function capitalize(str: string): string {
-  if (!str) return "";
-  return str.charAt(0).toUpperCase() + str.slice(1);
-}
-
-
 
 /* ========================= Types & Options ========================= */
 export type PlanOptions = {
@@ -29,8 +19,8 @@ export type PlanOptions = {
 type ProfileInput = {
   prenom?: string;
   age?: number;
-  objectif?: string; // libellé brut (affichage)
-  goal?: string; // clé normalisée: hypertrophy|fatloss|strength|endurance|mobility|general
+  objectif?: string;
+  goal?: string;
   equipLevel?: "none" | "limited" | "full";
   timePerSession?: number;
   level?: "debutant" | "intermediaire" | "avance";
@@ -40,7 +30,6 @@ type ProfileInput = {
   email?: string;
   likes?: string[];
   dislikes?: string[];
-  // NEW: cibles explicites détectées dans l'objectif (optionnel)
   targets?: string[];
 };
 
@@ -88,15 +77,12 @@ export function planProgrammeFromProfile(
     equipItems: normalizeItems(profile.equipItems),
   };
 
-  // NEW: cibles détectées dans l’objectif (optionnel)
   const detectedTargets =
     (profile.targets && profile.targets.length)
       ? normalizeTargets(profile.targets)
       : parseTargetsFromText(profile.objectif || profile.goal || "");
 
   const daysList = extractDaysList(profile.availabilityText);
-const focusPlanData = type === "muscu" ? makeFocusPlan(maxSessions, goalKey) : [];
-
 
   const sessions: AiSessionT[] = [];
   for (let i = 0; i < maxSessions; i++) {
@@ -108,7 +94,7 @@ const focusPlanData = type === "muscu" ? makeFocusPlan(maxSessions, goalKey) : [
 
     const variant = i % 3;
     const labelABC = ["A", "B", "C"][variant];
-    const dayLabel = daysList[i] ? capitalize(daysList[i]) : labelABC;
+    const dayLabel = daysList[i] ? daysList[i] : labelABC;
     const singleNoDay = maxSessions === 1 && daysList.length === 0;
 
     const targetKey = detectedTargets[i % Math.max(1, detectedTargets.length)];
@@ -125,7 +111,7 @@ const focusPlanData = type === "muscu" ? makeFocusPlan(maxSessions, goalKey) : [
         : type === "mobilité" ? buildMobility(ctx)
         : buildHiit(ctx);
     } else if (targetKey) {
-      const targetLabel = TARGET_LABEL[targetKey] || capitalize(targetKey);
+      const targetLabel = TARGET_LABEL[targetKey] || targetKey;
       title = profile.prenom
         ? singleNoDay
           ? `Séance pour ${profile.prenom} — ${targetLabel}`
@@ -135,7 +121,7 @@ const focusPlanData = type === "muscu" ? makeFocusPlan(maxSessions, goalKey) : [
           : `Séance — ${dayLabel} · ${targetLabel}`;
       exos = buildStrengthTargeted(ctx, targetKey, goalKey, profile);
     } else {
-      const focus: StrengthFocus | undefined = focusPlan[i % focusPlan.length];
+      const focus: StrengthFocus | undefined = undefined; // 👈 plus de référence à makeFocusPlan
       const focusSuffix = focus ? ` · ${FOCUS_LABEL[focus]}` : "";
       title = profile.prenom
         ? singleNoDay
@@ -168,7 +154,7 @@ function inferMaxSessions(text?: string | null): number | undefined {
   if (!text) return undefined;
   const s = String(text).toLowerCase();
 
-  // ✅ Détection uniquement des chiffres 1 à 7
+  // ✅ Détection chiffres de 1 à 7
   const numMatch = s.match(/\b([1-7])\s*(x|fois|jours?)?\b/);
   if (numMatch) {
     const n = parseInt(numMatch[1], 10);
@@ -184,7 +170,6 @@ function inferMaxSessions(text?: string | null): number | undefined {
 
   return undefined;
 }
-
 
 function extractDaysList(text?: string | null): string[] {
   if (!text) return [];
@@ -220,6 +205,9 @@ function availabilityTextFromAnswers(answers: any): string | undefined {
 
   return hits.length ? hits.join(" ; ") : undefined;
 }
+
+// 📝 le reste du fichier (buildCardio, buildMobility, buildHiit, muscu, etc.)
+// reste **inchangé** ✅
 
 /* ========================= Contexte & utils ========================= */
 type Ctx = {
