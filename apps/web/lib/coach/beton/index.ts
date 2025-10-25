@@ -150,31 +150,6 @@ export function planProgrammeFromProfile(
   return { sessions };
 }
 
-/* ========================= Génération depuis le Sheet (ajout detection chiffres) ========================= */
-function availabilityTextFromAnswers(answers: any): string | undefined {
-  if (!answers) return undefined;
-
-  // ✅ Détection chiffres 1 à 7 + jours/semaine
-  const dayPat =
-    /(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|week\s*-?\s*end|weekend|jours?\s+par\s+semaine|\b[1-7]\s*(x|fois|jours?)?)/i;
-
-  const candidates: string[] = [];
-  for (const k of ["daysPerWeek", "jours", "séances/semaine", "seances/semaine", "col_I"]) {
-    const v = answers[k];
-    if (typeof v === "string" || typeof v === "number") candidates.push(String(v));
-  }
-  for (const k of Object.keys(answers)) {
-    const v = answers[k];
-    if (typeof v === "string" || typeof v === "number") candidates.push(String(v));
-  }
-
-  const hits = candidates
-    .map((v) => String(v ?? "").trim())
-    .filter((v) => v && dayPat.test(v));
-
-  return hits.length ? hits.join(" ; ") : undefined;
-}  // 👈 fermeture correcte ici
-
 /* ========================= Inférence du nb de séances & Jours ========================= */
 const DAYS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"];
 
