@@ -13,6 +13,11 @@ function makeFocusPlan(maxSessions: number, goalKey: string) {
   const target = goalKey || "full";
   return Array.from({ length: maxSessions }, () => target);
 }
+function capitalize(str: string): string {
+  if (!str) return "";
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
 
 
 /* ========================= Types & Options ========================= */
