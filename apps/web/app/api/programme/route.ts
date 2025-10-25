@@ -1,11 +1,11 @@
-// apps/web/app/api/programme/route.ts — MAJ pour respecter la logique
+// apps/web/app/api/programme/route.ts — corrigé pour éviter les erreurs de build
 // "1 jour = 1 séance", "week-end = 2", "6x/6 jours = 6", etc.
 
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 
+// ✅ On utilise maintenant la seule fonction exportée du module béton
 import { planProgrammeFromProfile } from "../../../lib/coach/beton";
-
 
 import {
   getAnswersForEmail, // on le garde pour POST (quand answers déjà connus) et pour fallback
@@ -38,7 +38,7 @@ export async function GET(req: Request) {
 
     if (autogen) {
       // ⚙️ Génère depuis la DERNIÈRE ligne du Sheet **avec** la logique jours→séances
-      const { sessions, profile } = await planProgrammeFromEmail(email, {});
+      const { sessions, profile } = await planProgrammeFromProfile({ email });
       return NextResponse.json({ sessions, profile } satisfies AiProgramme, { status: 200 });
     }
 
@@ -71,13 +71,13 @@ export async function POST(req: Request) {
 
     if (body.autogen) {
       // Même logique que GET autogen, mais on renvoie ok:true
-      const { sessions, profile } = await planProgrammeFromEmail(email, {});
+      const { sessions, profile } = await planProgrammeFromProfile({ email });
       return NextResponse.json({ ok: true, programme: { sessions, profile } }, { status: 200 });
     }
 
     if (body.answers) {
       // Si le client t'envoie déjà l'objet answers → pas besoin d'appeler le Sheet
-      const { sessions, profile } = planProgrammeFromAnswers(body.answers, {});
+      const { sessions, profile } = planProgrammeFromProfile(body.answers);
       return NextResponse.json({ ok: true, programme: { sessions, profile } }, { status: 200 });
     }
 
@@ -90,7 +90,7 @@ export async function POST(req: Request) {
     // Fallback: si rien n'est fourni, on tente quand même de générer depuis le Sheet (ancienne habitude)
     const answers = await getAnswersForEmail(email);
     if (answers) {
-      const { sessions, profile } = planProgrammeFromAnswers(answers, {});
+      const { sessions, profile } = planProgrammeFromProfile(answers);
       return NextResponse.json({ ok: true, programme: { sessions, profile } }, { status: 200 });
     }
 
@@ -102,3 +102,4 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "INTERNAL" }, { status: 200 });
   }
 }
+
