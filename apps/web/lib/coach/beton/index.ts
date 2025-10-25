@@ -175,26 +175,63 @@ function availabilityTextFromAnswers(answers: any): string | undefined {
   return hits.length ? hits.join(" ; ") : undefined;
 }
 
-/* ========================= Inférence du nb de séances & Jours (ajout detection chiffres) ========================= */
+/* ========================= Inférence du nb de séances & Jours ========================= */
 const DAYS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"];
 
 function inferMaxSessions(text?: string | null): number | undefined {
   if (!text) return undefined;
   const s = String(text).toLowerCase();
 
-  // ✅ Ajout : détection aussi des chiffres seuls
-  const numMatch = s.match(/\b(\d{1,2})\s*(x|fois|jours?)?\b/);
+  // ✅ Détection uniquement des chiffres 1 à 7
+  const numMatch = s.match(/\b([1-7])\s*(x|fois|jours?)?\b/);
   if (numMatch) {
     const n = parseInt(numMatch[1], 10);
-    if (!Number.isNaN(n)) return clamp(n, 1, 6);
+    if (!Number.isNaN(n)) return clamp(n, 1, 7);
   }
 
-  if (/toute?\s+la\s+semaine|tous?\s+les\s+jours/.test(s)) return 6;
+  // ✅ Cas “toute la semaine” ou “tous les jours”
+  if (/toute?\s+la\s+semaine|tous?\s+les\s+jours/.test(s)) return 7;
 
+  // ✅ Détection des jours de la semaine
   const days = extractDaysList(s);
-  if (days.length) return clamp(days.length, 1, 6);
+  if (days.length) return clamp(days.length, 1, 7);
 
   return undefined;
+}
+
+function extractDaysList(text?: string | null): string[] {
+  if (!text) return [];
+  const s = String(text).toLowerCase();
+  const out: string[] = [];
+  const push = (d: string) => { if (!out.includes(d)) out.push(d); };
+
+  if (/week\s*-?\s*end|weekend/.test(s)) { push("samedi"); push("dimanche"); }
+  for (const d of DAYS) if (new RegExp(`\\b${d}\\b`, "i").test(s)) push(d);
+  return out;
+}
+
+function availabilityTextFromAnswers(answers: any): string | undefined {
+  if (!answers) return undefined;
+
+  // ✅ Détection chiffres 1 à 7 + jours/semaine
+  const dayPat =
+    /(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|week\s*-?\s*end|weekend|jours?\s+par\s+semaine|\b[1-7]\s*(x|fois|jours?)?)/i;
+
+  const candidates: string[] = [];
+  for (const k of ["daysPerWeek", "jours", "séances/semaine", "seances/semaine", "col_I"]) {
+    const v = answers[k];
+    if (typeof v === "string" || typeof v === "number") candidates.push(String(v));
+  }
+  for (const k of Object.keys(answers)) {
+    const v = answers[k];
+    if (typeof v === "string" || typeof v === "number") candidates.push(String(v));
+  }
+
+  const hits = candidates
+    .map((v) => String(v ?? "").trim())
+    .filter((v) => v && dayPat.test(v));
+
+  return hits.length ? hits.join(" ; ") : undefined;
 }
 
 /* ========================= Contexte & utils ========================= */
@@ -810,5 +847,3 @@ function extractTimestampAny(a: any): number {
   }
   return 0;
 }
-export { planProgrammeFromEmail };
-export { planProgrammeFromAnswers };
