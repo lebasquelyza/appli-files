@@ -38,8 +38,8 @@ export type Profile = {
   email?: string;
   prenom?: string;
   age?: number;
-  objectif?: string; // libellé FR brut (colonne G)
-  goal?: string;     // clé normalisée (hypertrophy/fatloss/strength/endurance/mobility/general)
+  objectif?: string;
+  goal?: string;
 };
 
 // --- ENV & URL helpers ---
@@ -52,14 +52,14 @@ function sheetCsvUrl(cacheBust?: boolean): string {
   const qp = new URLSearchParams();
   if (SHEET_GID) qp.set("gid", SHEET_GID);
   if (SHEET_RANGE) qp.set("range", SHEET_RANGE);
-  if (cacheBust) qp.set("_", String(Date.now())); // ✅ bust cache Google
+  if (cacheBust) qp.set("_", String(Date.now())); 
   const qs = qp.toString();
   return qs ? `${base}&${qs}` : base;
 }
 
-// --- Petit cache mémoire (TTL) ---
+// --- Cache mémoire (TTL) ---
 const GLOBAL_CACHE_KEY = "__ai_sheet_cache__";
-const CACHE_TTL_MS = Number(process.env.SHEET_CACHE_TTL_MS || 5000); // 5s par défaut
+const CACHE_TTL_MS = Number(process.env.SHEET_CACHE_TTL_MS || 5000);
 type CacheT = { at: number; text: string };
 
 declare global {
@@ -67,7 +67,7 @@ declare global {
   var __ai_sheet_cache__: CacheT | undefined;
 }
 
-// --- CSV parsing (sans dépendance) ---
+// --- CSV parsing ---
 function parseCSV(text: string): string[][] {
   const rows: string[][] = [];
   let i = 0, cur: string[] = [], cell = "", inQuotes = false;
@@ -97,7 +97,7 @@ function parseCSV(text: string): string[][] {
   return rows;
 }
 
-// --- CSV fetch avec option fresh ---
+// --- CSV fetch ---
 async function fetchSheetCSVRaw(fresh = false): Promise<string> {
   if (!SHEET_ID || !SHEET_GID) throw new Error("SHEET_ID et SHEET_GID requis.");
   const url = sheetCsvUrl(!!fresh);
@@ -105,10 +105,10 @@ async function fetchSheetCSVRaw(fresh = false): Promise<string> {
   if (!res.ok) throw new Error(`CSV fetch failed (${res.status})`);
   return res.text();
 }
+
 async function fetchSheetCSV(fresh = false): Promise<string[][]> {
   const now = Date.now();
   const cached: CacheT | undefined = (global as any)[GLOBAL_CACHE_KEY];
-
   if (!fresh && cached && now - cached.at < CACHE_TTL_MS) {
     return parseCSV(cached.text);
   }
@@ -117,10 +117,8 @@ async function fetchSheetCSV(fresh = false): Promise<string[][]> {
   return parseCSV(text);
 }
 
-// --- Aide : accès colonne par nom ou index fallback ---
+// --- Détection colonnes ---
 type ColIdxMap = { [key: string]: number };
-
-// Par défaut si pas d’en-têtes: A=0, B=1, C=2, D=3, E=4, F=5, G=6, H=7, I=8, J=9, K=10
 const DEFAULT_IDX: ColIdxMap = { prenom: 1, age: 2, objectif: 6, email: 9, ts: 0 };
 
 function toIndexFromLetter(letter: string): number {
@@ -148,35 +146,13 @@ function detectIndexes(rows: string[][]): ColIdxMap {
   const objIdx = find(["objectif", "goal", "objectif (g)"]);
   if (objIdx >= 0) map.objectif = objIdx;
 
-  const tsIdx = find([
-    "timestamp",
-    "ts",
-    "date",
-    "submitted at",
-    "horodatage",
-    "date de soumission",
-    "date/heure",
-  ]);
+  const tsIdx = find(["timestamp","ts","date","submitted at","horodatage","date de soumission","date/heure"]);
   if (tsIdx >= 0) map.ts = tsIdx;
-
-  // Override via lettres si défini (ex: SHEET_EMAIL_COL="K")
-  const letterOverride = (envName: string) => {
-    const v = (process.env[envName] || "").trim();
-    return v ? toIndexFromLetter(v) : null;
-  };
-  const oEmail = letterOverride("SHEET_EMAIL_COL");
-  if (oEmail !== null) map.email = oEmail;
-  const oPrenom = letterOverride("SHEET_PRENOM_COL");
-  if (oPrenom !== null) map.prenom = oPrenom;
-  const oAge = letterOverride("SHEET_AGE_COL");
-  if (oAge !== null) map.age = oAge;
-  const oObj = letterOverride("SHEET_OBJECTIF_COL");
-  if (oObj !== null) map.objectif = oObj;
 
   return map;
 }
 
-// --- Normalisation “objectif” -> clé interne
+// --- Normalisation objectif
 function normalizeGoal(input?: string): string {
   const s = String(input || "")
     .normalize("NFD").replace(/\p{Diacritic}/gu, "")
@@ -185,49 +161,47 @@ function normalizeGoal(input?: string): string {
 
   if (!s) return "";
 
+  // Mapping muscles → hypertrophy
+  if (/(epaule|epaules|epaul|shoulder|delts?)/.test(s)) return "hypertrophy";
+  if (/(pec|poitrine|torse)/.test(s)) return "hypertrophy";
+  if (/(dos|back|dorsaux)/.test(s)) return "hypertrophy";
+  if (/(bras|biceps|triceps)/.test(s)) return "hypertrophy";
+  if (/(abdos|abdominal|ventre|core)/.test(s)) return "hypertrophy";
+  if (/(fessier|fesse|glutes)/.test(s)) return "hypertrophy";
+  if (/(ischio|hamstring)/.test(s)) return "hypertrophy";
+  if (/(quadri|cuisses|quads)/.test(s)) return "hypertrophy";
+  if (/(jambes|bas du corps|lower body)/.test(s)) return "hypertrophy";
+  if (/(mollet|calves)/.test(s)) return "hypertrophy";
+
+  // Objectifs globaux
   if (/(hypertroph|esthetique|prise de muscle|prise de masse)/.test(s)) return "hypertrophy";
   if (/(perte|seche|gras|minceur|weight loss|fat)/.test(s)) return "fatloss";
   if (/(force|strength)/.test(s)) return "strength";
-  if (/(endurance|cardio|z2|course|velo|vélo|run)/.test(s)) return "endurance";
-  if (/(mobilite|mobilité|souplesse|flexibilite)/.test(s)) return "mobility";
+  if (/(endurance|cardio|z2|course|velo|run)/.test(s)) return "endurance";
+  if (/(mobilite|souplesse|flexibilite)/.test(s)) return "mobility";
+
   return "general";
 }
 
-/* ===================== Horodatage robuste ===================== */
+// --- Horodatage
 function parseTimestampLoose(input: any): number {
   if (!input) return 0;
   const s = String(input).trim();
-
-  // 1) Essai natif
   let t = Date.parse(s);
   if (!Number.isNaN(t)) return t;
 
-  // 2) Formats FR : "DD/MM/YYYY HH:mm[:ss]" ou "DD-MM-YYYY HH:mm"
   const m = s.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
   if (m) {
     const [, d, mo, y, hh = "0", mm = "0", ss = "0"] = m;
     const Y = Number((y.length === 2 ? "20" + y : y));
-    const date = new Date(
-      Y,
-      Number(mo) - 1,
-      Number(d),
-      Number(hh),
-      Number(mm),
-      Number(ss)
-    );
+    const date = new Date(Y, Number(mo) - 1, Number(d), Number(hh), Number(mm), Number(ss));
     const tt = date.getTime();
     if (!Number.isNaN(tt)) return tt;
   }
-
-  // 3) Fallback
   return 0;
 }
 
-/** ============================================================================
- *  API publique consommée par les pages
- *  ==========================================================================*/
-
-// 1) Lire toutes les réponses et retourner la DERNIÈRE pour un email donné
+// --- Lire dernière ligne client
 export async function getAnswersForEmail(
   email: string,
   opts?: { fresh?: boolean }
@@ -240,27 +214,23 @@ export async function getAnswersForEmail(
 
   const idx = detectIndexes(rows);
   const header = rows[0] || [];
-  const hasHeader = (header[idx.email] || "").toString().toLowerCase() === "email"
-    || (header[idx.email] || "").toString().toLowerCase() === "adresse e-mail"
-    || (header[idx.email] || "").toString().toLowerCase() === "adresse email";
+  const hasHeader =
+    (header[idx.email] || "").toString().toLowerCase() === "email" ||
+    (header[idx.email] || "").toString().toLowerCase() === "adresse e-mail" ||
+    (header[idx.email] || "").toString().toLowerCase() === "adresse email";
   const start = hasHeader ? 1 : 0;
 
   let latest: { row: string[]; ts: number; i: number } | null = null;
-
   for (let i = start; i < rows.length; i++) {
     const row = rows[i];
     if (!row || !row.length) continue;
     const rowMail = String(row[idx.email] || "").trim().toLowerCase();
     if (rowMail !== emailLc) continue;
-
     const tsNum = parseTimestampLoose(row[idx.ts]);
-
-    // Règle: timestamp le plus récent, et si égalité → la ligne la plus basse (i le plus grand)
     if (!latest || tsNum > latest.ts || (tsNum === latest.ts && i > latest.i)) {
       latest = { row, ts: tsNum, i };
     }
   }
-
   if (!latest) return null;
 
   const obj: Record<string, any> = {};
@@ -270,59 +240,45 @@ export async function getAnswersForEmail(
       obj[key] = latest.row[c];
     }
   } else {
-    // ⚙️ Fallback sans en-têtes : on expose B..K pour nos usages
-    obj["col_B"] = latest.row[1] || "";  // Prenom
-    obj["col_C"] = latest.row[2] || "";  // Age
-    obj["col_D"] = latest.row[3] || "";  // Niveau
-    obj["col_E"] = latest.row[4] || "";  // Matériel (none/limited/full)
-    obj["col_F"] = latest.row[5] || "";  // Durée (min)
-    obj["col_G"] = latest.row[6] || "";  // Objectif (libellé)
-    obj["col_H"] = latest.row[7] || "";  // Blessures
-    obj["col_I"] = latest.row[8] || "";  // Jours / semaine
-    obj["col_J"] = latest.row[9] || "";  // Équipements détaillés (liste)
-    obj["col_K"] = latest.row[10] || ""; // Email (si c'est là)
+    obj["col_B"] = latest.row[1] || "";
+    obj["col_C"] = latest.row[2] || "";
+    obj["col_D"] = latest.row[3] || "";
+    obj["col_E"] = latest.row[4] || "";
+    obj["col_F"] = latest.row[5] || "";
+    obj["col_G"] = latest.row[6] || "";
+    obj["col_H"] = latest.row[7] || "";
+    obj["col_I"] = latest.row[8] || "";
+    obj["col_J"] = latest.row[9] || "";
+    obj["col_K"] = latest.row[10] || "";
     obj["email"] = latest.row[idx.email] || emailLc;
     obj["ts"] = latest.row[idx.ts] || "";
   }
-
   obj["email"] = obj["email"] || emailLc;
-
   return obj;
 }
 
-// 2) Construire un profil depuis la ligne réponse (base: prenom/age/objectif/email)
+// --- Profil de base
 export function buildProfileFromAnswers(ans: Record<string, any>): Profile {
   if (!ans) return {};
-
-  const prenom =
-    ans["prenom"] ?? ans["prénom"] ?? ans["first name"] ?? ans["firstname"] ?? ans["col_B"] ?? "";
-
+  const prenom = ans["prenom"] ?? ans["prénom"] ?? ans["first name"] ?? ans["firstname"] ?? ans["col_B"] ?? "";
   const ageRaw = ans["age"] ?? ans["âge"] ?? ans["col_C"] ?? "";
-
   const objectifBrut = ans["objectif"] ?? ans["goal"] ?? ans["col_G"] ?? "";
-
   const email = ans["email"] ?? ans["mail"] ?? ans["e-mail"] ?? ans["col_K"] ?? "";
-
   const age = typeof ageRaw === "number" ? ageRaw : Number(String(ageRaw).replace(/[^\d.-]/g, ""));
   const goal = normalizeGoal(String(objectifBrut));
 
-  const profile: Profile = {
+  return {
     email: String(email || "").trim().toLowerCase() || undefined,
     prenom: (typeof prenom === "string" ? prenom.trim() : "") || undefined,
     age: Number.isFinite(age) && age > 0 ? age : undefined,
     objectif: String(objectifBrut || "").trim() || undefined,
     goal: goal || undefined,
   };
-
-  return profile;
 }
 
-/* ============================================================================
- *  3) Générer un programme (branché sur coach/beton)
- * ==========================================================================*/
+// --- Génération programme
 import { planProgrammeFromProfile } from "./beton";
 
-/* Helpers de normalisation pour champs étendus (D..J) */
 function normLevel(s: string | undefined) {
   const v = String(s || "").toLowerCase();
   if (/avanc/.test(v)) return "avance";
@@ -330,6 +286,7 @@ function normLevel(s: string | undefined) {
   if (/deb|déb/.test(v)) return "debutant";
   return "" as any;
 }
+
 function normEquipLevel(s: string | undefined): "none" | "limited" | "full" {
   const v = String(s || "").toLowerCase();
   if (/none|aucun|sans/.test(v)) return "none";
@@ -337,20 +294,35 @@ function normEquipLevel(s: string | undefined): "none" | "limited" | "full" {
   if (!v) return "limited";
   return "limited";
 }
+
 function toNumber(x: any): number | undefined {
   const n = Number(String(x ?? "").replace(/[^\d.-]/g, ""));
   return Number.isFinite(n) && n > 0 ? n : undefined;
 }
+
 function splitList(s: any): string[] | undefined {
   const txt = String(s || "").trim();
   if (!txt) return undefined;
   return txt.split(/[;,/|]/).map((t) => t.trim()).filter(Boolean);
 }
 
+// Table muscles → exos favoris
+const muscleLikes: Record<string, string[]> = {
+  pec: ["développé couché", "pompes", "écarté haltères"],
+  dos: ["tractions", "rowing", "tirage horizontal"],
+  epaules: ["élevations latérales", "développé haltères", "face pull", "élévations frontales"],
+  bras: ["curl biceps", "extension triceps", "hammer curl"],
+  abdos: ["crunch", "gainage", "mountain climbers"],
+  fessier: ["hip thrust", "glute bridge", "fentes"],
+  ischio: ["leg curl", "soulevé de terre jambes tendues"],
+  quadri: ["squat", "fentes", "leg extension"],
+  jambes: ["squat", "fentes", "mollets debout"],
+  mollet: ["mollets debout", "mollets assis"],
+};
+
 export function generateProgrammeFromAnswers(ans: Record<string, any>): { sessions: AiSession[] } {
   const profile = buildProfileFromAnswers(ans);
 
-  // Lecture “souple” des colonnes D..J (avec fallback col_D..col_J si pas d’en-têtes)
   const level =
     normLevel(
       (ans["niveau"] ??
@@ -383,24 +355,36 @@ export function generateProgrammeFromAnswers(ans: Record<string, any>): { sessio
   const equipItems =
     splitList(ans["equipItems"] ?? ans["équipements"] ?? ans["equipements"] ?? ans["col_J"]) || undefined;
 
-  // Payload enrichi pour le moteur “béton”
+  // Détection multi-muscles
+  const objectifTxt = String(profile.objectif || "")
+    .normalize("NFD").replace(/\p{Diacritic}/gu, "")
+    .toLowerCase();
+
+  const foundLikes: string[] = [];
+  for (const [muscle, exos] of Object.entries(muscleLikes)) {
+    if (objectifTxt.includes(muscle)) {
+      foundLikes.push(...exos);
+    }
+  }
+  const likes = foundLikes.length > 0 ? foundLikes : undefined;
+
   const enriched = {
     prenom: profile.prenom,
     age: profile.age,
-    objectif: profile.objectif, // libellé brut -> affichage
-    goal: profile.goal,         // clé normalisée -> logique
+    objectif: profile.objectif,
+    goal: profile.goal,
     equipLevel,
     timePerSession,
     level,
     injuries,
     equipItems,
+    likes,
   } as any;
 
-  // maxSessions = jours/semaine (1..6)
   return planProgrammeFromProfile(enriched, { maxSessions: daysPerWeek });
 }
 
-// 4) Sessions “stockées” (stub) — ici on retourne vide pour laisser la génération locale prendre le relais
+// 4) Sessions “stockées” (stub)
 export async function getAiSessions(_email: string): Promise<AiSession[]> {
   return [];
 }
