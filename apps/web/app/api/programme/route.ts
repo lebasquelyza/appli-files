@@ -2,21 +2,21 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 
-import { getAnswersForEmail, buildProfileFromAnswers, generateProgrammeFromAnswers } from "../../../lib/coach/ai";
+import {
+  getAnswersForEmail,
+  buildProfileFromAnswers,
+  generateProgrammeFromAnswers,
+} from "../../../lib/coach/ai";
 
 export const runtime = "nodejs";
 
 type AiProgramme = { sessions: any[]; profile?: any | null };
 
-/** Petite aide locale : reconstitue availabilityText depuis les réponses
- *  (détection chiffres 1–7, “x/fois/jours”, jours nommés, week-end, etc.)
- *  Note: on garde ce helper au cas où, mais la génération principale
- *  passe maintenant par `generateProgrammeFromAnswers`, qui lit déjà
- *  la colonne Jours/Semaine et clamp à 1..6.
+/** Helper optionnel : reconstruit un texte lisible de disponibilité
+ *  (utile pour afficher côté UI ; la génération principale passe par generateProgrammeFromAnswers)
  */
 function availabilityFromAnswers(answers: Record<string, any> | null | undefined): string | undefined {
   if (!answers) return undefined;
-
   const dayPat =
     /(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|week\s*-?\s*end|weekend|jours?\s+par\s+semaine|\b[1-7]\s*(x|fois|jours?)?)/i;
 
@@ -56,14 +56,14 @@ export async function GET(req: Request) {
     }
 
     if (autogen) {
-      // Lecture dernière réponse + génération fiable via generateProgrammeFromAnswers (cap 1..6)
+      // Lecture dernière réponse + génération fiable (cap 1..6) via generateProgrammeFromAnswers
       const answers = await getAnswersForEmail(email, { fresh: true } as any);
       if (!answers) {
         return NextResponse.json(
           { sessions: [], profile: { email } } satisfies AiProgramme,
           { status: 200 }
         );
-      }
+        }
       const { sessions } = generateProgrammeFromAnswers(answers);
       const profile = buildProfileFromAnswers(answers) as any;
       profile.availabilityText = availabilityFromAnswers(answers);
@@ -111,7 +111,7 @@ export async function POST(req: Request) {
     }
 
     if (body.answers) {
-      // Si on reçoit déjà la ligne du Sheet, on s’appuie aussi sur generateProgrammeFromAnswers
+      // Si on reçoit déjà la ligne du Sheet : même logique
       const answers = body.answers as Record<string, any>;
       const { sessions } = generateProgrammeFromAnswers(answers);
       const profile = buildProfileFromAnswers(answers) as any;
@@ -124,7 +124,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, programme }, { status: 200 });
     }
 
-    // Fallback : on tente une génération standard depuis la dernière réponse
+    // Fallback : dernière réponse (fresh) par défaut
     const answers = await getAnswersForEmail(email, { fresh: true } as any);
     if (answers) {
       const { sessions } = generateProgrammeFromAnswers(answers);
