@@ -1,18 +1,17 @@
-// apps/web/app/api/programme/route.ts
+// apps/web/app/api/programme/route.ts — corrigé
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 
-import {
-  getAnswersForEmail,
-  buildProfileFromAnswers,
-  generateProgrammeFromAnswers,
-} from "../../../lib/coach/ai";
+import { planProgrammeFromProfile } from "../../../lib/coach/beton";
+import { getAnswersForEmail, buildProfileFromAnswers } from "../../../lib/coach/ai";
 
 export const runtime = "nodejs";
 
 type AiProgramme = { sessions: any[]; profile?: any | null };
 
-/** Petite aide locale : reconstitue availabilityText depuis les réponses */
+/** Petite aide locale : reconstitue availabilityText depuis les réponses
+ *  (détection chiffres 1–7, “x/fois/jours”, jours nommés, week-end, etc.)
+ */
 function availabilityFromAnswers(answers: Record<string, any> | null | undefined): string | undefined {
   if (!answers) return undefined;
 
@@ -56,7 +55,8 @@ export async function GET(req: Request) {
 
     if (autogen) {
       // On lit la dernière ligne du Sheet, on construit un profil,
-      // on y ajoute availabilityText, puis on génère les séances.
+      // on y ajoute availabilityText (avec détection des chiffres),
+      // puis on génère les séances.
       const answers = await getAnswersForEmail(email, { fresh: true } as any);
       if (!answers) {
         return NextResponse.json(
@@ -64,16 +64,10 @@ export async function GET(req: Request) {
           { status: 200 }
         );
       }
-
       const profile = buildProfileFromAnswers(answers) as any;
       profile.availabilityText = availabilityFromAnswers(answers);
-
-      const { sessions } = generateProgrammeFromAnswers(answers);
-
-      return NextResponse.json(
-        { sessions, profile } satisfies AiProgramme,
-        { status: 200 }
-      );
+      const { sessions } = planProgrammeFromProfile(profile);
+      return NextResponse.json({ sessions, profile } satisfies AiProgramme, { status: 200 });
     }
 
     return NextResponse.json(
@@ -107,12 +101,9 @@ export async function POST(req: Request) {
           { status: 200 }
         );
       }
-
       const profile = buildProfileFromAnswers(answers) as any;
       profile.availabilityText = availabilityFromAnswers(answers);
-
-      const { sessions } = generateProgrammeFromAnswers(answers);
-
+      const { sessions } = planProgrammeFromProfile(profile);
       return NextResponse.json({ ok: true, programme: { sessions, profile } }, { status: 200 });
     }
 
@@ -121,9 +112,7 @@ export async function POST(req: Request) {
       const answers = body.answers as Record<string, any>;
       const profile = buildProfileFromAnswers(answers) as any;
       profile.availabilityText = availabilityFromAnswers(answers);
-
-      const { sessions } = generateProgrammeFromAnswers(answers);
-
+      const { sessions } = planProgrammeFromProfile(profile);
       return NextResponse.json({ ok: true, programme: { sessions, profile } }, { status: 200 });
     }
 
@@ -137,9 +126,7 @@ export async function POST(req: Request) {
     if (answers) {
       const profile = buildProfileFromAnswers(answers) as any;
       profile.availabilityText = availabilityFromAnswers(answers);
-
-      const { sessions } = generateProgrammeFromAnswers(answers);
-
+      const { sessions } = planProgrammeFromProfile(profile);
       return NextResponse.json({ ok: true, programme: { sessions, profile } }, { status: 200 });
     }
 
@@ -150,4 +137,3 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "INTERNAL" }, { status: 200 });
   }
 }
-
