@@ -12,11 +12,10 @@ export const runtime = "nodejs";
 
 type AiProgramme = { sessions: any[]; profile?: any | null };
 
-/** Helper optionnel : reconstruit un texte lisible de disponibilité
- *  (utile pour afficher côté UI ; la génération principale passe par generateProgrammeFromAnswers)
- */
+/** Petite aide locale : reconstitue availabilityText depuis les réponses */
 function availabilityFromAnswers(answers: Record<string, any> | null | undefined): string | undefined {
   if (!answers) return undefined;
+
   const dayPat =
     /(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|week\s*-?\s*end|weekend|jours?\s+par\s+semaine|\b[1-7]\s*(x|fois|jours?)?)/i;
 
@@ -56,17 +55,21 @@ export async function GET(req: Request) {
     }
 
     if (autogen) {
-      // Lecture dernière réponse + génération fiable (cap 1..6) via generateProgrammeFromAnswers
+      // On lit la dernière ligne du Sheet, on construit un profil,
+      // on y ajoute availabilityText, puis on génère les séances.
       const answers = await getAnswersForEmail(email, { fresh: true } as any);
       if (!answers) {
         return NextResponse.json(
           { sessions: [], profile: { email } } satisfies AiProgramme,
           { status: 200 }
         );
-        }
-      const { sessions } = generateProgrammeFromAnswers(answers);
+      }
+
       const profile = buildProfileFromAnswers(answers) as any;
       profile.availabilityText = availabilityFromAnswers(answers);
+
+      const { sessions } = generateProgrammeFromAnswers(answers);
+
       return NextResponse.json(
         { sessions, profile } satisfies AiProgramme,
         { status: 200 }
@@ -104,18 +107,23 @@ export async function POST(req: Request) {
           { status: 200 }
         );
       }
-      const { sessions } = generateProgrammeFromAnswers(answers);
+
       const profile = buildProfileFromAnswers(answers) as any;
       profile.availabilityText = availabilityFromAnswers(answers);
+
+      const { sessions } = generateProgrammeFromAnswers(answers);
+
       return NextResponse.json({ ok: true, programme: { sessions, profile } }, { status: 200 });
     }
 
     if (body.answers) {
-      // Si on reçoit déjà la ligne du Sheet : même logique
+      // Si on reçoit déjà les réponses, même traitement local
       const answers = body.answers as Record<string, any>;
-      const { sessions } = generateProgrammeFromAnswers(answers);
       const profile = buildProfileFromAnswers(answers) as any;
       profile.availabilityText = availabilityFromAnswers(answers);
+
+      const { sessions } = generateProgrammeFromAnswers(answers);
+
       return NextResponse.json({ ok: true, programme: { sessions, profile } }, { status: 200 });
     }
 
@@ -124,12 +132,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, programme }, { status: 200 });
     }
 
-    // Fallback : dernière réponse (fresh) par défaut
-    const answers = await getAnswersForEmail(email, { fresh: true } as any);
+    // Fallback : on tente une génération standard à partir du Sheet
+    const answers = await getAnswersForEmail(email);
     if (answers) {
-      const { sessions } = generateProgrammeFromAnswers(answers);
       const profile = buildProfileFromAnswers(answers) as any;
       profile.availabilityText = availabilityFromAnswers(answers);
+
+      const { sessions } = generateProgrammeFromAnswers(answers);
+
       return NextResponse.json({ ok: true, programme: { sessions, profile } }, { status: 200 });
     }
 
@@ -140,3 +150,4 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "INTERNAL" }, { status: 200 });
   }
 }
+
