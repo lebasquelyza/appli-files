@@ -347,6 +347,80 @@ function splitList(s: any): string[] | undefined {
   return txt.split(/[;,/|]/).map((t) => t.trim()).filter(Boolean);
 }
 
+/* ------------------------------------------------------------------
+ * 🔎 Dispo “loose”: détecte aussi les chiffres seuls 1..7 n’importe où
+ * ------------------------------------------------------------------*/
+function availabilityTextFromAnswersLoose(answers: Record<string, any>): string | undefined {
+  if (!answers) return undefined;
+
+  // On capte: lundi..dimanche, weekend, “5x / 5 fois / 5 jours”, “5”, “3-4 fois”, etc.
+  const pat =
+    /(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|week\s*-?\s*end|weekend|\b[1-7]\b|\b[1-7]\s*(x|fois|jour|jours)\b|\b[1-7]\s*-\s*[1-7]\b)/i;
+
+  const bag: string[] = [];
+
+  // indices "habituels"
+  for (const k of ["daysPerWeek", "jours", "séances/semaine", "seances/semaine", "col_I"]) {
+    const v = answers[k as keyof typeof answers];
+    if (typeof v === "string" || typeof v === "number") bag.push(String(v));
+  }
+  // scan complet de la ligne
+  for (const k of Object.keys(answers)) {
+    const v = (answers as any)[k];
+    if (typeof v === "string" || typeof v === "number") bag.push(String(v));
+  }
+
+  const hits = bag.map((v) => String(v ?? "").trim()).filter((v) => v && pat.test(v));
+  return hits.length ? hits.join(" ; ") : undefined;
+}
+
+/** Infère 1..6 séances depuis un texte libre.
+ *  - Prend “N x/fois/jours”, “N” tout seul (1..7), “week-end”, jours nommés, etc.
+ *  - Range N dans [1..6] (si 7 → 6, on n’en génère pas 7).
+ */
+function inferMaxSessionsFromText(text?: string | null): number | undefined {
+  if (!text) return undefined;
+  const s = String(text).toLowerCase();
+
+  // ex: "3-4 fois" → prend le plus grand du range
+  const range = s.match(/\b([1-7])\s*-\s*([1-7])\b/);
+  if (range) {
+    const hi = Math.max(parseInt(range[1], 10), parseInt(range[2], 10));
+    return Math.max(1, Math.min(6, hi));
+  }
+
+  // ex: "5x", "5 fois", "5 jours"
+  const withUnit = s.match(/\b([1-7])\s*(x|fois|jour|jours)\b/);
+  if (withUnit) {
+    const n = parseInt(withUnit[1], 10);
+    return Math.max(1, Math.min(6, n));
+  }
+
+  // ex: “5” seul (on tolère les chiffres isolés 1..7)
+  const solo = s.match(/\b([1-7])\b/);
+  if (solo) {
+    const n = parseInt(solo[1], 10);
+    return Math.max(1, Math.min(6, n));
+  }
+
+  // “toute la semaine” / “tous les jours”
+  if (/toute?\s+la\s+semaine|tous?\s+les\s+jours/.test(s)) return 6;
+
+  // Jours nommés + week-end
+  const days = (() => {
+    const out: string[] = [];
+    const push = (d: string) => { if (!out.includes(d)) out.push(d); };
+    if (/week\s*-?\s*end|weekend/.test(s)) { push("samedi"); push("dimanche"); }
+    for (const d of ["lundi","mardi","mercredi","jeudi","vendredi","samedi","dimanche"]) {
+      if (new RegExp(`\\b${d}\\b`, "i").test(s)) push(d);
+    }
+    return out;
+  })();
+  if (days.length) return Math.max(1, Math.min(6, days.length));
+
+  return undefined;
+}
+
 export function generateProgrammeFromAnswers(ans: Record<string, any>): { sessions: AiSession[] } {
   const profile = buildProfileFromAnswers(ans);
 
@@ -377,8 +451,16 @@ export function generateProgrammeFromAnswers(ans: Record<string, any>): { sessio
   const injuries =
     splitList(ans["injuries"] ?? ans["blessures"] ?? ans["col_H"]) || undefined;
 
-  const daysPerWeek =
-    Math.max(1, Math.min(6, toNumber(ans["daysPerWeek"] ?? ans["jours"] ?? ans["séances/semaine"] ?? ans["seances/semaine"] ?? ans["col_I"]) || 3));
+  // 🔎 Nouvelle détection de la dispo globale (y compris 1..7 tout seuls)
+  const availabilityText = availabilityTextFromAnswersLoose(ans);
+
+  // 🧠 Inférence 1..6 depuis le texte
+  const inferred = inferMaxSessionsFromText(availabilityText);
+
+  // Ancienne logique structurée (compat) → si présente on la prend, sinon on prend l’inférence, sinon 3
+  const structuredDays =
+    toNumber(ans["daysPerWeek"] ?? ans["jours"] ?? ans["séances/semaine"] ?? ans["seances/semaine"] ?? ans["col_I"]);
+  const maxSessions = Math.max(1, Math.min(6, structuredDays ?? inferred ?? 3));
 
   const equipItems =
     splitList(ans["equipItems"] ?? ans["équipements"] ?? ans["equipements"] ?? ans["col_J"]) || undefined;
@@ -394,10 +476,11 @@ export function generateProgrammeFromAnswers(ans: Record<string, any>): { sessio
     level,
     injuries,
     equipItems,
+    availabilityText, // 👈 utile si jours nommés
   } as any;
 
-  // maxSessions = jours/semaine (1..6)
-  return planProgrammeFromProfile(enriched, { maxSessions: daysPerWeek });
+  // maxSessions = 1..6 (7 est clampé à 6 par design UI)
+  return planProgrammeFromProfile(enriched, { maxSessions });
 }
 
 // 4) Sessions “stockées” (stub) — ici on retourne vide pour laisser la génération locale prendre le relais
