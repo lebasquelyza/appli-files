@@ -6,36 +6,19 @@ import type {
 } from "../ai";
 
 /* ========================= Types & Options ========================= */
-export type PlanOptions = {
-  today?: Date;
-  maxSessions?: number; // 1..6
-};
-
+export type PlanOptions = { today?: Date; maxSessions?: number };
 export type ProfileInput = {
-  prenom?: string;
-  age?: number;
-  objectif?: string;
-  goal?: string; // hypertrophy|fatloss|strength|endurance|mobility|general
-  equipLevel?: "none" | "limited" | "full";
-  timePerSession?: number;
+  prenom?: string; age?: number; objectif?: string; goal?: string;
+  equipLevel?: "none" | "limited" | "full"; timePerSession?: number;
   level?: "debutant" | "intermediaire" | "avance";
-  injuries?: string[];
-  equipItems?: string[];
-  availabilityText?: string;
-  email?: string;
-  likes?: string[];
-  dislikes?: string[];
+  injuries?: string[]; equipItems?: string[];
+  availabilityText?: string; email?: string; likes?: string[]; dislikes?: string[];
 };
 
 /* ====== Focus par séance (split) ====== */
 type StrengthFocus =
-  | "full"
-  | "bas_quads"
-  | "bas_iscios_glutes"
-  | "haut_push"
-  | "haut_pull"
-  | "haut_mix"
-  | "bras_core";
+  | "full" | "bas_quads" | "bas_iscios_glutes"
+  | "haut_push" | "haut_pull" | "haut_mix" | "bras_core";
 
 const FOCUS_LABEL: Record<StrengthFocus, string> = {
   full: "Full body",
@@ -122,8 +105,8 @@ export function planProgrammeFromProfile(
 
     const dayLabel = daysList[i] ? capitalize(daysList[i]) : labelABC;
     const singleNoDay = maxSessions === 1 && daysList.length === 0;
-    const focus: any = type === "muscu" ? focusPlan[i % focusPlan.length] : undefined;
-    const focusSuffix = focus ? ` · ${FOCUS_LABEL[focus as StrengthFocus]}` : "";
+    const focus: StrengthFocus | undefined = type === "muscu" ? focusPlan[i % focusPlan.length] : undefined;
+    const focusSuffix = focus ? ` · ${FOCUS_LABEL[focus]}` : "";
 
     const title = profile.prenom
       ? singleNoDay
@@ -140,7 +123,7 @@ export function planProgrammeFromProfile(
         ? buildMobility(ctx)
         : type === "hiit"
         ? buildHiit(ctx)
-        : buildStrengthFocused(ctx, (focus || "full") as StrengthFocus, goalKey, profile);
+        : buildStrengthFocused(ctx, focus ?? "full", goalKey, profile);
 
     sessions.push({
       id: `beton-${dateStr}-${i}-${Math.random().toString(36).slice(2, 7)}`,
@@ -178,72 +161,34 @@ function extractDaysList(text?: string | null): string[] {
   if (!text) return [];
   const s = String(text).toLowerCase();
   const out: string[] = [];
-  const push = (d: string) => {
-    if (!out.includes(d)) out.push(d);
-  };
-  if (/week\s*-?\s*end|weekend/.test(s)) {
-    push("samedi"); push("dimanche");
-  }
-  for (const d of DAYS) {
-    if (new RegExp(`\\b${d}\\b`, "i").test(s)) push(d);
-  }
+  const push = (d: string) => { if (!out.includes(d)) out.push(d); };
+  if (/week\s*-?\s*end|weekend/.test(s)) { push("samedi"); push("dimanche"); }
+  for (const d of DAYS) if (new RegExp(`\\b${d}\\b`, "i").test(s)) push(d);
   return out;
 }
 
-function capitalize(str: string) {
-  return str ? str.charAt(0).toUpperCase() + str.slice(1) : str;
-}
-function defaultBaseTitle(t: WorkoutType) {
-  return t === "cardio" ? "Cardio" : t === "mobilité" ? "Mobilité" : t === "hiit" ? "HIIT" : "Muscu";
-}
+function capitalize(str: string) { return str ? str.charAt(0).toUpperCase() + str.slice(1) : str; }
+function defaultBaseTitle(t: WorkoutType) { return t === "cardio" ? "Cardio" : t === "mobilité" ? "Mobilité" : t === "hiit" ? "HIIT" : "Muscu"; }
 
 /* ========================= Contexte & utils ========================= */
 type Ctx = {
   level: "debutant" | "intermediaire" | "avance";
   equip: "none" | "limited" | "full";
-  minutes: number;
-  goalKey: string;
-  injuries: Injuries;
-  equipItems: Items;
+  minutes: number; goalKey: string; injuries: Injuries; equipItems: Items;
 };
-type Injuries = {
-  back?: boolean; shoulder?: boolean; knee?: boolean; wrist?: boolean;
-  hip?: boolean; ankle?: boolean; elbow?: boolean;
-};
-type Items = {
-  bands?: boolean; kb?: boolean; trx?: boolean; bench?: boolean; bar?: boolean; db?: boolean;
-  bike?: boolean; rower?: boolean; treadmill?: boolean;
-};
+type Injuries = { back?: boolean; shoulder?: boolean; knee?: boolean; wrist?: boolean; hip?: boolean; ankle?: boolean; elbow?: boolean; };
+type Items = { bands?: boolean; kb?: boolean; trx?: boolean; bench?: boolean; bar?: boolean; db?: boolean; bike?: boolean; rower?: boolean; treadmill?: boolean; };
 
-function clamp(n: number, a: number, b: number) { return Math.max(a, Math.min(b, n)); }
-function addDays(d: Date, n: number) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
-
-function defaultTime(goal?: string) {
-  switch ((goal ?? "").toLowerCase()) {
-    case "endurance": return 35;
-    case "mobility": return 25;
-    case "fatloss": return 35;
-    default: return 45;
-  }
-}
-function pickType(goal?: string, age?: number): WorkoutType {
-  const g = (goal ?? "").toLowerCase();
-  if (g === "endurance") return "cardio";
-  if (g === "mobility") return "mobilité";
-  if (g === "fatloss" && (age ?? 0) > 45) return "hiit";
-  return "muscu";
-}
-function inferLevel(age?: number): "debutant" | "intermediaire" | "avance" {
-  if (!age) return "intermediaire";
-  if (age < 25) return "intermediaire";
-  if (age > 50) return "debutant";
-  return "intermediaire";
-}
+function clamp(n:number,a:number,b:number){ return Math.max(a, Math.min(b,n)); }
+function addDays(d:Date,n:number){ const x=new Date(d); x.setDate(x.getDate()+n); return x; }
+function defaultTime(goal?: string){ switch((goal ?? "").toLowerCase()){ case "endurance": return 35; case "mobility": return 25; case "fatloss": return 35; default: return 45; } }
+function pickType(goal?: string, age?: number): WorkoutType { const g=(goal ?? "").toLowerCase(); if (g==="endurance") return "cardio"; if (g==="mobility") return "mobilité"; if (g==="fatloss" && (age ?? 0) > 45) return "hiit"; return "muscu"; }
+function inferLevel(age?: number): "debutant" | "intermediaire" | "avance" { if (!age) return "intermediaire"; if (age < 25) return "intermediaire"; if (age > 50) return "debutant"; return "intermediaire"; }
 
 /* ========================= Normalisations ========================= */
 function normalizeInjuries(list?: string[]): Injuries {
-  const txt = (list || []).map((s) => String(s || "").toLowerCase());
-  const has = (pat: RegExp) => txt.some((s) => pat.test(s));
+  const txt = (list || []).map(s => String(s || "").toLowerCase());
+  const has = (pat: RegExp) => txt.some(s => pat.test(s));
   return {
     back: has(/dos|lomb|rachis|back|spine/),
     shoulder: has(/epaul|épaul|shoulder/),
@@ -255,8 +200,8 @@ function normalizeInjuries(list?: string[]): Injuries {
   };
 }
 function normalizeItems(list?: string[]): Items {
-  const txt = (list || []).map((s) => String(s || "").toLowerCase());
-  const has = (pat: RegExp) => txt.some((s) => pat.test(s));
+  const txt = (list || []).map(s => String(s || "").toLowerCase());
+  const has = (pat: RegExp) => txt.some(s => pat.test(s));
   return {
     bands: has(/elas|élast|band/),
     kb: has(/kb|kettlebell/),
@@ -270,27 +215,15 @@ function normalizeItems(list?: string[]): Items {
   };
 }
 
-/* ========================= Cardio/Mobility/HIIT ========================= */
+/* ========================= Cardio / Mobility / HIIT ========================= */
 function buildCardio(ctx: Ctx, variantIdx: number): NormalizedExercise[] {
   const { minutes, equipItems } = ctx;
   const warm = { name: "Échauffement Z1", reps: "8–10 min", block: "echauffement" } as NormalizedExercise;
   const cool = { name: "Retour au calme + mobilité", reps: "5–8 min", block: "fin" } as NormalizedExercise;
-
-  let main: NormalizedExercise;
-  if (variantIdx % 2 === 0) {
-    const dur = Math.max(15, minutes - 12);
-    main = {
-      name: equipItems.bike ? "Vélo Z2 continu" : equipItems.rower ? "Rameur Z2 continu" : "Z2 continu",
-      reps: `${dur} min`,
-      block: "principal",
-    };
-  } else {
-    main = {
-      name: equipItems.treadmill ? "Fractionné Z2/Z3 sur tapis" : "Fractionné Z2/Z3",
-      reps: "12×(1’/1’)",
-      block: "principal",
-    };
-  }
+  const main: NormalizedExercise =
+    variantIdx % 2 === 0
+      ? { name: equipItems.bike ? "Vélo Z2 continu" : equipItems.rower ? "Rameur Z2 continu" : "Z2 continu", reps: `${Math.max(15, minutes - 12)} min`, block: "principal" }
+      : { name: equipItems.treadmill ? "Fractionné Z2/Z3 sur tapis" : "Fractionné Z2/Z3", reps: "12×(1’/1’)", block: "principal" };
   return [warm, main, cool];
 }
 
@@ -304,18 +237,14 @@ function buildMobility(_ctx: Ctx): NormalizedExercise[] {
 }
 
 function buildHiit(ctx: Ctx): NormalizedExercise[] {
-  const out: NormalizedExercise[] = [];
-  out.push({ name: "Air Squats", reps: "40s", rest: "20s", block: "principal" });
-  out.push({ name: "Mountain Climbers", reps: "40s", rest: "20s", block: "principal" });
-  out.push(adjustForInjuries(ctx, {
-    name: "Burpees (option sans saut)",
-    reps: "30–40s", rest: "30–40s", block: "principal",
-    notes: "Retire le saut/impact si genoux sensibles.",
-  }));
-  return out;
+  return [
+    { name: "Air Squats", reps: "40s", rest: "20s", block: "principal" },
+    { name: "Mountain Climbers", reps: "40s", rest: "20s", block: "principal" },
+    adjustForInjuries(ctx, { name: "Burpees (option sans saut)", reps: "30–40s", rest: "30–40s", block: "principal", notes: "Retire le saut/impact si genoux sensibles." }),
+  ];
 }
 
-/* ========================= Sélection muscu ========================= */
+/* ========================= Musculation ========================= */
 type PoolItem = {
   name: string;
   need?: ("bar" | "db" | "bench" | "machine" | "kb" | "bands" | "trx")[];
@@ -601,9 +530,6 @@ function adjustForInjuries(ctx: Ctx, ex: NormalizedExercise): NormalizedExercise
     return swap(e, { name: "Marche rapide inclinée", sets: e.sets ?? 3, reps: "2–3 min", rest: "60s", block: "principal" });
   }
 
-  if (/tirage élastique|row|tirage/i.test(e.name)) {
-    if ((ctx.equipItems as any).bands) e.equipment = e.equipment || "élastiques";
-  }
   if (/kettlebell|kb/i.test(e.name) && !(ctx.equipItems as any).kb) {
     return swap(e, { ...e, name: e.name.replace(/kettlebell|KB/i, "haltère"), equipment: "haltères" });
   }
@@ -621,7 +547,7 @@ function preferBackFriendly(ex: NormalizedExercise, ctx: Ctx): NormalizedExercis
   return ex;
 }
 
-function swap(_old: NormalizedExercise, replacement: NormalizedExercise): NormalizedExercise { return { ...replacement }; }
+function swap(_old: NormalizedExercise, replacement: NormalizedExercise) { return { ...replacement }; }
 function joinNotes(a?: string, b?: string) { if (!a) return b || ""; if (!b) return a || ""; return `${a} ${b}`.trim(); }
 
 /* ========================= Exercices helpers ========================= */
@@ -651,13 +577,13 @@ function pickBodyweight(goal: string) {
   if (g === "fatloss") return "12–20";
   return "10–15";
 }
-function barbell(name: string, ctx: Ctx, _area?: "bas" | "haut" | "dos", extra?: Partial<NormalizedExercise>): NormalizedExercise {
+function barbell(name: string, ctx: Ctx, _area?: any, extra?: Partial<NormalizedExercise>): NormalizedExercise {
   return { name, sets: setsFor(ctx.level), reps: repsFor(ctx.goalKey), rest: "90s", tempo: tempoFor(ctx.goalKey), rir: rirFor(ctx.level), block: "principal", equipment: "barre", ...extra };
 }
-function dumbbell(name: string, ctx: Ctx, _area?: "bas" | "haut" | "dos", extra?: Partial<NormalizedExercise>): NormalizedExercise {
+function dumbbell(name: string, ctx: Ctx, _area?: any, extra?: Partial<NormalizedExercise>): NormalizedExercise {
   return { name, sets: setsFor(ctx.level), reps: repsFor(ctx.goalKey), rest: "75s", tempo: tempoFor(ctx.goalKey), rir: rirFor(ctx.level), block: "principal", equipment: "haltères", ...extra };
 }
-function cableOrMachine(name: string, ctx: Ctx, _area?: "bas" | "haut" | "dos", extra?: Partial<NormalizedExercise>): NormalizedExercise {
+function cableOrMachine(name: string, ctx: Ctx, _area?: any, extra?: Partial<NormalizedExercise>): NormalizedExercise {
   return { name, sets: setsFor(ctx.level), reps: repsFor(ctx.goalKey), rest: "75–90s", tempo: tempoFor(ctx.goalKey), rir: rirFor(ctx.level), block: "principal", equipment: "machine/câble", ...extra };
 }
 function bodyOrBand(name: string, ctx: Ctx, extra?: Partial<NormalizedExercise>): NormalizedExercise {
