@@ -277,8 +277,8 @@ export async function getAnswersForEmail(
     obj["col_E"] = latest.row[4] || "";  // Matériel (none/limited/full)
     obj["col_F"] = latest.row[5] || "";  // Durée (min)
     obj["col_G"] = latest.row[6] || "";  // Objectif (libellé)
-    obj["col_H"] = latest.row[7] || "";  // Blessures
-    obj["col_I"] = latest.row[8] || "";  // Jours / semaine
+    obj["col_H"] = latest.row[7] || "";  // ⚠️ Dispo (jours / semaine) — PRIORITÉ
+    obj["col_I"] = latest.row[8] || "";  // Ancienne: Jours / semaine
     obj["col_J"] = latest.row[9] || "";  // Équipements détaillés (liste)
     obj["col_K"] = latest.row[10] || ""; // Email (si c'est là)
     obj["email"] = latest.row[idx.email] || emailLc;
@@ -349,6 +349,7 @@ function splitList(s: any): string[] | undefined {
 
 /* ------------------------------------------------------------------
  * 🔎 Dispo “loose”: détecte aussi les chiffres seuls 1..7 n’importe où
+ *   → Priorité à col_H (ta consigne), puis autres champs, puis scan global
  * ------------------------------------------------------------------*/
 function availabilityTextFromAnswersLoose(answers: Record<string, any>): string | undefined {
   if (!answers) return undefined;
@@ -359,8 +360,8 @@ function availabilityTextFromAnswersLoose(answers: Record<string, any>): string 
 
   const bag: string[] = [];
 
-  // indices "habituels"
-  for (const k of ["daysPerWeek", "jours", "séances/semaine", "seances/semaine", "col_I"]) {
+  // ✅ Priorité à col_H
+  for (const k of ["col_H", "daysPerWeek", "jours", "séances/semaine", "seances/semaine", "col_I"]) {
     const v = answers[k as keyof typeof answers];
     if (typeof v === "string" || typeof v === "number") bag.push(String(v));
   }
@@ -375,8 +376,8 @@ function availabilityTextFromAnswersLoose(answers: Record<string, any>): string 
 }
 
 /** Infère 1..6 séances depuis un texte libre.
- *  - Prend “N x/fois/jours”, “N” tout seul (1..7), “week-end”, jours nommés, etc.
- *  - Range N dans [1..6] (si 7 → 6, on n’en génère pas 7).
+ *  - Prend “N x/fois/jours”, “N” tout seul (1..7), “3-4 fois”, “week-end”, jours nommés…
+ *  - Range N dans [1..6] (si 7 → 6).
  */
 function inferMaxSessionsFromText(text?: string | null): number | undefined {
   if (!text) return undefined;
@@ -451,15 +452,17 @@ export function generateProgrammeFromAnswers(ans: Record<string, any>): { sessio
   const injuries =
     splitList(ans["injuries"] ?? ans["blessures"] ?? ans["col_H"]) || undefined;
 
-  // 🔎 Nouvelle détection de la dispo globale (y compris 1..7 tout seuls)
+  // 🔎 Dispo globale (y compris 1..7 tout seuls) — priorité col_H
   const availabilityText = availabilityTextFromAnswersLoose(ans);
 
   // 🧠 Inférence 1..6 depuis le texte
   const inferred = inferMaxSessionsFromText(availabilityText);
 
-  // Ancienne logique structurée (compat) → si présente on la prend, sinon on prend l’inférence, sinon 3
+  // ✅ Priorise col_H pour le nombre de séances; sinon autres champs; sinon inférence; sinon 3
   const structuredDays =
+    toNumber(ans["col_H"]) ??
     toNumber(ans["daysPerWeek"] ?? ans["jours"] ?? ans["séances/semaine"] ?? ans["seances/semaine"] ?? ans["col_I"]);
+
   const maxSessions = Math.max(1, Math.min(6, structuredDays ?? inferred ?? 3));
 
   const equipItems =
