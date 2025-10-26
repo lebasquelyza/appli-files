@@ -9,8 +9,46 @@ export const runtime = "nodejs";
 
 type AiProgramme = { sessions: any[]; profile?: any | null };
 
+/** ===== Helpers locaux (minimaux) =====
+ * Ces helpers ne changent pas ta logique “Mes infos”.
+ * Ils servent juste à mieux lire la dispo pour passer maxSessions à béton.
+ */
+const DAYS = ["lundi","mardi","mercredi","jeudi","vendredi","samedi","dimanche"];
+
+function extractDaysList(text?: string | null): string[] {
+  if (!text) return [];
+  const s = String(text).toLowerCase();
+  const out: string[] = [];
+  const push = (d: string) => { if (!out.includes(d)) out.push(d); };
+
+  if (/week\s*-?\s*end|weekend/.test(s)) { push("samedi"); push("dimanche"); }
+  for (const d of DAYS) if (new RegExp(`\\b${d}\\b`, "i").test(s)) push(d);
+  return out;
+}
+
+function inferMaxSessionsFromText(text?: string | null): number | undefined {
+  if (!text) return undefined;
+  const s = String(text).toLowerCase();
+
+  // “5x”, “5 fois”, “5 jours”
+  const numMatch = s.match(/\b(\d{1,2})\s*(x|fois|jours?)\b/);
+  if (numMatch) {
+    const n = parseInt(numMatch[1], 10);
+    if (!Number.isNaN(n)) return Math.max(1, Math.min(6, n));
+  }
+
+  // “toute la semaine”, “tous les jours”
+  if (/toute?\s+la\s+semaine|tous?\s+les\s+jours/.test(s)) return 6;
+
+  // Liste de jours (“lundi mardi …” / “week-end”)
+  const days = extractDaysList(s);
+  if (days.length) return Math.max(1, Math.min(6, days.length));
+
+  return undefined;
+}
+
 /** Petite aide locale : reconstitue availabilityText depuis les réponses
- *  (détection chiffres 1–7, “x/fois/jours”, jours nommés, week-end, etc.)
+ * (détection chiffres 1–7, “x/fois/jours”, jours nommés, week-end, etc.)
  */
 function availabilityFromAnswers(answers: Record<string, any> | null | undefined): string | undefined {
   if (!answers) return undefined;
@@ -66,7 +104,12 @@ export async function GET(req: Request) {
       }
       const profile = buildProfileFromAnswers(answers) as any;
       profile.availabilityText = availabilityFromAnswers(answers);
-      const { sessions } = planProgrammeFromProfile(profile);
+
+      // 🔧 NOUVEAU (minime) : passer maxSessions explicite à béton
+      const maxSessions = inferMaxSessionsFromText(profile.availabilityText) ?? 3;
+
+      const { sessions } = planProgrammeFromProfile(profile, { maxSessions });
+
       return NextResponse.json({ sessions, profile } satisfies AiProgramme, { status: 200 });
     }
 
@@ -103,7 +146,11 @@ export async function POST(req: Request) {
       }
       const profile = buildProfileFromAnswers(answers) as any;
       profile.availabilityText = availabilityFromAnswers(answers);
-      const { sessions } = planProgrammeFromProfile(profile);
+
+      // 🔧 NOUVEAU (minime) : passer maxSessions explicite à béton
+      const maxSessions = inferMaxSessionsFromText(profile.availabilityText) ?? 3;
+
+      const { sessions } = planProgrammeFromProfile(profile, { maxSessions });
       return NextResponse.json({ ok: true, programme: { sessions, profile } }, { status: 200 });
     }
 
@@ -112,7 +159,11 @@ export async function POST(req: Request) {
       const answers = body.answers as Record<string, any>;
       const profile = buildProfileFromAnswers(answers) as any;
       profile.availabilityText = availabilityFromAnswers(answers);
-      const { sessions } = planProgrammeFromProfile(profile);
+
+      // 🔧 NOUVEAU (minime) : passer maxSessions explicite à béton
+      const maxSessions = inferMaxSessionsFromText(profile.availabilityText) ?? 3;
+
+      const { sessions } = planProgrammeFromProfile(profile, { maxSessions });
       return NextResponse.json({ ok: true, programme: { sessions, profile } }, { status: 200 });
     }
 
@@ -126,7 +177,11 @@ export async function POST(req: Request) {
     if (answers) {
       const profile = buildProfileFromAnswers(answers) as any;
       profile.availabilityText = availabilityFromAnswers(answers);
-      const { sessions } = planProgrammeFromProfile(profile);
+
+      // 🔧 NOUVEAU (minime) : passer maxSessions explicite à béton
+      const maxSessions = inferMaxSessionsFromText(profile.availabilityText) ?? 3;
+
+      const { sessions } = planProgrammeFromProfile(profile, { maxSessions });
       return NextResponse.json({ ok: true, programme: { sessions, profile } }, { status: 200 });
     }
 
