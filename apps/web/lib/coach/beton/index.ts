@@ -1,24 +1,49 @@
-// apps/web/lib/coach/beton/core.ts
+// apps/web/lib/coach/beton/index.ts
 import type {
   AiSession as AiSessionT,
   WorkoutType,
   NormalizedExercise,
+  Profile as ProfileT,
+} from "../ai";
+import {
+  getAnswersForEmail as _getAnswersForEmail,
+  buildProfileFromAnswers as _buildProfileFromAnswers,
 } from "../ai";
 
 /* ========================= Types & Options ========================= */
-export type PlanOptions = { today?: Date; maxSessions?: number };
-export type ProfileInput = {
-  prenom?: string; age?: number; objectif?: string; goal?: string;
-  equipLevel?: "none" | "limited" | "full"; timePerSession?: number;
+export type PlanOptions = {
+  today?: Date;
+  maxSessions?: number; // 1..6 (jours/semaine)
+};
+
+type ProfileInput = {
+  prenom?: string;
+  age?: number;
+  objectif?: string; // libellé brut (affichage)
+  goal?: string; // clé normalisée: hypertrophy|fatloss|strength|endurance|mobility|general
+  equipLevel?: "none" | "limited" | "full";
+  timePerSession?: number;
   level?: "debutant" | "intermediaire" | "avance";
-  injuries?: string[]; equipItems?: string[];
-  availabilityText?: string; email?: string; likes?: string[]; dislikes?: string[];
+  injuries?: string[]; // ex: ["dos","epaules","genoux"]
+  equipItems?: string[]; // ex: ["élastiques","kettlebell","trx"]
+  /** Texte libre de dispo: “lundi mardi”, “week-end”, “6 jours par semaine”, “3x”, etc. */
+  availabilityText?: string;
+  email?: string;
+
+  // préférences (facultatif si non présent dans le Sheet)
+  likes?: string[];    // ex: ["pompes","kettlebell","tractions"]
+  dislikes?: string[]; // ex: ["back squat","burpees"]
 };
 
 /* ====== Focus par séance (split) ====== */
 type StrengthFocus =
-  | "full" | "bas_quads" | "bas_iscios_glutes"
-  | "haut_push" | "haut_pull" | "haut_mix" | "bras_core";
+  | "full"
+  | "bas_quads"
+  | "bas_iscios_glutes"
+  | "haut_push"
+  | "haut_pull"
+  | "haut_mix"
+  | "bras_core"; // pour hypertrophy 5–6 jours
 
 const FOCUS_LABEL: Record<StrengthFocus, string> = {
   full: "Full body",
@@ -30,8 +55,11 @@ const FOCUS_LABEL: Record<StrengthFocus, string> = {
   bras_core: "Bras & Core",
 };
 
+/** Plan de split en fonction du nb de séances/sem. et de l’objectif */
 function makeFocusPlan(n: number, goalKey: string): StrengthFocus[] {
   const g = (goalKey || "general").toLowerCase();
+
+  // Hypertrophie → plus d'iso, journée Bras/Core si 5–6 jours
   if (g === "hypertrophy") {
     if (n <= 1) return ["full"];
     if (n === 2) return ["bas_iscios_glutes", "haut_mix"];
@@ -40,6 +68,8 @@ function makeFocusPlan(n: number, goalKey: string): StrengthFocus[] {
     if (n === 5) return ["bas_quads", "haut_push", "bas_iscios_glutes", "haut_pull", "bras_core"];
     return ["bas_quads", "haut_push", "bas_iscios_glutes", "haut_pull", "bras_core", "full"];
   }
+
+  // Force → gros polyarticulaires, 3–5 reps, repos long
   if (g === "strength") {
     if (n <= 1) return ["full"];
     if (n === 2) return ["bas_quads", "haut_push"];
@@ -48,6 +78,8 @@ function makeFocusPlan(n: number, goalKey: string): StrengthFocus[] {
     if (n === 5) return ["bas_quads", "haut_push", "bas_iscios_glutes", "haut_pull", "full"];
     return ["bas_quads", "haut_push", "bas_iscios_glutes", "haut_pull", "full", "full"];
   }
+
+  // Perte de gras → densité/rotation upper-lower
   if (g === "fatloss") {
     if (n <= 1) return ["full"];
     if (n === 2) return ["bas_iscios_glutes", "haut_mix"];
@@ -56,6 +88,8 @@ function makeFocusPlan(n: number, goalKey: string): StrengthFocus[] {
     if (n === 5) return ["bas_quads", "haut_mix", "bas_iscios_glutes", "haut_pull", "full"];
     return ["bas_quads", "haut_mix", "bas_iscios_glutes", "haut_pull", "full", "full"];
   }
+
+  // Général (fallback)
   if (n <= 1) return ["full"];
   if (n === 2) return ["bas_iscios_glutes", "haut_mix"];
   if (n === 3) return ["bas_quads", "haut_push", "haut_pull"];
@@ -71,6 +105,7 @@ export function planProgrammeFromProfile(
 ): { sessions: AiSessionT[] } {
   const { today = new Date(), maxSessions: maxOpt } = opts ?? {};
 
+  // Inférer le nb de séances depuis le texte de disponibilités si maxSessions non fourni
   const inferred = inferMaxSessions(profile.availabilityText);
   const maxSessions = clamp(maxOpt ?? inferred ?? 3, 1, 6);
 
@@ -89,7 +124,10 @@ export function planProgrammeFromProfile(
     equipItems: normalizeItems(profile.equipItems),
   };
 
+  // Jours explicites à afficher dans les titres (Lundi, Mardi...), sinon fallback A/B/C
   const daysList = extractDaysList(profile.availabilityText);
+
+  // Plan de focus si muscu (dépend aussi de l’objectif)
   const focusPlan = type === "muscu" ? makeFocusPlan(maxSessions, goalKey) : [];
 
   const sessions: AiSessionT[] = [];
@@ -100,9 +138,10 @@ export function planProgrammeFromProfile(
     const day = String(d.getDate()).padStart(2, "0");
     const dateStr = `${y}-${m}-${day}`;
 
-    const variant = i % 3;
+    const variant = i % 3; // A/B/C (fallback visuel)
     const labelABC = ["A", "B", "C"][variant];
 
+    // Titre logique
     const dayLabel = daysList[i] ? capitalize(daysList[i]) : labelABC;
     const singleNoDay = maxSessions === 1 && daysList.length === 0;
     const focus: StrengthFocus | undefined = type === "muscu" ? focusPlan[i % focusPlan.length] : undefined;
@@ -123,7 +162,7 @@ export function planProgrammeFromProfile(
         ? buildMobility(ctx)
         : type === "hiit"
         ? buildHiit(ctx)
-        : buildStrengthFocused(ctx, focus ?? "full", goalKey, profile);
+        : buildStrengthFocused(ctx, focus ?? "full", goalKey, profile); // ✅ muscu ultra personnalisée
 
     sessions.push({
       id: `beton-${dateStr}-${i}-${Math.random().toString(36).slice(2, 7)}`,
@@ -139,12 +178,80 @@ export function planProgrammeFromProfile(
   return { sessions };
 }
 
-/* ========================= Inférence nb séances & jours ========================= */
+/* ========================= Génération depuis le Sheet (optionnel) ========================= */
+function availabilityTextFromAnswers(answers: any): string | undefined {
+  if (!answers) return undefined;
+  const dayPat =
+    /(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|week\s*-?\s*end|weekend|jours?\s+par\s+semaine|\b\d+\s*(x|fois|jours?))/i;
+
+  const candidates: string[] = [];
+  // ✅ on ajoute col_H ici aussi
+  for (const k of ["col_H", "daysPerWeek", "jours", "séances/semaine", "seances/semaine", "col_I"]) {
+    const v = answers[k];
+    if (typeof v === "string") candidates.push(v);
+  }
+  for (const k of Object.keys(answers)) {
+    const v = answers[k];
+    if (typeof v === "string") candidates.push(v);
+  }
+  const hits = candidates
+    .map((v) => String(v ?? "").trim())
+    .filter((v) => v && dayPat.test(v));
+
+  return hits.length ? hits.join(" ; ") : undefined;
+}
+
+export async function planProgrammeFromEmail(
+  email: string,
+  opts: PlanOptions = {}
+): Promise<{ sessions: AiSessionT[]; profile: Partial<ProfileT> }> {
+  const cleanEmail = normalizeEmail(email);
+  const res = await _getAnswersForEmail(cleanEmail, { fresh: true } as any);
+  const last = Array.isArray(res)
+    ? res.slice().sort((a, b) => extractTimestampAny(a) - extractTimestampAny(b)).at(-1) ?? res[0]
+    : res;
+
+  let built: Partial<ProfileT> & { availabilityText?: string } = {};
+  if (last) {
+    built = (_buildProfileFromAnswers(last) || {}) as Partial<ProfileT> & { availabilityText?: string };
+    built.availabilityText = built.availabilityText || availabilityTextFromAnswers(last);
+  } else {
+    built = { email: cleanEmail } as Partial<ProfileT>;
+  }
+
+  const inferred = inferMaxSessions(built.availabilityText);
+  const maxSessions = clamp(opts.maxSessions ?? inferred ?? 3, 1, 6);
+  const { sessions } = planProgrammeFromProfile(built as unknown as ProfileInput, {
+    ...opts,
+    maxSessions,
+  });
+  return { sessions, profile: built };
+}
+
+export function planProgrammeFromAnswers(
+  answers: any,
+  opts: PlanOptions = {}
+): { sessions: AiSessionT[]; profile: Partial<ProfileT> } {
+  const built = (_buildProfileFromAnswers(answers) || {}) as Partial<ProfileT> & {
+    availabilityText?: string;
+  };
+  const availability = built.availabilityText || availabilityTextFromAnswers(answers);
+  const inferred = inferMaxSessions(availability);
+  const maxSessions = clamp(opts.maxSessions ?? inferred ?? 3, 1, 6);
+  const { sessions } = planProgrammeFromProfile(built as unknown as ProfileInput, {
+    ...opts,
+    maxSessions,
+  });
+  return { sessions, profile: built };
+}
+
+/* ========================= Inférence du nb de séances & Jours ========================= */
 const DAYS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"];
 
 function inferMaxSessions(text?: string | null): number | undefined {
   if (!text) return undefined;
   const s = String(text).toLowerCase();
+
   const numMatch = s.match(/\b(\d{1,2})\s*(x|fois|jours?)\b/);
   if (numMatch) {
     const n = parseInt(numMatch[1], 10);
@@ -154,6 +261,7 @@ function inferMaxSessions(text?: string | null): number | undefined {
 
   const days = extractDaysList(s);
   if (days.length) return clamp(days.length, 1, 6);
+
   return undefined;
 }
 
@@ -161,34 +269,100 @@ function extractDaysList(text?: string | null): string[] {
   if (!text) return [];
   const s = String(text).toLowerCase();
   const out: string[] = [];
-  const push = (d: string) => { if (!out.includes(d)) out.push(d); };
-  if (/week\s*-?\s*end|weekend/.test(s)) { push("samedi"); push("dimanche"); }
-  for (const d of DAYS) if (new RegExp(`\\b${d}\\b`, "i").test(s)) push(d);
+  const push = (d: string) => {
+    if (!out.includes(d)) out.push(d);
+  };
+
+  if (/week\s*-?\s*end|weekend/.test(s)) {
+    push("samedi");
+    push("dimanche");
+  }
+  for (const d of DAYS) {
+    if (new RegExp(`\\b${d}\\b`, "i").test(s)) push(d);
+  }
   return out;
 }
 
-function capitalize(str: string) { return str ? str.charAt(0).toUpperCase() + str.slice(1) : str; }
-function defaultBaseTitle(t: WorkoutType) { return t === "cardio" ? "Cardio" : t === "mobilité" ? "Mobilité" : t === "hiit" ? "HIIT" : "Muscu"; }
+function capitalize(str: string) {
+  return str ? str.charAt(0).toUpperCase() + str.slice(1) : str;
+}
+
+function defaultBaseTitle(t: WorkoutType) {
+  return t === "cardio" ? "Cardio" : t === "mobilité" ? "Mobilité" : t === "hiit" ? "HIIT" : "Muscu";
+}
 
 /* ========================= Contexte & utils ========================= */
 type Ctx = {
   level: "debutant" | "intermediaire" | "avance";
   equip: "none" | "limited" | "full";
-  minutes: number; goalKey: string; injuries: Injuries; equipItems: Items;
+  minutes: number;
+  goalKey: string;
+  injuries: Injuries;
+  equipItems: Items;
 };
-type Injuries = { back?: boolean; shoulder?: boolean; knee?: boolean; wrist?: boolean; hip?: boolean; ankle?: boolean; elbow?: boolean; };
-type Items = { bands?: boolean; kb?: boolean; trx?: boolean; bench?: boolean; bar?: boolean; db?: boolean; bike?: boolean; rower?: boolean; treadmill?: boolean; };
 
-function clamp(n:number,a:number,b:number){ return Math.max(a, Math.min(b,n)); }
-function addDays(d:Date,n:number){ const x=new Date(d); x.setDate(x.getDate()+n); return x; }
-function defaultTime(goal?: string){ switch((goal ?? "").toLowerCase()){ case "endurance": return 35; case "mobility": return 25; case "fatloss": return 35; default: return 45; } }
-function pickType(goal?: string, age?: number): WorkoutType { const g=(goal ?? "").toLowerCase(); if (g==="endurance") return "cardio"; if (g==="mobility") return "mobilité"; if (g==="fatloss" && (age ?? 0) > 45) return "hiit"; return "muscu"; }
-function inferLevel(age?: number): "debutant" | "intermediaire" | "avance" { if (!age) return "intermediaire"; if (age < 25) return "intermediaire"; if (age > 50) return "debutant"; return "intermediaire"; }
+type Injuries = {
+  back?: boolean;
+  shoulder?: boolean;
+  knee?: boolean;
+  wrist?: boolean;
+  hip?: boolean;
+  ankle?: boolean;
+  elbow?: boolean;
+};
+type Items = {
+  bands?: boolean;
+  kb?: boolean;
+  trx?: boolean;
+  bench?: boolean;
+  bar?: boolean;
+  db?: boolean;
+  bike?: boolean;
+  rower?: boolean;
+  treadmill?: boolean;
+};
+
+function clamp(n: number, a: number, b: number) {
+  return Math.max(a, Math.min(b, n));
+}
+function addDays(d: Date, n: number) {
+  const x = new Date(d);
+  x.setDate(x.getDate() + n);
+  return x;
+}
+
+function defaultTime(goal?: string) {
+  switch ((goal ?? "").toLowerCase()) {
+    case "endurance":
+      return 35;
+    case "mobility":
+      return 25;
+    case "fatloss":
+      return 35;
+    default:
+      return 45;
+  }
+}
+
+function pickType(goal?: string, age?: number): WorkoutType {
+  const g = (goal ?? "").toLowerCase();
+  if (g === "endurance") return "cardio";
+  if (g === "mobility") return "mobilité";
+  if (g === "fatloss" && (age ?? 0) > 45) return "hiit";
+  return "muscu";
+}
+
+function inferLevel(age?: number): "debutant" | "intermediaire" | "avance" {
+  if (!age) return "intermediaire";
+  if (age < 25) return "intermediaire";
+  if (age > 50) return "debutant";
+  return "intermediaire";
+}
 
 /* ========================= Normalisations ========================= */
 function normalizeInjuries(list?: string[]): Injuries {
-  const txt = (list || []).map(s => String(s || "").toLowerCase());
-  const has = (pat: RegExp) => txt.some(s => pat.test(s));
+  const txt = (list || []).map((s) => String(s || "").toLowerCase());
+  const has = (pat: RegExp) => txt.some((s) => pat.test(s));
   return {
     back: has(/dos|lomb|rachis|back|spine/),
     shoulder: has(/epaul|épaul|shoulder/),
@@ -200,8 +374,8 @@ function normalizeInjuries(list?: string[]): Injuries {
   };
 }
 function normalizeItems(list?: string[]): Items {
-  const txt = (list || []).map(s => String(s || "").toLowerCase());
-  const has = (pat: RegExp) => txt.some(s => pat.test(s));
+  const txt = (list || []).map((s) => String(s || "").toLowerCase());
+  const has = (pat: RegExp) => txt.some((s) => pat.test(s));
   return {
     bands: has(/elas|élast|band/),
     kb: has(/kb|kettlebell/),
@@ -215,15 +389,27 @@ function normalizeItems(list?: string[]): Items {
   };
 }
 
-/* ========================= Cardio / Mobility / HIIT ========================= */
+/* ========================= Cardio/Mobility/HIIT ========================= */
 function buildCardio(ctx: Ctx, variantIdx: number): NormalizedExercise[] {
   const { minutes, equipItems } = ctx;
   const warm = { name: "Échauffement Z1", reps: "8–10 min", block: "echauffement" } as NormalizedExercise;
   const cool = { name: "Retour au calme + mobilité", reps: "5–8 min", block: "fin" } as NormalizedExercise;
-  const main: NormalizedExercise =
-    variantIdx % 2 === 0
-      ? { name: equipItems.bike ? "Vélo Z2 continu" : equipItems.rower ? "Rameur Z2 continu" : "Z2 continu", reps: `${Math.max(15, minutes - 12)} min`, block: "principal" }
-      : { name: equipItems.treadmill ? "Fractionné Z2/Z3 sur tapis" : "Fractionné Z2/Z3", reps: "12×(1’/1’)", block: "principal" };
+
+  let main: NormalizedExercise;
+  if (variantIdx % 2 === 0) {
+    const dur = Math.max(15, minutes - 12);
+    main = {
+      name: equipItems.bike ? "Vélo Z2 continu" : equipItems.rower ? "Rameur Z2 continu" : "Z2 continu",
+      reps: `${dur} min`,
+      block: "principal",
+    };
+  } else {
+    main = {
+      name: equipItems.treadmill ? "Fractionné Z2/Z3 sur tapis" : "Fractionné Z2/Z3",
+      reps: "12×(1’/1’)",
+      block: "principal",
+    };
+  }
   return [warm, main, cool];
 }
 
@@ -237,21 +423,29 @@ function buildMobility(_ctx: Ctx): NormalizedExercise[] {
 }
 
 function buildHiit(ctx: Ctx): NormalizedExercise[] {
-  return [
-    { name: "Air Squats", reps: "40s", rest: "20s", block: "principal" },
-    { name: "Mountain Climbers", reps: "40s", rest: "20s", block: "principal" },
-    adjustForInjuries(ctx, { name: "Burpees (option sans saut)", reps: "30–40s", rest: "30–40s", block: "principal", notes: "Retire le saut/impact si genoux sensibles." }),
-  ];
+  const out: NormalizedExercise[] = [];
+  out.push({ name: "Air Squats", reps: "40s", rest: "20s", block: "principal" });
+  out.push({ name: "Mountain Climbers", reps: "40s", rest: "20s", block: "principal" });
+  out.push(
+    adjustForInjuries(ctx, {
+      name: "Burpees (option sans saut)",
+      reps: "30–40s",
+      rest: "30–40s",
+      block: "principal",
+      notes: "Retire le saut/impact si genoux sensibles.",
+    })
+  );
+  return out;
 }
 
-/* ========================= Musculation ========================= */
+/* ========================= Sélection dynamique Muscu ========================= */
 type PoolItem = {
   name: string;
   need?: ("bar" | "db" | "bench" | "machine" | "kb" | "bands" | "trx")[];
   fallback?: string;
   area?: "bas" | "haut" | "dos";
   kind?: "main" | "assist" | "iso" | "core";
-  contra?: (inj: Injuries) => boolean;
+  contra?: (inj: Injuries) => boolean; // si true → exclure
 };
 
 const POOLS: Record<StrengthFocus, PoolItem[]> = {
@@ -343,6 +537,8 @@ function parseRestToSec(r?: string) {
   if (s) return Number(s[1]);
   return 0;
 }
+
+/** ✅ FIX TS: plus de comparaison avec "full" après narrowing */
 function hasEquipment(
   ctx: Ctx,
   need: "bar" | "db" | "bench" | "machine" | "kb" | "bands" | "trx"
@@ -359,6 +555,7 @@ function hasEquipment(
     default: return false;
   }
 }
+
 function matchesPreference(name: string, list?: string[]) {
   if (!list || list.length === 0) return false;
   const n = name.toLowerCase();
@@ -368,7 +565,7 @@ function estimateTotalMinutes(list: NormalizedExercise[], goal: string) {
   return list.reduce((sum, e) => sum + estimateExerciseMinutes(e, goal), 0);
 }
 
-/* ========================= Musculation ========================= */
+/* ========================= Musculation ultra-personnalisée ========================= */
 function buildStrengthFocused(
   ctx: Ctx,
   focus: StrengthFocus,
@@ -467,7 +664,7 @@ function buildStrengthFocused(
   return out;
 }
 
-/* ========================= Ajustements blessures/items ========================= */
+/* ========================= Ajustements (blessures & items) ========================= */
 function adjustForInjuries(ctx: Ctx, ex: NormalizedExercise): NormalizedExercise {
   const e: NormalizedExercise = { ...ex };
 
@@ -530,6 +727,9 @@ function adjustForInjuries(ctx: Ctx, ex: NormalizedExercise): NormalizedExercise
     return swap(e, { name: "Marche rapide inclinée", sets: e.sets ?? 3, reps: "2–3 min", rest: "60s", block: "principal" });
   }
 
+  if (/tirage élastique|row|tirage/i.test(e.name)) {
+    if ((ctx.equipItems as any).bands) e.equipment = e.equipment || "élastiques";
+  }
   if (/kettlebell|kb/i.test(e.name) && !(ctx.equipItems as any).kb) {
     return swap(e, { ...e, name: e.name.replace(/kettlebell|KB/i, "haltère"), equipment: "haltères" });
   }
@@ -547,15 +747,23 @@ function preferBackFriendly(ex: NormalizedExercise, ctx: Ctx): NormalizedExercis
   return ex;
 }
 
-function swap(_old: NormalizedExercise, replacement: NormalizedExercise) { return { ...replacement }; }
-function joinNotes(a?: string, b?: string) { if (!a) return b || ""; if (!b) return a || ""; return `${a} ${b}`.trim(); }
+function swap(_old: NormalizedExercise, replacement: NormalizedExercise): NormalizedExercise {
+  return { ...replacement };
+}
+function joinNotes(a?: string, b?: string) {
+  if (!a) return b || "";
+  if (!b) return a || "";
+  return `${a} ${b}`.trim();
+}
 
 /* ========================= Exercices helpers ========================= */
 function setsFor(level: "debutant" | "intermediaire" | "avance", bw = false) {
   if (bw) return level === "avance" ? 4 : 3;
   return level === "avance" ? 4 : level === "intermediaire" ? 3 : 2;
 }
-function rirFor(level: "debutant" | "intermediaire" | "avance") { return level === "avance" ? 1 : 2; }
+function rirFor(level: "debutant" | "intermediaire" | "avance") {
+  return level === "avance" ? 1 : 2;
+}
 function tempoFor(goal: string) {
   const g = goal.toLowerCase();
   if (g === "hypertrophy") return "3011";
@@ -577,13 +785,15 @@ function pickBodyweight(goal: string) {
   if (g === "fatloss") return "12–20";
   return "10–15";
 }
-function barbell(name: string, ctx: Ctx, _area?: any, extra?: Partial<NormalizedExercise>): NormalizedExercise {
+
+/* ====== Factories ====== */
+function barbell(name: string, ctx: Ctx, _area?: "bas" | "haut" | "dos", extra?: Partial<NormalizedExercise>): NormalizedExercise {
   return { name, sets: setsFor(ctx.level), reps: repsFor(ctx.goalKey), rest: "90s", tempo: tempoFor(ctx.goalKey), rir: rirFor(ctx.level), block: "principal", equipment: "barre", ...extra };
 }
-function dumbbell(name: string, ctx: Ctx, _area?: any, extra?: Partial<NormalizedExercise>): NormalizedExercise {
+function dumbbell(name: string, ctx: Ctx, _area?: "bas" | "haut" | "dos", extra?: Partial<NormalizedExercise>): NormalizedExercise {
   return { name, sets: setsFor(ctx.level), reps: repsFor(ctx.goalKey), rest: "75s", tempo: tempoFor(ctx.goalKey), rir: rirFor(ctx.level), block: "principal", equipment: "haltères", ...extra };
 }
-function cableOrMachine(name: string, ctx: Ctx, _area?: any, extra?: Partial<NormalizedExercise>): NormalizedExercise {
+function cableOrMachine(name: string, ctx: Ctx, _area?: "bas" | "haut" | "dos", extra?: Partial<NormalizedExercise>): NormalizedExercise {
   return { name, sets: setsFor(ctx.level), reps: repsFor(ctx.goalKey), rest: "75–90s", tempo: tempoFor(ctx.goalKey), rir: rirFor(ctx.level), block: "principal", equipment: "machine/câble", ...extra };
 }
 function bodyOrBand(name: string, ctx: Ctx, extra?: Partial<NormalizedExercise>): NormalizedExercise {
@@ -591,4 +801,26 @@ function bodyOrBand(name: string, ctx: Ctx, extra?: Partial<NormalizedExercise>)
 }
 function body(name: string, ctx: Ctx, extra?: Partial<NormalizedExercise>): NormalizedExercise {
   return { name, sets: setsFor(ctx.level, true), reps: extra?.reps || pickBodyweight(ctx.goalKey), rest: "60s", block: "principal", equipment: "poids du corps", ...extra };
+}
+
+/* ========================= Divers utils (email/timestamp) ========================= */
+function normalizeEmail(raw?: string | null) {
+  const s = String(raw || "").trim().toLowerCase();
+  if (!s) return "";
+  return s
+    .replace(/@glmail\./g, "@gmail.")
+    .replace(/@gmai(l)?\./g, "@gmail.")
+    .replace(/@gnail\./g, "@gmail.")
+    .replace(/@hotnail\./g, "@hotmail.")
+    .replace(/\s+/g, "");
+}
+function extractTimestampAny(a: any): number {
+  const candidates = [a?.timestamp, a?.ts, a?.createdAt, a?.date, a?.Date, a?.A, a?.["A"], a?.["Horodatage"], a?.["horodatage"]];
+  for (const v of candidates) {
+    if (!v) continue;
+    const d = typeof v === "number" ? new Date(v) : new Date(String(v));
+    const t = d.getTime();
+    if (!Number.isNaN(t)) return t;
+  }
+  return 0;
 }
