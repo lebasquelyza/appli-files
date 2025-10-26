@@ -16,10 +16,11 @@ function availabilityFromAnswers(answers: Record<string, any> | null | undefined
   if (!answers) return undefined;
 
   const dayPat =
-    /(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|week\s*-?\s*end|weekend|jours?\s+par\s+semaine|\b[1-7]\s*(x|fois|jours?)?)/i;
+    /(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|week\s*-?\s*end|weekend|jours?\s+par\s+semaine|\b[1-7]\s*(x|fois|jours?)?|\b[1-7]\b)/i;
 
   const candidates: string[] = [];
-  for (const k of ["daysPerWeek", "jours", "séances/semaine", "seances/semaine", "col_I"]) {
+  // ✅ Ajout col_H en priorité (ta demande)
+  for (const k of ["col_H", "daysPerWeek", "jours", "séances/semaine", "seances/semaine", "col_I"]) {
     const v = answers[k as keyof typeof answers];
     if (typeof v === "string" || typeof v === "number") candidates.push(String(v));
   }
@@ -137,3 +138,4 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "INTERNAL" }, { status: 200 });
   }
 }
+
