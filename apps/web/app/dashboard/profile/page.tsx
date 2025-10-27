@@ -9,6 +9,7 @@ import {
   type Profile as ProfileT,
 } from "../../../lib/coach/ai";
 
+import { planProgrammeFromEmail } from "../../../lib/coach/beton"; // ⬅️ on charge le programme IA côté serveur
 import GenerateClient from "./GenerateClient";
 
 const QUESTIONNAIRE_BASE =
@@ -80,12 +81,26 @@ async function loadProfile(searchParams?: Record<string, string | string[] | und
   return { emailForDisplay, profile, debugInfo, forceBlank };
 }
 
+/* Loader — Programme IA côté serveur (SSR) */
+async function loadInitialSessions(email: string) {
+  if (!email) return [];
+  try {
+    const { sessions } = await planProgrammeFromEmail(email);
+    return sessions || [];
+  } catch {
+    return [];
+  }
+}
+
 export default async function Page({
   searchParams,
 }: {
   searchParams?: { success?: string; error?: string; debug?: string; blank?: string; empty?: string };
 }) {
   const { emailForDisplay, profile, debugInfo, forceBlank } = await loadProfile(searchParams);
+
+  // ✅ Génération IA côté serveur pour l’affichage initial
+  const initialSessions = await loadInitialSessions(emailForDisplay);
 
   const showPlaceholders = !forceBlank;
 
@@ -224,11 +239,11 @@ export default async function Page({
         </div>
       </section>
 
-      {/* ===== Mon programme — 100% client ===== */}
+      {/* ===== Mon programme — IA côté serveur, affichage côté client ===== */}
       <GenerateClient
         email={emailForDisplay}
         questionnaireBase={QUESTIONNAIRE_BASE}
-        initialSessions={[]}
+        initialSessions={initialSessions}
       />
     </div>
   );
