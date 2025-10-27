@@ -1,4 +1,4 @@
-//apps/web/lib/coach/beton/index.ts
+// apps/web/lib/coach/beton/index.ts
 import type {
   AiSession as AiSessionT,
   WorkoutType,
@@ -14,6 +14,8 @@ import {
 export type PlanOptions = {
   today?: Date;
   maxSessions?: number; // 1..6 (jours/semaine)
+  /** Preset figé : renvoie un plan déterministe (exemple) */
+  preset?: "example_v1";
 };
 
 type ProfileInput = {
@@ -103,7 +105,13 @@ export function planProgrammeFromProfile(
   profile: ProfileInput = {},
   opts?: PlanOptions
 ): { sessions: AiSessionT[] } {
-  const { today = new Date(), maxSessions: maxOpt } = opts ?? {};
+  const { today = new Date(), maxSessions: maxOpt, preset } = opts ?? {};
+
+  /* ====== PRESET FIGÉ : renvoie exactement le même programme exemple ====== */
+  if (preset === "example_v1") {
+    const sessions = buildFixedExampleSessions(today);
+    return { sessions };
+  }
 
   // Inférer le nb de séances depuis le texte de disponibilités si maxSessions non fourni
   const inferred = inferMaxSessions(profile.availabilityText);
@@ -250,28 +258,18 @@ const DAYS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dima
 
 function inferMaxSessions(text?: string | null): number | undefined {
   if (!text) return undefined;
-  const s = String(text).toLowerCase().normalize("NFKC");
+  const s = String(text).toLowerCase();
 
-  // 1) Motifs structurés: "5 j", "5j", "5 j/sem", "5 jours/semaine", "5x", "5 fois", etc.
-  const rich = s.match(/\b(\d{1,2})\s*(x|fois|j|jrs|jours?)(\s*(par|\/)\s*(semaine|sem))?\b/);
-  if (rich) {
-    const n = parseInt(rich[1], 10);
+  // ✅ élargi pour gérer "5j", "5 j", "5 j/sem", "5 jours/semaine", etc.
+  const numMatch = s.match(/\b(\d{1,2})\s*(x|fois|j|jrs|jours?)(\s*(par|\/)\s*(semaine|sem))?\b/);
+  if (numMatch) {
+    const n = parseInt(numMatch[1], 10);
     if (!Number.isNaN(n)) return clamp(n, 1, 6);
   }
-
-  // 2) Expressions textuelles
   if (/toute?\s+la\s+semaine|tous?\s+les\s+jours/.test(s)) return 6;
 
-  // 3) Liste de jours nommés ("lundi mardi ...")
   const days = extractDaysList(s);
   if (days.length) return clamp(days.length, 1, 6);
-
-  // 4) Fallback permissif : si on voit un nombre 1..6 ET qu'on parle de "semaine" ou "jour(s)"
-  const loose = s.match(/\b([1-6])\b/);
-  if (loose && /(sem(ain|)|semaine|jour|jours|jrs)/.test(s)) {
-    const n = parseInt(loose[1], 10);
-    if (!Number.isNaN(n)) return clamp(n, 1, 6);
-  }
 
   return undefined;
 }
@@ -835,3 +833,114 @@ function extractTimestampAny(a: any): number {
   }
   return 0;
 }
+
+/* ========================= PRESET: plan fixe (exemple) ========================= */
+/** ID stable (pas de random) */
+function stableId(dateStr: string, i: number) {
+  return `beton-${dateStr}-${i}-example`;
+}
+
+/** Force les 5 séances exactes de l’exemple, mêmes titres + exos */
+function buildFixedExampleSessions(today: Date): AiSessionT[] {
+  const mkDate = (offset: number) => {
+    const d = new Date(today);
+    d.setDate(d.getDate() + offset);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
+
+  // Séance 1 — Lundi · Bas (quadris)
+  const d1 = mkDate(0);
+  const s1: AiSessionT = {
+    id: stableId(d1, 0),
+    title: "Muscu — Lundi · Bas (quadris)",
+    type: "muscu",
+    date: d1,
+    plannedMin: 45,
+    intensity: "modérée",
+    exercises: [
+      { name: "Activation hanches/chevilles", reps: "3–5 min", block: "echauffement" },
+      { name: "Goblet Squat", sets: 3, reps: "8–12", rest: "75–90s", tempo: "3011", rir: 2, block: "principal", equipment: "haltères" },
+      { name: "Fente arrière", sets: 3, reps: "10–12/ côté", rest: "60–75s", tempo: "3011", rir: 2, block: "principal" },
+      { name: "Leg Extension (élastique)", sets: 3, reps: "12–15", rest: "60–75s", tempo: "3011", rir: 2, block: "principal", equipment: "élastiques" },
+      { name: "Side Plank (gauche/droite)", sets: 2, reps: "20–30s/ côté", rest: "45s", block: "fin" },
+    ],
+  };
+
+  // Séance 2 — Mardi · Haut (poussée)
+  const d2 = mkDate(1);
+  const s2: AiSessionT = {
+    id: stableId(d2, 1),
+    title: "Muscu — Mardi · Haut (poussée)",
+    type: "muscu",
+    date: d2,
+    plannedMin: 45,
+    intensity: "modérée",
+    exercises: [
+      { name: "Activation épaules/omoplates", reps: "3–5 min", block: "echauffement" },
+      { name: "Développé militaire haltères", sets: 3, reps: "8–10", rest: "75–90s", tempo: "3011", rir: 2, block: "principal", equipment: "haltères" },
+      { name: "Développé incliné haltères", sets: 3, reps: "8–10", rest: "75–90s", tempo: "3011", rir: 2, block: "principal", equipment: "haltères" },
+      { name: "Pompes", sets: 3, reps: "max", rest: "60–75s", block: "principal" },
+      { name: "Écartés (élastiques)", sets: 2, reps: "15", rest: "60s", block: "principal", equipment: "élastiques" },
+    ],
+  };
+
+  // Séance 3 — Mercredi · Bas (ischios/fessiers)
+  const d3 = mkDate(2);
+  const s3: AiSessionT = {
+    id: stableId(d3, 2),
+    title: "Muscu — Mercredi · Bas (ischios/fessiers)",
+    type: "muscu",
+    date: d3,
+    plannedMin: 45,
+    intensity: "modérée",
+    exercises: [
+      { name: "Activation hanches/fessiers", reps: "5 min", block: "echauffement" },
+      { name: "Hip Thrust au sol", sets: 4, reps: "10–12", rest: "75–90s", tempo: "3011", rir: 2, block: "principal" },
+      { name: "Soulevé de terre roumain (haltères)", sets: 3, reps: "8–10", rest: "75–90s", tempo: "3011", rir: 2, block: "principal", equipment: "haltères" },
+      { name: "Glute Bridge", sets: 3, reps: "15", rest: "60–75s", tempo: "3011", rir: 2, block: "principal" },
+      { name: "Fentes latérales", sets: 2, reps: "10/ côté", rest: "60s", block: "principal" },
+    ],
+  };
+
+  // Séance 4 — Vendredi · Full body / HIIT
+  const d4 = mkDate(4);
+  const s4: AiSessionT = {
+    id: stableId(d4, 3),
+    title: "HIIT — Vendredi · Full body",
+    type: "hiit",
+    date: d4,
+    plannedMin: 40,
+    intensity: "élevée",
+    exercises: [
+      { name: "Jump Squats", reps: "40s", rest: "20s", block: "principal" },
+      { name: "Pompes", reps: "40s", rest: "20s", block: "principal" },
+      { name: "Mountain Climbers", reps: "40s", rest: "20s", block: "principal" },
+      { name: "Dumbbell Thrusters", reps: "40s", rest: "20s", block: "principal", equipment: "haltères" },
+      { name: "Repos entre tours", reps: "60s", block: "fin" },
+    ],
+  };
+
+  // Séance 5 — Samedi · Mobilité / Core
+  const d5 = mkDate(5);
+  const s5: AiSessionT = {
+    id: stableId(d5, 4),
+    title: "Mobilité — Samedi · Core",
+    type: "mobilité",
+    date: d5,
+    plannedMin: 30,
+    intensity: "modérée",
+    exercises: [
+      { name: "Respiration + Flow léger", reps: "5 min", block: "echauffement" },
+      { name: "Cat-Cow", reps: "2 min", block: "principal" },
+      { name: "Bird-Dog", sets: 3, reps: "12", rest: "45s", block: "principal" },
+      { name: "Plank", sets: 3, reps: "30s", rest: "45s", block: "principal" },
+      { name: "Étirements complets", reps: "5 min", block: "fin" },
+    ],
+  };
+
+  return [s1, s2, s3, s4, s5];
+}
+
