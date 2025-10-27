@@ -1,5 +1,4 @@
-```ts
-// apps/web/lib/coach/beton/index.ts
+//apps/web/lib/coach/beton/index.ts
 import type {
   AiSession as AiSessionT,
   WorkoutType,
