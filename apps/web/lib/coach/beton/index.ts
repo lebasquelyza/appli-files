@@ -182,7 +182,7 @@ export function planProgrammeFromProfile(
 function availabilityTextFromAnswers(answers: any): string | undefined {
   if (!answers) return undefined;
   const dayPat =
-    /(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|week\s*-?\s*end|weekend|jours?\s+par\s+semaine|\d+\s*(x|fois|j|jrs|jours?)(\s*(par|\/)\s*(semaine|sem))?)/i;
+    /(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|week\s*-?\s*end|weekend|jours?\s+par\s+semaine|\b\d+\s*(x|fois|j|jrs|jours?)(\s*(par|\/)\s*(semaine|sem))?)/i;
 
   const candidates: string[] = [];
   // ✅ on ajoute col_H ici aussi
@@ -250,18 +250,28 @@ const DAYS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dima
 
 function inferMaxSessions(text?: string | null): number | undefined {
   if (!text) return undefined;
-  const s = String(text).toLowerCase();
+  const s = String(text).toLowerCase().normalize("NFKC");
 
-  // ✅ élargi pour gérer "5j", "5 j", "5 j/sem", "5 jours/semaine", etc.
-  const numMatch = s.match(/(\d{1,2})\s*(x|fois|j|jrs|jours?)(\s*(par|\/)\s*(semaine|sem))?/);
-  if (numMatch) {
-    const n = parseInt(numMatch[1], 10);
+  // 1) Motifs structurés: "5 j", "5j", "5 j/sem", "5 jours/semaine", "5x", "5 fois", etc.
+  const rich = s.match(/\b(\d{1,2})\s*(x|fois|j|jrs|jours?)(\s*(par|\/)\s*(semaine|sem))?\b/);
+  if (rich) {
+    const n = parseInt(rich[1], 10);
     if (!Number.isNaN(n)) return clamp(n, 1, 6);
   }
+
+  // 2) Expressions textuelles
   if (/toute?\s+la\s+semaine|tous?\s+les\s+jours/.test(s)) return 6;
 
+  // 3) Liste de jours nommés ("lundi mardi ...")
   const days = extractDaysList(s);
   if (days.length) return clamp(days.length, 1, 6);
+
+  // 4) Fallback permissif : si on voit un nombre 1..6 ET qu'on parle de "semaine" ou "jour(s)"
+  const loose = s.match(/\b([1-6])\b/);
+  if (loose && /(sem(ain|)|semaine|jour|jours|jrs)/.test(s)) {
+    const n = parseInt(loose[1], 10);
+    if (!Number.isNaN(n)) return clamp(n, 1, 6);
+  }
 
   return undefined;
 }
@@ -279,7 +289,7 @@ function extractDaysList(text?: string | null): string[] {
     push("dimanche");
   }
   for (const d of DAYS) {
-    if (new RegExp(`\b${d}\b`, "i").test(s)) push(d);
+    if (new RegExp(`\\b${d}\\b`, "i").test(s)) push(d);
   }
   return out;
 }
