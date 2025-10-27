@@ -3,7 +3,8 @@
 
 import { useState } from "react";
 import type { AiSession as AiSessionT, Profile as ProfileT } from "../../../lib/coach/ai";
-import { planProgrammeFromProfile } from "../../../lib/coach/beton/core";
+// ❌ plus besoin du planner côté client
+// import { planProgrammeFromProfile } from "../../../lib/coach/beton/core";
 
 type Props = {
   email?: string;
@@ -73,6 +74,7 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
       setLoading(true);
       setError("");
 
+      // 1) Récupère les dernières réponses pour enrichir le profil
       const url = email ? `/api/answers?email=${encodeURIComponent(email)}` : `/api/answers`;
       const res = await fetch(url, { cache: "no-store" });
       const data = await res.json();
@@ -80,7 +82,7 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
       const answers: Record<string, any> | null = data?.answers || null;
       const baseProfile: Partial<ProfileT> = data?.profile || {};
 
-      // Enrichissement identique à generateProgrammeFromAnswers (serveur)
+      // 2) Construit le profil (comme côté serveur)
       const profile: any = {
         prenom: baseProfile.prenom,
         age: baseProfile.age,
@@ -99,12 +101,18 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
         dislikes: splitList(answers?.["dislikes"]),
       };
 
-      const daysPerWeek =
+      const maxSessions =
         Math.max(1, Math.min(6, toNumber(answers?.["daysPerWeek"] ?? answers?.["jours"] ?? answers?.["séances/semaine"] ?? answers?.["seances/semaine"] ?? answers?.["col_I"]) || 3));
 
-      // ✨ Génération 100% client
-      const { sessions } = planProgrammeFromProfile(profile, { maxSessions: daysPerWeek });
-      setSessions(sessions);
+      // 3) 👉 Appelle l’API preset pour générer le plan (option B)
+      const planRes = await fetch("/api/plan", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ profile, maxSessions }),
+      });
+      const planJson = await planRes.json();
+      if (!planRes.ok) throw new Error(planJson?.error || "Erreur API plan");
+      setSessions(planJson.sessions || []);
     } catch (e: any) {
       setError("Impossible de générer les séances. Réessaie dans un instant.");
     } finally {
@@ -121,7 +129,7 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
         <div>
           <h2 style={{ marginBottom: 6 }}>Mon programme</h2>
           <p className="text-sm" style={{ color: "#6b7280" }}>
-            Personnalisé via vos dernières réponses (IA côté client).
+            Personnalisé via API (preset fixé).
           </p>
         </div>
 
@@ -130,7 +138,7 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
           disabled={loading}
           className="btn"
           style={{ background: "#111827", color: "#ffffff", border: "1px solid #d1d5db", fontWeight: 600, padding: "6px 10px", lineHeight: 1.2, borderRadius: 8 }}
-          title="Génère/Met à jour ton programme personnalisé"
+          title="Génère/Met à jour ton programme"
         >
           {loading ? "⏳ Génération..." : "⚙️ Générer"}
         </button>
