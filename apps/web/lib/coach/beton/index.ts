@@ -825,4 +825,3 @@ function extractTimestampAny(a: any): number {
   }
   return 0;
 }
-```
