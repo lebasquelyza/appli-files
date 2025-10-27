@@ -182,7 +182,7 @@ export function planProgrammeFromProfile(
 function availabilityTextFromAnswers(answers: any): string | undefined {
   if (!answers) return undefined;
   const dayPat =
-    /(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|week\s*-?\s*end|weekend|jours?\s+par\s+semaine|\b\d+\s*(x|fois|j|jrs|jours?)(\s*(par|\/)\s*(semaine|sem))?)/i;
+    /(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|week\s*-?\s*end|weekend|jours?\s+par\s+semaine|\d+\s*(x|fois|j|jrs|jours?)(\s*(par|\/)\s*(semaine|sem))?)/i;
 
   const candidates: string[] = [];
   // ✅ on ajoute col_H ici aussi
@@ -253,7 +253,7 @@ function inferMaxSessions(text?: string | null): number | undefined {
   const s = String(text).toLowerCase();
 
   // ✅ élargi pour gérer "5j", "5 j", "5 j/sem", "5 jours/semaine", etc.
-  const numMatch = s.match(/\b(\d{1,2})\s*(x|fois|j|jrs|jours?)(\s*(par|\/)\s*(semaine|sem))?\b/);
+  const numMatch = s.match(/(\d{1,2})\s*(x|fois|j|jrs|jours?)(\s*(par|\/)\s*(semaine|sem))?/);
   if (numMatch) {
     const n = parseInt(numMatch[1], 10);
     if (!Number.isNaN(n)) return clamp(n, 1, 6);
@@ -279,7 +279,7 @@ function extractDaysList(text?: string | null): string[] {
     push("dimanche");
   }
   for (const d of DAYS) {
-    if (new RegExp(`\\b${d}\\b`, "i").test(s)) push(d);
+    if (new RegExp(`\b${d}\b`, "i").test(s)) push(d);
   }
   return out;
 }
