@@ -449,8 +449,9 @@ export function generateProgrammeFromAnswers(ans: Record<string, any>): { sessio
     (profile.age && profile.age > 50 ? 35 : undefined) ??
     45;
 
+  // ✅ NE PAS lire les blessures depuis col_H (disponibilités). On coupe ce fallback.
   const injuries =
-    splitList(ans["injuries"] ?? ans["blessures"] ?? ans["col_H"]) || undefined;
+    splitList(ans["injuries"] ?? ans["blessures"]) || undefined;
 
   // 🔎 Dispo globale (y compris 1..7 tout seuls) — priorité col_H
   const availabilityText = availabilityTextFromAnswersLoose(ans);
@@ -458,10 +459,10 @@ export function generateProgrammeFromAnswers(ans: Record<string, any>): { sessio
   // 🧠 Inférence 1..6 depuis le texte
   const inferred = inferMaxSessionsFromText(availabilityText);
 
-  // ✅ Priorise col_H pour le nombre de séances; sinon autres champs; sinon inférence; sinon 3
+  // ✅ Sources structurées pour le nombre: col_H prioritaire, puis divers champs, puis inférence, sinon 3
   const structuredDays =
     toNumber(ans["col_H"]) ??
-    toNumber(ans["daysPerWeek"] ?? ans["jours"] ?? ans["séances/semaine"] ?? ans["seances/semaine"] ?? ans["col_I"]);
+    toNumber(ans["daysPerWeek"] ?? ans["jours"] ?? ans["jours/semaine"] ?? ans["séances/semaine"] ?? ans["seances/semaine"] ?? ans["col_I"]);
 
   const maxSessions = Math.max(1, Math.min(6, structuredDays ?? inferred ?? 3));
 
@@ -481,6 +482,11 @@ export function generateProgrammeFromAnswers(ans: Record<string, any>): { sessio
     equipItems,
     availabilityText, // 👈 utile si jours nommés
   } as any;
+
+  if (process.env.NODE_ENV !== "production") {
+    console.log("[ai.ts] availabilityText:", availabilityText);
+    console.log("[ai.ts] structuredDays:", structuredDays, "inferred:", inferred, "=> maxSessions:", maxSessions);
+  }
 
   // maxSessions = 1..6 (7 est clampé à 6 par design UI)
   return planProgrammeFromProfile(enriched, { maxSessions });
