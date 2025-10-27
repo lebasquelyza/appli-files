@@ -2,12 +2,12 @@
 "use client";
 
 import { useState } from "react";
-import type { AiSession as AiSessionT, Profile as ProfileT } from "../../../lib/coach/ai";
+import type { AiSession as AiSessionT } from "../../../lib/coach/ai";
 
 type Props = {
   email?: string;
   questionnaireBase: string;
-  initialSessions?: AiSessionT[]; // on l’ignore (on part vide)
+  initialSessions?: AiSessionT[];
 };
 
 type WorkoutType = "muscu" | "cardio" | "hiit" | "mobilité";
@@ -21,12 +21,9 @@ function typeBadgeClass(t: WorkoutType) {
   }
 }
 
-/* ========= Helpers pour profil/answers (identiques à avant) ========= */
-// ... (garde tes helpers existants: availabilityFromAnswers, normLevel, normEquipLevel, toNumber, splitList, extractDaysList)
-
-export default function GenerateClient({ email, questionnaireBase }: Props) {
+export default function GenerateClient({ email, questionnaireBase, initialSessions = [] }: Props) {
   const [loading, setLoading] = useState(false);
-  const [sessions, setSessions] = useState<AiSessionT[]>([]); // ✅ démarre toujours vide
+  const [sessions, setSessions] = useState<AiSessionT[]>(initialSessions);
   const [error, setError] = useState<string>("");
 
   async function onGenerate() {
@@ -34,53 +31,22 @@ export default function GenerateClient({ email, questionnaireBase }: Props) {
       setLoading(true);
       setError("");
 
-      // 1) Récupère les dernières réponses (inchangé)
-      const url = email ? `/api/answers?email=${encodeURIComponent(email)}` : `/api/answers`;
+      const url = email ? `/api/programme?email=${encodeURIComponent(email)}` : `/api/programme`;
       const res = await fetch(url, { cache: "no-store" });
       const data = await res.json();
 
-      const answers: Record<string, any> | null = data?.answers || null;
-      const baseProfile: Partial<ProfileT> = data?.profile || {};
+      if (!res.ok || data?.error) {
+        throw new Error(data?.error || "Programme indisponible");
+      }
 
-      // 2) Construit le profil (inchangé)
-      const profile: any = {
-        prenom: baseProfile.prenom,
-        age: baseProfile.age,
-        objectif: baseProfile.objectif,
-        goal: baseProfile.goal,
-        // … tes normalisations existantes …
-        // availabilityText: availabilityFromAnswers(answers),
-      };
-
-      // 3) Appel API preset — on n’affiche QUE ça
-      const planRes = await fetch("/api/plan", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ profile }), // le serveur décide du nombre via availability/chiffre
-      });
-      const planJson = await planRes.json();
-      if (!planRes.ok) throw new Error(planJson?.error || "Erreur API plan");
-
-      // ✅ On remplace totalement le state par CE QUI VIENT DE L’IA
-      setSessions(Array.isArray(planJson.sessions) ? planJson.sessions : []);
+      const serverSessions: AiSessionT[] = Array.isArray(data?.sessions) ? data.sessions : [];
+      setSessions(serverSessions);
     } catch (e: any) {
-      setSessions([]); // pas de séances si erreur
-      setError("Impossible de générer les séances. Réessaie dans un instant.");
+      setError(e?.message || "Impossible de récupérer votre programme pour le moment.");
     } finally {
       setLoading(false);
     }
   }
-
-  function onClear() {
-    setSessions([]); // 🗑️ supprime tout ce qui est affiché (IA)
-    setError("");    // et on enlève l’erreur éventuelle
-  }
-
-  const aiSessions = sessions.filter(
-    // Optionnel : filtre “séances IA seulement” si besoin d’un garde-fou
-    // par exemple si tu veux être SÛR de n’afficher que les ids générés par l’IA/preset
-    (s) => s?.id?.startsWith("preset-v1") || s?.id?.startsWith("beton-")
-  );
 
   return (
     <section className="section" style={{ marginTop: 12 }}>
@@ -91,42 +57,31 @@ export default function GenerateClient({ email, questionnaireBase }: Props) {
         <div>
           <h2 style={{ marginBottom: 6 }}>Mon programme</h2>
           <p className="text-sm" style={{ color: "#6b7280" }}>
-            Uniquement les séances générées par l’IA. En cas d’erreur, elle s’affiche ci-dessous.
+            Généré automatiquement selon vos dernières réponses au questionnaire.
           </p>
         </div>
 
-        <div style={{ display: "flex", gap: 8 }}>
-          <button
-            onClick={onClear}
-            disabled={loading || aiSessions.length === 0}
-            className="btn"
-            style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 600, padding: "6px 10px", lineHeight: 1.2, borderRadius: 8 }}
-            title="Supprimer les séances IA affichées"
-          >
-            🗑️ Effacer
-          </button>
-          <button
-            onClick={onGenerate}
-            disabled={loading}
-            className="btn"
-            style={{ background: "#111827", color: "#ffffff", border: "1px solid #d1d5db", fontWeight: 600, padding: "6px 10px", lineHeight: 1.2, borderRadius: 8 }}
-            title="Génère/Met à jour ton programme (IA)"
-          >
-            {loading ? "⏳ Génération..." : "⚙️ Générer"}
-          </button>
-        </div>
+        <button
+          onClick={onGenerate}
+          disabled={loading}
+          className="btn"
+          style={{ background: "#111827", color: "#ffffff", border: "1px solid #d1d5db", fontWeight: 600, padding: "6px 10px", lineHeight: 1.2, borderRadius: 8 }}
+          title="Génère/Met à jour ton programme personnalisé"
+        >
+          {loading ? "⏳ Génération..." : "⚙️ Générer"}
+        </button>
       </div>
 
       {error && (
         <div
           className="card text-sm"
-          style={{ border: "1px solid rgba(239,68,68,.35)", background: "rgba(239,68,68,.08)", fontWeight: 600 }}
+          style={{ border: "1px solid rgba(239,68,68,.35)", background: "rgba(239,68,68,.08)", fontWeight: 600, whiteSpace: "pre-wrap" }}
         >
           ⚠️ {error}
         </div>
       )}
 
-      {aiSessions.length === 0 && !error && (
+      {(!sessions || sessions.length === 0) ? (
         <div className="card text-sm" style={{ color: "#6b7280" }}>
           <div className="flex items-center gap-3">
             <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted">🤖</span>
@@ -139,11 +94,9 @@ export default function GenerateClient({ email, questionnaireBase }: Props) {
             </span>
           </div>
         </div>
-      )}
-
-      {aiSessions.length > 0 && (
+      ) : (
         <ul className="space-y-2 list-none pl-0">
-          {aiSessions.map((s) => {
+          {sessions.map((s) => {
             const qp = new URLSearchParams({
               title: s.title,
               date: s.date,
@@ -183,4 +136,3 @@ export default function GenerateClient({ email, questionnaireBase }: Props) {
     </section>
   );
 }
-
