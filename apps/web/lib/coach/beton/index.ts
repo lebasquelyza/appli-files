@@ -57,9 +57,51 @@ const FOCUS_LABEL: Record<StrengthFocus, string> = {
   bras_core: "Bras & Core",
 };
 
-/** Plan de split en fonction du nb de séances/sem. et de l’objectif */
-function makeFocusPlan(n: number, goalKey: string): StrengthFocus[] {
+/* ===== Détection d'une zone cible dans l'objectif (épaules, dos, etc.) ===== */
+type TargetArea = "shoulders" | "arms" | "back" | "glutes" | "quads" | "chest" | "core" | "none";
+
+function detectTargetArea(objectif?: string): TargetArea {
+  const s = String(objectif || "")
+    .normalize("NFD").replace(/\p{Diacritic}/gu, "")
+    .toLowerCase();
+
+  if (/(epaule|epaules|deltoid|deltoide|deltoides|shoulder)/.test(s)) return "shoulders";
+  if (/\b(biceps|triceps|bras)\b/.test(s)) return "arms";
+  if (/\b(dos|back|lats|dorsaux)\b/.test(s)) return "back";
+  if (/\b(fessier|glute|glutes)\b/.test(s)) return "glutes";
+  if (/\b(quadriceps|quadri|quads)\b/.test(s)) return "quads";
+  if (/\b(pec|pectoraux|chest)\b/.test(s)) return "chest";
+  if (/\b(core|abdo|tronc|gainage)\b/.test(s)) return "core";
+  return "none";
+}
+
+/** Plan de split en fonction du nb de séances/sem., de l’objectif et (nouveau) d’une zone cible */
+function makeFocusPlan(n: number, goalKey: string, target: TargetArea = "none"): StrengthFocus[] {
   const g = (goalKey || "general").toLowerCase();
+
+  // 🎯 Spécialisation muscle prioritaire quand 1–3 jours
+  if (target !== "none" && n <= 3) {
+    if (target === "shoulders" || target === "chest" || target === "arms") {
+      if (n === 1) return ["haut_push"];
+      if (n === 2) return ["haut_push", "haut_mix"];
+      return ["haut_push", "haut_pull", "bras_core"];
+    }
+    if (target === "back") {
+      if (n === 1) return ["haut_pull"];
+      if (n === 2) return ["haut_pull", "haut_mix"];
+      return ["haut_pull", "haut_push", "bras_core"];
+    }
+    if (target === "glutes" || target === "quads") {
+      if (n === 1) return [target === "quads" ? "bas_quads" : "bas_iscios_glutes"];
+      if (n === 2) return ["bas_quads", "bas_iscios_glutes"];
+      return ["bas_quads", "bas_iscios_glutes", "haut_mix"];
+    }
+    if (target === "core") {
+      if (n === 1) return ["bras_core"];
+      if (n === 2) return ["bras_core", "haut_mix"];
+      return ["bras_core", "haut_mix", "full"];
+    }
+  }
 
   // Hypertrophie → plus d'iso, journée Bras/Core si 5–6 jours
   if (g === "hypertrophy") {
@@ -123,6 +165,13 @@ export function planProgrammeFromProfile(
   const equip = profile.equipLevel ?? "limited";
   const goalKey = (profile.goal ?? "general").toLowerCase();
 
+  // 🎯 nouvelle détection de muscle cible depuis le libellé brut
+  const targetArea = detectTargetArea(profile.objectif);
+
+  // Optionnel : si ciblage muscle, on force la muscu pour garder la cohérence
+  const effectiveType: WorkoutType =
+    targetArea !== "none" ? "muscu" : (type as WorkoutType);
+
   const ctx: Ctx = {
     level,
     equip,
@@ -135,8 +184,9 @@ export function planProgrammeFromProfile(
   // Jours explicites à afficher dans les titres (Lundi, Mardi...), sinon fallback A/B/C
   const daysList = extractDaysList(profile.availabilityText);
 
-  // Plan de focus si muscu (dépend aussi de l’objectif)
-  const focusPlan = type === "muscu" ? makeFocusPlan(maxSessions, goalKey) : [];
+  // Plan de focus si muscu (dépend aussi de l’objectif) + prise en compte de la zone cible
+  const focusPlan =
+    effectiveType === "muscu" ? makeFocusPlan(maxSessions, goalKey, targetArea) : [];
 
   const sessions: AiSessionT[] = [];
   for (let i = 0; i < maxSessions; i++) {
@@ -152,7 +202,8 @@ export function planProgrammeFromProfile(
     // Titre logique
     const dayLabel = daysList[i] ? capitalize(daysList[i]) : labelABC;
     const singleNoDay = maxSessions === 1 && daysList.length === 0;
-    const focus: StrengthFocus | undefined = type === "muscu" ? focusPlan[i % focusPlan.length] : undefined;
+    const focus: StrengthFocus | undefined =
+      effectiveType === "muscu" ? focusPlan[i % focusPlan.length] : undefined;
     const focusSuffix = focus ? ` · ${FOCUS_LABEL[focus]}` : "";
 
     const title = profile.prenom
@@ -160,25 +211,25 @@ export function planProgrammeFromProfile(
         ? `Séance pour ${profile.prenom}${focusSuffix}`
         : `Séance pour ${profile.prenom} — ${dayLabel}${focusSuffix}`
       : singleNoDay
-      ? `${defaultBaseTitle(type)}${focusSuffix}`
-      : `${defaultBaseTitle(type)} — ${dayLabel}${focusSuffix}`;
+      ? `${defaultBaseTitle(effectiveType)}${focusSuffix}`
+      : `${defaultBaseTitle(effectiveType)} — ${dayLabel}${focusSuffix}`;
 
     const exos =
-      type === "cardio"
+      effectiveType === "cardio"
         ? buildCardio(ctx, variant)
-        : type === "mobilité"
+        : effectiveType === "mobilité"
         ? buildMobility(ctx)
-        : type === "hiit"
+        : effectiveType === "hiit"
         ? buildHiit(ctx)
         : buildStrengthFocused(ctx, focus ?? "full", goalKey, profile); // ✅ muscu ultra personnalisée
 
     sessions.push({
       id: `beton-${dateStr}-${i}-${Math.random().toString(36).slice(2, 7)}`,
       title,
-      type: type as WorkoutType,
+      type: effectiveType as WorkoutType,
       date: dateStr,
       plannedMin: minutes,
-      intensity: type === "hiit" ? "élevée" : "modérée",
+      intensity: effectiveType === "hiit" ? "élevée" : "modérée",
       exercises: exos,
     } as AiSessionT);
   }
@@ -943,4 +994,3 @@ function buildFixedExampleSessions(today: Date): AiSessionT[] {
 
   return [s1, s2, s3, s4, s5];
 }
-
