@@ -1,3 +1,4 @@
+
 import React from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -114,11 +115,14 @@ const styles = String.raw`
   .exoname { font-size: 15.5px; line-height:1.25; font-weight:700; }
   .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
   .meta-row { font-size:12.5px; color:#6b7280; margin-top:6px; display:grid; gap:4px; grid-template-columns:1fr; }
+  .btn { display:inline-flex; align-items:center; justify-content:center; border-radius:10px; border:1px solid #e5e7eb; background:#111827; color:#fff; font-weight:700; padding:8px 12px; line-height:1.2; }
+  .btn:hover { background:#0b1220; }
+  .btn-ghost { background:#fff; color:#111827; }
+  .btn-ghost:hover { background:#f9fafb; }
+  .btn-sm { padding:6px 10px; border-radius:8px; font-weight:600; font-size:12.5px; }
+  .btn-row { display:flex; gap:8px; flex-wrap:wrap; }
   @media(min-width:640px){ .meta-row{ grid-template-columns:1fr 1fr; } }
   @media print { .no-print { display: none !important; } }
-  .btn { display:inline-flex; align-items:center; justify-content:center; border-radius:10px; padding:8px 12px; font-weight:700; border:1px solid #e5e7eb; background:#111827; color:#fff; }
-  .btn-secondary { background:#ffffff; color:#111827; }
-  .btn:hover { filter:brightness(0.98); }
 `;
 
 /* ======================== Goal label helper (aligné sur la page profil) ======================== */
@@ -162,31 +166,35 @@ type PageViewProps = {
   goalLabel?: string;
   dataSource?: string;
   debug?: boolean;
-  backHref: string;
-  equipNoneHref: string;
-  equipFullHref: string;
 };
 
 /* ======================== View (JSX) ======================== */
 const PageView: React.FC<PageViewProps> = (props) => {
-  const { base, profile, groups, plannedMin, intensity, coachIntro, goalLabel, dataSource, debug, backHref, equipNoneHref, equipFullHref } = props;
+  const { base, profile, groups, plannedMin, intensity, coachIntro, goalLabel, dataSource, debug } = props;
+
+  // Build equip toggle URLs (simple: keep same id and force regen with equip)
+  const withEquipHref = `/dashboard/seance/${encodeURIComponent(base.id)}?regen=1&equip=full`;
+  const noEquipHref = `/dashboard/seance/${encodeURIComponent(base.id)}?regen=1&equip=none`;
 
   return (
     <div>
       <style dangerouslySetInnerHTML={{ __html: styles }} />
       {/* top bar */}
       <div className="mb-2 flex items-center justify-between no-print" style={{ paddingInline: 12 }}>
-        {/* Bouton retour → page Profil */}
-        <a href={backHref} className="btn btn-secondary">← Retour</a>
+        {/* Bouton retour — plus petit et reste en haut */}
+        <a
+          href="/dashboard/profile"
+          className="btn btn-sm btn-ghost"
+          style={{ borderColor:"#e5e7eb" }}
+        >
+          ← Retour
+        </a>
         <div className="flex items-center gap-2">
           {debug && dataSource && (
             <span className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-800">
               Source: {dataSource}
             </span>
           )}
-          {/* Boutons mode équipement */}
-          <a href={equipFullHref} className="btn btn-secondary" title="Voir la version avec équipement">Avec équipement</a>
-          <a href={equipNoneHref} className="btn" title="Voir la version sans équipement">Sans équipement</a>
         </div>
       </div>
 
@@ -247,6 +255,18 @@ const PageView: React.FC<PageViewProps> = (props) => {
                   : "Mouvement lent et contrôlé, respire profondément."}
               </li>
             </ul>
+          </div>
+
+          {/* Boutons variantes équipement — petits et juste sous le brief */}
+          <div className="no-print" style={{ marginTop: 10 }}>
+            <div className="btn-row">
+              <a href={withEquipHref} className="btn btn-sm" title="Variante avec matériel (salle/charges)">
+                Avec équipement
+              </a>
+              <a href={noEquipHref} className="btn btn-sm btn-ghost" title="Variante sans équipement (poids du corps)">
+                Sans équipement
+              </a>
+            </div>
           </div>
         </section>
 
@@ -327,7 +347,6 @@ async function loadData(
 }> {
   const debug = String(searchParams?.debug || "") === "1";
   const forceRegen = String(searchParams?.regen || "") === "1";
-  const equipOverride = String(searchParams?.equip || "").toLowerCase(); // "none" | "limited" | "full" | ""
 
   const store = parseStore(cookies().get("app_sessions")?.value);
   const fromStore = store.sessions.find((s) => s.id === id) as
@@ -412,11 +431,10 @@ async function loadData(
 
   // Profile depuis les réponses
   let profile: ProfileT | null = null;
-  let answers: Record<string, any> | null = null;
   try {
     const email = await getSignedInEmail();
     if (email) {
-      answers = await getAnswersForEmail(email);
+      const answers = await getAnswersForEmail(email);
       if (answers) profile = buildProfileFromAnswers(answers) as ProfileT;
     }
   } catch (e) {
@@ -434,13 +452,13 @@ async function loadData(
     try {
       const email = await getSignedInEmail();
       if (email) {
-        answers = answers || (await getAnswersForEmail(email));
+        const answers = await getAnswersForEmail(email);
         if (answers) {
-          // ⬇️ Override d'équipement via ?equip=none|limited|full
-          const eq = equipOverride;
-          if (eq === "none" || eq === "limited" || eq === "full") {
-            (answers as any).equipLevel = eq;
-          }
+          // Equip override via query ?equip=full|none
+          const equipParam = String(searchParams?.equip || "").toLowerCase();
+          const eq = equipParam === "none" ? "none" : equipParam === "full" ? "full" : "";
+          if (eq) (answers as any).equipLevel = eq;
+
           const regenProg = generateProgrammeFromAnswers(answers); // { sessions }
           const regen = regenProg.sessions || [];
           const match =
@@ -539,12 +557,6 @@ export default async function Page({
 
   const debug = String(searchParams?.debug || "") === "1";
 
-  // Construire les liens pour les boutons
-  const baseHref = `/dashboard/seance/${encodeURIComponent(base.id)}?title=${encodeURIComponent(base.title)}&date=${encodeURIComponent(base.date)}&type=${encodeURIComponent(base.type)}`;
-  const equipNoneHref = `${baseHref}&regen=1&equip=none`;
-  const equipFullHref = `${baseHref}&regen=1&equip=full`;
-  const backHref = "/dashboard/profile";
-
   return (
     <PageView
       base={base}
@@ -556,9 +568,6 @@ export default async function Page({
       goalLabel={goalLabel}
       dataSource={dataSource}
       debug={debug}
-      backHref={backHref}
-      equipNoneHref={equipNoneHref}
-      equipFullHref={equipFullHref}
     />
   );
 }
