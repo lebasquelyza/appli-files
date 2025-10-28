@@ -1,4 +1,3 @@
-
 import React from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -166,15 +165,31 @@ type PageViewProps = {
   goalLabel?: string;
   dataSource?: string;
   debug?: boolean;
+  /** full = avec équipement, none = sans équipement */
+  activeEquip: "full" | "none";
 };
 
 /* ======================== View (JSX) ======================== */
 const PageView: React.FC<PageViewProps> = (props) => {
-  const { base, profile, groups, plannedMin, intensity, coachIntro, goalLabel, dataSource, debug } = props;
+  const {
+    base,
+    profile,
+    groups,
+    plannedMin,
+    intensity,
+    coachIntro,
+    goalLabel,
+    dataSource,
+    debug,
+    activeEquip,
+  } = props;
 
   // Build equip toggle URLs (simple: keep same id and force regen with equip)
   const withEquipHref = `/dashboard/seance/${encodeURIComponent(base.id)}?regen=1&equip=full`;
   const noEquipHref = `/dashboard/seance/${encodeURIComponent(base.id)}?regen=1&equip=none`;
+
+  const filled = "btn btn-sm";
+  const ghost = "btn btn-sm btn-ghost";
 
   return (
     <div>
@@ -257,13 +272,23 @@ const PageView: React.FC<PageViewProps> = (props) => {
             </ul>
           </div>
 
-          {/* Boutons variantes équipement — petits et juste sous le brief */}
+          {/* Boutons variantes équipement — avec état visuel sélectionné */}
           <div className="no-print" style={{ marginTop: 10 }}>
             <div className="btn-row">
-              <a href={withEquipHref} className="btn btn-sm" title="Variante avec matériel (salle/charges)">
+              <a
+                href={withEquipHref}
+                aria-pressed={activeEquip === "full"}
+                className={activeEquip === "full" ? filled : ghost}
+                title="Variante avec matériel (salle/charges)"
+              >
                 Avec équipement
               </a>
-              <a href={noEquipHref} className="btn btn-sm btn-ghost" title="Variante sans équipement (poids du corps)">
+              <a
+                href={noEquipHref}
+                aria-pressed={activeEquip === "none"}
+                className={activeEquip === "none" ? filled : ghost}
+                title="Variante sans équipement (poids du corps)"
+              >
                 Sans équipement
               </a>
             </div>
@@ -344,9 +369,14 @@ async function loadData(
   profile: ProfileT | null;
   exercises: NormalizedExercise[];
   dataSource: string;
+  activeEquip: "full" | "none";
 }> {
   const debug = String(searchParams?.debug || "") === "1";
   const forceRegen = String(searchParams?.regen || "") === "1";
+
+  // NEW: lire param d'URL equip et initialiser l'état actif
+  const equipParam = String(searchParams?.equip || "").toLowerCase();
+  let activeEquip: "full" | "none" = equipParam === "none" ? "none" : "full";
 
   const store = parseStore(cookies().get("app_sessions")?.value);
   const fromStore = store.sessions.find((s) => s.id === id) as
@@ -441,6 +471,11 @@ async function loadData(
     console.warn("build profile failed", e);
   }
 
+  // Si pas de param d’URL, déduire depuis le profil (none => bouton "Sans équipement" actif)
+  if (!equipParam) {
+    activeEquip = profile?.equipLevel === "none" ? "none" : "full";
+  }
+
   // Exercices
   let exercises: NormalizedExercise[] =
     (fromStore?.exercises as NormalizedExercise[] | undefined) ||
@@ -455,7 +490,6 @@ async function loadData(
         const answers = await getAnswersForEmail(email);
         if (answers) {
           // Equip override via query ?equip=full|none
-          const equipParam = String(searchParams?.equip || "").toLowerCase();
           const eq = equipParam === "none" ? "none" : equipParam === "full" ? "full" : "";
           if (eq) (answers as any).equipLevel = eq;
 
@@ -491,10 +525,11 @@ async function loadData(
       foundAi: !!fromAi,
       storeLen: store.sessions.length,
       programmeLen: aiSessions.length,
+      activeEquip,
     });
   }
 
-  return { base, profile, exercises, dataSource };
+  return { base, profile, exercises, dataSource, activeEquip };
 }
 
 /* ======================== Small UI ======================== */
@@ -523,7 +558,7 @@ export default async function Page({
     redirect("/dashboard/profile?error=Seance%20introuvable");
   }
 
-  const { base, profile, exercises, dataSource } = await loadData(id, searchParams);
+  const { base, profile, exercises, dataSource, activeEquip } = await loadData(id, searchParams);
   if (!base) redirect("/dashboard/profile?error=Seance%20introuvable");
 
   const plannedMin = base.plannedMin ?? (profile?.timePerSession ?? 45);
@@ -568,6 +603,8 @@ export default async function Page({
       goalLabel={goalLabel}
       dataSource={dataSource}
       debug={debug}
+      activeEquip={activeEquip}
     />
   );
 }
+
