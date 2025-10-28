@@ -1,9 +1,9 @@
-// apps/web/app/dashboard/profile/GenerateClient.tsx
+
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import type { AiSession as AiSessionT, Profile as ProfileT } from "../../../lib/coach/ai";
-import { planProgrammeFromProfile } from "../../../lib/coach/beton/index"; // <-- assure-toi que ce chemin pointe bien sur ton index.ts béton
+import { planProgrammeFromProfile } from "../../../lib/coach/beton";
 
 type Props = {
   email?: string;
@@ -25,9 +25,9 @@ function typeBadgeClass(t: WorkoutType) {
 /* ========= Helpers client (mêmes règles que côté serveur) ========= */
 function availabilityFromAnswers(answers: Record<string, any> | null | undefined): string | undefined {
   if (!answers) return undefined;
-  const dayPat = /(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|week\s*-?\s*end|weekend|jours?\s+par\s+semaine|\b[1-7]\s*(x|fois|jours?)?)/i;
+  const dayPat = /(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|week\s*-?\s*end|weekend|\b[1-7]\s*(x|fois|j|jrs|jours?)\b)/i;
   const candidates: string[] = [];
-  for (const k of ["daysPerWeek", "jours", "séances/semaine", "seances/semaine", "col_I"]) {
+  for (const k of ["col_H", "daysPerWeek", "jours", "séances/semaine", "seances/semaine", "col_I"]) {
     const v = (answers as any)[k];
     if (typeof v === "string" || typeof v === "number") candidates.push(String(v));
   }
@@ -38,6 +38,7 @@ function availabilityFromAnswers(answers: Record<string, any> | null | undefined
   const hits = candidates.map(v => String(v ?? "").trim()).filter(v => v && dayPat.test(v));
   return hits.length ? hits.join(" ; ") : undefined;
 }
+
 function normLevel(s: string | undefined) {
   const v = String(s || "").toLowerCase();
   if (/avanc/.test(v)) return "avance";
@@ -61,23 +62,53 @@ function splitList(s: any): string[] | undefined {
   if (!txt) return undefined;
   return txt.split(/[;,/|]/).map((t) => t.trim()).filter(Boolean);
 }
+
+function clamp(n: number, a: number, b: number) {
+  return Math.max(a, Math.min(b, n));
+}
+
+function inferDaysPerWeekFromAvailability(text?: string | null): number | undefined {
+  if (!text) return undefined;
+  const s = String(text).toLowerCase();
+
+  // ranges "3-4"
+  const range = s.match(/\b([1-7])\s*-\s*([1-7])\b/);
+  if (range) {
+    const hi = Math.max(parseInt(range[1], 10), parseInt(range[2], 10));
+    return clamp(hi, 1, 6);
+  }
+
+  // explicit with units "5x", "5 fois", "5 j", "5 jours"
+  const withUnit = s.match(/\b([1-7])\s*(x|fois|j|jrs|jour|jours)\b/);
+  if (withUnit) {
+    return clamp(parseInt(withUnit[1], 10), 1, 6);
+  }
+
+  // solo number "5"
+  const solo = s.match(/\b([1-7])\b/);
+  if (solo) {
+    return clamp(parseInt(solo[1], 10), 1, 6);
+  }
+
+  if (/toute?\s+la\s+semaine|tous?\s+les\s+jours/.test(s)) return 6;
+
+  // named days + weekend
+  const DAYS = ["lundi","mardi","mercredi","jeudi","vendredi","samedi","dimanche"];
+  const seen: string[] = [];
+  if (/week\s*-?\s*end|weekend/.test(s)) { seen.push("samedi"); seen.push("dimanche"); }
+  for (const d of DAYS) {
+    if (new RegExp(`\\b${d}\\b`, "i").test(s) && !seen.includes(d)) seen.push(d);
+  }
+  if (seen.length) return clamp(seen.length, 1, 6);
+
+  return undefined;
+}
 /* ================================================================ */
 
 export default function GenerateClient({ email, questionnaireBase, initialSessions = [] }: Props) {
   const [loading, setLoading] = useState(false);
   const [sessions, setSessions] = useState<AiSessionT[]>(initialSessions);
   const [error, setError] = useState<string>("");
-
-  // NEW: au montage, on tente de récupérer d’anciennes séances (si l’utilisateur revient)
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem("ai_sessions");
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) setSessions(parsed);
-      }
-    } catch {}
-  }, []);
 
   async function onGenerate() {
     try {
@@ -90,6 +121,13 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
 
       const answers: Record<string, any> | null = data?.answers || null;
       const baseProfile: Partial<ProfileT> = data?.profile || {};
+
+      // Enrichissement identique à generateProgrammeFromAnswers (serveur)
+      const availabilityText = availabilityFromAnswers(answers);
+      const inferred = inferDaysPerWeekFromAvailability(availabilityText);
+      const structured = toNumber(answers?.["col_H"]) ??
+        toNumber(answers?.["daysPerWeek"] ?? answers?.["jours"] ?? answers?.["séances/semaine"] ?? answers?.["seances/semaine"] ?? answers?.["col_I"]);
+      const daysPerWeek = clamp(structured ?? inferred ?? 3, 1, 6);
 
       const profile: any = {
         prenom: baseProfile.prenom,
@@ -104,19 +142,16 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
         level: normLevel(answers?.["niveau"] ?? answers?.["level"] ?? answers?.["experience"] ?? answers?.["expérience"] ?? answers?.["col_D"]),
         injuries: splitList(answers?.["injuries"] ?? answers?.["blessures"] ?? answers?.["col_H"]),
         equipItems: splitList(answers?.["equipItems"] ?? answers?.["équipements"] ?? answers?.["equipements"] ?? answers?.["col_J"]),
-        availabilityText: availabilityFromAnswers(answers),
+        availabilityText,
         likes: splitList(answers?.["likes"]),
         dislikes: splitList(answers?.["dislikes"]),
       };
 
-      const daysPerWeek =
-        Math.max(1, Math.min(6, toNumber(answers?.["daysPerWeek"] ?? answers?.["jours"] ?? answers?.["séances/semaine"] ?? answers?.["seances/semaine"] ?? answers?.["col_I"]) || 3));
-
+      // ✨ Génération 100% client
       const { sessions } = planProgrammeFromProfile(profile, { maxSessions: daysPerWeek });
       setSessions(sessions);
+      try { localStorage.setItem("ai_sessions", JSON.stringify(sessions)); } catch {}
 
-      // NEW: on persiste pour la page détail
-      localStorage.setItem("ai_sessions", JSON.stringify(sessions));
     } catch (e: any) {
       setError("Impossible de générer les séances. Réessaie dans un instant.");
     } finally {
@@ -133,7 +168,7 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
         <div>
           <h2 style={{ marginBottom: 6 }}>Mon programme</h2>
           <p className="text-sm" style={{ color: "#6b7280" }}>
-            Personnalisé via vos dernières réponses (IA).
+            Personnalisé via vos dernières réponses (IA côté client).
           </p>
         </div>
 
@@ -212,4 +247,3 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
     </section>
   );
 }
-
