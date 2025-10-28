@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import DemoBrowser from "./DemoBrowser";
-import type { NormalizedExercise } from "../../lib/coach/ai";
+import type { NormalizedExercise } from "../lib/coach/ai";
 
 export default function ExerciseLink({
   exercise,
