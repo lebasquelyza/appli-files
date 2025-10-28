@@ -1,4 +1,3 @@
-// apps/web/lib/coach/beton/index.ts
 import type {
   AiSession as AiSessionT,
   WorkoutType,
@@ -76,26 +75,94 @@ function targetQuads(txt?: string)         { return has(txt, /\b(quadris?|quads?
 function targetHamstrings(txt?: string)    { return has(txt, /\b(ischios?|hamstrings?)\b/); }
 function targetCalves(txt?: string)        { return has(txt, /\b(mollets?|mollet|calf|calves|soleaire|sol[ée]aire|gastrocnemien)\b/); }
 
-/** Construit un plan de focus purement piloté par l'objectif brute (col G) si mots-clés. */
-function makePlanFromObjective(n: number, goalKey: string, objectifBrut?: string): StrengthFocus[] {
-  // mapping muscles -> focus
-  if (targetRearDelts(objectifBrut)) return Array.from({ length: n }, () => "haut_pull");
-  if (targetShoulders(objectifBrut)) return Array.from({ length: n }, () => "haut_push");
-  if (targetChest(objectifBrut))     return Array.from({ length: n }, () => "haut_push");
-  if (targetBack(objectifBrut) || targetTraps(objectifBrut)) return Array.from({ length: n }, () => "haut_pull");
-  if (targetBiceps(objectifBrut) || targetForearms(objectifBrut)) return Array.from({ length: n }, () => "haut_pull");
-  if (targetTriceps(objectifBrut))  return Array.from({ length: n }, () => "haut_push");
-  if (targetQuads(objectifBrut))    return Array.from({ length: n }, () => "bas_quads");
-  if (targetHamstrings(objectifBrut) || targetGlutes(objectifBrut)) return Array.from({ length: n }, () => "bas_iscios_glutes");
-  if (targetCalves(objectifBrut))   return Array.from({ length: n }, () => "bas_quads"); // on ajoutera un iso mollets
-  if (targetAbs(objectifBrut))      return Array.from({ length: n }, () => "bras_core"); // core dominant
+/** Détecte un muscle/segment ciblé depuis le libellé brut d’objectif (colonne G) */
+function deriveMuscleFocus(objectif?: string):
+  | "shoulders"
+  | "chest"
+  | "back"
+  | "quads"
+  | "hams_glutes"
+  | "arms"
+  | "core"
+  | "calves"
+  | undefined {
+  const s = String(objectif || "")
+    .normalize("NFD").replace(/\p{Diacritic}/gu, "")
+    .toLowerCase();
 
-  // fallback: plan standard par objectif global
-  return makeFocusPlan(n, goalKey);
+  if (!s) return undefined;
+
+  // Épaules
+  if (/(epaule|epaules|deltoid|deltoide)/.test(s)) return "shoulders";
+  // Pectoraux / poitrine
+  if (/(pec|pector|poitrine|chest)/.test(s)) return "chest";
+  // Dos / lats
+  if (/\bdos\b|lats?|grand dorsal|trap(ez|èze|eze)/.test(s)) return "back";
+  // Quadriceps / avant cuisse
+  if (/(quadri|quadriceps|avant cuisse|cuisses? (avant)?)/.test(s)) return "quads";
+  // Ischios / fessiers / chaîne postérieure
+  if (/(ischio|hamstring|fessier|glute|chaine posterieure)/.test(s)) return "hams_glutes";
+  // Bras : biceps / triceps / avant-bras
+  if (/(biceps?|triceps?|bras|avant[- ]bras)/.test(s)) return "arms";
+  // Abdos / core / gainage
+  if (/(abdos?|core|gainage|ceinture abdominale)/.test(s)) return "core";
+  // Mollets
+  if (/(mollet|calf|calves)/.test(s)) return "calves";
+
+  return undefined;
 }
 
-/** Plan standard par objectif global */
-function makeFocusPlan(n: number, goalKey: string): StrengthFocus[] {
+/** Plan de split en fonction du nb de séances/sem., de l’objectif ET (priorité) d’un muscle ciblé */
+function makeFocusPlan(
+  n: number,
+  goalKey: string,
+  muscle?: ReturnType<typeof deriveMuscleFocus>
+): StrengthFocus[] {
+  // 🎯 1) Si un muscle est explicitement demandé, on force un split cohérent
+  if (muscle) {
+    const one = () => {
+      switch (muscle) {
+        case "shoulders":
+        case "chest":      return ["haut_push"] as StrengthFocus[];
+        case "back":       return ["haut_pull"] as StrengthFocus[];
+        case "quads":      return ["bas_quads"] as StrengthFocus[];
+        case "hams_glutes":return ["bas_iscios_glutes"] as StrengthFocus[];
+        case "arms":
+        case "core":       return ["bras_core"] as StrengthFocus[];
+        case "calves":     return ["bas_quads"] as StrengthFocus[]; // proche du bloc quads
+      }
+    };
+    const two = () => {
+      switch (muscle) {
+        case "shoulders":
+        case "chest":      return ["haut_push", "haut_mix"] as StrengthFocus[];
+        case "back":       return ["haut_pull", "haut_mix"] as StrengthFocus[];
+        case "quads":      return ["bas_quads", "haut_mix"] as StrengthFocus[];
+        case "hams_glutes":return ["bas_iscios_glutes", "haut_mix"] as StrengthFocus[];
+        case "arms":
+        case "core":       return ["bras_core", "haut_mix"] as StrengthFocus[];
+        case "calves":     return ["bas_quads", "haut_mix"] as StrengthFocus[];
+      }
+    };
+    const three = () => {
+      switch (muscle) {
+        case "shoulders":
+        case "chest":      return ["haut_push", "haut_pull", "haut_mix"] as StrengthFocus[];
+        case "back":       return ["haut_pull", "haut_push", "haut_mix"] as StrengthFocus[];
+        case "quads":      return ["bas_quads", "haut_mix", "haut_pull"] as StrengthFocus[];
+        case "hams_glutes":return ["bas_iscios_glutes", "haut_mix", "haut_push"] as StrengthFocus[];
+        case "arms":
+        case "core":       return ["bras_core", "haut_mix", "haut_pull"] as StrengthFocus[];
+        case "calves":     return ["bas_quads", "haut_mix", "haut_pull"] as StrengthFocus[];
+      }
+    };
+
+    if (n <= 1) return one()!;
+    if (n === 2) return two()!;
+    if (n >= 3) return three()!;
+  }
+
+  // 🧠 2) Sinon: logique existante basée sur goalKey
   const g = (goalKey || "general").toLowerCase();
   if (g === "hypertrophy") {
     if (n <= 1) return ["full"];
@@ -164,9 +231,12 @@ export function planProgrammeFromProfile(
   // 3) Jours (affichage)
   const daysList = extractDaysList(profile.availabilityText);
 
-  // 4) Plan piloté par l’objectif BRUT (colonne G) s’il y a des mots-clés
+  // 🎯 Focus muscle (déduit du libellé brut d’objectif)
+  const muscleFocus = deriveMuscleFocus(profile.objectif);
+
+  // 4) Plan piloté par priorité muscle si muscu, sinon logique par objectif global
   const focusPlan = type === "muscu"
-    ? makePlanFromObjective(maxSessions, goalKey, profile.objectif)
+    ? makeFocusPlan(maxSessions, goalKey, muscleFocus)
     : [];
 
   const sessions: AiSessionT[] = [];
