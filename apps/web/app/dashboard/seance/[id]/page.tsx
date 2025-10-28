@@ -1,7 +1,7 @@
 import React from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import NextDynamic from "next/dynamic"; // ⬅️ renommé pour éviter le conflit
+import NextDynamic from "next/dynamic"; // alias pour éviter le conflit avec 'export const dynamic'
 import {
   getAiSessions,
   getAnswersForEmail,
@@ -13,7 +13,8 @@ import {
 } from "../../../../lib/coach/ai";
 
 /* Client-only modal (ChatGPT-powered) */
-const DemoModalAI = NextDynamic(() => import("../../../components/DemoModalAI"), { ssr: false });
+// ⬇️ CHEMIN CORRIGÉ ICI
+const DemoModalAI = NextDynamic(() => import("../../../../components/DemoModalAI"), { ssr: false });
 
 /* ======================== Utils ======================== */
 async function getSignedInEmail(): Promise<string> {
@@ -100,7 +101,7 @@ type ProfileT = ReturnType<typeof buildProfileFromAnswers> & {
   currentGoal?: string;
 };
 
-export const dynamic = "force-dynamic"; // ⬅️ Next.js app router flag (OK maintenant)
+export const dynamic = "force-dynamic"; // OK avec l’alias NextDynamic
 
 /* ======================== Styles & Const ======================== */
 const blockNames: Record<string, string> = {
@@ -681,4 +682,3 @@ export default async function Page({
     />
   );
 }
-
