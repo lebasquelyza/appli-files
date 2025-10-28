@@ -1,14 +1,13 @@
-
 "use client";
 
 import { useState } from "react";
 import type { AiSession as AiSessionT, Profile as ProfileT } from "../../../lib/coach/ai";
-// ✅ Utilise le fichier corrigé (index.ts)
 import { planProgrammeFromProfile } from "../../../lib/coach/beton";
 
 type Props = {
   email?: string;
   questionnaireBase: string;
+  /** Ignoré désormais pour n'afficher les séances qu'après clic */
   initialSessions?: AiSessionT[];
 };
 
@@ -98,15 +97,17 @@ function inferMaxSessionsFromText(text?: string | null): number | undefined {
 
 /* ================================================================ */
 
-export default function GenerateClient({ email, questionnaireBase, initialSessions = [] }: Props) {
+export default function GenerateClient({ email, questionnaireBase }: Props) {
   const [loading, setLoading] = useState(false);
-  const [sessions, setSessions] = useState<AiSessionT[]>(initialSessions);
+  const [sessions, setSessions] = useState<AiSessionT[]>([]); // 👈 démarrage vide
   const [error, setError] = useState<string>("");
+  const [hasGenerated, setHasGenerated] = useState(false);    // 👈 gate d'affichage
 
   async function onGenerate() {
     try {
       setLoading(true);
       setError("");
+      setHasGenerated(true); // le clic déclenche l'autorisation d'affichage
 
       const url = email ? `/api/answers?email=${encodeURIComponent(email)}` : `/api/answers`;
       const res = await fetch(url, { cache: "no-store" });
@@ -128,7 +129,7 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
         );
       const daysPerWeek = Math.max(1, Math.min(6, structuredDays ?? inferred ?? 3));
 
-      // ✅ Objectif brut : on couvre plusieurs sources coté client
+      // Objectif brut : sources multiples
       const objectifBrut =
         baseProfile.objectif ??
         answers?.["objectif"] ??
@@ -177,6 +178,8 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
     }
   }
 
+  const showList = hasGenerated && sessions && sessions.length > 0;
+
   return (
     <section className="section" style={{ marginTop: 12 }}>
       <div
@@ -210,20 +213,18 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
         </div>
       )}
 
-      {(!sessions || sessions.length === 0) ? (
+      {!showList && (
         <div className="card text-sm" style={{ color: "#6b7280" }}>
           <div className="flex items-center gap-3">
             <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted">🤖</span>
             <span>
-              Pas encore de séances.{" "}
-              <a className="link underline" href={questionnaireBase}>
-                Remplissez le questionnaire
-              </a>{" "}
-              puis cliquez sur « Générer ».
+              Les séances apparaîtront après avoir cliqué sur <strong>« Générer »</strong>.
             </span>
           </div>
         </div>
-      ) : (
+      )}
+
+      {showList && (
         <ul className="space-y-2 list-none pl-0">
           {sessions.map((s) => {
             const qp = new URLSearchParams({
