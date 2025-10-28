@@ -3,10 +3,13 @@
 [build]
   # Ton app Next se trouve dans apps/web
   base    = "apps/web"
-  # Install stricte + build Next
-  command = "npm ci --no-audit --no-fund && npm run build"
+
+  # ⬇️ Ici on supprime les fichiers fantômes AVANT le build
+  command = "rm -f components/ExerciseLink.tsx components/DemoBrowser.tsx && npm ci --no-audit --no-fund && npm run build"
+
   # Dossier de sortie de Next relatif à base
   publish = ".next"
+
 
 [build.environment]
   NODE_VERSION = "20"
