@@ -1,6 +1,7 @@
 import React from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import dynamic from "next/dynamic";
 import {
   getAiSessions,
   getAnswersForEmail,
@@ -10,6 +11,9 @@ import {
   type NormalizedExercise,
   type WorkoutType,
 } from "../../../../lib/coach/ai";
+
+/* Client-only modal (ChatGPT-powered) */
+const DemoModalAI = dynamic(() => import("../../../components/DemoModalAI"), { ssr: false });
 
 /* ======================== Utils ======================== */
 async function getSignedInEmail(): Promise<string> {
@@ -122,7 +126,6 @@ const styles = String.raw`
   .btn-row { display:flex; gap:8px; flex-wrap:wrap; }
   .card-link { text-decoration:none; color:inherit; display:block; }
   .card-link:hover .compact-card { border-color:#111827; box-shadow:0 1px 0 rgba(17,24,39,.08); }
-  .play-badge { display:inline-flex; align-items:center; gap:6px; font-size:12px; color:#111827; }
   @media(min-width:640px){ .meta-row{ grid-template-columns:1fr 1fr; } }
   @media print { .no-print { display: none !important; } }
 `;
@@ -170,17 +173,40 @@ type PageViewProps = {
   debug?: boolean;
   /** full = avec équipement, none = sans équipement */
   activeEquip: "full" | "none";
+  /** optional demo query from searchParams */
+  demoQuery?: string;
+  /** URL to close the modal (current page without demo) */
+  closeDemoHref: string;
 };
 
-/* ========= Demo URL helper ========= */
-function demoHrefFor(ex: NormalizedExercise) {
-  if ((ex as any).videoUrl) return (ex as any).videoUrl as string;
-  const q = encodeURIComponent(`${ex.name} exercice démonstration`);
-  return `https://www.youtube.com/results?search_query=${q}`;
+/* Build href to open demo for a given exercise (server-side, no client state) */
+function openDemoHrefFor(baseId: string, searchParams: Record<string,string|undefined>, name: string) {
+  const sp = new URLSearchParams();
+  // keep known params
+  if (searchParams.date) sp.set("date", searchParams.date);
+  if (searchParams.type) sp.set("type", searchParams.type);
+  if (searchParams.title) sp.set("title", searchParams.title);
+  if (searchParams.equip) sp.set("equip", searchParams.equip);
+  if (searchParams.debug) sp.set("debug", searchParams.debug);
+  sp.set("demo", name);
+  return `/dashboard/seance/${encodeURIComponent(baseId)}?${sp.toString()}`;
+}
+
+/* Build a close href (remove demo param) */
+function closeDemoHref(baseId: string, searchParams: Record<string,string|undefined>) {
+  const sp = new URLSearchParams();
+  if (searchParams.date) sp.set("date", searchParams.date);
+  if (searchParams.type) sp.set("type", searchParams.type);
+  if (searchParams.title) sp.set("title", searchParams.title);
+  if (searchParams.equip) sp.set("equip", searchParams.equip);
+  if (searchParams.debug) sp.set("debug", searchParams.debug);
+  return `/dashboard/seance/${encodeURIComponent(baseId)}?${sp.toString()}`;
 }
 
 /* ======================== View (JSX) ======================== */
-const PageView: React.FC<PageViewProps> = (props) => {
+const PageView: React.FC<PageViewProps & {
+  searchParams: Record<string,string|undefined>;
+}> = (props) => {
   const {
     base,
     profile,
@@ -192,6 +218,9 @@ const PageView: React.FC<PageViewProps> = (props) => {
     dataSource,
     debug,
     activeEquip,
+    demoQuery,
+    closeDemoHref,
+    searchParams,
   } = props;
 
   // Build equip toggle URLs (simple: keep same id and force regen with equip)
@@ -322,13 +351,11 @@ const PageView: React.FC<PageViewProps> = (props) => {
                     ex.load !== undefined && ex.load !== null
                       ? String(ex.load)
                       : (typeof ex.rir === "number" ? `RIR ${ex.rir}` : "");
-                  const demoHref = demoHrefFor(ex);
+                  const href = openDemoHrefFor(base.id, searchParams, ex.name);
                   return (
                     <a
                       key={`${k}-${i}`}
-                      href={demoHref}
-                      target="_blank"
-                      rel="noreferrer"
+                      href={href}
                       className="card-link"
                       title={`Voir la démonstration : ${ex.name}`}
                     >
@@ -344,25 +371,32 @@ const PageView: React.FC<PageViewProps> = (props) => {
 
                         {/* chips compactes */}
                         <div className="chips">
-                          <Chip label="🧱" value={typeof ex.sets === "number" ? `${ex.sets} séries` : "—"} title="Séries" />
-                          <Chip label="🔁" value={reps || "—"} title="Rép./Durée" />
-                          <Chip label="⏲️" value={ex.rest || "—"} title="Repos" />
-                          <Chip label="🏋︎" value={loadStr || "—"} title="Charge / RIR" />
-                          {ex.tempo && <Chip label="🎚" value={ex.tempo} title="Tempo" />}
-                          <span className="play-badge">▶︎ Démonstration</span>
+                          <span title="Séries" className="inline-flex items-center rounded-md border border-neutral-200 bg-white px-2 py-1 text-[12px] leading-[14px] text-neutral-800">
+                            <span className="mr-1 opacity-70">🧱</span> {typeof ex.sets === "number" ? `${ex.sets} séries` : "—"}
+                          </span>
+                          <span title="Rép./Durée" className="inline-flex items-center rounded-md border border-neutral-200 bg-white px-2 py-1 text-[12px] leading-[14px] text-neutral-800">
+                            <span className="mr-1 opacity-70">🔁</span> {reps || "—"}
+                          </span>
+                          <span title="Repos" className="inline-flex items-center rounded-md border border-neutral-200 bg-white px-2 py-1 text-[12px] leading-[14px] text-neutral-800">
+                            <span className="mr-1 opacity-70">⏲️</span> {ex.rest || "—"}
+                          </span>
+                          <span title="Charge / RIR" className="inline-flex items-center rounded-md border border-neutral-200 bg-white px-2 py-1 text-[12px] leading-[14px] text-neutral-800">
+                            <span className="mr-1 opacity-70">🏋︎</span> {loadStr || "—"}
+                          </span>
+                          {ex.tempo && (
+                            <span title="Tempo" className="inline-flex items-center rounded-md border border-neutral-200 bg-white px-2 py-1 text-[12px] leading-[14px] text-neutral-800">
+                              <span className="mr-1 opacity-70">🎚</span> {ex.tempo}
+                            </span>
+                          )}
+                          <span className="inline-flex items-center gap-1 text-[12px] text-neutral-800">🤖 Démo IA</span>
                         </div>
 
-                        {(ex.target || ex.equipment || ex.alt || ex.notes || (ex as any).videoUrl) && (
+                        {(ex.target || ex.equipment || ex.alt || ex.notes) && (
                           <div className="meta-row">
                             {ex.target && <div>🎯 {ex.target}</div>}
                             {ex.equipment && <div>🧰 {ex.equipment}</div>}
                             {ex.alt && <div>🔁 Alt: {ex.alt}</div>}
                             {ex.notes && <div>📝 {ex.notes}</div>}
-                            {(ex as any).videoUrl && (
-                              <div>
-                                📺 <span>Vidéo dédiée</span>
-                              </div>
-                            )}
                           </div>
                         )}
                       </article>
@@ -374,6 +408,15 @@ const PageView: React.FC<PageViewProps> = (props) => {
           );
         })}
       </div>
+
+      {/* Modal DEMO IA (ChatGPT) */}
+      <DemoModalAI
+        open={!!demoQuery}
+        onClose={() => (window.location.href = closeDemoHref)}
+        exercise={demoQuery || ""}
+        level={profile?.level}
+        injuries={profile?.injuries}
+      />
     </div>
   );
 };
@@ -610,6 +653,16 @@ export default async function Page({
 
   const debug = String(searchParams?.debug || "") === "1";
 
+  const demoQuery = typeof searchParams?.demo === "string" ? (searchParams!.demo as string) : undefined;
+  const safeSP: Record<string,string|undefined> = {
+    date: typeof searchParams?.date === "string" ? (searchParams!.date as string) : undefined,
+    type: typeof searchParams?.type === "string" ? (searchParams!.type as string) : undefined,
+    title: typeof searchParams?.title === "string" ? (searchParams!.title as string) : undefined,
+    equip: typeof searchParams?.equip === "string" ? (searchParams!.equip as string) : undefined,
+    debug: typeof searchParams?.debug === "string" ? (searchParams!.debug as string) : undefined,
+  };
+  const closeHref = closeDemoHref(base.id, safeSP);
+
   return (
     <PageView
       base={base}
@@ -622,6 +675,9 @@ export default async function Page({
       dataSource={dataSource}
       debug={debug}
       activeEquip={activeEquip}
+      demoQuery={demoQuery}
+      closeDemoHref={closeHref}
+      searchParams={safeSP}
     />
   );
 }
