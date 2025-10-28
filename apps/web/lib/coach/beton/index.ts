@@ -231,13 +231,24 @@ export function planProgrammeFromProfile(
   // 3) Jours (affichage)
   const daysList = extractDaysList(profile.availabilityText);
 
-  // 🎯 Focus muscle (déduit du libellé brut d’objectif)
-  const muscleFocus = deriveMuscleFocus(profile.objectif);
+  // 🎯 Focus muscle (déduit du libellé brut d’objectif) — robuste aux variations de clé
+  const objectiveRaw = (profile as any).objectif
+    ?? (profile as any).objective
+    ?? (profile as any).col_G
+    ?? (profile as any).goalDisplay
+    ?? profile.objectif;
+  const muscleFocus = deriveMuscleFocus(objectiveRaw);
 
   // 4) Plan piloté par priorité muscle si muscu, sinon logique par objectif global
-  const focusPlan = type === "muscu"
+  let focusPlan = type === "muscu"
     ? makeFocusPlan(maxSessions, goalKey, muscleFocus)
-    : [];
+    : [] as StrengthFocus[];
+
+  // 🛡️ Garde-fou : si un focus haut du corps est demandé, éviter tout bloc 'bas_*' dans un 2-jours
+  const upperRequest = muscleFocus && ["shoulders","chest","back","arms","core"].includes(muscleFocus);
+  if (upperRequest && focusPlan.some(f => f.startsWith("bas"))) {
+    focusPlan = makeFocusPlan(maxSessions, goalKey, muscleFocus);
+  }
 
   const sessions: AiSessionT[] = [];
   for (let i = 0; i < maxSessions; i++) {
@@ -252,7 +263,9 @@ export function planProgrammeFromProfile(
 
     const dayLabel = daysList[i] ? capitalize(daysList[i]) : labelABC;
     const singleNoDay = maxSessions === 1 && daysList.length === 0;
-    const focus: StrengthFocus | undefined = type === "muscu" ? focusPlan[i % focusPlan.length] : undefined;
+    const focus: StrengthFocus | undefined = (type === "muscu" && focusPlan.length)
+      ? focusPlan[i % focusPlan.length]
+      : undefined;
     const focusSuffix = focus ? ` · ${FOCUS_LABEL[focus]}` : "";
 
     const title = profile.prenom
