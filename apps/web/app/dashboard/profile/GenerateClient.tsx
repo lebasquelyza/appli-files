@@ -1,9 +1,9 @@
 // apps/web/app/dashboard/profile/GenerateClient.tsx
 "use client";
 
-import { useState } from "react";
-import type { AiSession as AiSessionT, Profile as ProfileT, NormalizedExercise } from "../../../lib/coach/ai";
-import { planProgrammeFromProfile } from "../../../lib/coach/beton/index";
+import { useState, useEffect } from "react";
+import type { AiSession as AiSessionT, Profile as ProfileT } from "../../../lib/coach/ai";
+import { planProgrammeFromProfile } from "../../../lib/coach/beton/index"; // <-- assure-toi que ce chemin pointe bien sur ton index.ts béton
 
 type Props = {
   email?: string;
@@ -22,12 +22,12 @@ function typeBadgeClass(t: WorkoutType) {
   }
 }
 
-/* ====== Helpers client ====== */
+/* ========= Helpers client (mêmes règles que côté serveur) ========= */
 function availabilityFromAnswers(answers: Record<string, any> | null | undefined): string | undefined {
   if (!answers) return undefined;
   const dayPat = /(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|week\s*-?\s*end|weekend|jours?\s+par\s+semaine|\b[1-7]\s*(x|fois|jours?)?)/i;
   const candidates: string[] = [];
-  for (const k of ["daysPerWeek", "jours", "séances/semaine", "seances/semaine", "col_I", "col_H"]) {
+  for (const k of ["daysPerWeek", "jours", "séances/semaine", "seances/semaine", "col_I"]) {
     const v = (answers as any)[k];
     if (typeof v === "string" || typeof v === "number") candidates.push(String(v));
   }
@@ -61,56 +61,23 @@ function splitList(s: any): string[] | undefined {
   if (!txt) return undefined;
   return txt.split(/[;,/|]/).map((t) => t.trim()).filter(Boolean);
 }
-
-/** Transforme une séance en version “sans équipement” côté client */
-function toBodyweightVersion(session: AiSessionT): AiSessionT {
-  const mapName = (name: string): string => {
-    const n = name.toLowerCase();
-    if (/front|goblet|squat|presse|leg\s*extension/.test(n)) return "Squat au poids du corps";
-    if (/fente|split|lunge/.test(n)) return "Fente arrière au poids du corps";
-    if (/hip thrust|glute|pont/.test(n)) return "Hip Thrust au sol";
-    if (/souleve|rdl|deadlift|good morning/.test(n)) return "Good morning au poids du corps";
-    if (/leg curl|curl ischio/.test(n)) return "Nordic curl assisté";
-    if (/bench|developpe|militaire|incline|presse epaule/.test(n)) return "Pompes (mains surélevées si besoin)";
-    if (/ecarte/.test(n)) return "Pompes tempo lent";
-    if (/rowing|tirage horizontal/.test(n)) return "Tirage serviette sous table";
-    if (/tirage vertical|tractions?/.test(n)) return "Tirage horizontal élastique/serviette";
-    if (/elevations?/.test(n)) return "Élévations latérales sans charge (tempo lent)";
-    if (/curl/.test(n)) return "Curl isométrique serviette";
-    if (/triceps/.test(n)) return "Dips entre deux chaises (amplitude confortable)";
-    if (/plank|gainage/.test(n)) return "Gainage planche";
-    if (/hollow/.test(n)) return "Hollow Hold";
-    if (/mollets?|calf/.test(n)) return "Mollets debout au poids du corps";
-    if (/poignets?|forearm/.test(n)) return "Farmer carry (charges improvisées)";
-    return name;
-  };
-
-  const bwEx = (session.exercises || []).map<NormalizedExercise>((e) => {
-    const isWeighted = /halt|barre|machine|cable|câble|bench/i.test(e.equipment || "") ||
-                       /(squat|bench|developpe|rowing|tirage|curl|extension|kettlebell|kb|barre|halt|mollets|poignets)/i.test(e.name);
-    if (!isWeighted) return e;
-
-    const name = mapName(e.name);
-    const out: NormalizedExercise = {
-      ...e,
-      name,
-      equipment: "poids du corps",
-      tempo: e.tempo || undefined,
-      rest: "60–75s",
-      reps: e.reps || "10–15",
-      sets: e.sets || 3,
-    };
-    return out;
-  });
-
-  return { ...session, exercises: bwEx, title: session.title.replace(/$/, " (sans équipement)") };
-}
+/* ================================================================ */
 
 export default function GenerateClient({ email, questionnaireBase, initialSessions = [] }: Props) {
   const [loading, setLoading] = useState(false);
   const [sessions, setSessions] = useState<AiSessionT[]>(initialSessions);
   const [error, setError] = useState<string>("");
-  const [bwToggled, setBwToggled] = useState<Record<string, boolean>>({}); // id -> true = sans équipement
+
+  // NEW: au montage, on tente de récupérer d’anciennes séances (si l’utilisateur revient)
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("ai_sessions");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) setSessions(parsed);
+      }
+    } catch {}
+  }, []);
 
   async function onGenerate() {
     try {
@@ -127,7 +94,7 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
       const profile: any = {
         prenom: baseProfile.prenom,
         age: baseProfile.age,
-        objectif: baseProfile.objectif, // <-- libellé brut utilisé côté béton
+        objectif: baseProfile.objectif,
         goal: baseProfile.goal,
         equipLevel: normEquipLevel(answers?.equipLevel ?? answers?.["matériel"] ?? answers?.["materiel"] ?? answers?.["equipment_level"] ?? answers?.["col_E"]),
         timePerSession:
@@ -145,30 +112,16 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
       const daysPerWeek =
         Math.max(1, Math.min(6, toNumber(answers?.["daysPerWeek"] ?? answers?.["jours"] ?? answers?.["séances/semaine"] ?? answers?.["seances/semaine"] ?? answers?.["col_I"]) || 3));
 
-      // ✨ Génération IA (avec équipement selon profil)
       const { sessions } = planProgrammeFromProfile(profile, { maxSessions: daysPerWeek });
-
-      setBwToggled({}); // reset toggles
       setSessions(sessions);
+
+      // NEW: on persiste pour la page détail
+      localStorage.setItem("ai_sessions", JSON.stringify(sessions));
     } catch (e: any) {
       setError("Impossible de générer les séances. Réessaie dans un instant.");
     } finally {
       setLoading(false);
     }
-  }
-
-  function onToggleSession(id: string) {
-    setBwToggled((prev) => {
-      const next = { ...prev, [id]: !prev[id] };
-      return next;
-    });
-    setSessions((prev) =>
-      prev.map((s) => {
-        if (s.id !== id) return s;
-        const toggled = !bwToggled[id];
-        return toggled ? toBodyweightVersion(s) : { ...s, title: s.title.replace(/\s*\(sans équipement\)\s*$/, "") };
-      })
-    );
   }
 
   return (
@@ -180,7 +133,7 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
         <div>
           <h2 style={{ marginBottom: 6 }}>Mon programme</h2>
           <p className="text-sm" style={{ color: "#6b7280" }}>
-            Personnalisé via vos dernières réponses (IA). Cliquez sur le titre d’une séance pour voir la version sans équipement.
+            Personnalisé via vos dernières réponses (IA).
           </p>
         </div>
 
@@ -220,26 +173,31 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
       ) : (
         <ul className="space-y-2 list-none pl-0">
           {sessions.map((s) => {
-            const displayTitle = s.title || "Séance";
-            const equipped = !/\(sans équipement\)/i.test(displayTitle);
+            const qp = new URLSearchParams({
+              title: s.title,
+              date: s.date,
+              type: s.type,
+              plannedMin: s.plannedMin ? String(s.plannedMin) : "",
+            });
+            const href = `/dashboard/seance/${encodeURIComponent(s.id)}?${qp.toString()}`;
 
             return (
               <li key={s.id} className="card p-3">
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <button
-                      onClick={() => onToggleSession(s.id)}
-                      className="font-medium underline-offset-2 hover:underline truncate text-left"
+                    <a
+                      href={href}
+                      className="font-medium underline-offset-2 hover:underline truncate"
                       style={{ fontSize: 16, display: "inline-block", maxWidth: "100%" }}
-                      title="Cliquer pour alterner équipement / sans équipement"
+                      title={s.title}
                     >
-                      {displayTitle}
-                    </button>
+                      {s.title}
+                    </a>
                     <div className="text-xs mt-0.5 text-gray-500">
                       <span className="inline-flex items-center rounded-full border border-gray-200 bg-white px-1.5 py-0.5 mr-2">
                         IA
                       </span>
-                      {s.plannedMin ? `${s.plannedMin} min` : "—"} · {equipped ? "Équipement" : "Sans équipement"}
+                      {s.plannedMin ? `${s.plannedMin} min` : "—"}
                     </div>
                   </div>
                   <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type as WorkoutType)}`}>
@@ -254,3 +212,4 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
     </section>
   );
 }
+
