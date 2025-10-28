@@ -227,6 +227,9 @@ export function planProgrammeFromProfile(
     injuries: normalizeInjuries(profile.injuries),
     equipItems: normalizeItems(profile.equipItems),
   };
+  // 🔎 Debug (désactivable en prod en mettant __BETON_DEBUG__ = false)
+  const __BETON_DEBUG__ = (globalThis as any).__BETON_DEBUG__ ?? true;
+
 
   // 3) Jours (affichage)
   const daysList = extractDaysList(profile.availabilityText);
@@ -249,6 +252,8 @@ export function planProgrammeFromProfile(
   if (upperRequest && focusPlan.some(f => f.startsWith("bas"))) {
     focusPlan = makeFocusPlan(maxSessions, goalKey, muscleFocus);
   }
+
+  if (__BETON_DEBUG__) console.debug("[beton] plan", { objectiveRaw, muscleFocus, maxSessions, type, goalKey, focusPlan });
 
   const sessions: AiSessionT[] = [];
   for (let i = 0; i < maxSessions; i++) {
