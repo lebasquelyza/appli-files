@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState } from "react";
@@ -23,21 +22,34 @@ function typeBadgeClass(t: WorkoutType) {
 }
 
 /* ========= Helpers client (mêmes règles que côté serveur) ========= */
+
+/** Récupère un texte de dispo depuis la ligne d’answers (priorité col_H), on capte aussi le reste. */
 function availabilityFromAnswers(answers: Record<string, any> | null | undefined): string | undefined {
   if (!answers) return undefined;
-  const dayPat = /(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|week\s*-?\s*end|weekend|jours?\s+par\s+semaine|\b[1-7]\s*(x|fois|jours?)?)/i;
-  const candidates: string[] = [];
-  for (const k of ["daysPerWeek", "jours", "séances/semaine", "seances/semaine", "col_I"]) {
+
+  // on élargit le pattern pour capter: lundi..dimanche, weekend, “5x/fois/j/jrs/jours”, “5 j/sem”, etc.
+  const pat =
+    /(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|week\s*-?\s*end|weekend|\b[1-7]\s*(x|fois|j|jrs|jour|jours)(\s*(par|\/)\s*(semaine|sem))?|\b[1-7]\b)/i;
+
+  const bag: string[] = [];
+
+  // ✅ priorité à col_H (chez toi: “dispo (jours/sem)”)
+  for (const k of ["col_H", "daysPerWeek", "jours", "séances/semaine", "seances/semaine", "col_I"]) {
     const v = (answers as any)[k];
-    if (typeof v === "string" || typeof v === "number") candidates.push(String(v));
+    if (typeof v === "string" || typeof v === "number") bag.push(String(v));
   }
+
+  // scan global de la ligne
   for (const k of Object.keys(answers)) {
     const v = (answers as any)[k];
-    if (typeof v === "string" || typeof v === "number") candidates.push(String(v));
+    if (typeof v === "string" || typeof v === "number") bag.push(String(v));
   }
-  const hits = candidates.map(v => String(v ?? "").trim()).filter(v => v && dayPat.test(v));
+
+  const hits = bag.map(v => String(v ?? "").trim()).filter(v => v && pat.test(v));
   return hits.length ? hits.join(" ; ") : undefined;
 }
+
+/** Normalisations simples */
 function normLevel(s: string | undefined) {
   const v = String(s || "").toLowerCase();
   if (/avanc/.test(v)) return "avance";
@@ -61,6 +73,50 @@ function splitList(s: any): string[] | undefined {
   if (!txt) return undefined;
   return txt.split(/[;,/|]/).map((t) => t.trim()).filter(Boolean);
 }
+
+/** Infère 1..6 séances depuis un texte libre (mêmes règles que côté serveur). */
+function inferMaxSessionsFromText(text?: string | null): number | undefined {
+  if (!text) return undefined;
+  const s = String(text).toLowerCase();
+
+  // ex: "3-4 fois" → prend le plus grand du range
+  const range = s.match(/\b([1-7])\s*-\s*([1-7])\b/);
+  if (range) {
+    const hi = Math.max(parseInt(range[1], 10), parseInt(range[2], 10));
+    return Math.max(1, Math.min(6, hi));
+  }
+
+  // ex: "5x", "5 fois", "5 j", "5 jours", "5 j/sem"
+  const withUnit = s.match(/\b([1-7])\s*(x|fois|j|jrs|jour|jours)(\s*(par|\/)\s*(semaine|sem))?\b/);
+  if (withUnit) {
+    const n = parseInt(withUnit[1], 10);
+    return Math.max(1, Math.min(6, n));
+  }
+
+  // ex: “5” seul (tolère chiffres isolés 1..7)
+  const solo = s.match(/\b([1-7])\b/);
+  if (solo) {
+    const n = parseInt(solo[1], 10);
+    return Math.max(1, Math.min(6, n));
+  }
+
+  // “toute la semaine” / “tous les jours”
+  if (/toute?\s+la\s+semaine|tous?\s+les\s+jours/.test(s)) return 6;
+
+  // Jours nommés + week-end
+  const days = (() => {
+    const out: string[] = [];
+    const push = (d: string) => { if (!out.includes(d)) out.push(d); };
+    if (/week\s*-?\s*end|weekend/.test(s)) { push("samedi"); push("dimanche"); }
+    for (const d of ["lundi","mardi","mercredi","jeudi","vendredi","samedi","dimanche"]) {
+      if (new RegExp(`\\b${d}\\b`, "i").test(s)) push(d);
+    }
+    return out;
+  })();
+  if (days.length) return Math.max(1, Math.min(6, days.length));
+
+  return undefined;
+}
 /* ================================================================ */
 
 export default function GenerateClient({ email, questionnaireBase, initialSessions = [] }: Props) {
@@ -80,29 +136,55 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
       const answers: Record<string, any> | null = data?.answers || null;
       const baseProfile: Partial<ProfileT> = data?.profile || {};
 
+      // 1) Texte de disponibilité + inférence 1..6
+      const availabilityText = availabilityFromAnswers(answers);
+      const inferred = inferMaxSessionsFromText(availabilityText);
+
+      // 2) Structured numeric (prioritaire si donné)
+      const structuredDays =
+        toNumber(
+          answers?.["daysPerWeek"] ??
+          answers?.["jours"] ??
+          answers?.["séances/semaine"] ??
+          answers?.["seances/semaine"] ??
+          answers?.["col_I"]
+        );
+
+      // 3) Décision finale
+      const daysPerWeek = Math.max(1, Math.min(6, structuredDays ?? inferred ?? 3));
+
       // Enrichissement identique à generateProgrammeFromAnswers (serveur)
       const profile: any = {
         prenom: baseProfile.prenom,
         age: baseProfile.age,
         objectif: baseProfile.objectif,
         goal: baseProfile.goal,
-        equipLevel: normEquipLevel(answers?.equipLevel ?? answers?.["matériel"] ?? answers?.["materiel"] ?? answers?.["equipment_level"] ?? answers?.["col_E"]),
+        equipLevel: normEquipLevel(
+          answers?.equipLevel ??
+          answers?.["matériel"] ??
+          answers?.["materiel"] ??
+          answers?.["equipment_level"] ??
+          answers?.["col_E"]
+        ),
         timePerSession:
           toNumber(answers?.timePerSession ?? answers?.["durée"] ?? answers?.["duree"] ?? answers?.["col_F"]) ??
           ((baseProfile.age && (baseProfile.age as number) > 50) ? 35 : undefined) ??
           45,
-        level: normLevel(answers?.["niveau"] ?? answers?.["level"] ?? answers?.["experience"] ?? answers?.["expérience"] ?? answers?.["col_D"]),
+        level: normLevel(
+          answers?.["niveau"] ??
+          answers?.["level"] ??
+          answers?.["experience"] ??
+          answers?.["expérience"] ??
+          answers?.["col_D"]
+        ),
         injuries: splitList(answers?.["injuries"] ?? answers?.["blessures"] ?? answers?.["col_H"]),
         equipItems: splitList(answers?.["equipItems"] ?? answers?.["équipements"] ?? answers?.["equipements"] ?? answers?.["col_J"]),
-        availabilityText: availabilityFromAnswers(answers),
+        availabilityText, // 👈 crucial pour titres Lundi/Mardi et cohérence
         likes: splitList(answers?.["likes"]),
         dislikes: splitList(answers?.["dislikes"]),
       };
 
-      const daysPerWeek =
-        Math.max(1, Math.min(6, toNumber(answers?.["daysPerWeek"] ?? answers?.["jours"] ?? answers?.["séances/semaine"] ?? answers?.["seances/semaine"] ?? answers?.["col_I"]) || 3));
-
-      // ✨ Génération 100% client
+      // ✨ Génération 100% client (maxSessions = daysPerWeek corrigé)
       const { sessions } = planProgrammeFromProfile(profile, { maxSessions: daysPerWeek });
       setSessions(sessions);
     } catch (e: any) {
@@ -129,7 +211,7 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
           onClick={onGenerate}
           disabled={loading}
           className="btn"
-          style={{ background: "#111827", color: "#ffffff", border: "1px solid #d1d5db", fontWeight: 700, padding: "8px 12px", lineHeight: 1.2, borderRadius: 10 }}
+          style={{ background: "#111827", color: "#ffffff", border: "1px solid #d1d5db", fontWeight: 600, padding: "6px 10px", lineHeight: 1.2, borderRadius: 8 }}
           title="Génère/Met à jour ton programme personnalisé"
         >
           {loading ? "⏳ Génération..." : "⚙️ Générer"}
