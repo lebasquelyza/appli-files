@@ -120,6 +120,9 @@ const styles = String.raw`
   .btn-ghost:hover { background:#f9fafb; }
   .btn-sm { padding:6px 10px; border-radius:8px; font-weight:600; font-size:12.5px; }
   .btn-row { display:flex; gap:8px; flex-wrap:wrap; }
+  .card-link { text-decoration:none; color:inherit; display:block; }
+  .card-link:hover .compact-card { border-color:#111827; box-shadow:0 1px 0 rgba(17,24,39,.08); }
+  .play-badge { display:inline-flex; align-items:center; gap:6px; font-size:12px; color:#111827; }
   @media(min-width:640px){ .meta-row{ grid-template-columns:1fr 1fr; } }
   @media print { .no-print { display: none !important; } }
 `;
@@ -168,6 +171,13 @@ type PageViewProps = {
   /** full = avec équipement, none = sans équipement */
   activeEquip: "full" | "none";
 };
+
+/* ========= Demo URL helper ========= */
+function demoHrefFor(ex: NormalizedExercise) {
+  if ((ex as any).videoUrl) return (ex as any).videoUrl as string;
+  const q = encodeURIComponent(`${ex.name} exercice démonstration`);
+  return `https://www.youtube.com/results?search_query=${q}`;
+}
 
 /* ======================== View (JSX) ======================== */
 const PageView: React.FC<PageViewProps> = (props) => {
@@ -312,43 +322,51 @@ const PageView: React.FC<PageViewProps> = (props) => {
                     ex.load !== undefined && ex.load !== null
                       ? String(ex.load)
                       : (typeof ex.rir === "number" ? `RIR ${ex.rir}` : "");
+                  const demoHref = demoHrefFor(ex);
                   return (
-                    <article key={`${k}-${i}`} className="compact-card">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="exoname">{ex.name}</div>
-                        {ex.block ? (
-                          <span className="shrink-0 rounded-full bg-neutral-50 px-2 py-0.5 text-[11px] text-neutral-600">
-                            {blockNames[ex.block] || ex.block}
-                          </span>
-                        ) : null}
-                      </div>
-
-                      {/* chips compactes */}
-                      <div className="chips">
-                        <Chip label="🧱" value={typeof ex.sets === "number" ? `${ex.sets} séries` : "—"} title="Séries" />
-                        <Chip label="🔁" value={reps || "—"} title="Rép./Durée" />
-                        <Chip label="⏲️" value={ex.rest || "—"} title="Repos" />
-                        <Chip label="🏋︎" value={loadStr || "—"} title="Charge / RIR" />
-                        {ex.tempo && <Chip label="🎚" value={ex.tempo} title="Tempo" />}
-                      </div>
-
-                      {(ex.target || ex.equipment || ex.alt || ex.notes || ex.videoUrl) && (
-                        <div className="meta-row">
-                          {ex.target && <div>🎯 {ex.target}</div>}
-                          {ex.equipment && <div>🧰 {ex.equipment}</div>}
-                          {ex.alt && <div>🔁 Alt: {ex.alt}</div>}
-                          {ex.notes && <div>📝 {ex.notes}</div>}
-                          {ex.videoUrl && (
-                            <div>
-                              📺{" "}
-                              <a className="underline underline-offset-2" href={ex.videoUrl} target="_blank" rel="noreferrer">
-                                Vidéo
-                              </a>
-                            </div>
-                          )}
+                    <a
+                      key={`${k}-${i}`}
+                      href={demoHref}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="card-link"
+                      title={`Voir la démonstration : ${ex.name}`}
+                    >
+                      <article className="compact-card">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="exoname">{ex.name}</div>
+                          {ex.block ? (
+                            <span className="shrink-0 rounded-full bg-neutral-50 px-2 py-0.5 text-[11px] text-neutral-600">
+                              {blockNames[ex.block] || ex.block}
+                            </span>
+                          ) : null}
                         </div>
-                      )}
-                    </article>
+
+                        {/* chips compactes */}
+                        <div className="chips">
+                          <Chip label="🧱" value={typeof ex.sets === "number" ? `${ex.sets} séries` : "—"} title="Séries" />
+                          <Chip label="🔁" value={reps || "—"} title="Rép./Durée" />
+                          <Chip label="⏲️" value={ex.rest || "—"} title="Repos" />
+                          <Chip label="🏋︎" value={loadStr || "—"} title="Charge / RIR" />
+                          {ex.tempo && <Chip label="🎚" value={ex.tempo} title="Tempo" />}
+                          <span className="play-badge">▶︎ Démonstration</span>
+                        </div>
+
+                        {(ex.target || ex.equipment || ex.alt || ex.notes || (ex as any).videoUrl) && (
+                          <div className="meta-row">
+                            {ex.target && <div>🎯 {ex.target}</div>}
+                            {ex.equipment && <div>🧰 {ex.equipment}</div>}
+                            {ex.alt && <div>🔁 Alt: {ex.alt}</div>}
+                            {ex.notes && <div>📝 {ex.notes}</div>}
+                            {(ex as any).videoUrl && (
+                              <div>
+                                📺 <span>Vidéo dédiée</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </article>
+                    </a>
                   );
                 })}
               </div>
@@ -607,4 +625,3 @@ export default async function Page({
     />
   );
 }
-
