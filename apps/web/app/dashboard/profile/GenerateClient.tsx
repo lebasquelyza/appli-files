@@ -1,8 +1,10 @@
+
 "use client";
 
 import { useState } from "react";
 import type { AiSession as AiSessionT, Profile as ProfileT } from "../../../lib/coach/ai";
-import { planProgrammeFromProfile } from "../../../lib/coach/beton/core";
+// ✅ Utilise le fichier corrigé (index.ts)
+import { planProgrammeFromProfile } from "../../../lib/coach/beton";
 
 type Props = {
   email?: string;
@@ -22,34 +24,23 @@ function typeBadgeClass(t: WorkoutType) {
 }
 
 /* ========= Helpers client (mêmes règles que côté serveur) ========= */
-
-/** Récupère un texte de dispo depuis la ligne d’answers (priorité col_H), on capte aussi le reste. */
 function availabilityFromAnswers(answers: Record<string, any> | null | undefined): string | undefined {
   if (!answers) return undefined;
-
-  // on élargit le pattern pour capter: lundi..dimanche, weekend, “5x/fois/j/jrs/jours”, “5 j/sem”, etc.
   const pat =
     /(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|week\s*-?\s*end|weekend|\b[1-7]\s*(x|fois|j|jrs|jour|jours)(\s*(par|\/)\s*(semaine|sem))?|\b[1-7]\b)/i;
-
   const bag: string[] = [];
-
-  // ✅ priorité à col_H (chez toi: “dispo (jours/sem)”)
   for (const k of ["col_H", "daysPerWeek", "jours", "séances/semaine", "seances/semaine", "col_I"]) {
     const v = (answers as any)[k];
     if (typeof v === "string" || typeof v === "number") bag.push(String(v));
   }
-
-  // scan global de la ligne
   for (const k of Object.keys(answers)) {
     const v = (answers as any)[k];
     if (typeof v === "string" || typeof v === "number") bag.push(String(v));
   }
-
   const hits = bag.map(v => String(v ?? "").trim()).filter(v => v && pat.test(v));
   return hits.length ? hits.join(" ; ") : undefined;
 }
 
-/** Normalisations simples */
 function normLevel(s: string | undefined) {
   const v = String(s || "").toLowerCase();
   if (/avanc/.test(v)) return "avance";
@@ -73,37 +64,25 @@ function splitList(s: any): string[] | undefined {
   if (!txt) return undefined;
   return txt.split(/[;,/|]/).map((t) => t.trim()).filter(Boolean);
 }
-
-/** Infère 1..6 séances depuis un texte libre (mêmes règles que côté serveur). */
 function inferMaxSessionsFromText(text?: string | null): number | undefined {
   if (!text) return undefined;
   const s = String(text).toLowerCase();
-
-  // ex: "3-4 fois" → prend le plus grand du range
   const range = s.match(/\b([1-7])\s*-\s*([1-7])\b/);
   if (range) {
     const hi = Math.max(parseInt(range[1], 10), parseInt(range[2], 10));
     return Math.max(1, Math.min(6, hi));
   }
-
-  // ex: "5x", "5 fois", "5 j", "5 jours", "5 j/sem"
   const withUnit = s.match(/\b([1-7])\s*(x|fois|j|jrs|jour|jours)(\s*(par|\/)\s*(semaine|sem))?\b/);
   if (withUnit) {
     const n = parseInt(withUnit[1], 10);
     return Math.max(1, Math.min(6, n));
   }
-
-  // ex: “5” seul (tolère chiffres isolés 1..7)
   const solo = s.match(/\b([1-7])\b/);
   if (solo) {
     const n = parseInt(solo[1], 10);
     return Math.max(1, Math.min(6, n));
   }
-
-  // “toute la semaine” / “tous les jours”
   if (/toute?\s+la\s+semaine|tous?\s+les\s+jours/.test(s)) return 6;
-
-  // Jours nommés + week-end
   const days = (() => {
     const out: string[] = [];
     const push = (d: string) => { if (!out.includes(d)) out.push(d); };
@@ -114,9 +93,9 @@ function inferMaxSessionsFromText(text?: string | null): number | undefined {
     return out;
   })();
   if (days.length) return Math.max(1, Math.min(6, days.length));
-
   return undefined;
 }
+
 /* ================================================================ */
 
 export default function GenerateClient({ email, questionnaireBase, initialSessions = [] }: Props) {
@@ -136,11 +115,9 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
       const answers: Record<string, any> | null = data?.answers || null;
       const baseProfile: Partial<ProfileT> = data?.profile || {};
 
-      // 1) Texte de disponibilité + inférence 1..6
       const availabilityText = availabilityFromAnswers(answers);
       const inferred = inferMaxSessionsFromText(availabilityText);
 
-      // 2) Structured numeric (prioritaire si donné)
       const structuredDays =
         toNumber(
           answers?.["daysPerWeek"] ??
@@ -149,15 +126,21 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
           answers?.["seances/semaine"] ??
           answers?.["col_I"]
         );
-
-      // 3) Décision finale
       const daysPerWeek = Math.max(1, Math.min(6, structuredDays ?? inferred ?? 3));
 
-      // Enrichissement identique à generateProgrammeFromAnswers (serveur)
+      // ✅ Objectif brut : on couvre plusieurs sources coté client
+      const objectifBrut =
+        baseProfile.objectif ??
+        answers?.["objectif"] ??
+        answers?.["objective"] ??
+        answers?.["col_G"] ??
+        answers?.["goalDisplay"] ??
+        "";
+
       const profile: any = {
         prenom: baseProfile.prenom,
         age: baseProfile.age,
-        objectif: baseProfile.objectif,
+        objectif: objectifBrut,
         goal: baseProfile.goal,
         equipLevel: normEquipLevel(
           answers?.equipLevel ??
@@ -179,15 +162,15 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
         ),
         injuries: splitList(answers?.["injuries"] ?? answers?.["blessures"] ?? answers?.["col_H"]),
         equipItems: splitList(answers?.["equipItems"] ?? answers?.["équipements"] ?? answers?.["equipements"] ?? answers?.["col_J"]),
-        availabilityText, // 👈 crucial pour titres Lundi/Mardi et cohérence
+        availabilityText,
         likes: splitList(answers?.["likes"]),
         dislikes: splitList(answers?.["dislikes"]),
       };
 
-      // ✨ Génération 100% client (maxSessions = daysPerWeek corrigé)
       const { sessions } = planProgrammeFromProfile(profile, { maxSessions: daysPerWeek });
       setSessions(sessions);
     } catch (e: any) {
+      console.error("[GenerateClient] onGenerate error", e);
       setError("Impossible de générer les séances. Réessaie dans un instant.");
     } finally {
       setLoading(false);
