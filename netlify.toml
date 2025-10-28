@@ -50,6 +50,3 @@
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
-[build]
-  command = "rm -f apps/web/components/ExerciseLink.tsx && npm ci --no-audit --no-fund && npm run build"
-
