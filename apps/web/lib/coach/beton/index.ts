@@ -21,20 +21,17 @@ export type PlanOptions = {
 type ProfileInput = {
   prenom?: string;
   age?: number;
-  objectif?: string; // libellé brut (affichage)
-  goal?: string; // clé normalisée: hypertrophy|fatloss|strength|endurance|mobility|general
+  objectif?: string; // libellé brut (affichage) — EX: "cibler les épaules"
+  goal?: string;     // clé normalisée: hypertrophy|fatloss|strength|endurance|mobility|general
   equipLevel?: "none" | "limited" | "full";
   timePerSession?: number;
   level?: "debutant" | "intermediaire" | "avance";
-  injuries?: string[]; // ex: ["dos","epaules","genoux"]
-  equipItems?: string[]; // ex: ["élastiques","kettlebell","trx"]
-  /** Texte libre de dispo: “lundi mardi”, “week-end”, “6 jours par semaine”, “3x”, “5j”, etc. */
+  injuries?: string[];
+  equipItems?: string[];
   availabilityText?: string;
   email?: string;
-
-  // préférences (facultatif si non présent dans le Sheet)
-  likes?: string[];    // ex: ["pompes","kettlebell","tractions"]
-  dislikes?: string[]; // ex: ["back squat","burpees"]
+  likes?: string[];
+  dislikes?: string[];
 };
 
 /* ====== Focus par séance (split) ====== */
@@ -45,7 +42,7 @@ type StrengthFocus =
   | "haut_push"
   | "haut_pull"
   | "haut_mix"
-  | "bras_core"; // pour hypertrophy 5–6 jours
+  | "bras_core";
 
 const FOCUS_LABEL: Record<StrengthFocus, string> = {
   full: "Full body",
@@ -57,53 +54,49 @@ const FOCUS_LABEL: Record<StrengthFocus, string> = {
   bras_core: "Bras & Core",
 };
 
-/* ===== Détection d'une zone cible dans l'objectif (épaules, dos, etc.) ===== */
-type TargetArea = "shoulders" | "arms" | "back" | "glutes" | "quads" | "chest" | "core" | "none";
-
-function detectTargetArea(objectif?: string): TargetArea {
-  const s = String(objectif || "")
+/* =================== Détecteurs objectif brut (tous muscles) =================== */
+function norm(s?: string) {
+  return String(s || "")
     .normalize("NFD").replace(/\p{Diacritic}/gu, "")
     .toLowerCase();
+}
+const has = (txt: string|undefined, re: RegExp) => re.test(norm(txt));
 
-  if (/(epaule|epaules|deltoid|deltoide|deltoides|shoulder)/.test(s)) return "shoulders";
-  if (/\b(biceps|triceps|bras)\b/.test(s)) return "arms";
-  if (/\b(dos|back|lats|dorsaux)\b/.test(s)) return "back";
-  if (/\b(fessier|glute|glutes)\b/.test(s)) return "glutes";
-  if (/\b(quadriceps|quadri|quads)\b/.test(s)) return "quads";
-  if (/\b(pec|pectoraux|chest)\b/.test(s)) return "chest";
-  if (/\b(core|abdo|tronc|gainage)\b/.test(s)) return "core";
-  return "none";
+function targetShoulders(txt?: string)     { return has(txt, /\b(epaule|epaules|deltoid|deltoide|deltoides|shoulder)\b/); }
+function targetRearDelts(txt?: string)     { return has(txt, /\b(arriere d[ ']*epaules?|arriere-epaules?|arriere delto|rear delts?)\b/); }
+function targetChest(txt?: string)         { return has(txt, /\b(pecs?|poitrine|bench|developpe coucher|developpe couché)\b/); }
+function targetBack(txt?: string)          { return has(txt, /\b(dos|back|lats?|grand dorsal|row|tirage|tractions?)\b/); }
+function targetTraps(txt?: string)         { return has(txt, /\b(trap[e|è]?zes?|trapz|upper back)\b/); }
+function targetBiceps(txt?: string)        { return has(txt, /\b(biceps|curl)\b/); }
+function targetTriceps(txt?: string)       { return has(txt, /\b(triceps|extension triceps)\b/); }
+function targetForearms(txt?: string)      { return has(txt, /\b(avant[- ]?bras|forearms?|poignets?)\b/); }
+function targetAbs(txt?: string)           { return has(txt, /\b(abdos?|core|ceinture|gainage|ventre)\b/); }
+function targetGlutes(txt?: string)        { return has(txt, /\b(fessier|glute|fessiers|ischio|ischios|posterior|hinge|souleve|soulev[ei])\b/); }
+function targetQuads(txt?: string)         { return has(txt, /\b(quadris?|quads?|squat avant|front)\b/); }
+function targetHamstrings(txt?: string)    { return has(txt, /\b(ischios?|hamstrings?)\b/); }
+function targetCalves(txt?: string)        { return has(txt, /\b(mollets?|mollet|calf|calves|soleaire|sol[ée]aire|gastrocnemien)\b/); }
+
+/** Construit un plan de focus purement piloté par l'objectif brute (col G) si mots-clés. */
+function makePlanFromObjective(n: number, goalKey: string, objectifBrut?: string): StrengthFocus[] {
+  // mapping muscles -> focus
+  if (targetRearDelts(objectifBrut)) return Array.from({ length: n }, () => "haut_pull");
+  if (targetShoulders(objectifBrut)) return Array.from({ length: n }, () => "haut_push");
+  if (targetChest(objectifBrut))     return Array.from({ length: n }, () => "haut_push");
+  if (targetBack(objectifBrut) || targetTraps(objectifBrut)) return Array.from({ length: n }, () => "haut_pull");
+  if (targetBiceps(objectifBrut) || targetForearms(objectifBrut)) return Array.from({ length: n }, () => "haut_pull");
+  if (targetTriceps(objectifBrut))  return Array.from({ length: n }, () => "haut_push");
+  if (targetQuads(objectifBrut))    return Array.from({ length: n }, () => "bas_quads");
+  if (targetHamstrings(objectifBrut) || targetGlutes(objectifBrut)) return Array.from({ length: n }, () => "bas_iscios_glutes");
+  if (targetCalves(objectifBrut))   return Array.from({ length: n }, () => "bas_quads"); // on ajoutera un iso mollets
+  if (targetAbs(objectifBrut))      return Array.from({ length: n }, () => "bras_core"); // core dominant
+
+  // fallback: plan standard par objectif global
+  return makeFocusPlan(n, goalKey);
 }
 
-/** Plan de split en fonction du nb de séances/sem., de l’objectif et (nouveau) d’une zone cible */
-function makeFocusPlan(n: number, goalKey: string, target: TargetArea = "none"): StrengthFocus[] {
+/** Plan standard par objectif global */
+function makeFocusPlan(n: number, goalKey: string): StrengthFocus[] {
   const g = (goalKey || "general").toLowerCase();
-
-  // 🎯 Spécialisation muscle prioritaire quand 1–3 jours
-  if (target !== "none" && n <= 3) {
-    if (target === "shoulders" || target === "chest" || target === "arms") {
-      if (n === 1) return ["haut_push"];
-      if (n === 2) return ["haut_push", "haut_mix"];
-      return ["haut_push", "haut_pull", "bras_core"];
-    }
-    if (target === "back") {
-      if (n === 1) return ["haut_pull"];
-      if (n === 2) return ["haut_pull", "haut_mix"];
-      return ["haut_pull", "haut_push", "bras_core"];
-    }
-    if (target === "glutes" || target === "quads") {
-      if (n === 1) return [target === "quads" ? "bas_quads" : "bas_iscios_glutes"];
-      if (n === 2) return ["bas_quads", "bas_iscios_glutes"];
-      return ["bas_quads", "bas_iscios_glutes", "haut_mix"];
-    }
-    if (target === "core") {
-      if (n === 1) return ["bras_core"];
-      if (n === 2) return ["bras_core", "haut_mix"];
-      return ["bras_core", "haut_mix", "full"];
-    }
-  }
-
-  // Hypertrophie → plus d'iso, journée Bras/Core si 5–6 jours
   if (g === "hypertrophy") {
     if (n <= 1) return ["full"];
     if (n === 2) return ["bas_iscios_glutes", "haut_mix"];
@@ -112,8 +105,6 @@ function makeFocusPlan(n: number, goalKey: string, target: TargetArea = "none"):
     if (n === 5) return ["bas_quads", "haut_push", "bas_iscios_glutes", "haut_pull", "bras_core"];
     return ["bas_quads", "haut_push", "bas_iscios_glutes", "haut_pull", "bras_core", "full"];
   }
-
-  // Force → gros polyarticulaires, 3–5 reps, repos long
   if (g === "strength") {
     if (n <= 1) return ["full"];
     if (n === 2) return ["bas_quads", "haut_push"];
@@ -122,8 +113,6 @@ function makeFocusPlan(n: number, goalKey: string, target: TargetArea = "none"):
     if (n === 5) return ["bas_quads", "haut_push", "bas_iscios_glutes", "haut_pull", "full"];
     return ["bas_quads", "haut_push", "bas_iscios_glutes", "haut_pull", "full", "full"];
   }
-
-  // Perte de gras → densité/rotation upper-lower
   if (g === "fatloss") {
     if (n <= 1) return ["full"];
     if (n === 2) return ["bas_iscios_glutes", "haut_mix"];
@@ -132,8 +121,6 @@ function makeFocusPlan(n: number, goalKey: string, target: TargetArea = "none"):
     if (n === 5) return ["bas_quads", "haut_mix", "bas_iscios_glutes", "haut_pull", "full"];
     return ["bas_quads", "haut_mix", "bas_iscios_glutes", "haut_pull", "full", "full"];
   }
-
-  // Général (fallback)
   if (n <= 1) return ["full"];
   if (n === 2) return ["bas_iscios_glutes", "haut_mix"];
   if (n === 3) return ["bas_quads", "haut_push", "haut_pull"];
@@ -149,28 +136,21 @@ export function planProgrammeFromProfile(
 ): { sessions: AiSessionT[] } {
   const { today = new Date(), maxSessions: maxOpt, preset } = opts ?? {};
 
-  /* ====== PRESET FIGÉ : renvoie exactement le même programme exemple ====== */
   if (preset === "example_v1") {
     const sessions = buildFixedExampleSessions(today);
     return { sessions };
   }
 
-  // Inférer le nb de séances depuis le texte de disponibilités si maxSessions non fourni
+  // 1) Nb de séances (jours nommés, chiffres 1..6, etc.)
   const inferred = inferMaxSessions(profile.availabilityText);
   const maxSessions = clamp(maxOpt ?? inferred ?? 3, 1, 6);
 
+  // 2) Contexte général
   const minutes = clamp(profile.timePerSession ?? defaultTime(profile.goal), 20, 90);
   const type = pickType(profile.goal, profile.age);
   const level = profile.level ?? inferLevel(profile.age);
   const equip = profile.equipLevel ?? "limited";
   const goalKey = (profile.goal ?? "general").toLowerCase();
-
-  // 🎯 nouvelle détection de muscle cible depuis le libellé brut
-  const targetArea = detectTargetArea(profile.objectif);
-
-  // Optionnel : si ciblage muscle, on force la muscu pour garder la cohérence
-  const effectiveType: WorkoutType =
-    targetArea !== "none" ? "muscu" : (type as WorkoutType);
 
   const ctx: Ctx = {
     level,
@@ -181,12 +161,13 @@ export function planProgrammeFromProfile(
     equipItems: normalizeItems(profile.equipItems),
   };
 
-  // Jours explicites à afficher dans les titres (Lundi, Mardi...), sinon fallback A/B/C
+  // 3) Jours (affichage)
   const daysList = extractDaysList(profile.availabilityText);
 
-  // Plan de focus si muscu (dépend aussi de l’objectif) + prise en compte de la zone cible
-  const focusPlan =
-    effectiveType === "muscu" ? makeFocusPlan(maxSessions, goalKey, targetArea) : [];
+  // 4) Plan piloté par l’objectif BRUT (colonne G) s’il y a des mots-clés
+  const focusPlan = type === "muscu"
+    ? makePlanFromObjective(maxSessions, goalKey, profile.objectif)
+    : [];
 
   const sessions: AiSessionT[] = [];
   for (let i = 0; i < maxSessions; i++) {
@@ -196,14 +177,12 @@ export function planProgrammeFromProfile(
     const day = String(d.getDate()).padStart(2, "0");
     const dateStr = `${y}-${m}-${day}`;
 
-    const variant = i % 3; // A/B/C (fallback visuel)
+    const variant = i % 3;
     const labelABC = ["A", "B", "C"][variant];
 
-    // Titre logique
     const dayLabel = daysList[i] ? capitalize(daysList[i]) : labelABC;
     const singleNoDay = maxSessions === 1 && daysList.length === 0;
-    const focus: StrengthFocus | undefined =
-      effectiveType === "muscu" ? focusPlan[i % focusPlan.length] : undefined;
+    const focus: StrengthFocus | undefined = type === "muscu" ? focusPlan[i % focusPlan.length] : undefined;
     const focusSuffix = focus ? ` · ${FOCUS_LABEL[focus]}` : "";
 
     const title = profile.prenom
@@ -211,25 +190,25 @@ export function planProgrammeFromProfile(
         ? `Séance pour ${profile.prenom}${focusSuffix}`
         : `Séance pour ${profile.prenom} — ${dayLabel}${focusSuffix}`
       : singleNoDay
-      ? `${defaultBaseTitle(effectiveType)}${focusSuffix}`
-      : `${defaultBaseTitle(effectiveType)} — ${dayLabel}${focusSuffix}`;
+      ? `${defaultBaseTitle(type)}${focusSuffix}`
+      : `${defaultBaseTitle(type)} — ${dayLabel}${focusSuffix}`;
 
-    const exos =
-      effectiveType === "cardio"
-        ? buildCardio(ctx, variant)
-        : effectiveType === "mobilité"
-        ? buildMobility(ctx)
-        : effectiveType === "hiit"
-        ? buildHiit(ctx)
-        : buildStrengthFocused(ctx, focus ?? "full", goalKey, profile); // ✅ muscu ultra personnalisée
+    let exos: NormalizedExercise[] =
+      type === "cardio"   ? buildCardio(ctx, variant)
+    : type === "mobilité" ? buildMobility(ctx)
+    : type === "hiit"     ? buildHiit(ctx)
+    : buildStrengthFocused(ctx, focus ?? "full", goalKey, profile);
+
+    // 🔧 Extras orientés muscle si demandé (mollets, avant-bras, abdos, rear delts…)
+    exos = addObjectiveExtras(exos, profile.objectif, ctx);
 
     sessions.push({
       id: `beton-${dateStr}-${i}-${Math.random().toString(36).slice(2, 7)}`,
       title,
-      type: effectiveType as WorkoutType,
+      type: type as WorkoutType,
       date: dateStr,
       plannedMin: minutes,
-      intensity: effectiveType === "hiit" ? "élevée" : "modérée",
+      intensity: type === "hiit" ? "élevée" : "modérée",
       exercises: exos,
     } as AiSessionT);
   }
@@ -244,7 +223,6 @@ function availabilityTextFromAnswers(answers: any): string | undefined {
     /(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|week\s*-?\s*end|weekend|jours?\s+par\s+semaine|\b\d+\s*(x|fois|j|jrs|jours?)(\s*(par|\/)\s*(semaine|sem))?)/i;
 
   const candidates: string[] = [];
-  // ✅ on ajoute col_H ici aussi
   for (const k of ["col_H", "daysPerWeek", "jours", "séances/semaine", "seances/semaine", "col_I"]) {
     const v = answers[k];
     if (typeof v === "string") candidates.push(v);
@@ -311,7 +289,6 @@ function inferMaxSessions(text?: string | null): number | undefined {
   if (!text) return undefined;
   const s = String(text).toLowerCase();
 
-  // ✅ élargi pour gérer "5j", "5 j", "5 j/sem", "5 jours/semaine", etc.
   const numMatch = s.match(/\b(\d{1,2})\s*(x|fois|j|jrs|jours?)(\s*(par|\/)\s*(semaine|sem))?\b/);
   if (numMatch) {
     const n = parseInt(numMatch[1], 10);
@@ -329,9 +306,7 @@ function extractDaysList(text?: string | null): string[] {
   if (!text) return [];
   const s = String(text).toLowerCase();
   const out: string[] = [];
-  const push = (d: string) => {
-    if (!out.includes(d)) out.push(d);
-  };
+  const push = (d: string) => { if (!out.includes(d)) out.push(d); };
 
   if (/week\s*-?\s*end|weekend/.test(s)) {
     push("samedi");
@@ -382,32 +357,22 @@ type Items = {
   treadmill?: boolean;
 };
 
-function clamp(n: number, a: number, b: number) {
-  return Math.max(a, Math.min(b, n));
-}
-function addDays(d: Date, n: number) {
-  const x = new Date(d);
-  x.setDate(x.getDate() + n);
-  return x;
-}
+function clamp(n: number, a: number, b: number) { return Math.max(a, Math.min(b, n)); }
+function addDays(d: Date, n: number) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
 
 function defaultTime(goal?: string) {
   switch ((goal ?? "").toLowerCase()) {
-    case "endurance":
-      return 35;
-    case "mobility":
-      return 25;
-    case "fatloss":
-      return 35;
-    default:
-      return 45;
+    case "endurance": return 35;
+    case "mobility":  return 25;
+    case "fatloss":   return 35;
+    default:          return 45;
   }
 }
 
 function pickType(goal?: string, age?: number): WorkoutType {
   const g = (goal ?? "").toLowerCase();
   if (g === "endurance") return "cardio";
-  if (g === "mobility") return "mobilité";
+  if (g === "mobility")  return "mobilité";
   if (g === "fatloss" && (age ?? 0) > 45) return "hiit";
   return "muscu";
 }
@@ -505,7 +470,7 @@ type PoolItem = {
   fallback?: string;
   area?: "bas" | "haut" | "dos";
   kind?: "main" | "assist" | "iso" | "core";
-  contra?: (inj: Injuries) => boolean; // si true → exclure
+  contra?: (inj: Injuries) => boolean;
 };
 
 const POOLS: Record<StrengthFocus, PoolItem[]> = {
@@ -521,6 +486,8 @@ const POOLS: Record<StrengthFocus, PoolItem[]> = {
     { name: "Presse à cuisses", need: ["machine"], area: "bas", kind: "assist", fallback: "Fente arrière" },
     { name: "Fente arrière", area: "bas", kind: "assist" },
     { name: "Leg Extension (élastique/machine)", need: ["machine", "bands"], area: "bas", kind: "iso", fallback: "Squat partiel" },
+    // NEW: mollets
+    { name: "Mollets debout (haltères/élastique)", need: ["db","bands"], area: "bas", kind: "iso", fallback: "Mollets debout au poids du corps" },
   ],
   bas_iscios_glutes: [
     { name: "Hip Thrust (barre/haltère)", need: ["bench"], area: "bas", kind: "main", fallback: "Hip Thrust au sol" },
@@ -541,6 +508,8 @@ const POOLS: Record<StrengthFocus, PoolItem[]> = {
     { name: "Rowing unilatéral", need: ["db"], area: "dos", kind: "main", fallback: "Row avec serviette/table" },
     { name: "Face Pull (câble/élastique)", need: ["machine", "bands"], area: "dos", kind: "assist", fallback: "Tirage horizontal élastique" },
     { name: "Curl biceps (haltères/élastique)", need: ["db", "bands"], area: "haut", kind: "iso" },
+    // NEW: avant-bras / grip
+    { name: "Curl poignets (avant-bras)", need: ["db","bands"], area: "haut", kind: "iso", fallback: "Farmer carry (charges/poids du corps)" },
   ],
   haut_mix: [
     { name: "Développé haltères", need: ["db"], area: "haut", kind: "main", fallback: "Pompes surélevées" },
@@ -557,7 +526,7 @@ const POOLS: Record<StrengthFocus, PoolItem[]> = {
   ],
 };
 
-/* ===== Estimation du temps & normalisation ===== */
+/* ===== Estimation/rest/etc ===== */
 function baseRest(goal: string) {
   const g = (goal || "general").toLowerCase();
   if (g === "strength") return 120;
@@ -598,7 +567,7 @@ function parseRestToSec(r?: string) {
   return 0;
 }
 
-/** ✅ FIX TS: plus de comparaison avec "full" après narrowing */
+/** FIX TS */
 function hasEquipment(
   ctx: Ctx,
   need: "bar" | "db" | "bench" | "machine" | "kb" | "bands" | "trx"
@@ -625,7 +594,7 @@ function estimateTotalMinutes(list: NormalizedExercise[], goal: string) {
   return list.reduce((sum, e) => sum + estimateExerciseMinutes(e, goal), 0);
 }
 
-/* ========================= Musculation ultra-personnalisée ========================= */
+/* ============ Musculation ============ */
 function buildStrengthFocused(
   ctx: Ctx,
   focus: StrengthFocus,
@@ -724,6 +693,46 @@ function buildStrengthFocused(
   return out;
 }
 
+/* ========================= Extras orientés objectif ========================= */
+function addObjectiveExtras(exos: NormalizedExercise[], objectifBrut: string|undefined, ctx: Ctx): NormalizedExercise[] {
+  const s = norm(objectifBrut);
+  const out = exos.slice();
+
+  const hasName = (pat: RegExp) => out.some(e => pat.test((e.name||"").toLowerCase()));
+  const pushIf = (cond: boolean, ex: NormalizedExercise) => { if (cond) out.push(ex); };
+
+  // Mollets
+  pushIf(targetCalves(s) && !hasName(/mollets?|calf/),
+    adjustForInjuries(ctx, {
+      name: ctx.equipItems.db || ctx.equipItems.bands ? "Mollets debout (charge/élastique)" : "Mollets debout au poids du corps",
+      sets: 3, reps: "12–20", rest: "45–60s", block: "fin"
+    })
+  );
+
+  // Avant-bras
+  pushIf(targetForearms(s) && !hasName(/poignets?|forearm|farmer/),
+    adjustForInjuries(ctx, {
+      name: ctx.equipItems.db ? "Curl poignets (haltères)" : "Farmer carry (charges improvisées)",
+      sets: 2, reps: "12–20 ou 30–45s", rest: "45–60s", block: "fin"
+    })
+  );
+
+  // Arrière d'épaules
+  pushIf(targetRearDelts(s) && !hasName(/face pull|oiseau|arriere/),
+    adjustForInjuries(ctx, {
+      name: ctx.equipItems.bands ? "Face Pull (élastique)" : "Oiseau au poids du corps (penché)",
+      sets: 3, reps: "12–15", rest: "45–60s", block: "fin"
+    })
+  );
+
+  // Abdos
+  pushIf(targetAbs(s) && !hasName(/hollow|plank|gainage|crunch/),
+    { name: "Crunchs + Gainage", sets: 2, reps: "15 + 30–40s", rest: "45–60s", block: "fin" }
+  );
+
+  return out;
+}
+
 /* ========================= Ajustements (blessures & items) ========================= */
 function adjustForInjuries(ctx: Ctx, ex: NormalizedExercise): NormalizedExercise {
   const e: NormalizedExercise = { ...ex };
@@ -796,7 +805,6 @@ function adjustForInjuries(ctx: Ctx, ex: NormalizedExercise): NormalizedExercise
   if (/trx|suspension/i.test(e.name) && !(ctx.equipItems as any).trx) {
     return swap(e, bodyOrBand("Tirage élastique / serviette", ctx, { reps: e.reps || pickBodyweight(ctx.goalKey) }));
   }
-
   return e;
 }
 
@@ -807,42 +815,34 @@ function preferBackFriendly(ex: NormalizedExercise, ctx: Ctx): NormalizedExercis
   return ex;
 }
 
-function swap(_old: NormalizedExercise, replacement: NormalizedExercise): NormalizedExercise {
-  return { ...replacement };
-}
-function joinNotes(a?: string, b?: string) {
-  if (!a) return b || "";
-  if (!b) return a || "";
-  return `${a} ${b}`.trim();
-}
+function swap(_old: NormalizedExercise, replacement: NormalizedExercise): NormalizedExercise { return { ...replacement }; }
+function joinNotes(a?: string, b?: string) { if (!a) return b || ""; if (!b) return a || ""; return `${a} ${b}`.trim(); }
 
 /* ========================= Exercices helpers ========================= */
 function setsFor(level: "debutant" | "intermediaire" | "avance", bw = false) {
   if (bw) return level === "avance" ? 4 : 3;
   return level === "avance" ? 4 : level === "intermediaire" ? 3 : 2;
 }
-function rirFor(level: "debutant" | "intermediaire" | "avance") {
-  return level === "avance" ? 1 : 2;
-}
+function rirFor(level: "debutant" | "intermediaire" | "avance") { return level === "avance" ? 1 : 2; }
 function tempoFor(goal: string) {
   const g = goal.toLowerCase();
   if (g === "hypertrophy") return "3011";
-  if (g === "strength") return "21X1";
+  if (g === "strength")   return "21X1";
   return "2011";
 }
 function repsFor(goal: string) {
   const g = goal.toLowerCase();
-  if (g === "strength") return "4–6";
+  if (g === "strength")  return "4–6";
   if (g === "hypertrophy") return "8–12";
-  if (g === "fatloss") return "10–15";
+  if (g === "fatloss")   return "10–15";
   if (g === "endurance") return "12–15";
-  if (g === "mobility") return "8–10";
+  if (g === "mobility")  return "8–10";
   return "8–12";
 }
 function pickBodyweight(goal: string) {
   const g = goal.toLowerCase();
   if (g === "strength") return "6–8";
-  if (g === "fatloss") return "12–20";
+  if (g === "fatloss")  return "12–20";
   return "10–15";
 }
 
@@ -885,13 +885,9 @@ function extractTimestampAny(a: any): number {
   return 0;
 }
 
-/* ========================= PRESET: plan fixe (exemple) ========================= */
-/** ID stable (pas de random) */
-function stableId(dateStr: string, i: number) {
-  return `beton-${dateStr}-${i}-example`;
-}
+/* ========================= PRESET (démo) ========================= */
+function stableId(dateStr: string, i: number) { return `beton-${dateStr}-${i}-example`; }
 
-/** Force les 5 séances exactes de l’exemple, mêmes titres + exos */
 function buildFixedExampleSessions(today: Date): AiSessionT[] {
   const mkDate = (offset: number) => {
     const d = new Date(today);
@@ -901,8 +897,6 @@ function buildFixedExampleSessions(today: Date): AiSessionT[] {
     const day = String(d.getDate()).padStart(2, "0");
     return `${y}-${m}-${day}`;
   };
-
-  // Séance 1 — Lundi · Bas (quadris)
   const d1 = mkDate(0);
   const s1: AiSessionT = {
     id: stableId(d1, 0),
@@ -919,8 +913,6 @@ function buildFixedExampleSessions(today: Date): AiSessionT[] {
       { name: "Side Plank (gauche/droite)", sets: 2, reps: "20–30s/ côté", rest: "45s", block: "fin" },
     ],
   };
-
-  // Séance 2 — Mardi · Haut (poussée)
   const d2 = mkDate(1);
   const s2: AiSessionT = {
     id: stableId(d2, 1),
@@ -937,8 +929,6 @@ function buildFixedExampleSessions(today: Date): AiSessionT[] {
       { name: "Écartés (élastiques)", sets: 2, reps: "15", rest: "60s", block: "principal", equipment: "élastiques" },
     ],
   };
-
-  // Séance 3 — Mercredi · Bas (ischios/fessiers)
   const d3 = mkDate(2);
   const s3: AiSessionT = {
     id: stableId(d3, 2),
@@ -955,8 +945,6 @@ function buildFixedExampleSessions(today: Date): AiSessionT[] {
       { name: "Fentes latérales", sets: 2, reps: "10/ côté", rest: "60s", block: "principal" },
     ],
   };
-
-  // Séance 4 — Vendredi · Full body / HIIT
   const d4 = mkDate(4);
   const s4: AiSessionT = {
     id: stableId(d4, 3),
@@ -973,8 +961,6 @@ function buildFixedExampleSessions(today: Date): AiSessionT[] {
       { name: "Repos entre tours", reps: "60s", block: "fin" },
     ],
   };
-
-  // Séance 5 — Samedi · Mobilité / Core
   const d5 = mkDate(5);
   const s5: AiSessionT = {
     id: stableId(d5, 4),
@@ -991,6 +977,5 @@ function buildFixedExampleSessions(today: Date): AiSessionT[] {
       { name: "Étirements complets", reps: "5 min", block: "fin" },
     ],
   };
-
   return [s1, s2, s3, s4, s5];
 }
