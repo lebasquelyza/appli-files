@@ -116,6 +116,9 @@ const styles = String.raw`
   .meta-row { font-size:12.5px; color:#6b7280; margin-top:6px; display:grid; gap:4px; grid-template-columns:1fr; }
   @media(min-width:640px){ .meta-row{ grid-template-columns:1fr 1fr; } }
   @media print { .no-print { display: none !important; } }
+  .btn { display:inline-flex; align-items:center; justify-content:center; border-radius:10px; padding:8px 12px; font-weight:700; border:1px solid #e5e7eb; background:#111827; color:#fff; }
+  .btn-secondary { background:#ffffff; color:#111827; }
+  .btn:hover { filter:brightness(0.98); }
 `;
 
 /* ======================== Goal label helper (aligné sur la page profil) ======================== */
@@ -159,57 +162,14 @@ type PageViewProps = {
   goalLabel?: string;
   dataSource?: string;
   debug?: boolean;
-  mode: "equip" | "noequip";
-  urlEquip: string;
-  urlNoEquip: string;
+  backHref: string;
+  equipNoneHref: string;
+  equipFullHref: string;
 };
-
-/* ========== Mapping vers variantes sans équipement (côté serveur) ========== */
-function toNoEquipmentExercise(ex: NormalizedExercise): NormalizedExercise {
-  const name = (ex.name || "").toLowerCase();
-  const base: NormalizedExercise = { ...ex, equipment: "poids du corps" };
-
-  // BAS
-  if (/goblet|back squat|front squat|squat|presse/.test(name))
-    return { ...base, name: "Squat au poids du corps", sets: ex.sets ?? 3, reps: ex.reps || "12–20", rest: "45–60s" };
-  if (/fente|split squat/.test(name))
-    return { ...base, name: "Fente arrière (PDC)", sets: ex.sets ?? 3, reps: ex.reps || "10–12/ côté", rest: "45–60s" };
-  if (/hip thrust/.test(name))
-    return { ...base, name: "Hip Thrust au sol", sets: ex.sets ?? 3, reps: ex.reps || "12–15", rest: "45–60s" };
-  if (/soulev[ée] de terre|deadlift|rdl|good morning/.test(name))
-    return { ...base, name: "Good Morning (bras croisés)", sets: ex.sets ?? 3, reps: "12–15", rest: "45–60s" };
-  if (/mollet|calf/.test(name))
-    return { ...base, name: "Mollets debout (PDC)", sets: ex.sets ?? 3, reps: "15–25", rest: "45–60s" };
-
-  // HAUT PUSH
-  if (/bench|d[ée]velopp[ée]/.test(name) && !/tirage|row/.test(name))
-    return { ...base, name: "Pompes", sets: ex.sets ?? 3, reps: "max contrôlé", rest: "60–75s", notes: "Surélever les mains si besoin." };
-  if (/ecart[ée]s|fly/.test(name))
-    return { ...base, name: "Pompes mains écartées (amplitude)", sets: ex.sets ?? 2, reps: "10–15", rest: "45–60s" };
-  if (/triceps/.test(name))
-    return { ...base, name: "Pompes mains serrées", sets: ex.sets ?? 3, reps: "8–12", rest: "45–60s" };
-  if (/elevations? lat[ée]rales?/.test(name))
-    return { ...base, name: "Pike press (léger)", sets: ex.sets ?? 3, reps: "6–10", rest: "60–75s", notes: "Épaules, amplitude confortable." };
-
-  // HAUT PULL
-  if (/row|tirage|tractions?/.test(name))
-    return { ...base, name: "Tirage sous table (serviette)", sets: ex.sets ?? 3, reps: "6–10", rest: "60–75s", notes: "Table robuste / barre basse." };
-  if (/face pull/.test(name))
-    return { ...base, name: "Tirage horizontal (serviette)", sets: ex.sets ?? 3, reps: "10–12", rest: "45–60s" };
-  if (/biceps|curl/.test(name))
-    return { ...base, name: "Curl isométrique paume contre paume", sets: ex.sets ?? 3, reps: "20–30s", rest: "45–60s" };
-  if (/avant[- ]?bras|forearm/.test(name))
-    return { ...base, name: "Farmer hold sans charge (isométrie)", sets: ex.sets ?? 3, reps: "30–45s", rest: "45–60s" };
-  if (/rear delt|arriere d[ée]paules?|post[ée]rieur/.test(name))
-    return { ...base, name: "Reverse snow angels (au sol)", sets: ex.sets ?? 3, reps: "10–15", rest: "45–60s" };
-
-  // CORE/HIIT/MOBILITÉ : souvent déjà PDC
-  return base;
-}
 
 /* ======================== View (JSX) ======================== */
 const PageView: React.FC<PageViewProps> = (props) => {
-  const { base, profile, groups, plannedMin, intensity, coachIntro, goalLabel, dataSource, debug, mode, urlEquip, urlNoEquip } = props;
+  const { base, profile, groups, plannedMin, intensity, coachIntro, goalLabel, dataSource, debug, backHref, equipNoneHref, equipFullHref } = props;
 
   return (
     <div>
@@ -217,39 +177,16 @@ const PageView: React.FC<PageViewProps> = (props) => {
       {/* top bar */}
       <div className="mb-2 flex items-center justify-between no-print" style={{ paddingInline: 12 }}>
         {/* Bouton retour → page Profil */}
-        <a
-          href="/dashboard/profile"
-          className="inline-flex items-center rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm font-medium text-neutral-800 hover:bg-neutral-50"
-        >
-          ← Retour
-        </a>
+        <a href={backHref} className="btn btn-secondary">← Retour</a>
         <div className="flex items-center gap-2">
-          {/* Toggle equip / no-equip */}
-          <a
-            href={urlEquip}
-            className={`inline-flex items-center rounded-lg border px-3 py-2 text-sm font-medium ${mode === "equip" ? "bg-black text-white border-black" : "bg-white text-neutral-800 border-neutral-200 hover:bg-neutral-50"}`}
-            title="Version avec équipement"
-          >
-            Avec équipement
-          </a>
-          <a
-            href={urlNoEquip}
-            className={`inline-flex items-center rounded-lg border px-3 py-2 text-sm font-medium ${mode === "noequip" ? "bg-black text-white border-black" : "bg-white text-neutral-800 border-neutral-200 hover:bg-neutral-50"}`}
-            title="Version sans équipement"
-          >
-            Sans équipement
-          </a>
           {debug && dataSource && (
             <span className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-800">
               Source: {dataSource}
             </span>
           )}
-          <a
-            href="javascript:print()"
-            className="inline-flex items-center rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm font-medium text-neutral-800 hover:bg-neutral-50"
-          >
-            Imprimer
-          </a>
+          {/* Boutons mode équipement */}
+          <a href={equipFullHref} className="btn btn-secondary" title="Voir la version avec équipement">Avec équipement</a>
+          <a href={equipNoneHref} className="btn" title="Voir la version sans équipement">Sans équipement</a>
         </div>
       </div>
 
@@ -287,9 +224,7 @@ const PageView: React.FC<PageViewProps> = (props) => {
               {profile?.equipLevel && (
                 <li>
                   🧰 <b>Matériel</b> :{" "}
-                  {mode === "noequip"
-                    ? "aucun (poids du corps)"
-                    : profile.equipLevel === "full"
+                  {profile.equipLevel === "full"
                     ? "accès salle (machines/barres)"
                     : profile.equipLevel === "limited"
                     ? `limité (${profile.equipItems?.join(", ") || "quelques charges"})`
@@ -350,12 +285,12 @@ const PageView: React.FC<PageViewProps> = (props) => {
                         <Chip label="⏲️" value={ex.rest || "—"} title="Repos" />
                         <Chip label="🏋︎" value={loadStr || "—"} title="Charge / RIR" />
                         {ex.tempo && <Chip label="🎚" value={ex.tempo} title="Tempo" />}
-                        <Chip label="🧰" value={ex.equipment ? String(ex.equipment) : "—"} title="Équipement" />
                       </div>
 
-                      {(ex.target || ex.alt || ex.notes || ex.videoUrl) && (
+                      {(ex.target || ex.equipment || ex.alt || ex.notes || ex.videoUrl) && (
                         <div className="meta-row">
                           {ex.target && <div>🎯 {ex.target}</div>}
+                          {ex.equipment && <div>🧰 {ex.equipment}</div>}
                           {ex.alt && <div>🔁 Alt: {ex.alt}</div>}
                           {ex.notes && <div>📝 {ex.notes}</div>}
                           {ex.videoUrl && (
@@ -392,6 +327,7 @@ async function loadData(
 }> {
   const debug = String(searchParams?.debug || "") === "1";
   const forceRegen = String(searchParams?.regen || "") === "1";
+  const equipOverride = String(searchParams?.equip || "").toLowerCase(); // "none" | "limited" | "full" | ""
 
   const store = parseStore(cookies().get("app_sessions")?.value);
   const fromStore = store.sessions.find((s) => s.id === id) as
@@ -476,10 +412,11 @@ async function loadData(
 
   // Profile depuis les réponses
   let profile: ProfileT | null = null;
+  let answers: Record<string, any> | null = null;
   try {
     const email = await getSignedInEmail();
     if (email) {
-      const answers = await getAnswersForEmail(email);
+      answers = await getAnswersForEmail(email);
       if (answers) profile = buildProfileFromAnswers(answers) as ProfileT;
     }
   } catch (e) {
@@ -497,8 +434,13 @@ async function loadData(
     try {
       const email = await getSignedInEmail();
       if (email) {
-        const answers = await getAnswersForEmail(email);
+        answers = answers || (await getAnswersForEmail(email));
         if (answers) {
+          // ⬇️ Override d'équipement via ?equip=none|limited|full
+          const eq = equipOverride;
+          if (eq === "none" || eq === "limited" || eq === "full") {
+            (answers as any).equipLevel = eq;
+          }
           const regenProg = generateProgrammeFromAnswers(answers); // { sessions }
           const regen = regenProg.sessions || [];
           const match =
@@ -522,6 +464,16 @@ async function loadData(
   if (!exercises.length) {
     exercises = genericFallback((base?.type ?? "muscu") as WorkoutType);
     if (dataSource === "unknown") dataSource = "fallback";
+  }
+
+  if (debug) {
+    console.log("seance page dataSource=", dataSource, {
+      id,
+      foundStore: !!fromStore,
+      foundAi: !!fromAi,
+      storeLen: store.sessions.length,
+      programmeLen: aiSessions.length,
+    });
   }
 
   return { base, profile, exercises, dataSource };
@@ -556,12 +508,6 @@ export default async function Page({
   const { base, profile, exercises, dataSource } = await loadData(id, searchParams);
   if (!base) redirect("/dashboard/profile?error=Seance%20introuvable");
 
-  // ====== mode equip / no-equip via query param ======
-  const mode: "equip" | "noequip" = String(searchParams?.mode || "") === "noequip" ? "noequip" : "equip";
-
-  // map exercises if no-equip
-  const mappedExercises = mode === "noequip" ? (exercises || []).map(toNoEquipmentExercise) : exercises || [];
-
   const plannedMin = base.plannedMin ?? (profile?.timePerSession ?? 45);
   const intensity = base.intensity ?? "modérée";
 
@@ -579,7 +525,7 @@ export default async function Page({
 
   const blockOrder = { echauffement: 0, principal: 1, accessoires: 2, fin: 3 } as const;
 
-  const exs = mappedExercises.slice().sort((a, b) => {
+  const exs = exercises.slice().sort((a, b) => {
     const A = a.block ? (blockOrder as any)[a.block] ?? 99 : 50;
     const B = b.block ? (blockOrder as any)[b.block] ?? 99 : 50;
     return A - B;
@@ -591,22 +537,13 @@ export default async function Page({
     (groups[k] ||= []).push(ex);
   }
 
-  // URLs pour le toggle (on conserve les autres query params)
-  const buildUrlWithMode = (m: "equip" | "noequip") => {
-    const qp = new URLSearchParams();
-    for (const [k, v] of Object.entries(searchParams || {})) {
-      if (k === "mode") continue;
-      if (Array.isArray(v)) v.forEach((x) => qp.append(k, String(x)));
-      else if (typeof v === "string") qp.set(k, v);
-    }
-    qp.set("mode", m);
-    return `?${qp.toString()}`;
-  };
-
-  const urlEquip = buildUrlWithMode("equip");
-  const urlNoEquip = buildUrlWithMode("noequip");
-
   const debug = String(searchParams?.debug || "") === "1";
+
+  // Construire les liens pour les boutons
+  const baseHref = `/dashboard/seance/${encodeURIComponent(base.id)}?title=${encodeURIComponent(base.title)}&date=${encodeURIComponent(base.date)}&type=${encodeURIComponent(base.type)}`;
+  const equipNoneHref = `${baseHref}&regen=1&equip=none`;
+  const equipFullHref = `${baseHref}&regen=1&equip=full`;
+  const backHref = "/dashboard/profile";
 
   return (
     <PageView
@@ -619,9 +556,9 @@ export default async function Page({
       goalLabel={goalLabel}
       dataSource={dataSource}
       debug={debug}
-      mode={mode}
-      urlEquip={urlEquip}
-      urlNoEquip={urlNoEquip}
+      backHref={backHref}
+      equipNoneHref={equipNoneHref}
+      equipFullHref={equipFullHref}
     />
   );
 }
