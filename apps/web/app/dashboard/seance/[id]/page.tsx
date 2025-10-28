@@ -1,7 +1,8 @@
+// apps/web/app/dashboard/seance/[id]/page.tsx
 import React from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import NextDynamic from "next/dynamic"; // alias pour éviter le conflit avec 'export const dynamic'
+import NextDynamic from "next/dynamic"; // alias to avoid clash with `export const dynamic`
 import {
   getAiSessions,
   getAnswersForEmail,
@@ -13,7 +14,6 @@ import {
 } from "../../../../lib/coach/ai";
 
 /* Client-only modal (ChatGPT-powered) */
-// ⬇️ CHEMIN CORRIGÉ ICI
 const DemoModalAI = NextDynamic(() => import("../../../../components/DemoModalAI"), { ssr: false });
 
 /* ======================== Utils ======================== */
@@ -93,6 +93,8 @@ type ProfileT = ReturnType<typeof buildProfileFromAnswers> & {
   equipLevel?: "none" | "limited" | "full";
   equipItems?: string[];
   injuries?: string[];
+  // ✅ add level here to satisfy usage below
+  level?: "debutant" | "intermediaire" | "avance";
   // variantes possibles côté questionnaire
   goal?: string;
   primaryGoal?: string;
@@ -101,7 +103,7 @@ type ProfileT = ReturnType<typeof buildProfileFromAnswers> & {
   currentGoal?: string;
 };
 
-export const dynamic = "force-dynamic"; // OK avec l’alias NextDynamic
+export const dynamic = "force-dynamic";
 
 /* ======================== Styles & Const ======================== */
 const blockNames: Record<string, string> = {
@@ -131,15 +133,11 @@ const styles = String.raw`
   @media print { .no-print { display: none !important; } }
 `;
 
-/* ======================== Goal label helper (aligné sur la page profil) ======================== */
+/* ======================== Goal label helper ======================== */
 function goalLabelFromProfile(profile: any): string | undefined {
   if (!profile) return undefined;
-
-  // 1) Priorité au libellé brut du Sheet (comme dans "Mes infos")
   const raw = String(profile?.objectif ?? "").trim();
   if (raw) return raw;
-
-  // 2) Sinon fallback via la clé normalisée -> libellé FR
   const map: Record<string, string> = {
     hypertrophy: "Hypertrophie / Esthétique",
     fatloss: "Perte de gras",
@@ -148,7 +146,6 @@ function goalLabelFromProfile(profile: any): string | undefined {
     mobility: "Mobilité / Souplesse",
     general: "Forme générale",
   };
-
   const key = String(
     profile?.goal ??
       profile?.primaryGoal ??
@@ -157,7 +154,6 @@ function goalLabelFromProfile(profile: any): string | undefined {
       profile?.currentGoal ??
       ""
   ).toLowerCase();
-
   return map[key] || undefined;
 }
 
@@ -172,18 +168,13 @@ type PageViewProps = {
   goalLabel?: string;
   dataSource?: string;
   debug?: boolean;
-  /** full = avec équipement, none = sans équipement */
   activeEquip: "full" | "none";
-  /** optional demo query from searchParams */
   demoQuery?: string;
-  /** URL to close the modal (current page without demo) */
   closeDemoHref: string;
 };
 
-/* Build href to open demo for a given exercise (server-side, no client state) */
 function openDemoHrefFor(baseId: string, searchParams: Record<string,string|undefined>, name: string) {
   const sp = new URLSearchParams();
-  // keep known params
   if (searchParams.date) sp.set("date", searchParams.date);
   if (searchParams.type) sp.set("type", searchParams.type);
   if (searchParams.title) sp.set("title", searchParams.title);
@@ -193,7 +184,6 @@ function openDemoHrefFor(baseId: string, searchParams: Record<string,string|unde
   return `/dashboard/seance/${encodeURIComponent(baseId)}?${sp.toString()}`;
 }
 
-/* Build a close href (remove demo param) */
 function closeDemoHref(baseId: string, searchParams: Record<string,string|undefined>) {
   const sp = new URLSearchParams();
   if (searchParams.date) sp.set("date", searchParams.date);
@@ -224,7 +214,6 @@ const PageView: React.FC<PageViewProps & {
     searchParams,
   } = props;
 
-  // Build equip toggle URLs (simple: keep same id and force regen with equip)
   const withEquipHref = `/dashboard/seance/${encodeURIComponent(base.id)}?regen=1&equip=full`;
   const noEquipHref = `/dashboard/seance/${encodeURIComponent(base.id)}?regen=1&equip=none`;
 
@@ -234,14 +223,8 @@ const PageView: React.FC<PageViewProps & {
   return (
     <div>
       <style dangerouslySetInnerHTML={{ __html: styles }} />
-      {/* top bar */}
       <div className="mb-2 flex items-center justify-between no-print" style={{ paddingInline: 12 }}>
-        {/* Bouton retour — plus petit et reste en haut */}
-        <a
-          href="/dashboard/profile"
-          className="btn btn-sm btn-ghost"
-          style={{ borderColor:"#e5e7eb" }}
-        >
+        <a href="/dashboard/profile" className="btn btn-sm btn-ghost" style={{ borderColor:"#e5e7eb" }}>
           ← Retour
         </a>
         <div className="flex items-center gap-2">
@@ -253,9 +236,7 @@ const PageView: React.FC<PageViewProps & {
         </div>
       </div>
 
-      {/* wrapper étroit pour mobile */}
       <div className="mx-auto w-full" style={{ maxWidth: 640, paddingInline: 12, paddingBottom: 24 }}>
-        {/* header */}
         <div className="page-header">
           <div>
             <h1 className="h1-compact">{base.title}</h1>
@@ -265,25 +246,19 @@ const PageView: React.FC<PageViewProps & {
           </div>
         </div>
 
-        {/* Brief */}
         <section className="section" style={{ marginTop: 12 }}>
           <div className="section-head" style={{ marginBottom: 8 }}>
             <h2 className="section-title">Brief de séance</h2>
           </div>
           <div className="compact-card">
-            {/* Objectif actuel du client — libellé FR conforme à la page profil */}
             {goalLabel && (
               <div style={{ fontSize: 14, marginBottom: 8 }}>
                 🎯 <b>Objectif actuel</b> : {goalLabel}
               </div>
             )}
             <ul style={{ fontSize: 14, lineHeight: 1.5 }}>
-              <li>
-                🧭 <b>Intention de séance</b> : {coachIntro}
-              </li>
-              <li>
-                ⏱️ <b>Durée</b> : {plannedMin} min · <b>Intensité</b> : {intensity}
-              </li>
+              <li>🧭 <b>Intention de séance</b> : {coachIntro}</li>
+              <li>⏱️ <b>Durée</b> : {plannedMin} min · <b>Intensité</b> : {intensity}</li>
               {profile?.equipLevel && (
                 <li>
                   🧰 <b>Matériel</b> :{" "}
@@ -312,30 +287,18 @@ const PageView: React.FC<PageViewProps & {
             </ul>
           </div>
 
-          {/* Boutons variantes équipement — avec état visuel sélectionné */}
           <div className="no-print" style={{ marginTop: 10 }}>
             <div className="btn-row">
-              <a
-                href={withEquipHref}
-                aria-pressed={activeEquip === "full"}
-                className={activeEquip === "full" ? filled : ghost}
-                title="Variante avec matériel (salle/charges)"
-              >
+              <a href={withEquipHref} aria-pressed={activeEquip === "full"} className={activeEquip === "full" ? filled : ghost} title="Variante avec matériel (salle/charges)">
                 Avec équipement
               </a>
-              <a
-                href={noEquipHref}
-                aria-pressed={activeEquip === "none"}
-                className={activeEquip === "none" ? filled : ghost}
-                title="Variante sans équipement (poids du corps)"
-              >
+              <a href={noEquipHref} aria-pressed={activeEquip === "none"} className={activeEquip === "none" ? filled : ghost} title="Variante sans équipement (poids du corps)">
                 Sans équipement
               </a>
             </div>
           </div>
         </section>
 
-        {/* Blocs */}
         {["echauffement", "principal", "accessoires", "fin"].map((k) => {
           const list = groups[k] || [];
           if (!list.length) return null;
@@ -354,12 +317,7 @@ const PageView: React.FC<PageViewProps & {
                       : (typeof ex.rir === "number" ? `RIR ${ex.rir}` : "");
                   const href = openDemoHrefFor(base.id, searchParams, ex.name);
                   return (
-                    <a
-                      key={`${k}-${i}`}
-                      href={href}
-                      className="card-link"
-                      title={`Voir la démonstration : ${ex.name}`}
-                    >
+                    <a key={`${k}-${i}`} href={href} className="card-link" title={`Voir la démonstration : ${ex.name}`}>
                       <article className="compact-card">
                         <div className="flex items-start justify-between gap-3">
                           <div className="exoname">{ex.name}</div>
@@ -370,7 +328,6 @@ const PageView: React.FC<PageViewProps & {
                           ) : null}
                         </div>
 
-                        {/* chips compactes */}
                         <div className="chips">
                           <span title="Séries" className="inline-flex items-center rounded-md border border-neutral-200 bg-white px-2 py-1 text-[12px] leading-[14px] text-neutral-800">
                             <span className="mr-1 opacity-70">🧱</span> {typeof ex.sets === "number" ? `${ex.sets} séries` : "—"}
@@ -410,11 +367,10 @@ const PageView: React.FC<PageViewProps & {
         })}
       </div>
 
-      {/* Modal DEMO IA (ChatGPT) */}
       <DemoModalAI
-        open={!!demoQuery}
+        open={!!(typeof window !== "undefined" && new URLSearchParams(window.location.search).get("demo"))}
         onClose={() => (window.location.href = closeDemoHref)}
-        exercise={demoQuery || ""}
+        exercise={(typeof window !== "undefined" && new URLSearchParams(window.location.search).get("demo")) || ""}
         level={profile?.level}
         injuries={profile?.injuries}
       />
@@ -436,7 +392,6 @@ async function loadData(
   const debug = String(searchParams?.debug || "") === "1";
   const forceRegen = String(searchParams?.regen || "") === "1";
 
-  // NEW: lire param d'URL equip et initialiser l'état actif
   const equipParam = String(searchParams?.equip || "").toLowerCase();
   let activeEquip: "full" | "none" = equipParam === "none" ? "none" : "full";
 
@@ -445,7 +400,6 @@ async function loadData(
     | (AiSession & { exercises?: NormalizedExercise[] })
     | undefined;
 
-  // ⬇️ lire les séances IA via la lib (email depuis cookie/app session)
   let aiSessions: AiSession[] = [];
   try {
     const email = await getSignedInEmail();
@@ -486,7 +440,6 @@ async function loadData(
 
   let dataSource = "unknown";
 
-  // Base prioritaire par id / query
   let base: AiSession | undefined =
     (fromStore as AiSession | undefined) || fromAi || (storeByQD as AiSession | undefined) || aiByQD;
 
@@ -495,7 +448,6 @@ async function loadData(
   else if (storeByQD) dataSource = "storeByQD";
   else if (aiByQD) dataSource = "aiByQD";
 
-  // Force regeneration if requested
   if (forceRegen) {
     dataSource = "regen";
     base =
@@ -509,7 +461,6 @@ async function loadData(
       } as AiSession);
   }
 
-  // Si rien de trouvé mais des QPs => stub minimal
   if (!base && (qpTitle || qpDateRaw || (searchParams?.type as string | undefined))) {
     dataSource = "stub";
     base = {
@@ -521,7 +472,6 @@ async function loadData(
     } as AiSession;
   }
 
-  // Profile depuis les réponses
   let profile: ProfileT | null = null;
   try {
     const email = await getSignedInEmail();
@@ -533,29 +483,25 @@ async function loadData(
     console.warn("build profile failed", e);
   }
 
-  // Si pas de param d’URL, déduire depuis le profil (none => bouton "Sans équipement" actif)
   if (!equipParam) {
     activeEquip = profile?.equipLevel === "none" ? "none" : "full";
   }
 
-  // Exercices
   let exercises: NormalizedExercise[] =
     (fromStore?.exercises as NormalizedExercise[] | undefined) ||
     (fromAi?.exercises as NormalizedExercise[] | undefined) ||
     [];
 
-  // Régénération si demandée OU si on n'a rien
   if (forceRegen || !exercises.length) {
     try {
       const email = await getSignedInEmail();
       if (email) {
         const answers = await getAnswersForEmail(email);
         if (answers) {
-          // Equip override via query ?equip=full|none
           const eq = equipParam === "none" ? "none" : equipParam === "full" ? "full" : "";
           if (eq) (answers as any).equipLevel = eq;
 
-          const regenProg = generateProgrammeFromAnswers(answers); // { sessions }
+          const regenProg = generateProgrammeFromAnswers(answers);
           const regen = regenProg.sessions || [];
           const match =
             regen.find(
@@ -633,9 +579,8 @@ export default async function Page({
       ? "Aérobie maîtrisée, souffle régulier en zone 2–3."
       : base.type === "hiit"
       ? "Pics d’intensité courts, technique impeccable."
-      : "Amplitude confortable, respiration calme, zéro douleur nette.";
+      : "Mouvement lent et contrôlé, respire profondément.";
 
-  // Objectif actuel du client — libellé FR identique au profil
   const goalLabel = goalLabelFromProfile(profile);
 
   const blockOrder = { echauffement: 0, principal: 1, accessoires: 2, fin: 3 } as const;
