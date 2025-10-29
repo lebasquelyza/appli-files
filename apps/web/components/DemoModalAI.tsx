@@ -1,169 +1,66 @@
+// apps/web/components/DemoModalAI.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+import * as Dialog from "@radix-ui/react-dialog";
 
-type DemoData = {
-  animation?: string;     // ex: squat.glb (si tu ajoutes le rendu 3D plus tard)
-  tempo?: string;         // ex: 3011
-  cues?: string[];        // consignes courtes
-  errors?: string[];      // erreurs fréquentes
-  progression?: string;   // variante plus dure
-  regression?: string;    // variante plus facile
-  camera?: string;        // suggestion angle caméra
-  videoKeywords?: string; // mots-clés pour le fallback vidéo
+type Props = {
+  open: boolean;
+  closeHref: string; // on passe une URL (pas de fonction depuis le Server Component)
+  exercise: string;
+  level?: "debutant" | "intermediaire" | "avance";
+  injuries?: string[];
 };
 
-export default function DemoModalAI({
-  open,
-  onClose,
-  exercise,
-  level,
-  injuries,
-}: {
-  open: boolean;
-  onClose: () => void;
-  exercise: string;
-  level?: string;
-  injuries?: string[];
-}) {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string>("");
-  const [data, setData] = useState<DemoData | null>(null);
+export default function DemoModalAI({ open, closeHref, exercise, level, injuries }: Props) {
+  const [isOpen, setIsOpen] = useState(open);
 
-  useEffect(() => {
-    if (!open) return;
-    setLoading(true);
-    setError("");
-    setData(null);
+  useEffect(() => setIsOpen(open), [open]);
 
-    (async () => {
-      try {
-        const res = await fetch("/api/exo-demo", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            exercise,
-            level: level || "débutant",
-            injuries: injuries || [],
-            language: "fr",
-          }),
-        });
-        const json = await res.json();
-        if (!res.ok) throw new Error(json?.error || "Erreur IA");
-        setData(json as DemoData);
-      } catch (e: any) {
-        setError(e?.message || "Erreur IA");
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [open, exercise, level, injuries]);
-
-  // Fallback vidéo (YouTube embed search) — simple, pas de clé API
-  const embedSrc = useMemo(() => {
-    const q = data?.videoKeywords || `${exercise} exercice tutoriel`;
-    return `https://www.youtube.com/embed?autoplay=1&rel=0&modestbranding=1&listType=search&list=${encodeURIComponent(q)}`;
-  }, [data?.videoKeywords, exercise]);
-
-  if (!open) return null;
+  const handleClose = () => {
+    window.location.href = closeHref; // navigation côté client
+  };
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      className="fixed inset-0 z-[100] flex items-center justify-center"
-      style={{ background: "rgba(17,24,39,.6)" }}
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-3xl rounded-2xl bg-white shadow-xl"
-        style={{ overflow: "hidden" }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-          <div className="font-semibold">Démo IA — {exercise}</div>
-          <button onClick={onClose} className="rounded-md px-3 py-1 text-sm border border-gray-200 hover:bg-gray-50">Fermer</button>
-        </div>
+    <Dialog.Root open={isOpen} onOpenChange={(v) => { setIsOpen(v); if (!v) handleClose(); }}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 bg-black/40" />
+        <Dialog.Content className="fixed inset-x-0 top-[10%] mx-auto w-[min(96vw,680px)] rounded-2xl bg-white p-4 shadow-lg">
+          <div className="flex items-start justify-between gap-3">
+            <h3 className="text-lg font-bold">Démo IA — {exercise}</h3>
+            <button onClick={handleClose} className="rounded-md border px-2 py-1 text-sm">
+              Fermer
+            </button>
+          </div>
 
-        <div className="grid md:grid-cols-[2fr_1fr] gap-0">
-          {/* Player / 3D placeholder */}
-          <div className="p-4">
-            <div className="aspect-video w-full rounded-lg overflow-hidden border border-gray-200 bg-black/2">
-              {loading ? (
-                <div className="w-full h-full flex items-center justify-center text-sm text-gray-600">
-                  Chargement de la démo IA…
-                </div>
-              ) : error ? (
-                <div className="w-full h-full flex items-center justify-center text-sm text-red-700 bg-red-50">
-                  {error}
-                </div>
-              ) : (
-                <iframe
-                  src={embedSrc}
-                  className="w-full h-full"
-                  title={`Demo ${exercise}`}
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                />
-              )}
+          {/* Contenu simple (tu peux brancher ton moteur ici plus tard) */}
+          <div className="mt-3 text-sm text-neutral-700 space-y-3">
+            <p>
+              <b>Niveau:</b> {level || "—"} {injuries?.length ? <span> · <b>Blessures:</b> {injuries.join(", ")}</span> : null}
+            </p>
+            <div className="rounded-lg border bg-neutral-50 p-3 text-neutral-800">
+              <p className="mb-2">
+                Voici une courte description pour <b>{exercise}</b> :
+              </p>
+              <ul className="list-disc pl-5">
+                <li>Positionne-toi correctement et engage le tronc.</li>
+                <li>Contrôle la phase excentrique (descente) et concentrique (montée).</li>
+                <li>Respire régulièrement, garde une amplitude confortable.</li>
+              </ul>
             </div>
-
-            {/* Placeholders pour l'avatar 3D futur
-            {data?.animation && (
-              <div className="mt-2 text-xs text-gray-600">
-                Animation 3D suggérée : <code>{data.animation}</code> (hook à brancher avec three.js)
-              </div>
-            )} */}
+            {/* Placeholder vidéo : remplace par un lecteur/iframe ou une recherche pilotée plus tard */}
+            <div className="aspect-video w-full overflow-hidden rounded-lg border bg-black/5">
+              <iframe
+                title={`Demo ${exercise}`}
+                className="h-full w-full"
+                src={`https://www.youtube.com/embed?autoplay=0&mute=1&rel=0`}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              />
+            </div>
           </div>
-
-          {/* Infos IA */}
-          <div className="border-t md:border-l md:border-t-0 border-gray-200 max-h-[70vh] overflow-auto p-4">
-            {loading && <div className="text-sm text-gray-500">Analyse IA…</div>}
-            {!loading && !error && (
-              <div className="space-y-3 text-sm">
-                {data?.tempo && (
-                  <div>
-                    <div className="font-semibold">Tempo</div>
-                    <div className="text-gray-700">{data.tempo}</div>
-                  </div>
-                )}
-                {!!(data?.cues?.length) && (
-                  <div>
-                    <div className="font-semibold">Consignes clés</div>
-                    <ul className="list-disc pl-5 space-y-1">
-                      {data!.cues!.map((c, i) => <li key={i}>{c}</li>)}
-                    </ul>
-                  </div>
-                )}
-                {!!(data?.errors?.length) && (
-                  <div>
-                    <div className="font-semibold">Erreurs fréquentes</div>
-                    <ul className="list-disc pl-5 space-y-1 text-gray-700">
-                      {data!.errors!.map((c, i) => <li key={i}>{c}</li>)}
-                    </ul>
-                  </div>
-                )}
-                {(data?.regression || data?.progression) && (
-                  <div className="grid grid-cols-1 gap-2">
-                    {data?.regression && (
-                      <div>
-                        <div className="font-semibold">Régression</div>
-                        <div className="text-gray-700">{data.regression}</div>
-                      </div>
-                    )}
-                    {data?.progression && (
-                      <div>
-                        <div className="font-semibold">Progression</div>
-                        <div className="text-gray-700">{data.progression}</div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
+
