@@ -2,7 +2,6 @@
 import React from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import NextDynamic from "next/dynamic"; // alias pour éviter conflit avec export const dynamic
 import {
   getAiSessions,
   getAnswersForEmail,
@@ -12,9 +11,6 @@ import {
   type NormalizedExercise,
   type WorkoutType,
 } from "../../../../lib/coach/ai";
-
-/* Client-only modal (ChatGPT-powered) */
-const DemoModalAI = NextDynamic(() => import("../../../../components/DemoModalAI"), { ssr: false });
 
 /* ======================== Utils ======================== */
 async function getSignedInEmail(): Promise<string> {
@@ -93,7 +89,7 @@ type ProfileT = ReturnType<typeof buildProfileFromAnswers> & {
   equipLevel?: "none" | "limited" | "full";
   equipItems?: string[];
   injuries?: string[];
-  level?: "debutant" | "intermediaire" | "avance"; // ajouté
+  level?: "debutant" | "intermediaire" | "avance"; // utile pour affichage
   // variantes possibles côté questionnaire
   goal?: string;
   primaryGoal?: string;
@@ -126,8 +122,6 @@ const styles = String.raw`
   .btn-ghost:hover { background:#f9fafb; }
   .btn-sm { padding:6px 10px; border-radius:8px; font-weight:600; font-size:12.5px; }
   .btn-row { display:flex; gap:8px; flex-wrap:wrap; }
-  .card-link { text-decoration:none; color:inherit; display:block; }
-  .card-link:hover .compact-card { border-color:#111827; box-shadow:0 1px 0 rgba(17,24,39,.08); }
   @media(min-width:640px){ .meta-row{ grid-template-columns:1fr 1fr; } }
   @media print { .no-print { display: none !important; } }
 `;
@@ -156,27 +150,6 @@ function goalLabelFromProfile(profile: any): string | undefined {
   return map[key] || undefined;
 }
 
-function openDemoHrefFor(baseId: string, searchParams: Record<string,string|undefined>, name: string) {
-  const sp = new URLSearchParams();
-  if (searchParams.date) sp.set("date", searchParams.date);
-  if (searchParams.type) sp.set("type", searchParams.type);
-  if (searchParams.title) sp.set("title", searchParams.title);
-  if (searchParams.equip) sp.set("equip", searchParams.equip);
-  if (searchParams.debug) sp.set("debug", searchParams.debug);
-  sp.set("demo", name);
-  return `/dashboard/seance/${encodeURIComponent(baseId)}?${sp.toString()}`;
-}
-
-function closeDemoHref(baseId: string, searchParams: Record<string,string|undefined>) {
-  const sp = new URLSearchParams();
-  if (searchParams.date) sp.set("date", searchParams.date);
-  if (searchParams.type) sp.set("type", searchParams.type);
-  if (searchParams.title) sp.set("title", searchParams.title);
-  if (searchParams.equip) sp.set("equip", searchParams.equip);
-  if (searchParams.debug) sp.set("debug", searchParams.debug);
-  return `/dashboard/seance/${encodeURIComponent(baseId)}?${sp.toString()}`;
-}
-
 /* ======================== View (JSX) ======================== */
 const PageView: React.FC<{
   base: AiSession;
@@ -189,9 +162,6 @@ const PageView: React.FC<{
   dataSource?: string;
   debug?: boolean;
   activeEquip: "full" | "none";
-  demoQuery?: string;
-  closeDemoHref: string;
-  searchParams: Record<string,string|undefined>;
 }> = (props) => {
   const {
     base,
@@ -204,9 +174,6 @@ const PageView: React.FC<{
     dataSource,
     debug,
     activeEquip,
-    demoQuery,
-    closeDemoHref,
-    searchParams,
   } = props;
 
   const withEquipHref = `/dashboard/seance/${encodeURIComponent(base.id)}?regen=1&equip=full`;
@@ -310,50 +277,43 @@ const PageView: React.FC<{
                     ex.load !== undefined && ex.load !== null
                       ? String(ex.load)
                       : (typeof ex.rir === "number" ? `RIR ${ex.rir}` : "");
-                  const href = openDemoHrefFor(base.id, searchParams, ex.name);
                   return (
-                    <a key={`${k}-${i}`} href={href} className="card-link" title={`Voir la démonstration : ${ex.name}`}>
-                      <article className="compact-card">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="exoname">{ex.name}</div>
-                          {ex.block ? (
-                            <span className="shrink-0 rounded-full bg-neutral-50 px-2 py-0.5 text-[11px] text-neutral-600">
-                              {blockNames[ex.block] || ex.block}
-                            </span>
-                          ) : null}
-                        </div>
+                    <article key={`${k}-${i}`} className="compact-card">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="exoname">{ex.name}</div>
+                        {ex.block ? (
+                          <span className="shrink-0 rounded-full bg-neutral-50 px-2 py-0.5 text-[11px] text-neutral-600">
+                            {blockNames[ex.block] || ex.block}
+                          </span>
+                        ) : null}
+                      </div>
 
-                        <div className="chips">
-                          <span title="Séries" className="inline-flex items-center rounded-md border border-neutral-200 bg-white px-2 py-1 text-[12px] leading-[14px] text-neutral-800">
-                            <span className="mr-1 opacity-70">🧱</span> {typeof ex.sets === "number" ? `${ex.sets} séries` : "—"}
-                          </span>
-                          <span title="Rép./Durée" className="inline-flex items-center rounded-md border border-neutral-200 bg-white px-2 py-1 text-[12px] leading-[14px] text-neutral-800">
-                            <span className="mr-1 opacity-70">🔁</span> {reps || "—"}
-                          </span>
-                          <span title="Repos" className="inline-flex items-center rounded-md border border-neutral-200 bg-white px-2 py-1 text-[12px] leading-[14px] text-neutral-800">
-                            <span className="mr-1 opacity-70">⏲️</span> {ex.rest || "—"}
-                          </span>
-                          <span title="Charge / RIR" className="inline-flex items-center rounded-md border border-neutral-200 bg-white px-2 py-1 text-[12px] leading-[14px] text-neutral-800">
-                            <span className="mr-1 opacity-70">🏋︎</span> {loadStr || "—"}
-                          </span>
-                          {ex.tempo && (
-                            <span title="Tempo" className="inline-flex items-center rounded-md border border-neutral-200 bg-white px-2 py-1 text-[12px] leading-[14px] text-neutral-800">
-                              <span className="mr-1 opacity-70">🎚</span> {ex.tempo}
-                            </span>
+                      {/* chips compactes */}
+                      <div className="chips">
+                        <Chip label="🧱" value={typeof ex.sets === "number" ? `${ex.sets} séries` : "—"} title="Séries" />
+                        <Chip label="🔁" value={reps || "—"} title="Rép./Durée" />
+                        <Chip label="⏲️" value={ex.rest || "—"} title="Repos" />
+                        <Chip label="🏋︎" value={loadStr || "—"} title="Charge / RIR" />
+                        {ex.tempo && <Chip label="🎚" value={ex.tempo} title="Tempo" />}
+                      </div>
+
+                      {(ex.target || ex.equipment || ex.alt || ex.notes || ex.videoUrl) && (
+                        <div className="meta-row">
+                          {ex.target && <div>🎯 {ex.target}</div>}
+                          {ex.equipment && <div>🧰 {ex.equipment}</div>}
+                          {ex.alt && <div>🔁 Alt: {ex.alt}</div>}
+                          {ex.notes && <div>📝 {ex.notes}</div>}
+                          {ex.videoUrl && (
+                            <div>
+                              📺{" "}
+                              <a className="underline underline-offset-2" href={ex.videoUrl} target="_blank" rel="noreferrer">
+                                Vidéo
+                              </a>
+                            </div>
                           )}
-                          <span className="inline-flex items-center gap-1 text-[12px] text-neutral-800">🤖 Démo IA</span>
                         </div>
-
-                        {(ex.target || ex.equipment || ex.alt || ex.notes) && (
-                          <div className="meta-row">
-                            {ex.target && <div>🎯 {ex.target}</div>}
-                            {ex.equipment && <div>🧰 {ex.equipment}</div>}
-                            {ex.alt && <div>🔁 Alt: {ex.alt}</div>}
-                            {ex.notes && <div>📝 {ex.notes}</div>}
-                          </div>
-                        )}
-                      </article>
-                    </a>
+                      )}
+                    </article>
                   );
                 })}
               </div>
@@ -361,15 +321,6 @@ const PageView: React.FC<{
           );
         })}
       </div>
-
-      {/* Modal IA — SSR-safe : on ne passe PAS de fonction depuis le Server Component */}
-      <DemoModalAI
-        open={!!demoQuery}
-        closeHref={closeDemoHref}
-        exercise={demoQuery || ""}
-        level={profile?.level}
-        injuries={profile?.injuries}
-      />
     </div>
   );
 };
@@ -573,16 +524,6 @@ export default async function Page({
     (groups[k] ||= []).push(ex);
   }
 
-  const demoQuery = typeof searchParams?.demo === "string" ? (searchParams!.demo as string) : undefined;
-  const safeSP: Record<string,string|undefined> = {
-    date: typeof searchParams?.date === "string" ? (searchParams!.date as string) : undefined,
-    type: typeof searchParams?.type === "string" ? (searchParams!.type as string) : undefined,
-    title: typeof searchParams?.title === "string" ? (searchParams!.title as string) : undefined,
-    equip: typeof searchParams?.equip === "string" ? (searchParams!.equip as string) : undefined,
-    debug: typeof searchParams?.debug === "string" ? (searchParams!.debug as string) : undefined,
-  };
-  const closeHref = closeDemoHref(base.id, safeSP);
-
   return (
     <PageView
       base={base}
@@ -595,9 +536,6 @@ export default async function Page({
       dataSource={dataSource}
       debug={false}
       activeEquip={activeEquip}
-      demoQuery={demoQuery}
-      closeDemoHref={closeHref}
-      searchParams={safeSP}
     />
   );
 }
