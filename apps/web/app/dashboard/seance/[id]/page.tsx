@@ -362,10 +362,10 @@ const PageView: React.FC<{
         })}
       </div>
 
-      {/* Modal IA — SSR-safe (open/exercise passent via query) */}
+      {/* Modal IA — SSR-safe : on ne passe PAS de fonction depuis le Server Component */}
       <DemoModalAI
         open={!!demoQuery}
-        onClose={() => (window.location.href = closeDemoHref)}
+        closeHref={closeDemoHref}
         exercise={demoQuery || ""}
         level={profile?.level}
         injuries={profile?.injuries}
