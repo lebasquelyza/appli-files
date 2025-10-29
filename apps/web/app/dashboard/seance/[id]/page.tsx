@@ -176,8 +176,26 @@ const PageView: React.FC<{
     activeEquip,
   } = props;
 
-  const withEquipHref = `/dashboard/seance/${encodeURIComponent(base.id)}?regen=1&equip=full`;
-  const noEquipHref = `/dashboard/seance/${encodeURIComponent(base.id)}?regen=1&equip=none`;
+  // ⚠️ PRÉSERVE title/date/type pour éviter "Séance introuvable" lors du toggle
+  const withEquipHref = (() => {
+    const sp = new URLSearchParams();
+    sp.set("regen", "1");
+    sp.set("equip", "full");
+    if (base.title) sp.set("title", base.title);
+    if (base.date) sp.set("date", base.date);
+    if (base.type) sp.set("type", base.type);
+    return `/dashboard/seance/${encodeURIComponent(base.id)}?${sp.toString()}`;
+  })();
+
+  const noEquipHref = (() => {
+    const sp = new URLSearchParams();
+    sp.set("regen", "1");
+    sp.set("equip", "none");
+    if (base.title) sp.set("title", base.title);
+    if (base.date) sp.set("date", base.date);
+    if (base.type) sp.set("type", base.type);
+    return `/dashboard/seance/${encodeURIComponent(base.id)}?${sp.toString()}`;
+  })();
 
   const filled = "btn btn-sm";
   const ghost = "btn btn-sm btn-ghost";
@@ -489,7 +507,7 @@ export default async function Page({
   searchParams?: Record<string, string | string[] | undefined>;
 }) {
   const id = decodeURIComponent(params?.id ?? "");
-  // On ne redirige que si on n'a NI id NI query params
+  // On ne redirige que si on n'a NI id NI query params minimaux
   if (!id && !(searchParams?.title || searchParams?.date || searchParams?.type)) {
     redirect("/dashboard/profile?error=Seance%20introuvable");
   }
