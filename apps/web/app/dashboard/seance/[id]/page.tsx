@@ -279,69 +279,68 @@ const PageView: React.FC<{
           </div>
         </section>
 
-        {["echauffement", "principal", "accessoires", "fin"].map((k) => {
-          const list = groups[k] || [];
-          if (!list.length) return null;
+       {["echauffement", "principal", "accessoires", "fin"].map((k) => {
+  const list = groups[k] || [];
+  if (!list.length) return null;
+  return (
+    <section key={k} className="section" style={{ marginTop: 12 }}>
+      <div className="section-head" style={{ marginBottom: 8 }}>
+        <h2 className="section-title">{blockNames[k]}</h2>
+      </div>
+
+      <div className="grid gap-3">
+        {list.map((ex, i) => {
+          const reps = ex.reps ? String(ex.reps) : ex.durationSec ? `${ex.durationSec}s` : "";
+
           return (
-            <section key={k} className="section" style={{ marginTop: 12 }}>
-              <div className="section-head" style={{ marginBottom: 8 }}>
-                <h2 className="section-title">{blockNames[k]}</h2>
+            <article key={`${k}-${i}`} className="compact-card">
+              <div className="flex items-start justify-between gap-3">
+                <div className="exoname">{ex.name}</div>
+                {ex.block ? (
+                  <span className="shrink-0 rounded-full bg-neutral-50 px-2 py-0.5 text-[11px] text-neutral-600">
+                    {blockNames[ex.block] || ex.block}
+                  </span>
+                ) : null}
               </div>
 
-              <div className="grid gap-3">
-                {list.map((ex, i) => {
-                  const reps = ex.reps ? String(ex.reps) : ex.durationSec ? `${ex.durationSec}s` : "";
-                  const loadStr =
-                    ex.load !== undefined && ex.load !== null
-                      ? String(ex.load)
-                      : (typeof ex.rir === "number" ? `RIR ${ex.rir}` : "");
-                  return (
-                    <article key={`${k}-${i}`} className="compact-card">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="exoname">{ex.name}</div>
-                        {ex.block ? (
-                          <span className="shrink-0 rounded-full bg-neutral-50 px-2 py-0.5 text-[11px] text-neutral-600">
-                            {blockNames[ex.block] || ex.block}
-                          </span>
-                        ) : null}
-                      </div>
-
-                      {/* chips compactes */}
-                      <div className="chips">
-                        <Chip label="🧱" value={typeof ex.sets === "number" ? `${ex.sets} séries` : "—"} title="Séries" />
-                        <Chip label="🔁" value={reps || "—"} title="Rép./Durée" />
-                        <Chip label="⏲️" value={ex.rest || "—"} title="Repos" />
-                        <Chip label="🏋︎" value={loadStr || "—"} title="Charge / RIR" />
-                        {ex.tempo && <Chip label="🎚" value={ex.tempo} title="Tempo" />}
-                      </div>
-
-                      {(ex.target || ex.equipment || ex.alt || ex.notes || ex.videoUrl) && (
-                        <div className="meta-row">
-                          {ex.target && <div>🎯 {ex.target}</div>}
-                          {ex.equipment && <div>🧰 {ex.equipment}</div>}
-                          {ex.alt && <div>🔁 Alt: {ex.alt}</div>}
-                          {ex.notes && <div>📝 {ex.notes}</div>}
-                          {ex.videoUrl && (
-                            <div>
-                              📺{" "}
-                              <a className="underline underline-offset-2" href={ex.videoUrl} target="_blank" rel="noreferrer">
-                                Vidéo
-                              </a>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </article>
-                  );
-                })}
+              {/* chips compactes — sets / reps / rest uniquement */}
+              <div className="chips">
+                {typeof ex.sets === "number" && (
+                  <Chip label="🧱" value={`${ex.sets} séries`} title="Séries" />
+                )}
+                {reps && <Chip label="🔁" value={reps} title="Rép./Durée" />}
+                {ex.rest && <Chip label="⏲️" value={ex.rest} title="Repos" />}
               </div>
-            </section>
+
+              {(ex.target || ex.equipment || ex.alt || ex.notes || ex.videoUrl) && (
+                <div className="meta-row">
+                  {ex.target && <div>🎯 {ex.target}</div>}
+                  {ex.equipment && <div>🧰 {ex.equipment}</div>}
+                  {ex.alt && <div>🔁 Alt: {ex.alt}</div>}
+                  {ex.notes && <div>📝 {ex.notes}</div>}
+                  {ex.videoUrl && (
+                    <div>
+                      📺{" "}
+                      <a
+                        className="underline underline-offset-2"
+                        href={ex.videoUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Vidéo
+                      </a>
+                    </div>
+                  )}
+                </div>
+              )}
+            </article>
           );
         })}
       </div>
-    </div>
+    </section>
   );
-};
+})}
+
 
 /* ====================== Data Loader (avec fallback “stub”) ====================== */
 async function loadData(
