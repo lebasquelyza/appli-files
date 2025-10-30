@@ -89,8 +89,7 @@ type ProfileT = ReturnType<typeof buildProfileFromAnswers> & {
   equipLevel?: "none" | "limited" | "full";
   equipItems?: string[];
   injuries?: string[];
-  level?: "debutant" | "intermediaire" | "avance"; // utile pour affichage
-  // variantes possibles côté questionnaire
+  level?: "debutant" | "intermediaire" | "avance";
   goal?: string;
   primaryGoal?: string;
   objective?: string;
@@ -150,6 +149,19 @@ function goalLabelFromProfile(profile: any): string | undefined {
   return map[key] || undefined;
 }
 
+/** Nettoie reps/rest pour retirer RIR/tempos éventuellement concaténés. */
+function cleanText(s?: string): string {
+  if (!s) return "";
+  return String(s)
+    .replace(/(?:^|\s*[·•\-|,;]\s*)RIR\s*\d+(?:\.\d+)?/gi, "") // retire “RIR 2”, “· RIR 1.5”, etc.
+    .replace(/\b[0-4xX]{3,4}\b/g, "")                          // retire tempos “3011”, “30X1”, …
+    .replace(/Tempo\s*:\s*[0-4xX]{3,4}/gi, "")                  // retire “Tempo: 3011”
+    .replace(/\s*[·•\-|,;]\s*(?=[·•\-|,;]|$)/g, "")             // nettoie séparateurs doublons
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s*[·•\-|,;]\s*$/g, "")
+    .trim();
+}
+
 /* ======================== View (JSX) ======================== */
 const PageView: React.FC<{
   base: AiSession;
@@ -176,7 +188,6 @@ const PageView: React.FC<{
     activeEquip,
   } = props;
 
-  // ⚠️ PRÉSERVE title/date/type pour éviter "Séance introuvable" lors du toggle
   const withEquipHref = (() => {
     const sp = new URLSearchParams();
     sp.set("regen", "1");
@@ -279,68 +290,68 @@ const PageView: React.FC<{
           </div>
         </section>
 
-       {["echauffement", "principal", "accessoires", "fin"].map((k) => {
-  const list = groups[k] || [];
-  if (!list.length) return null;
-  return (
-    <section key={k} className="section" style={{ marginTop: 12 }}>
-      <div className="section-head" style={{ marginBottom: 8 }}>
-        <h2 className="section-title">{blockNames[k]}</h2>
-      </div>
-
-      <div className="grid gap-3">
-        {list.map((ex, i) => {
-          const reps = ex.reps ? String(ex.reps) : ex.durationSec ? `${ex.durationSec}s` : "";
-
+        {["echauffement", "principal", "accessoires", "fin"].map((k) => {
+          const list = groups[k] || [];
+          if (!list.length) return null;
           return (
-            <article key={`${k}-${i}`} className="compact-card">
-              <div className="flex items-start justify-between gap-3">
-                <div className="exoname">{ex.name}</div>
-                {ex.block ? (
-                  <span className="shrink-0 rounded-full bg-neutral-50 px-2 py-0.5 text-[11px] text-neutral-600">
-                    {blockNames[ex.block] || ex.block}
-                  </span>
-                ) : null}
+            <section key={k} className="section" style={{ marginTop: 12 }}>
+              <div className="section-head" style={{ marginBottom: 8 }}>
+                <h2 className="section-title">{blockNames[k]}</h2>
               </div>
 
-              {/* chips compactes — sets / reps / rest uniquement */}
-              <div className="chips">
-                {typeof ex.sets === "number" && (
-                  <Chip label="🧱" value={`${ex.sets} séries`} title="Séries" />
-                )}
-                {reps && <Chip label="🔁" value={reps} title="Rép./Durée" />}
-                {ex.rest && <Chip label="⏲️" value={ex.rest} title="Repos" />}
-              </div>
+              <div className="grid gap-3">
+                {list.map((ex, i) => {
+                  const rawReps = ex.reps ? String(ex.reps) : ex.durationSec ? `${ex.durationSec}s` : "";
+                  const reps = cleanText(rawReps);
+                  const rest = cleanText(ex.rest || "");
 
-              {(ex.target || ex.equipment || ex.alt || ex.notes || ex.videoUrl) && (
-                <div className="meta-row">
-                  {ex.target && <div>🎯 {ex.target}</div>}
-                  {ex.equipment && <div>🧰 {ex.equipment}</div>}
-                  {ex.alt && <div>🔁 Alt: {ex.alt}</div>}
-                  {ex.notes && <div>📝 {ex.notes}</div>}
-                  {ex.videoUrl && (
-                    <div>
-                      📺{" "}
-                      <a
-                        className="underline underline-offset-2"
-                        href={ex.videoUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        Vidéo
-                      </a>
-                    </div>
-                  )}
-                </div>
-              )}
-            </article>
+                  return (
+                    <article key={`${k}-${i}`} className="compact-card">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="exoname">{ex.name}</div>
+                        {ex.block ? (
+                          <span className="shrink-0 rounded-full bg-neutral-50 px-2 py-0.5 text-[11px] text-neutral-600">
+                            {blockNames[ex.block] || ex.block}
+                          </span>
+                        ) : null}
+                      </div>
+
+                      {/* chips compactes — sets / reps / rest uniquement */}
+                      <div className="chips">
+                        {typeof ex.sets === "number" && (
+                          <Chip label="🧱" value={`${ex.sets} séries`} title="Séries" />
+                        )}
+                        {reps && <Chip label="🔁" value={reps} title="Rép./Durée" />}
+                        {rest && <Chip label="⏲️" value={rest} title="Repos" />}
+                      </div>
+
+                      {(ex.target || ex.equipment || ex.alt || ex.notes || ex.videoUrl) && (
+                        <div className="meta-row">
+                          {ex.target && <div>🎯 {ex.target}</div>}
+                          {ex.equipment && <div>🧰 {ex.equipment}</div>}
+                          {ex.alt && <div>🔁 Alt: {ex.alt}</div>}
+                          {ex.notes && <div>📝 {ex.notes}</div>}
+                          {ex.videoUrl && (
+                            <div>
+                              📺{" "}
+                              <a className="underline underline-offset-2" href={ex.videoUrl} target="_blank" rel="noreferrer">
+                                Vidéo
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
           );
         })}
       </div>
-    </section>
+    </div>
   );
-})}
-
+};
 
 /* ====================== Data Loader (avec fallback “stub”) ====================== */
 async function loadData(
@@ -359,7 +370,6 @@ async function loadData(
   const equipParam = String(searchParams?.equip || "").toLowerCase();
   let activeEquip: "full" | "none" = equipParam === "none" ? "none" : "full";
 
-  // QPs pour fallback
   const qpTitle = typeof searchParams?.title === "string" ? (searchParams!.title as string) : "";
   const qpDateRaw = typeof searchParams?.date === "string" ? (searchParams!.date as string) : "";
   const qpType = normalizeWorkoutType(
@@ -370,7 +380,6 @@ async function loadData(
       ? Number(searchParams!.plannedMin)
       : undefined;
 
-  // Date par défaut si non fournie
   const today = new Date();
   const qpDate =
     qpDateRaw && /^\d{4}-\d{2}-\d{2}$/.test(qpDateRaw)
@@ -379,7 +388,6 @@ async function loadData(
           today.getDate()
         ).padStart(2, "0")}`;
 
-  // 1) via cookie store + API AI
   const store = parseStore(cookies().get("app_sessions")?.value);
   const fromStore = store.sessions.find((s) => s.id === id) as
     | (AiSession & { exercises?: NormalizedExercise[] })
@@ -400,7 +408,6 @@ async function loadData(
   if (fromStore) dataSource = "store";
   else if (fromAi) dataSource = "ai";
 
-  // 2) Fallback “stub” si rien trouvé mais QPs présents
   if (!base && (qpTitle || qpDateRaw || (searchParams?.type as string | undefined))) {
     dataSource = "stub";
     base = {
@@ -412,7 +419,6 @@ async function loadData(
     } as AiSession;
   }
 
-  // 3) Profil
   let profile: ProfileT | null = null;
   try {
     const email = await getSignedInEmail();
@@ -422,18 +428,15 @@ async function loadData(
     }
   } catch {}
 
-  // Équipement actif si non imposé par ?equip=
   if (!equipParam) {
     activeEquip = profile?.equipLevel === "none" ? "none" : "full";
   }
 
-  // 4) Exercices
   let exercises: NormalizedExercise[] =
     (fromStore?.exercises as NormalizedExercise[] | undefined) ||
     (fromAi?.exercises as NormalizedExercise[] | undefined) ||
     [];
 
-  // Régénérer si demandé OU si rien et qu’on peut
   if (forceRegen || !exercises.length) {
     try {
       const email = await getSignedInEmail();
@@ -464,7 +467,6 @@ async function loadData(
     }
   }
 
-  // Dernier filet : exercices génériques
   if (!exercises.length) {
     exercises = genericFallback((base?.type ?? "muscu") as WorkoutType);
     if (dataSource === "unknown") dataSource = "fallback";
@@ -506,7 +508,6 @@ export default async function Page({
   searchParams?: Record<string, string | string[] | undefined>;
 }) {
   const id = decodeURIComponent(params?.id ?? "");
-  // On ne redirige que si on n'a NI id NI query params minimaux
   if (!id && !(searchParams?.title || searchParams?.date || searchParams?.type)) {
     redirect("/dashboard/profile?error=Seance%20introuvable");
   }
