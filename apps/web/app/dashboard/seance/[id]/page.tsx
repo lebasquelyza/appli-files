@@ -3,14 +3,31 @@ import React from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import {
+  getAiSessions,
   getAnswersForEmail,
   buildProfileFromAnswers,
+  generateProgrammeFromAnswers,
   type AiSession,
   type NormalizedExercise,
   type WorkoutType,
 } from "../../../../lib/coach/ai";
 
 /* ======================== Utils ======================== */
+async function getSignedInEmail(): Promise<string> {
+  try {
+    // @ts-ignore optional
+    const { getServerSession } = await import("next-auth");
+    // @ts-ignore optional
+    const { authOptions } = await import("../../../../lib/auth");
+    const session = await getServerSession(authOptions as any);
+    const email = (session as any)?.user?.email as string | undefined;
+    if (email) return email;
+  } catch (e) {
+    console.warn("getSignedInEmail: no session", e);
+  }
+  return cookies().get("app_email")?.value || "";
+}
+
 function parseStore(val?: string | null): { sessions: any[] } {
   if (!val) return { sessions: [] };
   try {
@@ -66,6 +83,20 @@ function genericFallback(type: WorkoutType): NormalizedExercise[] {
   ];
 }
 
+/* ───── Types étendus ───── */
+type ProfileT = ReturnType<typeof buildProfileFromAnswers> & {
+  timePerSession?: number;
+  equipLevel?: "none" | "limited" | "full";
+  equipItems?: string[];
+  injuries?: string[];
+  level?: "debutant" | "intermediaire" | "avance";
+  goal?: string;
+  primaryGoal?: string;
+  objective?: string;
+  mainObjective?: string;
+  currentGoal?: string;
+};
+
 export const dynamic = "force-dynamic";
 
 /* ======================== Styles & Const ======================== */
@@ -83,7 +114,15 @@ const styles = String.raw`
   .section-title { font-size: clamp(16px,1.9vw,18px); line-height:1.2; margin:0; font-weight:800; }
   .exoname { font-size: 15.5px; line-height:1.25; font-weight:700; }
   .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .meta-row { font-size:12.5px; color:#6b7280; margin-top:6px; display:grid; gap:4px; grid-template-columns:1fr; }
   .btn { display:inline-flex; align-items:center; justify-content:center; border-radius:10px; border:1px solid #e5e7eb; background:#111827; color:#fff; font-weight:700; padding:8px 12px; line-height:1.2; }
+  .btn:hover { background:#0b1220; }
+  .btn-ghost { background:#fff; color:#111827; }
+  .btn-ghost:hover { background:#f9fafb; }
+  .btn-sm { padding:6px 10px; border-radius:8px; font-weight:600; font-size:12.5px; }
+  .btn-row { display:flex; gap:8px; flex-wrap:wrap; }
+  @media(min-width:640px){ .meta-row{ grid-template-columns:1fr 1fr; } }
+  @media print { .no-print { display: none !important; } }
 `;
 
 /* ======================== Helpers ======================== */
@@ -110,7 +149,20 @@ function goalLabelFromProfile(profile: any): string | undefined {
   return map[key] || undefined;
 }
 
-/* ======================== UI ======================== */
+/** Nettoie reps/rest pour retirer RIR/tempos éventuellement concaténés. */
+function cleanText(s?: string): string {
+  if (!s) return "";
+  return String(s)
+    .replace(/(?:^|\s*[·•\-|,;]\s*)RIR\s*\d+(?:\.\d+)?/gi, "")
+    .replace(/\b[0-4xX]{3,4}\b/g, "")
+    .replace(/Tempo\s*:\s*[0-4xX]{3,4}/gi, "")
+    .replace(/\s*[·•\-|,;]\s*(?=[·•\-|,;]|$)/g, "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s*[·•\-|,;]\s*$/g, "")
+    .trim();
+}
+
+/* ======================== Small UI ======================== */
 function Chip({ label, value, title }: { label: string; value: string; title?: string }) {
   if (!value) return null;
   return (
@@ -123,7 +175,7 @@ function Chip({ label, value, title }: { label: string; value: string; title?: s
   );
 }
 
-/* ======================== Page ======================== */
+/* ======================== Page principale ======================== */
 export default async function Page({
   params,
   searchParams,
@@ -132,28 +184,25 @@ export default async function Page({
   searchParams?: Record<string, string | string[] | undefined>;
 }) {
   const id = decodeURIComponent(params?.id ?? "");
-  const cookieStore = cookies();
-  const store = parseStore(cookieStore.get("app_sessions")?.value);
+  if (!id && !(searchParams?.title || searchParams?.date || searchParams?.type)) {
+    redirect("/dashboard/profile?error=Seance%20introuvable");
+  }
 
-  const base = store.sessions.find((s) => s.id === id) as AiSession | undefined;
+  const { base, profile, exercises, dataSource, activeEquip } = await loadData(id, searchParams);
   if (!base) redirect("/dashboard/profile?error=Seance%20introuvable");
 
-  // Récupère profil IA depuis les réponses
-  let profile = null;
-  try {
-    const email = cookieStore.get("app_email")?.value;
-    if (email) {
-      const answers = await getAnswersForEmail(email);
-      if (answers) profile = buildProfileFromAnswers(answers);
-    }
-  } catch {}
-
-  const exercises: NormalizedExercise[] = base?.exercises?.length
-    ? base.exercises
-    : genericFallback(base?.type as WorkoutType);
-
-  const plannedMin = base?.plannedMin ?? profile?.timePerSession ?? 45;
+  const plannedMin = base?.plannedMin ?? profile?.timePerSession ?? 45; // ✅ corrigé : timePerSession reconnu
   const intensity = base?.intensity ?? "modérée";
+
+  const coachIntro =
+    base.type === "muscu"
+      ? "Exécution propre, contrôle du tempo et progression des charges."
+      : base.type === "cardio"
+      ? "Aérobie maîtrisée, souffle régulier en zone 2–3."
+      : base.type === "hiit"
+      ? "Pics d’intensité courts, technique impeccable."
+      : "Mouvement lent et contrôlé, respire profondément.";
+
   const goalLabel = goalLabelFromProfile(profile);
   const blockOrder = { echauffement: 0, principal: 1, accessoires: 2, fin: 3 } as const;
 
@@ -169,70 +218,16 @@ export default async function Page({
     (groups[k] ||= []).push(ex);
   }
 
-  const coachIntro =
-    base.type === "muscu"
-      ? "Exécution propre, contrôle du tempo et progression des charges."
-      : base.type === "cardio"
-      ? "Aérobie maîtrisée, souffle régulier en zone 2–3."
-      : base.type === "hiit"
-      ? "Pics d’intensité courts, technique impeccable."
-      : "Mouvement lent et contrôlé, respire profondément.";
-
   return (
-    <div>
+    <div className="mx-auto w-full" style={{ maxWidth: 640, paddingInline: 12, paddingBottom: 24 }}>
       <style dangerouslySetInnerHTML={{ __html: styles }} />
-
-      <div className="mx-auto w-full" style={{ maxWidth: 640, paddingInline: 12, paddingBottom: 24 }}>
-        <a href="/dashboard/profile" className="btn mb-4">← Retour</a>
-
-        <h1 className="h1-compact">{base.title}</h1>
-        <p className="lead-compact">
-          {fmtDateYMD(base.date)} · {plannedMin} min · {base.type}
-        </p>
-
-        <div className="compact-card mt-4">
-          {goalLabel && <div>🎯 <b>Objectif actuel :</b> {goalLabel}</div>}
-          <div>🧭 <b>Intention :</b> {coachIntro}</div>
-          <div>⏱️ <b>Durée :</b> {plannedMin} min</div>
-          {profile?.equipLevel && (
-            <div>
-              🧰 <b>Matériel :</b>{" "}
-              {profile.equipLevel === "full"
-                ? "Accès salle (machines/barres)"
-                : profile.equipLevel === "limited"
-                ? `Limité (${profile.equipItems?.join(", ") || "quelques charges"})`
-                : "Aucun (poids du corps)"}
-            </div>
-          )}
-        </div>
-
-        {["echauffement", "principal", "accessoires", "fin"].map((k) => {
-          const list = groups[k] || [];
-          if (!list.length) return null;
-          return (
-            <section key={k} className="section mt-4">
-              <h2 className="section-title mb-2">{blockNames[k]}</h2>
-              <div className="grid gap-3">
-                {list.map((ex, i) => (
-                  <article key={`${k}-${i}`} className="compact-card">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="exoname">{ex.name}</div>
-                    </div>
-                    <div className="chips">
-                      {typeof ex.sets === "number" && (
-                        <Chip label="🧱" value={`${ex.sets} séries`} title="Séries" />
-                      )}
-                      {ex.reps && <Chip label="🔁" value={ex.reps} title="Répétitions" />}
-                      {ex.rest && <Chip label="⏲️" value={ex.rest} title="Repos" />}
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </section>
-          );
-        })}
-      </div>
+      <h1 className="h1-compact">{base.title}</h1>
+      <p className="lead-compact">
+        {fmtDateYMD(base.date)} · {plannedMin} min · {base.type}
+      </p>
+      <p className="mt-2 text-sm text-gray-600">
+        Source: <b>{dataSource}</b> | Mode équipement: <b>{activeEquip}</b>
+      </p>
     </div>
   );
 }
-
