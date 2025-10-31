@@ -1,141 +1,254 @@
-"use client";
+// apps/web/app/dashboard/seance/[id]/page.tsx
+import React from "react";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import {
+  getAnswersForEmail,
+  generateProgrammeFromAnswers,
+  type AiSession,
+  type NormalizedExercise,
+  type WorkoutType,
+} from "../../../../lib/coach/ai";
 
-import React, { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import type { AiSession } from "../../../lib/coach/ai";
-
-type Props = {
-  email: string;
-  questionnaireBase: string;
-  initialSessions?: AiSession[];
-};
-
-/* ===== Détection Haut/Bas alignée avec la page détail ===== */
-function norm(s?: string) {
-  return String(s || "").normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+/* ======================== Utils ======================== */
+async function getSignedInEmail(): Promise<string> {
+  try {
+    // @ts-ignore optional
+    const { getServerSession } = await import("next-auth");
+    // @ts-ignore optional
+    const { authOptions } = await import("../../../../lib/auth");
+    const session = await getServerSession(authOptions as any);
+    const email = (session as any)?.user?.email as string | undefined;
+    if (email) return email;
+  } catch {}
+  return cookies().get("app_email")?.value || "";
 }
 
-const TITLE_UPPAT = /\b(haut du corps|upper|push|poitrine|pector|pecs|epaules|eapaule|delto|dos|row|tirage|pull|biceps|triceps)\b/i;
-const TITLE_LOWPAT = /\b(bas du corps|lower|jambes|legs|quadriceps|quads|ischios?|fessiers?|glutes?|mollets?|cuisses?|squat|deadlift|souleve de terre|hip thrust|fentes?|split squat|leg press|presse|adducteurs?|abducteurs?)\b/i;
+/* ====== Fallback exercices si jamais rien ne remonte ====== */
+function genericFallback(type: WorkoutType): NormalizedExercise[] {
+  if (type === "cardio")
+    return [
+      { name: "Échauffement Z1", reps: "8–10 min", block: "echauffement" },
+      { name: "Cardio continu Z2", reps: "25–35 min", block: "principal" },
+      { name: "Retour au calme + mobilité", reps: "5–8 min", block: "fin" },
+    ];
+  if (type === "mobilité")
+    return [
+      { name: "Respiration diaphragmatique", reps: "2–3 min", block: "echauffement" },
+      { name: "90/90 hanches", reps: "8–10/ côté", block: "principal" },
+      { name: "T-spine rotations", reps: "8–10/ côté", block: "principal" },
+      { name: "Down-Dog → Cobra", reps: "6–8", block: "fin" },
+    ];
+  return [
+    { name: "Goblet Squat", sets: 3, reps: "8–12", rest: "75s", block: "principal" },
+    { name: "Développé haltères", sets: 3, reps: "8–12", rest: "75s", block: "principal" },
+    { name: "Rowing unilatéral", sets: 3, reps: "10–12/ côté", rest: "75s", block: "principal" },
+    { name: "Planche", sets: 2, reps: "30–45s", rest: "45s", block: "fin" },
+  ];
+}
 
-function sessionTitleList(raw?: string, opts: { keepName?: boolean } = { keepName: true }) {
+/** Nettoyage : on ne garde que l’info utile (supprime RIR/tempo) */
+function cleanText(s?: string): string {
+  if (!s) return "";
+  return String(s)
+    .replace(/(?:^|\s*[·•\-|,;]\s*)RIR\s*\d+(?:\.\d+)?/gi, "")
+    .replace(/\b[0-4xX]{3,4}\b/g, "")
+    .replace(/Tempo\s*:\s*[0-4xX]{3,4}/gi, "")
+    .replace(/\s*[·•\-|,;]\s*(?=[·•\-|,;]|$)/g, "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s*[·•\-|,;]\s*$/g, "")
+    .trim();
+}
+
+/* ===================== Titre basé UNIQUEMENT sur le titre brut ===================== */
+function sessionTitleFromRaw(raw?: string, opts: { keepName?: boolean } = { keepName: true }) {
   const s = String(raw || "");
+  // récupère le prénom si présent (“Séance pour X — …”)
   const name = (s.match(/S[ée]ance\s+pour\s+([^—–-]+)/i)?.[1] || "").trim();
+
+  // extrait la partie après “—”
   let t = s.replace(/S[ée]ance\s+pour\s+[^—–-]+[—–-]\s*/i, "");
+  // retire la lettre “— A” éventuelle
   t = t.replace(/[—–-]\s*[A-Z]\b/g, "").replace(/·\s*[A-Z]\b/g, "");
 
-  const side =
-    TITLE_UPPAT.test(t) && !TITLE_LOWPAT.test(t)
-      ? "Haut du corps"
-      : TITLE_LOWPAT.test(t) && !TITLE_UPPAT.test(t)
-      ? "Bas du corps"
-      : "Séance";
+  const lowPat = /\b(bas du corps|lower|jambes|legs)\b/i;
+  const upPat  = /\b(haut du corps|upper|push|pull)\b/i;
 
-  return opts.keepName && name ? `Séance pour ${name} — ${side}` : side;
+  let sideLabel: string | null = null;
+  if (lowPat.test(t) && !upPat.test(t)) sideLabel = "Bas du corps";
+  else if (upPat.test(t) && !lowPat.test(t)) sideLabel = "Haut du corps";
+
+  const title = sideLabel || "Séance";
+  return opts.keepName && name ? `Séance pour ${name} — ${title}` : title;
 }
 
-export default function GenerateClient({ email, questionnaireBase, initialSessions = [] }: Props) {
-  const router = useRouter();
-  const [sessions, setSessions] = useState<AiSession[]>(initialSessions);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+/* ======================== Styles & Const ======================== */
+const blockNames: Record<string, string> = {
+  echauffement: "Échauffement",
+  principal: "Bloc principal",
+  accessoires: "Accessoires",
+  fin: "Fin / retour au calme",
+};
 
-  async function handleGenerate() {
-    try {
-      setLoading(true);
-      setError(null);
-      const res = await fetch(`/api/programme?email=${encodeURIComponent(email)}`);
-      const data = await res.json();
-      if (!res.ok || !data.sessions) {
-        throw new Error(data.error || "Erreur de génération du programme.");
+const styles = String.raw`
+  .compact-card { padding: 12px; border-radius: 16px; background:#fff; box-shadow: 0 1px 0 rgba(17,24,39,.05); border:1px solid #e5e7eb; }
+  .h1-compact { margin-bottom:2px; font-size: clamp(20px, 2.2vw, 24px); line-height:1.15; font-weight:800; }
+  .lead-compact { margin-top:4px; font-size: clamp(12px, 1.6vw, 14px); line-height:1.35; color:#4b5563; }
+  .section-title { font-size: clamp(16px,1.9vw,18px); line-height:1.2; margin:0; font-weight:800; }
+  .exoname { font-size: 15.5px; line-height:1.25; font-weight:700; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .btn { display:inline-flex; align-items:center; justify-content:center; border-radius:10px; border:1px solid #e5e7eb; background:#111827; color:#fff; font-weight:700; padding:8px 12px; line-height:1.2; }
+  .btn-ghost { background:#fff; color:#111827; }
+  @media print { .no-print { display: none !important; } }
+`;
+
+/* ====================== Data Loader (IA + fallback) ====================== */
+async function loadData(
+  id: string,
+  searchParams?: Record<string, string | string[] | undefined>
+): Promise<{
+  base?: AiSession;
+  exercises: NormalizedExercise[];
+}> {
+  const equipParam = String(searchParams?.equip || "").toLowerCase();
+  let base: AiSession | undefined;
+  let exercises: NormalizedExercise[] = [];
+
+  // IA depuis Google Sheet
+  try {
+    const email = await getSignedInEmail();
+    if (email) {
+      const answers = await getAnswersForEmail(email);
+      if (answers) {
+        if (equipParam === "none") (answers as any).equipLevel = "none";
+        if (equipParam === "full") (answers as any).equipLevel = "full";
+
+        const regenProg = generateProgrammeFromAnswers(answers); // 🧠 IA ici
+        const regen = regenProg.sessions || [];
+        base = regen.find((s) => s.id === id) || regen[0];
+
+        if (base?.exercises?.length) exercises = base.exercises!;
       }
-      setSessions(data.sessions);
-    } catch (e: any) {
-      setError(e.message || "Erreur inconnue");
-    } finally {
-      setLoading(false);
     }
+  } catch {}
+
+  // Filets
+  if (!base) {
+    base = { id, title: "Séance personnalisée", date: "", type: "muscu", plannedMin: 45 } as AiSession;
+  }
+  if (!exercises.length) {
+    exercises = genericFallback((base?.type ?? "muscu") as WorkoutType);
   }
 
-  useEffect(() => {
-    setSessions(initialSessions);
-  }, [initialSessions]);
+  return { base, exercises };
+}
 
+/* ======================== Small UI ======================== */
+function Chip({ label, value, title }: { label: string; value: string; title?: string }) {
+  if (!value) return null;
   return (
-    <section className="section" style={{ marginTop: 24 }}>
-      <div
-        className="section-head"
-        style={{ marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}
-      >
-        <h2 className="font-semibold text-lg">Mes séances</h2>
-        <button
-          onClick={handleGenerate}
-          disabled={loading}
-          className="btn"
-          style={{
-            background: "#111827",
-            color: "white",
-            padding: "4px 10px",
-            borderRadius: 8,
-            fontSize: 12,
-            fontWeight: 600,
-            opacity: loading ? 0.7 : 1,
-            whiteSpace: "nowrap",
-          }}
-          title="Générer/mettre à jour le programme"
-        >
-          {loading ? "⏳..." : "⚙️ Générer"}
-        </button>
+    <span
+      title={title || label}
+      className="inline-flex items-center rounded-md border border-neutral-200 bg-white px-2 py-1 text-[12px] leading-[14px] text-neutral-800"
+    >
+      <span className="mr-1 opacity-70">{label}</span> {value}
+    </span>
+  );
+}
+
+/* ======================== View (JSX) ======================== */
+const PageView: React.FC<{
+  base: AiSession;
+  groups: Record<string, NormalizedExercise[]>;
+  plannedMin: number;
+}> = ({ base, groups, plannedMin }) => {
+  return (
+    <div>
+      <style dangerouslySetInnerHTML={{ __html: styles }} />
+
+      <div className="mb-2 flex items-center justify-between no-print" style={{ paddingInline: 12 }}>
+        <a href="/dashboard/profile" className="btn btn-ghost" style={{ borderColor:"#e5e7eb", padding: "6px 10px", borderRadius: 8 }}>
+          ← Retour
+        </a>
+        <div className="text-xs text-gray-400">Programme IA</div>
       </div>
 
-      {error && (
-        <div
-          style={{
-            background: "rgba(239,68,68,0.08)",
-            border: "1px solid rgba(239,68,68,0.3)",
-            padding: "8px 10px",
-            borderRadius: 6,
-            fontSize: 13,
-            color: "#b91c1c",
-            marginBottom: 8,
-          }}
-        >
-          ⚠️ {error}
+      <div className="mx-auto w-full" style={{ maxWidth: 640, paddingInline: 12, paddingBottom: 24 }}>
+        <div className="page-header">
+          <div>
+            <h1 className="h1-compact">{sessionTitleFromRaw(base.title, { keepName: true })}</h1>
+            {/* pas de date */}
+            <p className="lead-compact">{plannedMin} min · {base.type}</p>
+          </div>
         </div>
-      )}
 
-      {!loading && sessions && sessions.length > 0 && (
-        <ul className="space-y-2 list-none pl-0">
-          {sessions.map((s, i) => {
-            const sessionId = s.id || `custom-${i}`;
-            const href = `/dashboard/seance/${encodeURIComponent(sessionId)}`;
-            return (
-              <li
-                key={sessionId}
-                onClick={() => router.push(href)}
-                className="card hover:bg-gray-50 cursor-pointer transition"
-                style={{ padding: 12, border: "1px solid #e5e7eb", borderRadius: 8 }}
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="font-medium text-sm">
-                      {sessionTitleList(s.title, { keepName: true })}
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      {s.type}
-                      {s.plannedMin ? ` · ${s.plannedMin} min` : ""}
-                    </div>
-                  </div>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+        {["echauffement", "principal", "accessoires", "fin"].map((k) => {
+          const list = groups[k] || [];
+          if (!list.length) return null;
+          return (
+            <section key={k} className="section" style={{ marginTop: 12 }}>
+              <div className="section-head" style={{ marginBottom: 8 }}>
+                <h2 className="section-title">{blockNames[k]}</h2>
+              </div>
 
-      {!loading && (!sessions || sessions.length === 0) && (
-        <div className="text-sm text-gray-500">Aucune séance disponible pour le moment.</div>
-      )}
-    </section>
+              <div className="grid gap-3">
+                {list.map((ex, i) => {
+                  const reps = cleanText(ex.reps ? String(ex.reps) : ex.durationSec ? `${ex.durationSec}s` : "");
+                  const rest = cleanText(ex.rest || "");
+                  return (
+                    <article key={`${k}-${i}`} className="compact-card">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="exoname">{ex.name}</div>
+                        {/* badge de bloc supprimé */}
+                      </div>
+
+                      <div className="chips">
+                        {typeof ex.sets === "number" && <Chip label="🧱" value={`${ex.sets} séries`} title="Séries" />}
+                        {reps && <Chip label="🔁" value={reps} title="Rép./Durée" />}
+                        {rest && <Chip label="⏲️" value={rest} title="Repos" />}
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
+          );
+        })}
+      </div>
+    </div>
   );
+};
+
+/* ======================== Page (server) ======================== */
+export default async function Page({
+  params,
+  searchParams,
+}: {
+  params: { id?: string };
+  searchParams?: Record<string, string | string[] | undefined>;
+}) {
+  const id = decodeURIComponent(params?.id ?? "");
+  if (!id && !(searchParams?.title || searchParams?.type)) {
+    redirect("/dashboard/profile?error=Seance%20introuvable");
+  }
+
+  const { base, exercises } = await loadData(id, searchParams);
+  if (!base) redirect("/dashboard/profile?error=Seance%20introuvable");
+
+  const plannedMin = base.plannedMin ?? 45;
+
+  // tri + groupage par bloc
+  const blockOrder = { echauffement: 0, principal: 1, accessoires: 2, fin: 3 } as const;
+  const exs = exercises.slice().sort((a, b) => {
+    const A = a.block ? (blockOrder as any)[a.block] ?? 99 : 50;
+    const B = b.block ? (blockOrder as any)[b.block] ?? 99 : 50;
+    return A - B;
+  });
+  const groups: Record<string, NormalizedExercise[]> = {};
+  for (const ex of exs) {
+    const k = ex.block || "principal";
+    (groups[k] ||= []).push(ex);
+  }
+
+  return <PageView base={base} groups={groups} plannedMin={plannedMin} />;
 }
