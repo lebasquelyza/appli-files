@@ -4,7 +4,6 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import {
   getAnswersForEmail,
-  buildProfileFromAnswers,
   generateProgrammeFromAnswers,
   type AiSession,
   type NormalizedExercise,
@@ -25,6 +24,7 @@ async function getSignedInEmail(): Promise<string> {
   return cookies().get("app_email")?.value || "";
 }
 
+/* ====== Fallback exercices si jamais rien ne remonte ====== */
 function genericFallback(type: WorkoutType): NormalizedExercise[] {
   if (type === "cardio")
     return [
@@ -60,61 +60,91 @@ function cleanText(s?: string): string {
     .trim();
 }
 
-/* ======== Titre intelligent : garde le prénom, déduit Haut/Bas si besoin ======== */
-function normalize(s?: string) {
+/* ===================== Détection Haut/Bas robuste ===================== */
+function norm(s?: string) {
   return String(s || "")
     .normalize("NFD")
     .replace(/\p{Diacritic}/gu, "")
     .toLowerCase();
 }
+
+// Mots-clés explicites dans le **titre**
+const TITLE_UPPAT = /\b(haut du corps|upper|push|poitrine|pector|pecs|epaules|eapaule|delto|dos|row|tirage|pull|biceps|triceps)\b/i;
+const TITLE_LOWPAT = /\b(bas du corps|lower|jambes|legs|quadriceps|quads|ischios?|fessiers?|glutes?|mollets?|cuisses?|squat|deadlift|souleve de terre|hip thrust|fentes?|split squat|leg press|presse|adducteurs?|abducteurs?)\b/i;
+
+// Scoring par mots-clés (pour exercices)
 const UPPER_KW = [
-  "haut du corps","haut","upper","pector","pecs","poitrine","eapaule","epaules","delto",
-  "dos","lats","row","pull","biceps","triceps","tirage","presse a epaules","overhead","ope","push"
+  "haut du corps","upper","push","poitrine","pector","pecs","epaules","delto","dos","row","tirage","pull",
+  "biceps","triceps","overhead","developpe","militaire","bench","incline","pec deck","poulie","tirage menton"
 ];
 const LOWER_KW = [
-  "bas du corps","bas","lower","jambes","quadriceps","quads","ischio","ischios","fessier","fessiers",
-  "mollet","mollets","squat","deadlift","souleve de terre","hip thrust","fente","fentes","split squat",
-  "leg press","presse","adducteurs","abducteurs"
+  "bas du corps","lower","jambes","legs","quadriceps","quads","ischio","ischios","fessier","fessiers","glute","glutes",
+  "mollet","mollets","cuisses","squat","front squat","back squat","deadlift","souleve de terre","hip thrust",
+  "fente","fentes","split squat","leg press","presse","adducteur","adducteurs","abducteur","abducteurs",
+  "hamstrings","calf","calves","extension jambe","leg extension","leg curl"
 ];
 
 function scoreSide(text: string) {
-  const t = normalize(text);
+  const t = norm(text);
   let up = 0, low = 0;
-  for (const kw of UPPER_KW) if (t.includes(kw)) up++;
-  for (const kw of LOWER_KW) if (t.includes(kw)) low++;
+  for (const kw of UPPER_KW) if (t.includes(norm(kw))) up++;
+  for (const kw of LOWER_KW) if (t.includes(norm(kw))) low++;
   return { up, low };
 }
 
-function inferSide(title?: string, exercises?: NormalizedExercise[]): "haut" | "bas" | undefined {
-  // 1) Si le titre contient explicitement "haut/bas"
-  const t = normalize(title);
-  if (/\bhaut\b/.test(t) || t.includes("haut du corps")) return "haut";
-  if (/\bbas\b/.test(t) || t.includes("bas du corps")) return "bas";
+/** Déduit le côté :
+ *  1) Regarde le titre brut (haut/bas/push/pull/legs…)
+ *  2) Sinon, score **UNIQUEMENT sur le bloc principal**
+ *  3) Si mixte → indécidable
+ */
+function inferSideSmart(title?: string, groups?: Record<string, NormalizedExercise[]>) {
+  const hasTitleUp = TITLE_UPPAT.test(title || "");
+  const hasTitleLow = TITLE_LOWPAT.test(title || "");
+  if (hasTitleUp && !hasTitleLow) return "haut";
+  if (hasTitleLow && !hasTitleUp) return "bas";
 
-  // 2) Sinon: scoring sur le titre
-  const s1 = scoreSide(title || "");
-  // 3) Et sur les exos (name + target)
-  let up = s1.up, low = s1.low;
-  for (const ex of exercises || []) {
-    const parts = [ex.name, ex.target].filter(Boolean).join(" ");
-    const s = scoreSide(parts);
-    up += s.up;
-    low += s.low;
+  // Bloc principal prioritaire
+  const principal = groups?.["principal"] || [];
+  if (principal.length) {
+    let up = 0, low = 0;
+    for (const ex of principal) {
+      const parts = [ex.name, ex.target].filter(Boolean).join(" ");
+      const { up: su, low: sl } = scoreSide(parts);
+      up += su; low += sl;
+    }
+    if (up > 0 && low === 0) return "haut";
+    if (low > 0 && up === 0) return "bas";
+    if (up > low) return "haut";
+    if (low > up) return "bas";
   }
-  if (up === 0 && low === 0) return undefined;
-  return up >= low ? "haut" : "bas";
+
+  // Sinon, on tente sur tous les exos (plus rare)
+  const all = Object.values(groups || {}).flat();
+  if (all.length) {
+    let up = 0, low = 0;
+    for (const ex of all) {
+      const parts = [ex.name, ex.target].filter(Boolean).join(" ");
+      const { up: su, low: sl } = scoreSide(parts);
+      up += su; low += sl;
+    }
+    if (up > 0 && low === 0) return "haut";
+    if (low > 0 && up === 0) return "bas";
+    if (up > low) return "haut";
+    if (low > up) return "bas";
+  }
+
+  return undefined; // indécidable
 }
 
-/** Construit le libellé final : “Séance pour {Prénom} — Haut/Bas du corps” (ou “Séance” si indécidable) */
-function sessionTitleSmart(raw?: string, exercises?: NormalizedExercise[], opts: { keepName?: boolean } = { keepName: true }) {
+/** Construit le libellé final. */
+function sessionTitleSmart(raw?: string, groups?: Record<string, NormalizedExercise[]>, opts: { keepName?: boolean } = { keepName: true }) {
   const s = String(raw || "");
   const name = (s.match(/S[ée]ance\s+pour\s+([^—–-]+)/i)?.[1] || "").trim();
-  // retire le préfixe “Séance pour XXX — …”
   let t = s.replace(/S[ée]ance\s+pour\s+[^—–-]+[—–-]\s*/i, "");
   // retire la lettre/plan "— A" / "· A"
   t = t.replace(/[—–-]\s*[A-Z]\b/g, "").replace(/·\s*[A-Z]\b/g, "");
 
-  const side = inferSide(t, exercises);
+  const side = inferSideSmart(t, groups);
   const sideLabel = side === "haut" ? "Haut du corps" : side === "bas" ? "Bas du corps" : "Séance";
 
   return opts.keepName && name ? `Séance pour ${name} — ${sideLabel}` : sideLabel;
@@ -152,7 +182,7 @@ async function loadData(
   let base: AiSession | undefined;
   let exercises: NormalizedExercise[] = [];
 
-  // 1) Régénère via IA depuis Google Sheet (source de vérité)
+  // 1) Régénère via IA depuis Google Sheet
   try {
     const email = await getSignedInEmail();
     if (email) {
@@ -199,8 +229,7 @@ const PageView: React.FC<{
   base: AiSession;
   groups: Record<string, NormalizedExercise[]>;
   plannedMin: number;
-  exercises: NormalizedExercise[];
-}> = ({ base, groups, plannedMin, exercises }) => {
+}> = ({ base, groups, plannedMin }) => {
   return (
     <div>
       <style dangerouslySetInnerHTML={{ __html: styles }} />
@@ -215,11 +244,8 @@ const PageView: React.FC<{
       <div className="mx-auto w-full" style={{ maxWidth: 640, paddingInline: 12, paddingBottom: 24 }}>
         <div className="page-header">
           <div>
-            <h1 className="h1-compact">{sessionTitleSmart(base.title, exercises, { keepName: true })}</h1>
-            {/* pas de date, juste type + durée */}
-            <p className="lead-compact">
-              {plannedMin} min · {base.type}
-            </p>
+            <h1 className="h1-compact">{sessionTitleSmart(base.title, groups, { keepName: true })}</h1>
+            <p className="lead-compact">{plannedMin} min · {base.type}</p>
           </div>
         </div>
 
@@ -240,14 +266,11 @@ const PageView: React.FC<{
                     <article key={`${k}-${i}`} className="compact-card">
                       <div className="flex items-start justify-between gap-3">
                         <div className="exoname">{ex.name}</div>
-                        {/* ✅ badge à droite supprimé */}
+                        {/* badge de bloc supprimé */}
                       </div>
 
-                      {/* puces — uniquement Séries / Rép. / Repos */}
                       <div className="chips">
-                        {typeof ex.sets === "number" && (
-                          <Chip label="🧱" value={`${ex.sets} séries`} title="Séries" />
-                        )}
+                        {typeof ex.sets === "number" && <Chip label="🧱" value={`${ex.sets} séries`} title="Séries" />}
                         {reps && <Chip label="🔁" value={reps} title="Rép./Durée" />}
                         {rest && <Chip label="⏲️" value={rest} title="Repos" />}
                       </div>
@@ -281,7 +304,7 @@ export default async function Page({
 
   const plannedMin = base.plannedMin ?? 45;
 
-  // tri + groupage par bloc (comme avant)
+  // tri + groupage par bloc
   const blockOrder = { echauffement: 0, principal: 1, accessoires: 2, fin: 3 } as const;
   const exs = exercises.slice().sort((a, b) => {
     const A = a.block ? (blockOrder as any)[a.block] ?? 99 : 50;
@@ -294,12 +317,5 @@ export default async function Page({
     (groups[k] ||= []).push(ex);
   }
 
-  return (
-    <PageView
-      base={base}
-      groups={groups}
-      plannedMin={plannedMin}
-      exercises={exercises}
-    />
-  );
+  return <PageView base={base} groups={groups} plannedMin={plannedMin} />;
 }
