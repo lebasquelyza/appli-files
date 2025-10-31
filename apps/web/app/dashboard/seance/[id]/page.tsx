@@ -60,20 +60,64 @@ function cleanText(s?: string): string {
     .trim();
 }
 
-/** Formate le titre final : “Séance pour {Prénom} — Haut du corps / Bas du corps” */
-function sessionTitle(raw?: string, opts: { keepName?: boolean } = { keepName: true }) {
+/* ======== Titre intelligent : garde le prénom, déduit Haut/Bas si besoin ======== */
+function normalize(s?: string) {
+  return String(s || "")
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase();
+}
+const UPPER_KW = [
+  "haut du corps","haut","upper","pector","pecs","poitrine","eapaule","epaules","delto",
+  "dos","lats","row","pull","biceps","triceps","tirage","presse a epaules","overhead","ope","push"
+];
+const LOWER_KW = [
+  "bas du corps","bas","lower","jambes","quadriceps","quads","ischio","ischios","fessier","fessiers",
+  "mollet","mollets","squat","deadlift","souleve de terre","hip thrust","fente","fentes","split squat",
+  "leg press","presse","adducteurs","abducteurs"
+];
+
+function scoreSide(text: string) {
+  const t = normalize(text);
+  let up = 0, low = 0;
+  for (const kw of UPPER_KW) if (t.includes(kw)) up++;
+  for (const kw of LOWER_KW) if (t.includes(kw)) low++;
+  return { up, low };
+}
+
+function inferSide(title?: string, exercises?: NormalizedExercise[]): "haut" | "bas" | undefined {
+  // 1) Si le titre contient explicitement "haut/bas"
+  const t = normalize(title);
+  if (/\bhaut\b/.test(t) || t.includes("haut du corps")) return "haut";
+  if (/\bbas\b/.test(t) || t.includes("bas du corps")) return "bas";
+
+  // 2) Sinon: scoring sur le titre
+  const s1 = scoreSide(title || "");
+  // 3) Et sur les exos (name + target)
+  let up = s1.up, low = s1.low;
+  for (const ex of exercises || []) {
+    const parts = [ex.name, ex.target].filter(Boolean).join(" ");
+    const s = scoreSide(parts);
+    up += s.up;
+    low += s.low;
+  }
+  if (up === 0 && low === 0) return undefined;
+  return up >= low ? "haut" : "bas";
+}
+
+/** Construit le libellé final : “Séance pour {Prénom} — Haut/Bas du corps” (ou “Séance” si indécidable) */
+function sessionTitleSmart(raw?: string, exercises?: NormalizedExercise[], opts: { keepName?: boolean } = { keepName: true }) {
   const s = String(raw || "");
   const name = (s.match(/S[ée]ance\s+pour\s+([^—–-]+)/i)?.[1] || "").trim();
+  // retire le préfixe “Séance pour XXX — …”
   let t = s.replace(/S[ée]ance\s+pour\s+[^—–-]+[—–-]\s*/i, "");
   // retire la lettre/plan "— A" / "· A"
   t = t.replace(/[—–-]\s*[A-Z]\b/g, "").replace(/·\s*[A-Z]\b/g, "");
-  // garde uniquement haut/bas
-  const side = /\bhaut\b/i.test(t)
-    ? "Haut du corps"
-    : /\bbas\b/i.test(t)
-    ? "Bas du corps"
-    : "Séance";
-  return opts.keepName && name ? `Séance pour ${name} — ${side}` : side;
+
+  const side = inferSide(t, exercises);
+  const sideLabel = side === "haut" ? "Haut du corps" : side === "bas" ? "Bas du corps" : "Séance";
+
+  return opts.keepName && name ? `Séance pour ${name} — ${sideLabel}` : sideLabel;
 }
 
 /* ======================== Styles & Const ======================== */
@@ -155,7 +199,8 @@ const PageView: React.FC<{
   base: AiSession;
   groups: Record<string, NormalizedExercise[]>;
   plannedMin: number;
-}> = ({ base, groups, plannedMin }) => {
+  exercises: NormalizedExercise[];
+}> = ({ base, groups, plannedMin, exercises }) => {
   return (
     <div>
       <style dangerouslySetInnerHTML={{ __html: styles }} />
@@ -170,7 +215,7 @@ const PageView: React.FC<{
       <div className="mx-auto w-full" style={{ maxWidth: 640, paddingInline: 12, paddingBottom: 24 }}>
         <div className="page-header">
           <div>
-            <h1 className="h1-compact">{sessionTitle(base.title, { keepName: true })}</h1>
+            <h1 className="h1-compact">{sessionTitleSmart(base.title, exercises, { keepName: true })}</h1>
             {/* pas de date, juste type + durée */}
             <p className="lead-compact">
               {plannedMin} min · {base.type}
@@ -254,6 +299,7 @@ export default async function Page({
       base={base}
       groups={groups}
       plannedMin={plannedMin}
+      exercises={exercises}
     />
   );
 }
