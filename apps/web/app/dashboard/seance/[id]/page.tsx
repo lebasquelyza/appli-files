@@ -1,4 +1,3 @@
-// apps/web/app/dashboard/seance/[id]/page.tsx
 import React from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -24,20 +23,6 @@ async function getSignedInEmail(): Promise<string> {
     if (email) return email;
   } catch {}
   return cookies().get("app_email")?.value || "";
-}
-
-function fmtDateYMD(ymd?: string) {
-  if (!ymd) return "—";
-  try {
-    const [y, m, d] = (ymd || "").split("-").map(Number);
-    return new Date(y, (m || 1) - 1, d || 1).toLocaleDateString("fr-FR", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
-  } catch {
-    return "—";
-  }
 }
 
 function normalizeWorkoutType(input?: string): WorkoutType {
@@ -70,17 +55,31 @@ function genericFallback(type: WorkoutType): NormalizedExercise[] {
   ];
 }
 
-/** Nettoie reps/rest pour retirer RIR/tempos éventuellement concaténés. */
+/** Nettoyage : on ne garde que l’info utile (supprime RIR/tempo) */
 function cleanText(s?: string): string {
   if (!s) return "";
   return String(s)
-    .replace(/(?:^|\s*[·•\-|,;]\s*)RIR\s*\d+(?:\.\d+)?/gi, "") // retire “RIR 2”
-    .replace(/\b[0-4xX]{3,4}\b/g, "")                          // tempos 3011/30X1
-    .replace(/Tempo\s*:\s*[0-4xX]{3,4}/gi, "")                  // “Tempo: 3011”
+    .replace(/(?:^|\s*[·•\-|,;]\s*)RIR\s*\d+(?:\.\d+)?/gi, "")
+    .replace(/\b[0-4xX]{3,4}\b/g, "")
+    .replace(/Tempo\s*:\s*[0-4xX]{3,4}/gi, "")
     .replace(/\s*[·•\-|,;]\s*(?=[·•\-|,;]|$)/g, "")
     .replace(/\s{2,}/g, " ")
     .replace(/\s*[·•\-|,;]\s*$/g, "")
     .trim();
+}
+
+/** Formate le titre final. */
+function sessionTitle(raw?: string, opts: { keepName?: boolean } = { keepName: true }) {
+  const s = String(raw || "");
+  const name = (s.match(/S[ée]ance\s+pour\s+([^—–-]+)/i)?.[1] || "").trim();
+  let t = s.replace(/S[ée]ance\s+pour\s+[^—–-]+[—–-]\s*/i, "");
+  t = t.replace(/[—–-]\s*[A-Z]\b/g, "").replace(/·\s*[A-Z]\b/g, "");
+  const side = /\bhaut\b/i.test(t)
+    ? "Haut du corps"
+    : /\bbas\b/i.test(t)
+    ? "Bas du corps"
+    : "Séance";
+  return opts.keepName && name ? `Séance pour ${name} — ${side}` : side;
 }
 
 /* ======================== Styles & Const ======================== */
@@ -98,14 +97,8 @@ const styles = String.raw`
   .section-title { font-size: clamp(16px,1.9vw,18px); line-height:1.2; margin:0; font-weight:800; }
   .exoname { font-size: 15.5px; line-height:1.25; font-weight:700; }
   .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
-  .meta-row { font-size:12.5px; color:#6b7280; margin-top:6px; display:grid; gap:4px; grid-template-columns:1fr; }
   .btn { display:inline-flex; align-items:center; justify-content:center; border-radius:10px; border:1px solid #e5e7eb; background:#111827; color:#fff; font-weight:700; padding:8px 12px; line-height:1.2; }
-  .btn:hover { background:#0b1220; }
   .btn-ghost { background:#fff; color:#111827; }
-  .btn-ghost:hover { background:#f9fafb; }
-  .btn-sm { padding:6px 10px; border-radius:8px; font-weight:600; font-size:12.5px; }
-  .btn-row { display:flex; gap:8px; flex-wrap:wrap; }
-  @media(min-width:640px){ .meta-row{ grid-template-columns:1fr 1fr; } }
   @media print { .no-print { display: none !important; } }
 `;
 
@@ -121,7 +114,7 @@ const PageView: React.FC<{
       <style dangerouslySetInnerHTML={{ __html: styles }} />
 
       <div className="mb-2 flex items-center justify-between no-print" style={{ paddingInline: 12 }}>
-        <a href="/dashboard/profile" className="btn btn-sm btn-ghost" style={{ borderColor:"#e5e7eb" }}>
+        <a href="/dashboard/profile" className="btn btn-ghost" style={{ borderColor:"#e5e7eb", padding: "6px 10px", borderRadius: 8 }}>
           ← Retour
         </a>
         <div className="text-xs text-gray-400">Programme IA</div>
@@ -130,8 +123,8 @@ const PageView: React.FC<{
       <div className="mx-auto w-full" style={{ maxWidth: 640, paddingInline: 12, paddingBottom: 24 }}>
         <div className="page-header">
           <div>
-            <h1 className="h1-compact">{base.title}</h1>
-            {/* pas d’affichage de date, juste type + durée */}
+            <h1 className="h1-compact">{sessionTitle(base.title, { keepName: true })}</h1>
+            {/* pas de date, juste type + durée */}
             <p className="lead-compact">
               {plannedMin} min · {base.type}
             </p>
@@ -162,7 +155,7 @@ const PageView: React.FC<{
                         ) : null}
                       </div>
 
-                      {/* chips — uniquement Séries / Rép. / Repos */}
+                      {/* puces — uniquement Séries / Rép. / Repos */}
                       <div className="chips">
                         {typeof ex.sets === "number" && (
                           <Chip label="🧱" value={`${ex.sets} séries`} title="Séries" />
@@ -204,7 +197,6 @@ async function loadData(
     | (AiSession & { exercises?: NormalizedExercise[] })
     | undefined;
 
-  // Optionnel: si tu as un stockage IA ailleurs
   let fromAi: AiSession | undefined;
   try {
     const email = await getSignedInEmail();
@@ -214,7 +206,7 @@ async function loadData(
 
   let base: AiSession | undefined = fromStore || fromAi;
 
-  // Fallback IA régénérée depuis le Sheet
+  // Fallback : on régénère depuis le Sheet
   if (!base) {
     try {
       const email = await getSignedInEmail();
@@ -224,7 +216,7 @@ async function loadData(
           if (equipParam === "none") (answers as any).equipLevel = "none";
           if (equipParam === "full") (answers as any).equipLevel = "full";
 
-          const regenProg = generateProgrammeFromAnswers(answers); // { sessions }
+          const regenProg = generateProgrammeFromAnswers(answers);
           const regen = regenProg.sessions || [];
           base = regen.find((s) => s.id === id) || regen[0];
         }
@@ -232,7 +224,6 @@ async function loadData(
     } catch {}
   }
 
-  // Dernier filet
   if (!base) {
     base = { id, title: "Séance personnalisée", date: "", type: "muscu", plannedMin: 45 } as AiSession;
   }
@@ -278,7 +269,7 @@ export default async function Page({
   const plannedMin = base.plannedMin ?? 45;
   const intensity = base.intensity ?? "modérée";
 
-  // tri + groupage
+  // tri + groupage par bloc
   const blockOrder = { echauffement: 0, principal: 1, accessoires: 2, fin: 3 } as const;
   const exs = exercises.slice().sort((a, b) => {
     const A = a.block ? (blockOrder as any)[a.block] ?? 99 : 50;
