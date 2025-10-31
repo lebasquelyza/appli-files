@@ -1,118 +1,106 @@
+// apps/web/app/dashboard/profile/GenerateClient.tsx
 "use client";
 
-import { useState } from "react";
-import type { AiSession as AiSessionT, Profile as ProfileT } from "../../../lib/coach/ai";
-import { planProgrammeFromProfile } from "../../../lib/coach/beton";
+import React, { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import type { AiSession } from "../../../lib/coach/ai";
 
 type Props = {
-  email?: string;
+  email: string;
   questionnaireBase: string;
+  initialSessions?: AiSession[]; // ✅ ajouté pour corriger l’erreur TS
 };
 
-type WorkoutType = "muscu" | "cardio" | "hiit" | "mobilité";
+export default function GenerateClient({ email, questionnaireBase, initialSessions = [] }: Props) {
+  const router = useRouter();
 
-function typeBadgeClass(t: WorkoutType) {
-  switch (t) {
-    case "muscu": return "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200";
-    case "cardio": return "bg-sky-50 text-sky-700 ring-1 ring-sky-200";
-    case "hiit": return "bg-amber-50 text-amber-700 ring-1 ring-amber-200";
-    case "mobilité": return "bg-violet-50 text-violet-700 ring-1 ring-violet-200";
-  }
-}
-
-export default function GenerateClient({ email, questionnaireBase }: Props) {
+  const [sessions, setSessions] = useState<AiSession[]>(initialSessions);
   const [loading, setLoading] = useState(false);
-  const [sessions, setSessions] = useState<AiSessionT[]>([]);
-  const [error, setError] = useState<string>("");
-  const [hasGenerated, setHasGenerated] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  async function onGenerate() {
+  async function handleGenerate() {
     try {
       setLoading(true);
-      setError("");
-      setHasGenerated(true);
-
-      const url = email ? `/api/answers?email=${encodeURIComponent(email)}` : `/api/answers`;
-      const res = await fetch(url, { cache: "no-store" });
+      setError(null);
+      const res = await fetch(`/api/programme?email=${encodeURIComponent(email)}`);
       const data = await res.json();
-
-      const answers: Record<string, any> | null = data?.answers || null;
-      const baseProfile: Partial<ProfileT> = data?.profile || {};
-
-      const { sessions } = planProgrammeFromProfile(baseProfile as any, { maxSessions: 3 });
-      setSessions(sessions);
+      if (!res.ok || !data.sessions) {
+        throw new Error(data.error || "Erreur de génération du programme.");
+      }
+      setSessions(data.sessions);
     } catch (e: any) {
-      console.error("[GenerateClient] onGenerate error", e);
-      setError("Impossible de générer les séances. Réessaie plus tard.");
+      console.error(e);
+      setError(e.message || "Erreur inconnue");
     } finally {
       setLoading(false);
     }
   }
 
-  const showList = hasGenerated && sessions.length > 0;
+  useEffect(() => {
+    setSessions(initialSessions);
+  }, [initialSessions]);
 
   return (
-    <section className="section" style={{ marginTop: 12 }}>
+    <section className="section" style={{ marginTop: 24 }}>
       <div className="section-head" style={{ marginBottom: 8 }}>
-        <h2 style={{ marginBottom: 6 }}>Mes séances</h2>
+        <h2>Mes séances</h2>
       </div>
 
+      {/* Bouton de génération */}
+      <div style={{ marginBottom: 12 }}>
+        <button
+          onClick={handleGenerate}
+          disabled={loading}
+          className="btn"
+          style={{
+            background: "#111827",
+            color: "white",
+            padding: "8px 16px",
+            borderRadius: 6,
+            fontSize: 13,
+          }}
+        >
+          {loading ? "Génération en cours..." : "Générer le programme"}
+        </button>
+      </div>
+
+      {/* Erreur */}
       {error && (
         <div
-          className="card text-sm"
-          style={{ border: "1px solid rgba(239,68,68,.35)", background: "rgba(239,68,68,.08)", fontWeight: 600 }}
+          style={{
+            background: "rgba(239,68,68,0.08)",
+            border: "1px solid rgba(239,68,68,0.3)",
+            padding: "8px 10px",
+            borderRadius: 6,
+            fontSize: 13,
+            color: "#b91c1c",
+            marginBottom: 8,
+          }}
         >
           ⚠️ {error}
         </div>
       )}
 
-      {!showList && (
-        <div className="card text-sm" style={{ color: "#6b7280" }}>
-          <div className="flex items-center gap-3">
-            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted">🤖</span>
-            <span>
-              Cliquez sur <strong>« Générer »</strong> pour voir vos séances.
-            </span>
-          </div>
+      {/* Liste des séances */}
+      {!loading && sessions && sessions.length > 0 && (
+        <div className="space-y-2">
+          {sessions.map((s, i) => (
+            <div key={s.id || i} className="card" style={{ padding: 12 }}>
+              <div className="font-semibold">{s.title}</div>
+              <div className="text-xs text-gray-500">
+                {s.date ? `📅 ${s.date}` : ""} · {s.type}
+                {s.plannedMin ? ` · ${s.plannedMin} min` : ""}
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
-      {showList && (
-        <ul className="space-y-2 list-none pl-0">
-          {sessions.map((s) => {
-            const qp = new URLSearchParams({
-              title: s.title,
-              date: s.date,
-              type: s.type,
-              plannedMin: s.plannedMin ? String(s.plannedMin) : "",
-            });
-            const href = `/dashboard/seance/${encodeURIComponent(s.id)}?${qp.toString()}`;
-            const displayTitle = (s.title || "").replace(/^(S[eé]ance)s?\s+de\b/i, "Séance");
-
-            return (
-              <li key={s.id} className="card p-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <a
-                      href={href}
-                      className="font-medium underline-offset-2 hover:underline truncate"
-                      style={{ fontSize: 16 }}
-                      title={displayTitle}
-                    >
-                      {displayTitle}
-                    </a>
-                    <div className="text-xs mt-0.5 text-gray-500">
-                      {s.plannedMin ? `${s.plannedMin} min` : "—"}
-                    </div>
-                  </div>
-                  <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${typeBadgeClass(s.type as WorkoutType)}`}>
-                    {s.type}
-                  </span>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+      {/* Aucun résultat */}
+      {!loading && (!sessions || sessions.length === 0) && (
+        <div className="text-sm text-gray-500">
+          Aucune séance trouvée pour le moment.
+        </div>
       )}
     </section>
   );
