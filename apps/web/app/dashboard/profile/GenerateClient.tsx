@@ -10,25 +10,26 @@ type Props = {
   initialSessions?: AiSession[];
 };
 
-/** Formate le titre : garde "Séance pour {Prénom} — Haut/Bas du corps", enlève la lettre A/B et le reste. */
-function sessionTitle(raw?: string, opts: { keepName?: boolean } = { keepName: true }) {
+/* ===== Détection Haut/Bas alignée avec la page détail ===== */
+function norm(s?: string) {
+  return String(s || "").normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+}
+
+const TITLE_UPPAT = /\b(haut du corps|upper|push|poitrine|pector|pecs|epaules|eapaule|delto|dos|row|tirage|pull|biceps|triceps)\b/i;
+const TITLE_LOWPAT = /\b(bas du corps|lower|jambes|legs|quadriceps|quads|ischios?|fessiers?|glutes?|mollets?|cuisses?|squat|deadlift|souleve de terre|hip thrust|fentes?|split squat|leg press|presse|adducteurs?|abducteurs?)\b/i;
+
+function sessionTitleList(raw?: string, opts: { keepName?: boolean } = { keepName: true }) {
   const s = String(raw || "");
-
-  // extrait le prénom si présent
   const name = (s.match(/S[ée]ance\s+pour\s+([^—–-]+)/i)?.[1] || "").trim();
-
-  // retire le préfixe "Séance pour XXX — "
   let t = s.replace(/S[ée]ance\s+pour\s+[^—–-]+[—–-]\s*/i, "");
-
-  // retire lettre/plan "— A" / "· A" etc.
   t = t.replace(/[—–-]\s*[A-Z]\b/g, "").replace(/·\s*[A-Z]\b/g, "");
 
-  // garde seulement Haut/Bas du corps
-  const side = /\bhaut\b/i.test(t)
-    ? "Haut du corps"
-    : /\bbas\b/i.test(t)
-    ? "Bas du corps"
-    : "Séance";
+  const side =
+    TITLE_UPPAT.test(t) && !TITLE_LOWPAT.test(t)
+      ? "Haut du corps"
+      : TITLE_LOWPAT.test(t) && !TITLE_UPPAT.test(t)
+      ? "Bas du corps"
+      : "Séance";
 
   return opts.keepName && name ? `Séance pour ${name} — ${side}` : side;
 }
@@ -50,7 +51,6 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
       }
       setSessions(data.sessions);
     } catch (e: any) {
-      console.error(e);
       setError(e.message || "Erreur inconnue");
     } finally {
       setLoading(false);
@@ -63,19 +63,11 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
 
   return (
     <section className="section" style={{ marginTop: 24 }}>
-      {/* En-tête : titre + bouton à droite (petit) */}
       <div
         className="section-head"
-        style={{
-          marginBottom: 8,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 12,
-        }}
+        style={{ marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}
       >
         <h2 className="font-semibold text-lg">Mes séances</h2>
-
         <button
           onClick={handleGenerate}
           disabled={loading}
@@ -83,7 +75,7 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
           style={{
             background: "#111827",
             color: "white",
-            padding: "4px 10px", // bouton compact
+            padding: "4px 10px",
             borderRadius: 8,
             fontSize: 12,
             fontWeight: 600,
@@ -96,7 +88,6 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
         </button>
       </div>
 
-      {/* Erreur */}
       {error && (
         <div
           style={{
@@ -113,7 +104,6 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
         </div>
       )}
 
-      {/* Liste des séances (cliquables) */}
       {!loading && sessions && sessions.length > 0 && (
         <ul className="space-y-2 list-none pl-0">
           {sessions.map((s, i) => {
@@ -124,17 +114,12 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
                 key={sessionId}
                 onClick={() => router.push(href)}
                 className="card hover:bg-gray-50 cursor-pointer transition"
-                style={{
-                  padding: 12,
-                  border: "1px solid #e5e7eb",
-                  borderRadius: 8,
-                }}
+                style={{ padding: 12, border: "1px solid #e5e7eb", borderRadius: 8 }}
               >
                 <div className="flex items-center justify-between">
                   <div>
-                    {/* Titre formaté */}
                     <div className="font-medium text-sm">
-                      {sessionTitle(s.title, { keepName: true })}
+                      {sessionTitleList(s.title, { keepName: true })}
                     </div>
                     <div className="text-xs text-gray-500">
                       {s.type}
@@ -148,11 +133,9 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
         </ul>
       )}
 
-      {/* Aucun résultat */}
       {!loading && (!sessions || sessions.length === 0) && (
         <div className="text-sm text-gray-500">Aucune séance disponible pour le moment.</div>
       )}
     </section>
   );
 }
-
