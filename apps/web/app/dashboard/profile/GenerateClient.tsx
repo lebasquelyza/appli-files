@@ -1,4 +1,3 @@
-// apps/web/app/dashboard/profile/GenerateClient.tsx
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -13,7 +12,6 @@ type Props = {
 
 export default function GenerateClient({ email, questionnaireBase, initialSessions = [] }: Props) {
   const router = useRouter();
-
   const [sessions, setSessions] = useState<AiSession[]>(initialSessions);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -62,15 +60,16 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
           style={{
             background: "#111827",
             color: "white",
-            padding: "8px 14px",
-            borderRadius: 8,
-            fontSize: 13,
+            padding: "4px 10px", // ✅ bouton plus petit
+            borderRadius: 6,
+            fontSize: 12, // ✅ texte réduit
             fontWeight: 600,
             opacity: loading ? 0.7 : 1,
             transition: "opacity 0.2s",
+            whiteSpace: "nowrap",
           }}
         >
-          {loading ? "⏳ Génération..." : "⚙️ Générer le programme"}
+          {loading ? "⏳..." : "⚙️ Générer"}
         </button>
       </div>
 
@@ -94,11 +93,12 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
       {/* ===== Liste des séances ===== */}
       {!loading && sessions && sessions.length > 0 && (
         <ul className="space-y-2 list-none pl-0">
-          {sessions.map((s) => {
-            const href = `/dashboard/seance/${encodeURIComponent(s.id)}`;
+          {sessions.map((s, i) => {
+            const sessionId = s.id || `custom-${i}`; // ✅ fallback id si vide
+            const href = `/dashboard/seance/${encodeURIComponent(sessionId)}`;
             return (
               <li
-                key={s.id}
+                key={sessionId}
                 onClick={() => router.push(href)}
                 className="card hover:bg-gray-50 cursor-pointer transition"
                 style={{
@@ -109,7 +109,7 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
               >
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="font-medium text-sm">{s.title}</div>
+                    <div className="font-medium text-sm">{s.title || `Séance ${i + 1}`}</div>
                     <div className="text-xs text-gray-500">
                       {s.type}
                       {s.plannedMin ? ` · ${s.plannedMin} min` : ""}
@@ -124,10 +124,9 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
 
       {/* ===== Aucun résultat ===== */}
       {!loading && (!sessions || sessions.length === 0) && (
-        <div className="text-sm text-gray-500">
-          Aucune séance disponible pour le moment.
-        </div>
+        <div className="text-sm text-gray-500">Aucune séance disponible pour le moment.</div>
       )}
     </section>
   );
 }
+
