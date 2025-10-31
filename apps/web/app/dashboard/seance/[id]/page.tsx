@@ -11,16 +11,8 @@ import {
 } from "../../../lib/coach/ai";
 
 /* ======================== Utils ======================== */
+// Email depuis le cookie uniquement (supprime la dépendance à lib/auth / next-auth)
 async function getSignedInEmail(): Promise<string> {
-  try {
-    // @ts-ignore optional
-    const { getServerSession } = await import("next-auth");
-    // @ts-ignore optional
-    const { authOptions } = await import("../../../../lib/auth");
-    const session = await getServerSession(authOptions as any);
-    const email = (session as any)?.user?.email as string | undefined;
-    if (email) return email;
-  } catch {}
   return cookies().get("app_email")?.value || "";
 }
 
@@ -60,94 +52,26 @@ function cleanText(s?: string): string {
     .trim();
 }
 
-/* ===================== Détection Haut/Bas robuste ===================== */
-function norm(s?: string) {
-  return String(s || "")
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
-    .toLowerCase();
-}
-
-// Mots-clés explicites dans le **titre**
-const TITLE_UPPAT = /\b(haut du corps|upper|push|poitrine|pector|pecs|epaules|eapaule|delto|dos|row|tirage|pull|biceps|triceps)\b/i;
-const TITLE_LOWPAT = /\b(bas du corps|lower|jambes|legs|quadriceps|quads|ischios?|fessiers?|glutes?|mollets?|cuisses?|squat|deadlift|souleve de terre|hip thrust|fentes?|split squat|leg press|presse|adducteurs?|abducteurs?)\b/i;
-
-// Scoring par mots-clés (pour exercices)
-const UPPER_KW = [
-  "haut du corps","upper","push","poitrine","pector","pecs","epaules","delto","dos","row","tirage","pull",
-  "biceps","triceps","overhead","developpe","militaire","bench","incline","pec deck","poulie","tirage menton"
-];
-const LOWER_KW = [
-  "bas du corps","lower","jambes","legs","quadriceps","quads","ischio","ischios","fessier","fessiers","glute","glutes",
-  "mollet","mollets","cuisses","squat","front squat","back squat","deadlift","souleve de terre","hip thrust",
-  "fente","fentes","split squat","leg press","presse","adducteur","adducteurs","abducteur","abducteurs",
-  "hamstrings","calf","calves","extension jambe","leg extension","leg curl"
-];
-
-function scoreSide(text: string) {
-  const t = norm(text);
-  let up = 0, low = 0;
-  for (const kw of UPPER_KW) if (t.includes(norm(kw))) up++;
-  for (const kw of LOWER_KW) if (t.includes(norm(kw))) low++;
-  return { up, low };
-}
-
-/** Déduit le côté :
- *  1) Regarde le titre brut (haut/bas/push/pull/legs…)
- *  2) Sinon, score **UNIQUEMENT sur le bloc principal**
- *  3) Si mixte → indécidable
- */
-function inferSideSmart(title?: string, groups?: Record<string, NormalizedExercise[]>) {
-  const hasTitleUp = TITLE_UPPAT.test(title || "");
-  const hasTitleLow = TITLE_LOWPAT.test(title || "");
-  if (hasTitleUp && !hasTitleLow) return "haut";
-  if (hasTitleLow && !hasTitleUp) return "bas";
-
-  // Bloc principal prioritaire
-  const principal = groups?.["principal"] || [];
-  if (principal.length) {
-    let up = 0, low = 0;
-    for (const ex of principal) {
-      const parts = [ex.name, ex.target].filter(Boolean).join(" ");
-      const { up: su, low: sl } = scoreSide(parts);
-      up += su; low += sl;
-    }
-    if (up > 0 && low === 0) return "haut";
-    if (low > 0 && up === 0) return "bas";
-    if (up > low) return "haut";
-    if (low > up) return "bas";
-  }
-
-  // Sinon, on tente sur tous les exos (plus rare)
-  const all = Object.values(groups || {}).flat();
-  if (all.length) {
-    let up = 0, low = 0;
-    for (const ex of all) {
-      const parts = [ex.name, ex.target].filter(Boolean).join(" ");
-      const { up: su, low: sl } = scoreSide(parts);
-      up += su; low += sl;
-    }
-    if (up > 0 && low === 0) return "haut";
-    if (low > 0 && up === 0) return "bas";
-    if (up > low) return "haut";
-    if (low > up) return "bas";
-  }
-
-  return undefined; // indécidable
-}
-
-/** Construit le libellé final. */
-function sessionTitleSmart(raw?: string, groups?: Record<string, NormalizedExercise[]>, opts: { keepName?: boolean } = { keepName: true }) {
+/* ===================== Titre basé UNIQUEMENT sur le titre brut ===================== */
+function sessionTitleFromRaw(raw?: string, opts: { keepName?: boolean } = { keepName: true }) {
   const s = String(raw || "");
+  // récupère le prénom si présent (“Séance pour X — …”)
   const name = (s.match(/S[ée]ance\s+pour\s+([^—–-]+)/i)?.[1] || "").trim();
+
+  // extrait la partie après “—”
   let t = s.replace(/S[ée]ance\s+pour\s+[^—–-]+[—–-]\s*/i, "");
-  // retire la lettre/plan "— A" / "· A"
+  // retire la lettre “— A” éventuelle
   t = t.replace(/[—–-]\s*[A-Z]\b/g, "").replace(/·\s*[A-Z]\b/g, "");
 
-  const side = inferSideSmart(t, groups);
-  const sideLabel = side === "haut" ? "Haut du corps" : side === "bas" ? "Bas du corps" : "Séance";
+  const lowPat = /\b(bas du corps|lower|jambes|legs)\b/i;
+  const upPat  = /\b(haut du corps|upper|push|pull)\b/i;
 
-  return opts.keepName && name ? `Séance pour ${name} — ${sideLabel}` : sideLabel;
+  let sideLabel: string | null = null;
+  if (lowPat.test(t) && !upPat.test(t)) sideLabel = "Bas du corps";
+  else if (upPat.test(t) && !lowPat.test(t)) sideLabel = "Haut du corps";
+
+  const title = sideLabel || "Séance";
+  return opts.keepName && name ? `Séance pour ${name} — ${title}` : title;
 }
 
 /* ======================== Styles & Const ======================== */
@@ -182,7 +106,7 @@ async function loadData(
   let base: AiSession | undefined;
   let exercises: NormalizedExercise[] = [];
 
-  // 1) Régénère via IA depuis Google Sheet
+  // IA depuis Google Sheet
   try {
     const email = await getSignedInEmail();
     if (email) {
@@ -200,7 +124,7 @@ async function loadData(
     }
   } catch {}
 
-  // 2) Filet si rien trouvé
+  // Filets
   if (!base) {
     base = { id, title: "Séance personnalisée", date: "", type: "muscu", plannedMin: 45 } as AiSession;
   }
@@ -244,7 +168,8 @@ const PageView: React.FC<{
       <div className="mx-auto w-full" style={{ maxWidth: 640, paddingInline: 12, paddingBottom: 24 }}>
         <div className="page-header">
           <div>
-            <h1 className="h1-compact">{sessionTitleSmart(base.title, groups, { keepName: true })}</h1>
+            <h1 className="h1-compact">{sessionTitleFromRaw(base.title, { keepName: true })}</h1>
+            {/* pas de date */}
             <p className="lead-compact">{plannedMin} min · {base.type}</p>
           </div>
         </div>
