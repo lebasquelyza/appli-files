@@ -3,7 +3,6 @@ import React from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import {
-  getAiSessions,
   getAnswersForEmail,
   buildProfileFromAnswers,
   generateProgrammeFromAnswers,
@@ -12,7 +11,7 @@ import {
   type WorkoutType,
 } from "../../../../lib/coach/ai";
 
-/* ======================== Utils ======================== */
+/* =============== Utils =============== */
 async function getSignedInEmail(): Promise<string> {
   try {
     // @ts-ignore optional
@@ -49,121 +48,184 @@ function genericFallback(type: WorkoutType): NormalizedExercise[] {
       { name: "Down-Dog → Cobra", reps: "6–8", block: "fin" },
     ];
   return [
-    { name: "Squat goblet", sets: 3, reps: "8–12", rest: "75s", block: "principal" },
-    { name: "Développé haltères", sets: 3, reps: "8–12", rest: "75s", block: "principal" },
+    { name: "Goblet Squat", sets: 3, reps: "8–12", rest: "75–90s", block: "principal" },
+    { name: "Développé haltères", sets: 3, reps: "8–12", rest: "75–90s", block: "principal" },
     { name: "Rowing unilatéral", sets: 3, reps: "10–12/ côté", rest: "75s", block: "principal" },
-    { name: "Gainage planche", sets: 2, reps: "30–45s", rest: "45s", block: "fin" },
+    { name: "Gainage", sets: 2, reps: "30–45s", rest: "45s", block: "fin" },
   ];
 }
 
-/* ======================== Data Loader ======================== */
-async function loadData(id: string, searchParams?: Record<string, string | string[] | undefined>) {
+/** Nettoie un texte pour ne garder que l’info utile (supprime RIR/tempo). */
+function cleanText(s?: string): string {
+  if (!s) return "";
+  return String(s)
+    .replace(/(?:^|\s*[·•\-|,]\s*)RIR\s*\d+(?:\.\d+)?/gi, "")
+    .replace(/\b[0-4xX]{3,4}\b/g, "") // tempos 3011/30X1
+    .replace(/Tempo\s*:\s*[0-4xX]{3,4}/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s*[·•\-|,]\s*$/g, "")
+    .trim();
+}
+
+/* =============== Data loader (IA) =============== */
+async function loadData(id: string) {
   const email = await getSignedInEmail();
   if (!email) return null;
 
-  // IA: recharge à partir du profil Sheet
   const answers = await getAnswersForEmail(email);
   if (!answers) return null;
 
-  const regen = generateProgrammeFromAnswers(answers); // IA crée les séances ici
-  const match =
-    regen.sessions.find((s) => s.id === id) ||
-    regen.sessions.find((s) => s.title.toLowerCase().includes(id.toLowerCase())) ||
-    regen.sessions[0];
+  const profile = buildProfileFromAnswers(answers);
+  const prog = generateProgrammeFromAnswers(answers); // 🧠 IA ici
+  const sessions = prog.sessions || [];
 
-  if (!match) {
+  // on essaie d’abord l’id exact, sinon on prend la 1re séance
+  const base =
+    sessions.find((s) => s.id === id) ||
+    sessions.find((s) => encodeURIComponent(s.id) === id) ||
+    sessions[0];
+
+  if (!base) {
+    // filet
     return {
-      base: { id, title: "Séance introuvable", type: "muscu", date: "", plannedMin: 45 },
-      profile: buildProfileFromAnswers(answers),
+      base: { id, title: "Séance", type: "muscu", date: "", plannedMin: 45 } as AiSession,
+      profile,
       exercises: genericFallback("muscu"),
-      dataSource: "fallback",
     };
   }
 
   return {
-    base: match,
-    profile: buildProfileFromAnswers(answers),
-    exercises: match.exercises?.length ? match.exercises : genericFallback(match.type),
-    dataSource: "ai",
+    base,
+    profile,
+    exercises: base.exercises?.length ? base.exercises : genericFallback(base.type),
   };
 }
 
-/* ======================== Component ======================== */
+/* =============== Styles =============== */
+const styles = String.raw`
+  .wrap { max-width: 720px; margin: 0 auto; padding: 16px 12px 40px; }
+  .top { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+  .back { font-size:13px; color:#2563eb; text-decoration:underline; }
+  .meta { font-size:13px; color:#6b7280; margin-top:4px; }
+  .card { background:#fff; border:1px solid #e5e7eb; border-radius:14px; padding:12px 12px; }
+  .section { margin-top:14px; }
+  .section h3 { font-size:14px; font-weight:800; margin:0 0 8px 0; color:#111827; }
+  .exo { display:flex; align-items:flex-start; justify-content:space-between; padding:10px 0; }
+  .exo + .exo { border-top:1px solid #f1f5f9; }
+  .name { font-weight:700; font-size:15px; color:#111827; }
+  .line { font-size:13px; color:#374151; margin-top:2px; }
+`;
+
+/* =============== Page =============== */
 export default async function Page({
   params,
-  searchParams,
 }: {
   params: { id: string };
-  searchParams?: Record<string, string | string[] | undefined>;
 }) {
   const id = decodeURIComponent(params?.id ?? "");
-  if (!id) redirect("/dashboard/profile?error=Séance%20introuvable");
+  if (!id) redirect("/dashboard/profile?error=Seance%20introuvable");
 
-  const data = await loadData(id, searchParams);
-  if (!data || !data.base) redirect("/dashboard/profile?error=Séance%20introuvable");
+  const data = await loadData(id);
+  if (!data) redirect("/dashboard/profile?error=Seance%20introuvable");
 
   const { base, profile, exercises } = data;
-  const goalLabel =
-    profile.goal === "fatloss"
-      ? "Perte de gras"
-      : profile.goal === "hypertrophy"
-      ? "Hypertrophie"
-      : profile.goal === "strength"
-      ? "Force"
-      : profile.goal === "mobility"
-      ? "Mobilité"
-      : "Forme générale";
+
+  // libellé objectif concis
+  const goal =
+    (profile.goal === "hypertrophy" && "Hypertrophie") ||
+    (profile.goal === "fatloss" && "Perte de gras") ||
+    (profile.goal === "strength" && "Force") ||
+    (profile.goal === "mobility" && "Mobilité") ||
+    "Forme générale";
+
+  // regroupe par blocs pour des sections propres
+  const blockOrder: Record<string, number> = { echauffement: 0, principal: 1, accessoires: 2, fin: 3 };
+  const blockNames: Record<string, string> = {
+    echauffement: "Échauffement",
+    principal: "Bloc principal",
+    accessoires: "Accessoires",
+    fin: "Fin / retour au calme",
+  };
+  const sorted = exercises.slice().sort((a, b) => {
+    const A = a.block ? blockOrder[a.block] ?? 99 : 50;
+    const B = b.block ? blockOrder[b.block] ?? 99 : 50;
+    return A - B;
+  });
+
+  const groups: Record<string, NormalizedExercise[]> = {};
+  for (const ex of sorted) {
+    const k = ex.block || "principal";
+    (groups[k] ||= []).push(ex);
+  }
 
   return (
-    <div className="max-w-2xl mx-auto p-4">
-      {/* ===== Titre ===== */}
-      <div className="flex items-center justify-between mb-4">
-        <a href="/dashboard/profile" className="text-sm text-gray-600 underline">
-          ← Retour
-        </a>
-        <div className="text-xs text-gray-400">Programme IA</div>
+    <div className="wrap">
+      <style dangerouslySetInnerHTML={{ __html: styles }} />
+
+      {/* header compact */}
+      <div className="top">
+        <a className="back" href="/dashboard/profile">← Retour</a>
+        <div className="meta">Programme IA</div>
       </div>
 
-      <h1 className="text-2xl font-bold mb-1">{base.title}</h1>
-      <p className="text-sm text-gray-500 mb-3 capitalize">
+      <h1 style={{ fontSize: 24, fontWeight: 800, lineHeight: 1.15, marginBottom: 2 }}>
+        {base.title}
+      </h1>
+      <div className="meta">
         {base.type} · {base.plannedMin ?? 45} min
-      </p>
-
-      {/* ===== Objectif ===== */}
-      <div className="mb-4 rounded-lg border border-gray-200 p-3 bg-white shadow-sm">
-        <div className="text-sm">
-          🎯 <b>Objectif :</b> {goalLabel}
-        </div>
-        <div className="text-sm text-gray-600 mt-1">
-          💡 <b>Conseil :</b>{" "}
-          {base.type === "muscu"
-            ? "Contrôle du tempo, 1–2 reps en réserve."
-            : base.type === "cardio"
-            ? "Reste en zone 2, souffle maîtrisé."
-            : base.type === "hiit"
-            ? "Explosif mais propre, récupère entre les tours."
-            : "Mouvements lents, respire profondément."}
-        </div>
       </div>
 
-      {/* ===== Liste des exercices ===== */}
-      {exercises.map((ex, i) => (
-        <div
-          key={i}
-          className="mb-3 border border-gray-200 rounded-lg p-3 bg-white shadow-sm"
-        >
-          <div className="font-semibold text-sm">{ex.name}</div>
-          <div className="text-xs text-gray-500 mt-1">
-            {ex.sets ? `${ex.sets} séries` : ""}
-            {ex.reps ? ` · ${ex.reps}` : ""}
-            {ex.rest ? ` · Repos ${ex.rest}` : ""}
+      {/* objectif + conseil (très simple) */}
+      <div className="section">
+        <div className="card">
+          <div style={{ fontSize: 14 }}><b>Objectif :</b> {goal}</div>
+          <div className="meta" style={{ marginTop: 4 }}>
+            <b>Conseil :</b>{" "}
+            {base.type === "muscu"
+              ? "Contrôle propre, 1–2 reps en réserve."
+              : base.type === "cardio"
+              ? "Reste en zone 2 (respiration aisée)."
+              : base.type === "hiit"
+              ? "Explosif mais technique propre."
+              : "Mouvements lents et contrôlés."}
           </div>
         </div>
-      ))}
+      </div>
 
-      {(!exercises || exercises.length === 0) && (
-        <div className="text-gray-500 text-sm">Aucun exercice disponible pour cette séance.</div>
-      )}
+      {/* sections: on n’affiche QUE séries · reps · repos */}
+      {["echauffement", "principal", "accessoires", "fin"].map((k) => {
+        const list = groups[k] || [];
+        if (!list.length) return null;
+
+        return (
+          <div key={k} className="section">
+            <h3>{blockNames[k]}</h3>
+            <div className="card">
+              {list.map((ex, i) => {
+                const repsRaw = ex.reps ? String(ex.reps) : ex.durationSec ? `${ex.durationSec}s` : "";
+                const reps = cleanText(repsRaw);
+                const rest = cleanText(ex.rest || "");
+                const sets = typeof ex.sets === "number" ? `${ex.sets} séries` : "";
+
+                // ligne “séries · reps · Repos …” (seuls éléments demandés)
+                const line = [sets, reps ? reps : "", rest ? `Repos ${rest}` : ""]
+                  .filter(Boolean)
+                  .join(" · ");
+
+                return (
+                  <div key={`${k}-${i}`} className="exo">
+                    <div>
+                      <div className="name">{ex.name}</div>
+                      <div className="line">{line || "—"}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
+
