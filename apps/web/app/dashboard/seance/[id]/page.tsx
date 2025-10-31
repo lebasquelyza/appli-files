@@ -1,8 +1,8 @@
+// apps/web/app/dashboard/seance/[id]/page.tsx
 import React from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import {
-  getAiSessions,
   getAnswersForEmail,
   buildProfileFromAnswers,
   generateProgrammeFromAnswers,
@@ -23,14 +23,6 @@ async function getSignedInEmail(): Promise<string> {
     if (email) return email;
   } catch {}
   return cookies().get("app_email")?.value || "";
-}
-
-function normalizeWorkoutType(input?: string): WorkoutType {
-  const s = String(input || "").trim().toLowerCase();
-  if (["cardio", "endurance"].includes(s)) return "cardio";
-  if (["hiit", "metcon", "wod"].includes(s)) return "hiit";
-  if (["mobilite", "mobilité"].includes(s)) return "mobilité";
-  return "muscu";
 }
 
 function genericFallback(type: WorkoutType): NormalizedExercise[] {
@@ -68,12 +60,14 @@ function cleanText(s?: string): string {
     .trim();
 }
 
-/** Formate le titre final. */
+/** Formate le titre final : “Séance pour {Prénom} — Haut du corps / Bas du corps” */
 function sessionTitle(raw?: string, opts: { keepName?: boolean } = { keepName: true }) {
   const s = String(raw || "");
   const name = (s.match(/S[ée]ance\s+pour\s+([^—–-]+)/i)?.[1] || "").trim();
   let t = s.replace(/S[ée]ance\s+pour\s+[^—–-]+[—–-]\s*/i, "");
+  // retire la lettre/plan "— A" / "· A"
   t = t.replace(/[—–-]\s*[A-Z]\b/g, "").replace(/·\s*[A-Z]\b/g, "");
+  // garde uniquement haut/bas
   const side = /\bhaut\b/i.test(t)
     ? "Haut du corps"
     : /\bbas\b/i.test(t)
@@ -102,13 +96,66 @@ const styles = String.raw`
   @media print { .no-print { display: none !important; } }
 `;
 
+/* ====================== Data Loader (IA + fallback) ====================== */
+async function loadData(
+  id: string,
+  searchParams?: Record<string, string | string[] | undefined>
+): Promise<{
+  base?: AiSession;
+  exercises: NormalizedExercise[];
+}> {
+  const equipParam = String(searchParams?.equip || "").toLowerCase();
+  let base: AiSession | undefined;
+  let exercises: NormalizedExercise[] = [];
+
+  // 1) Régénère via IA depuis Google Sheet (source de vérité)
+  try {
+    const email = await getSignedInEmail();
+    if (email) {
+      const answers = await getAnswersForEmail(email);
+      if (answers) {
+        if (equipParam === "none") (answers as any).equipLevel = "none";
+        if (equipParam === "full") (answers as any).equipLevel = "full";
+
+        const regenProg = generateProgrammeFromAnswers(answers); // 🧠 IA ici
+        const regen = regenProg.sessions || [];
+        base = regen.find((s) => s.id === id) || regen[0];
+
+        if (base?.exercises?.length) exercises = base.exercises!;
+      }
+    }
+  } catch {}
+
+  // 2) Filet si rien trouvé
+  if (!base) {
+    base = { id, title: "Séance personnalisée", date: "", type: "muscu", plannedMin: 45 } as AiSession;
+  }
+  if (!exercises.length) {
+    exercises = genericFallback((base?.type ?? "muscu") as WorkoutType);
+  }
+
+  return { base, exercises };
+}
+
+/* ======================== Small UI ======================== */
+function Chip({ label, value, title }: { label: string; value: string; title?: string }) {
+  if (!value) return null;
+  return (
+    <span
+      title={title || label}
+      className="inline-flex items-center rounded-md border border-neutral-200 bg-white px-2 py-1 text-[12px] leading-[14px] text-neutral-800"
+    >
+      <span className="mr-1 opacity-70">{label}</span> {value}
+    </span>
+  );
+}
+
 /* ======================== View (JSX) ======================== */
 const PageView: React.FC<{
   base: AiSession;
   groups: Record<string, NormalizedExercise[]>;
   plannedMin: number;
-  intensity: string;
-}> = ({ base, groups, plannedMin, intensity }) => {
+}> = ({ base, groups, plannedMin }) => {
   return (
     <div>
       <style dangerouslySetInnerHTML={{ __html: styles }} />
@@ -148,11 +195,7 @@ const PageView: React.FC<{
                     <article key={`${k}-${i}`} className="compact-card">
                       <div className="flex items-start justify-between gap-3">
                         <div className="exoname">{ex.name}</div>
-                        {ex.block ? (
-                          <span className="shrink-0 rounded-full bg-neutral-50 px-2 py-0.5 text-[11px] text-neutral-600">
-                            {blockNames[ex.block] || ex.block}
-                          </span>
-                        ) : null}
+                        {/* ✅ badge à droite supprimé */}
                       </div>
 
                       {/* puces — uniquement Séries / Rép. / Repos */}
@@ -175,81 +218,6 @@ const PageView: React.FC<{
   );
 };
 
-/* ====================== Data Loader (IA + fallback) ====================== */
-async function loadData(
-  id: string,
-  searchParams?: Record<string, string | string[] | undefined>
-): Promise<{
-  base?: AiSession;
-  exercises: NormalizedExercise[];
-}> {
-  const equipParam = String(searchParams?.equip || "").toLowerCase();
-
-  const store = (() => {
-    try {
-      const val = cookies().get("app_sessions")?.value;
-      if (!val) return { sessions: [] as any[] };
-      const o = JSON.parse(val);
-      return Array.isArray(o?.sessions) ? { sessions: o.sessions as any[] } : { sessions: [] as any[] };
-    } catch { return { sessions: [] as any[] }; }
-  })();
-  const fromStore = store.sessions.find((s) => s.id === id) as
-    | (AiSession & { exercises?: NormalizedExercise[] })
-    | undefined;
-
-  let fromAi: AiSession | undefined;
-  try {
-    const email = await getSignedInEmail();
-    const sessions = email ? await getAiSessions(email) : [];
-    fromAi = sessions.find((s) => s.id === id);
-  } catch {}
-
-  let base: AiSession | undefined = fromStore || fromAi;
-
-  // Fallback : on régénère depuis le Sheet
-  if (!base) {
-    try {
-      const email = await getSignedInEmail();
-      if (email) {
-        const answers = await getAnswersForEmail(email);
-        if (answers) {
-          if (equipParam === "none") (answers as any).equipLevel = "none";
-          if (equipParam === "full") (answers as any).equipLevel = "full";
-
-          const regenProg = generateProgrammeFromAnswers(answers);
-          const regen = regenProg.sessions || [];
-          base = regen.find((s) => s.id === id) || regen[0];
-        }
-      }
-    } catch {}
-  }
-
-  if (!base) {
-    base = { id, title: "Séance personnalisée", date: "", type: "muscu", plannedMin: 45 } as AiSession;
-  }
-
-  let exercises: NormalizedExercise[] =
-    (fromStore?.exercises as NormalizedExercise[] | undefined) || [];
-
-  if (!exercises.length && base?.exercises?.length) exercises = base.exercises!;
-  if (!exercises.length) exercises = genericFallback((base?.type ?? "muscu") as WorkoutType);
-
-  return { base, exercises };
-}
-
-/* ======================== Small UI ======================== */
-function Chip({ label, value, title }: { label: string; value: string; title?: string }) {
-  if (!value) return null;
-  return (
-    <span
-      title={title || label}
-      className="inline-flex items-center rounded-md border border-neutral-200 bg-white px-2 py-1 text-[12px] leading-[14px] text-neutral-800"
-    >
-      <span className="mr-1 opacity-70">{label}</span> {value}
-    </span>
-  );
-}
-
 /* ======================== Page (server) ======================== */
 export default async function Page({
   params,
@@ -267,9 +235,8 @@ export default async function Page({
   if (!base) redirect("/dashboard/profile?error=Seance%20introuvable");
 
   const plannedMin = base.plannedMin ?? 45;
-  const intensity = base.intensity ?? "modérée";
 
-  // tri + groupage par bloc
+  // tri + groupage par bloc (comme avant)
   const blockOrder = { echauffement: 0, principal: 1, accessoires: 2, fin: 3 } as const;
   const exs = exercises.slice().sort((a, b) => {
     const A = a.block ? (blockOrder as any)[a.block] ?? 99 : 50;
@@ -287,8 +254,6 @@ export default async function Page({
       base={base}
       groups={groups}
       plannedMin={plannedMin}
-      intensity={intensity}
     />
   );
 }
-
