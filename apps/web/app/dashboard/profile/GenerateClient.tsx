@@ -8,7 +8,7 @@ import type { AiSession } from "../../../lib/coach/ai";
 type Props = {
   email: string;
   questionnaireBase: string;
-  initialSessions?: AiSession[]; // ✅ ajouté pour corriger l’erreur TS
+  initialSessions?: AiSession[];
 };
 
 export default function GenerateClient({ email, questionnaireBase, initialSessions = [] }: Props) {
@@ -42,12 +42,19 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
 
   return (
     <section className="section" style={{ marginTop: 24 }}>
-      <div className="section-head" style={{ marginBottom: 8 }}>
-        <h2>Mes séances</h2>
-      </div>
+      {/* ===== En-tête ===== */}
+      <div
+        className="section-head"
+        style={{
+          marginBottom: 8,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+        }}
+      >
+        <h2 className="font-semibold text-lg">Mes séances</h2>
 
-      {/* Bouton de génération */}
-      <div style={{ marginBottom: 12 }}>
         <button
           onClick={handleGenerate}
           disabled={loading}
@@ -55,16 +62,19 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
           style={{
             background: "#111827",
             color: "white",
-            padding: "8px 16px",
-            borderRadius: 6,
+            padding: "8px 14px",
+            borderRadius: 8,
             fontSize: 13,
+            fontWeight: 600,
+            opacity: loading ? 0.7 : 1,
+            transition: "opacity 0.2s",
           }}
         >
-          {loading ? "Génération en cours..." : "Générer le programme"}
+          {loading ? "⏳ Génération..." : "⚙️ Générer le programme"}
         </button>
       </div>
 
-      {/* Erreur */}
+      {/* ===== Erreur ===== */}
       {error && (
         <div
           style={{
@@ -81,25 +91,41 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
         </div>
       )}
 
-      {/* Liste des séances */}
+      {/* ===== Liste des séances ===== */}
       {!loading && sessions && sessions.length > 0 && (
-        <div className="space-y-2">
-          {sessions.map((s, i) => (
-            <div key={s.id || i} className="card" style={{ padding: 12 }}>
-              <div className="font-semibold">{s.title}</div>
-              <div className="text-xs text-gray-500">
-                {s.date ? `📅 ${s.date}` : ""} · {s.type}
-                {s.plannedMin ? ` · ${s.plannedMin} min` : ""}
-              </div>
-            </div>
-          ))}
-        </div>
+        <ul className="space-y-2 list-none pl-0">
+          {sessions.map((s) => {
+            const href = `/dashboard/seance/${encodeURIComponent(s.id)}`;
+            return (
+              <li
+                key={s.id}
+                onClick={() => router.push(href)}
+                className="card hover:bg-gray-50 cursor-pointer transition"
+                style={{
+                  padding: 12,
+                  border: "1px solid #e5e7eb",
+                  borderRadius: 8,
+                }}
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="font-medium text-sm">{s.title}</div>
+                    <div className="text-xs text-gray-500">
+                      {s.type}
+                      {s.plannedMin ? ` · ${s.plannedMin} min` : ""}
+                    </div>
+                  </div>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
       )}
 
-      {/* Aucun résultat */}
+      {/* ===== Aucun résultat ===== */}
       {!loading && (!sessions || sessions.length === 0) && (
         <div className="text-sm text-gray-500">
-          Aucune séance trouvée pour le moment.
+          Aucune séance disponible pour le moment.
         </div>
       )}
     </section>
