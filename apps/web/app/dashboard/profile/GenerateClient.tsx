@@ -8,7 +8,7 @@ import {
   type AiSession,
   type NormalizedExercise,
   type WorkoutType,
-} from "../../../lib/coach/ai";
+} from "../../lib/coach/ai";
 
 /* ======================== Utils ======================== */
 async function getSignedInEmail(): Promise<string> {
