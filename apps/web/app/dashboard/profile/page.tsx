@@ -5,11 +5,11 @@ import { redirect } from "next/navigation";
 import {
   getAnswersForEmail,
   buildProfileFromAnswers,
-  type AiSession as AiSessionT, // (plus utilisé ici)
+  type AiSession as AiSessionT,
   type Profile as ProfileT,
 } from "../../../lib/coach/ai";
 
-import { planProgrammeFromEmail } from "../../../lib/coach/beton"; // ⬅️ on charge le programme IA côté serveur
+import { planProgrammeFromEmail } from "../../../lib/coach/beton";
 import GenerateClient from "./GenerateClient";
 
 const QUESTIONNAIRE_BASE =
@@ -32,7 +32,7 @@ async function getEmailFromSupabaseSession(): Promise<string> {
   }
 }
 
-/* Loaders — Mes infos (inchangé) */
+/* Loaders — Mes infos */
 async function loadProfile(searchParams?: Record<string, string | string[] | undefined>) {
   const forceBlank = ["1", "true", "yes"].includes(
     String(searchParams?.blank || searchParams?.empty || "").toLowerCase()
@@ -99,9 +99,7 @@ export default async function Page({
 }) {
   const { emailForDisplay, profile, debugInfo, forceBlank } = await loadProfile(searchParams);
 
-  // ✅ Génération IA côté serveur pour l’affichage initial
   const initialSessions = await loadInitialSessions(emailForDisplay);
-
   const showPlaceholders = !forceBlank;
 
   const p = (profile ?? {}) as Partial<ProfileT>;
@@ -179,7 +177,7 @@ export default async function Page({
         )}
       </div>
 
-      {/* ===== Mes infos (inchangé) ===== */}
+      {/* ===== Mes infos ===== */}
       <section className="section" style={{ marginTop: 12 }}>
         <div
           className="section-head"
@@ -239,7 +237,7 @@ export default async function Page({
         </div>
       </section>
 
-      {/* ===== Mon programme — IA côté serveur, affichage côté client ===== */}
+      {/* ===== Mon programme ===== */}
       <GenerateClient
         email={emailForDisplay}
         questionnaireBase={QUESTIONNAIRE_BASE}
