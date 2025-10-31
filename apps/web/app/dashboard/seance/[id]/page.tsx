@@ -8,10 +8,10 @@ import {
   type AiSession,
   type NormalizedExercise,
   type WorkoutType,
-} from "../../../lib/coach/ai";
+} from "../../../lib/coach/ai"; // ⬅️ CORRIGÉ: ../../../lib/coach/ai
 
 /* ======================== Utils ======================== */
-// Email depuis le cookie uniquement (supprime la dépendance à lib/auth / next-auth)
+// Email depuis cookie uniquement (pas d'import lib/auth)
 async function getSignedInEmail(): Promise<string> {
   return cookies().get("app_email")?.value || "";
 }
@@ -52,15 +52,12 @@ function cleanText(s?: string): string {
     .trim();
 }
 
-/* ===================== Titre basé UNIQUEMENT sur le titre brut ===================== */
+/* ===== Titre basé UNIQUEMENT sur le titre brut ===== */
 function sessionTitleFromRaw(raw?: string, opts: { keepName?: boolean } = { keepName: true }) {
   const s = String(raw || "");
-  // récupère le prénom si présent (“Séance pour X — …”)
   const name = (s.match(/S[ée]ance\s+pour\s+([^—–-]+)/i)?.[1] || "").trim();
 
-  // extrait la partie après “—”
   let t = s.replace(/S[ée]ance\s+pour\s+[^—–-]+[—–-]\s*/i, "");
-  // retire la lettre “— A” éventuelle
   t = t.replace(/[—–-]\s*[A-Z]\b/g, "").replace(/·\s*[A-Z]\b/g, "");
 
   const lowPat = /\b(bas du corps|lower|jambes|legs)\b/i;
