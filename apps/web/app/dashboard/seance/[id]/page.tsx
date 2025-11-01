@@ -8,7 +8,7 @@ import {
   type AiSession,
   type NormalizedExercise,
   type WorkoutType,
-} from "../../../lib/coach/ai"; // ⬅️ CORRIGÉ: ../../../lib/coach/ai
+} from "../../../../lib/coach/ai"; // ⬅️ CORRIGÉ: ../../../lib/coach/ai
 
 /* ======================== Utils ======================== */
 // Email depuis cookie uniquement (pas d'import lib/auth)
