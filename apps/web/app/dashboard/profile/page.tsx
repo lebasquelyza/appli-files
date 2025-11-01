@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import {
   getAnswersForEmail,
   buildProfileFromAnswers,
+  generateProgrammeFromAnswers, // ⬅️ ajouté pour générer la variante sans matériel
   type AiSession as AiSessionT,
   type Profile as ProfileT,
 } from "../../../lib/coach/ai";
@@ -81,10 +82,26 @@ async function loadProfile(searchParams?: Record<string, string | string[] | und
   return { emailForDisplay, profile, debugInfo, forceBlank };
 }
 
-/* Loader — Programme IA côté serveur (SSR) */
-async function loadInitialSessions(email: string) {
+/* Loader — Programme IA côté serveur (SSR)
+   - défaut: flux existant (avec matériel)
+   - si equip=none: on force answers.equipLevel="none" puis on génère via generateProgrammeFromAnswers
+*/
+async function loadInitialSessions(email: string, equipParam?: string) {
   if (!email) return [];
+  const equip = String(equipParam || "").toLowerCase();
+
   try {
+    if (equip === "none" || equip === "full") {
+      // Génération avec la même logique que d’habitude, en forçant le niveau d’équipement
+      const answers = await getAnswersForEmail(email, { fresh: true });
+      if (!answers) return [];
+      if (equip === "none") (answers as any).equipLevel = "none";
+      if (equip === "full") (answers as any).equipLevel = "full";
+      const prog = generateProgrammeFromAnswers(answers);
+      return prog.sessions || [];
+    }
+
+    // Chemin par défaut (avec matériel comme actuellement)
     const { sessions } = await planProgrammeFromEmail(email);
     return sessions || [];
   } catch {
@@ -95,11 +112,14 @@ async function loadInitialSessions(email: string) {
 export default async function Page({
   searchParams,
 }: {
-  searchParams?: { success?: string; error?: string; debug?: string; blank?: string; empty?: string };
+  searchParams?: { success?: string; error?: string; debug?: string; blank?: string; empty?: string; equip?: string };
 }) {
   const { emailForDisplay, profile, debugInfo, forceBlank } = await loadProfile(searchParams);
 
-  const initialSessions = await loadInitialSessions(emailForDisplay);
+  // ⬇️ on regarde si l’utilisateur demande la liste "sans matériel"
+  const equipParam = String(searchParams?.equip || "").toLowerCase(); // '', 'none', 'full'
+  const initialSessions = await loadInitialSessions(emailForDisplay, equipParam);
+
   const showPlaceholders = !forceBlank;
 
   const p = (profile ?? {}) as Partial<ProfileT>;
@@ -133,15 +153,8 @@ export default async function Page({
   const displayedSuccess = searchParams?.success || "";
   const showDebug = String(searchParams?.debug || "") === "1";
 
-  // Lien "Sans matériel" vers la première séance en mode equip=none
-  const firstSession = Array.isArray(initialSessions) && initialSessions.length > 0 ? initialSessions[0] : null;
-  const hrefNone =
-    firstSession
-      ? `/dashboard/seance/${encodeURIComponent(firstSession.id)}?title=${encodeURIComponent(
-          String(firstSession.title || "")
-        )}&equip=none`
-      : "";
-  // pas de séance => pas de bouton
+  // Bouton "Sans matériel" -> liste, pas une séance
+  const hrefNone = `/dashboard/profile?equip=none`;
 
   return (
     <div className="container" style={{ paddingTop: 24, paddingBottom: 32, fontSize: "var(--settings-fs, 12px)" }}>
@@ -262,23 +275,21 @@ export default async function Page({
         >
           <h2 style={{ margin: 0 }}>Mon programme</h2>
 
-          {firstSession && (
-            <div
-              className="inline-flex items-center"
-              style={{ display: "inline-flex", alignItems: "center", gap: 10 }}
-            >
-              <div className="text-sm" style={{ color: "#374151", whiteSpace: "nowrap" }}>
-                Par défaut, les séances <b>avec matériel</b> sont affichées, sinon
-              </div>
-              <a
-                href={hrefNone}
-                className="inline-flex items-center rounded-md border border-neutral-800 bg-neutral-900 px-3 py-1.5 text-sm font-semibold text-white"
-                title="Voir la séance en version sans matériel"
-              >
-                Sans matériel
-              </a>
+          <div
+            className="inline-flex items-center"
+            style={{ display: "inline-flex", alignItems: "center", gap: 10 }}
+          >
+            <div className="text-sm" style={{ color: "#374151", whiteSpace: "nowrap" }}>
+              Par défaut, les séances <b>avec matériel</b> sont affichées, sinon
             </div>
-          )}
+            <a
+              href={hrefNone}
+              className="inline-flex items-center rounded-md border border-neutral-800 bg-neutral-900 px-3 py-1.5 text-sm font-semibold text-white"
+              title="Voir la liste en version sans matériel"
+            >
+              Sans matériel
+            </a>
+          </div>
         </div>
 
         {/* Le composant existant affiche le programme (inchangé) */}
@@ -291,4 +302,3 @@ export default async function Page({
     </div>
   );
 }
-
