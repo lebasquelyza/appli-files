@@ -33,7 +33,7 @@ async function getEmailFromSupabaseSession(): Promise<string> {
   }
 }
 
-/* ===== Helpers bodyweight ===== */
+/* ===== Helpers bodyweight / backfill (≥ 4 exos) ===== */
 function requiresEquipmentName(s: string): boolean {
   const t = s.toLowerCase();
   return /halt[eè]re|dumbbell|barre|barbell|kettlebell|kettle|machine|poulie|c(?:â|a)ble|smith|presse|leg\s*press|bench\b|banc|box jump|box\b|step(?:per)?|[ée]lastique|band|trx|sangle|anneaux|rings?|med(?:ecine)?\s*ball|ballon|bosu|ab\s*wheel|roue\s*abdo|rameur|rower|erg|assault\s*bike|v[ée]lo|tapis|pull-?up|tractions?|dips?|barre\s*fixe|chaise|table/i.test(
@@ -165,21 +165,27 @@ async function loadInitialSessions(email: string, equipParam?: string) {
       const prog = generateProgrammeFromAnswers(answers);
       const sessions: AiSessionT[] = prog.sessions || [];
 
-      if (equip === "none") {
-        // Nettoyage strict bodyweight sur la LISTE + filet ≥4
-        return sessions.map((s) => {
-          const type = (s.type || "muscu") as WorkoutType;
-          const exs = (s.exercises || []).filter((ex) => !requiresEquipment(ex));
-          const ensured = ensureAtLeast4(exs, type, "none");
-          return { ...s, exercises: ensured };
-        });
-      }
-      return sessions;
+      // ⬇️ Applique ≥4 exos dans les deux modes
+      return sessions.map((s) => {
+        const type = (s.type || "muscu") as WorkoutType;
+        let exs = (s.exercises || []).slice();
+        if (equip === "none") {
+          // stricte bodyweight
+          exs = exs.filter((ex) => !requiresEquipment(ex));
+        }
+        const ensured = ensureAtLeast4(exs, type, equip);
+        return { ...s, exercises: ensured };
+      });
     }
 
-    // Par défaut : logique existante (avec matériel)
+    // Par défaut : logique existante (avec matériel), mais on sécurise ≥4 exos pour l'affichage
     const { sessions } = await planProgrammeFromEmail(email);
-    return sessions || [];
+    const safe = (sessions || []).map((s) => {
+      const type = (s.type || "muscu") as WorkoutType;
+      const ensured = ensureAtLeast4((s.exercises || []), type, "full");
+      return { ...s, exercises: ensured };
+    });
+    return safe;
   } catch {
     return [];
   }
@@ -196,7 +202,7 @@ export default async function Page({
   const equipParam = String(searchParams?.equip || "").toLowerCase();
   const equipMode: "full" | "none" = equipParam === "none" ? "none" : "full";
 
-  // Liste calculée selon l'équipement (avec filtre bodyweight si none)
+  // Liste calculée selon l'équipement (≥4 exos assuré dans loadInitialSessions)
   const initialSessions = await loadInitialSessions(emailForDisplay, equipMode);
 
   const showPlaceholders = !forceBlank;
@@ -383,7 +389,7 @@ export default async function Page({
           </div>
         </div>
 
-        {/* Le composant existant affiche la liste (inchangé) */}
+        {/* La liste a déjà ≥4 exos par séance (appliqué en amont) */}
         <GenerateClient
           email={emailForDisplay}
           questionnaireBase={QUESTIONNAIRE_BASE}
@@ -394,4 +400,3 @@ export default async function Page({
     </div>
   );
 }
-
