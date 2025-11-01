@@ -1,12 +1,10 @@
 // apps/web/app/dashboard/profile/page.tsx
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
 
 import {
   getAnswersForEmail,
   buildProfileFromAnswers,
-  generateProgrammeFromAnswers, // utilisé pour forcer l'équipement en conservant la logique
-  type AiSession as AiSessionT,
+  generateProgrammeFromAnswers,
   type Profile as ProfileT,
 } from "../../../lib/coach/ai";
 
@@ -26,7 +24,9 @@ async function getEmailFromSupabaseSession(): Promise<string> {
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       { cookies: { get: (n: string) => cookieStore.get(n)?.value } }
     );
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     return user?.email?.trim().toLowerCase() || "";
   } catch {
     return "";
@@ -295,7 +295,7 @@ export default async function Page({
             </a>
             <a
               href={hrefNone}
-              className{
+              className={
                 equipMode === "none"
                   ? "inline-flex items-center rounded-md border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-sm font-semibold text-white"
                   : "inline-flex items-center rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-semibold text-neutral-900"
