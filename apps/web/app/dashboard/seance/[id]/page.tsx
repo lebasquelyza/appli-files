@@ -114,6 +114,15 @@ function isCoreOrNeutral(ex: NormalizedExercise): boolean {
   const t = `${ex.name || ""} ${ex.target || ""} ${ex.notes || ""}`.toLowerCase();
   return /(gainage|planche|plank|abdo|core|hollow|dead bug|oiseau|bird dog|good morning|pont|bridge|mobilit[eé]|respiration)/i.test(t);
 }
+
+/* ===== Détection “nécessite matériel” (pour equip=none) ===== */
+function requiresEquipment(ex: NormalizedExercise): boolean {
+  const t = `${ex.name || ""} ${ex.notes || ""}`.toLowerCase();
+  // Liste non exhaustive, mais couvre 99% des cas courants
+  return /(halt[eè]re|dumbbell|barre|barbell|kettlebell|kettle|machine|poulie|c(â|a)ble|smith|presse|leg press|bench\b|banc|[ée]lastique|band|trx|sangle|med(?:ecine)? ball|ballon|bosu|roue abdo|wheel|rameur|rower|v[ée]lo|assault bike|tapis|stepper|erg)/i.test(t);
+}
+
+/* ===== Filtre Focus + Matériel ===== */
 function filterExercisesByFocus(exs: NormalizedExercise[], focus: Focus): NormalizedExercise[] {
   if (focus === "mix" || focus === "full") return exs.slice();
   const out: NormalizedExercise[] = [];
@@ -136,7 +145,6 @@ function uniqByName(list: NormalizedExercise[]): NormalizedExercise[] {
   });
 }
 
-/** Priorise des exos "coach" pour le backfill : bloc principal, polyarticulaires, puis le reste */
 function scoreExerciseForBackfill(ex: NormalizedExercise): number {
   const name = (ex.name || "").toLowerCase();
   let score = 0;
@@ -146,11 +154,6 @@ function scoreExerciseForBackfill(ex: NormalizedExercise): number {
   return score;
 }
 
-/**
- * Complète la liste filtrée pour garantir >= 4 exercices,
- * sans casser l’ordre initial : on garde d’abord `filtered`,
- * puis on pioche dans `original` (non inclus), puis des fallbacks adaptés à l’équipement.
- */
 function ensureAtLeast4Exercises(
   filtered: NormalizedExercise[],
   type: WorkoutType,
@@ -181,7 +184,6 @@ function ensureAtLeast4Exercises(
       if (focus === "lower" && !(isLower(ex) || isCoreOrNeutral(ex))) continue;
       combined.push(ex);
     }
-    // Au cas où (très rare), on autorise le reste du fallback pour assurer ≥4
     if (combined.length < 4) {
       for (const ex of fallbacks) {
         if (combined.length >= 4) break;
@@ -193,7 +195,7 @@ function ensureAtLeast4Exercises(
   return uniqByName(combined).slice(0, Math.max(4, filtered.length));
 }
 
-/* ====================== Chargement (IA + filtre focus) ====================== */
+/* ====================== Chargement (IA + filtre focus + filtre matériel) ====================== */
 async function loadData(
   id: string,
   searchParams?: Record<string, string | string[] | undefined>
@@ -245,13 +247,21 @@ async function loadData(
     exercises = genericFallback((base?.type ?? "muscu") as WorkoutType, equipParam);
   }
 
-  // 4) Déduire le focus, puis filtrer
+  // 4) Déduire le focus
   const focus =
     inferFocusFromTitle(qpTitle || base.title) ||
     inferFocusFromProfile(profile) ||
     "mix";
 
-  const filtered = filterExercisesByFocus(exercises, focus);
+  // 5) Filtrer par focus
+  let filtered = filterExercisesByFocus(exercises, focus);
+
+  // 6) Si equip=none → supprimer tout ce qui demande du matériel
+  if (equipParam === "none") {
+    filtered = filtered.filter((ex) => !requiresEquipment(ex));
+  }
+
+  // 7) Filet ≥ 4 exos, avec fallback adapté à l’équipement
   const ensured = ensureAtLeast4Exercises(
     filtered,
     (base?.type ?? "muscu") as WorkoutType,
@@ -259,6 +269,7 @@ async function loadData(
     exercises,
     equipParam
   );
+
   const plannedMin = base.plannedMin ?? 45;
 
   // titre sans lettres
