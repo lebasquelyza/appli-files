@@ -53,32 +53,32 @@ function cleanText(s?: string): string {
     .trim();
 }
 
-/* ===== Détection du FOCUS (haut / bas / mix / full) ===== */
+/* ===== Détection du FOCUS ===== */
 type Focus = "upper" | "lower" | "mix" | "full";
 
 function inferFocusFromTitle(title?: string): Focus | null {
   const s = String(title || "").toLowerCase();
   if (/(haut du corps|upper|push|haut\b)/i.test(s)) return "upper";
   if (/(bas du corps|lower|jambes|legs|bas\b)/i.test(s)) return "lower";
-  if (/\bmix|total body|complet|full body|full\b/i.test(s)) return /full\b/i.test(s) ? "full" : "mix";
+  if (/\bfull body\b/i.test(s)) return "full";
+  if (/\bmix|total body|complet|full\b/i.test(s)) return "mix";
   return null;
 }
-
 function inferFocusFromProfile(profile?: Profile | null): Focus | null {
   const g = String(profile?.goal || "").toLowerCase();
   if (!g) return null;
-  if (g === "hypertrophy" || g === "strength") {
-    // Hypertrophie/force : par défaut on aime des splits ⇒ mix si on ne sait pas
-    return "mix";
-  }
-  if (g === "fatloss" || g === "endurance" || g === "general" || g === "mobility") {
-    // Ces objectifs tolèrent mieux full-body si rien n'est précisé
-    return "full";
-  }
+  if (g === "hypertrophy" || g === "strength") return "mix";
+  if (g === "fatloss" || g === "endurance" || g === "general" || g === "mobility") return "full";
   return null;
 }
+function focusLabel(focus: Focus): string {
+  return focus === "upper" ? "Haut du corps" :
+         focus === "lower" ? "Bas du corps" :
+         focus === "full"  ? "Full body" :
+                              "Mix";
+}
 
-/** Classe les exos par groupe musculaire (grossier mais efficace). */
+/** tag simple par zones */
 function isLower(ex: NormalizedExercise): boolean {
   const t = `${ex.name || ""} ${ex.target || ""} ${ex.notes || ""}`.toLowerCase();
   return /(squat|fente|deadlift|soulev[ée] de terre|hip|glute|fess|ischio|quad|quads|quadriceps|hamstring|mollet|calf|leg(?!\s*raise))/i.test(t);
@@ -91,43 +91,16 @@ function isCoreOrNeutral(ex: NormalizedExercise): boolean {
   const t = `${ex.name || ""} ${ex.target || ""} ${ex.notes || ""}`.toLowerCase();
   return /(gainage|planche|plank|abdo|core|hollow|dead bug|oiseau|bird dog|good morning|pont|bridge|mobilit[eé]|respiration)/i.test(t);
 }
-
-/** Filtre les exos selon le focus choisi. Garde toujours le core/neutral. */
 function filterExercisesByFocus(exs: NormalizedExercise[], focus: Focus): NormalizedExercise[] {
-  if (focus === "mix" || focus === "full") return exs.slice(); // pas de filtre
+  if (focus === "mix" || focus === "full") return exs.slice();
   const out: NormalizedExercise[] = [];
   for (const ex of exs) {
     if (isCoreOrNeutral(ex)) { out.push(ex); continue; }
     if (focus === "upper" && isUpper(ex)) out.push(ex);
     if (focus === "lower" && isLower(ex)) out.push(ex);
   }
-  // Si filtre trop agressif → garde programme original (mieux que vide)
   return out.length >= Math.min(3, exs.length) ? out : exs;
 }
-
-/* ===== Titre affiché (montre le focus proprement) ===== */
-function focusLabel(focus: Focus): string {
-  return focus === "upper" ? "Haut du corps" :
-         focus === "lower" ? "Bas du corps" :
-         focus === "full"  ? "Full body" :
-                              "Mix";
-}
-function displayTitle(raw?: string, focus?: Focus, keepName = true): string {
-  const s = String(raw || "");
-  const name = (s.match(/S[ée]ance\s+pour\s+([^—–-]+)/i)?.[1] || "").trim();
-  const label = focus ? focusLabel(focus) : "Séance";
-  return keepName && name ? `Séance pour ${name} — ${label}` : label;
-}
-
-/* ======================== Styles ======================== */
-const styles = String.raw`
-  .compact-card { padding: 12px; border-radius: 16px; background:#fff; box-shadow: 0 1px 0 rgba(17,24,39,.05); border:1px solid #e5e7eb; }
-  .h1-compact { margin-bottom:2px; font-size: clamp(20px, 2.2vw, 24px); line-height:1.15; font-weight:800; }
-  .lead-compact { margin-top:4px; font-size: clamp(12px, 1.6vw, 14px); line-height:1.35; color:#4b5563; }
-  .exoname { font-size: 15.5px; line-height:1.25; font-weight:700; }
-  .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
-  .btn-ghost { background:#fff; color:#111827; border:1px solid #e5e7eb; border-radius:8px; padding:6px 10px; font-weight:600; }
-`;
 
 /* ====================== Chargement (IA + filtre focus) ====================== */
 async function loadData(
@@ -140,6 +113,7 @@ async function loadData(
   plannedMin: number;
 }> {
   const equipParam = String(searchParams?.equip || "").toLowerCase();
+  const qpTitle = typeof searchParams?.title === "string" ? searchParams!.title : "";
 
   // 1) Lire réponses du Sheet
   const email = await getSignedInEmail();
@@ -159,9 +133,18 @@ async function loadData(
     if (equipParam === "none") (answers as any).equipLevel = "none";
     if (equipParam === "full") (answers as any).equipLevel = "full";
 
-    const regenProg = generateProgrammeFromAnswers(answers);
+    const regenProg = generateProgrammeFromAnswers(answers); // IA
     const regen = regenProg.sessions || [];
-    base = regen.find((s) => s.id === id) || regen[0];
+
+    // ⬅️ ESSAI 1: match par title (on passe le title depuis la liste)
+    base = (qpTitle && regen.find((s) => s.title === qpTitle)) || undefined;
+
+    // ⬅️ ESSAI 2: fallback par id
+    if (!base) base = regen.find((s) => s.id === id);
+
+    // ⬅️ Dernier filet: 1ère séance
+    if (!base) base = regen[0];
+
     if (base?.exercises?.length) exercises = base.exercises!;
   }
 
@@ -173,20 +156,22 @@ async function loadData(
     exercises = genericFallback((base?.type ?? "muscu") as WorkoutType);
   }
 
-  // 4) Déduire le focus, puis filtrer les exos
+  // 4) Déduire le focus, puis filtrer
   const focus =
-    inferFocusFromTitle(base.title) ||
+    inferFocusFromTitle(qpTitle || base.title) ||
     inferFocusFromProfile(profile) ||
     "mix";
 
   const filtered = filterExercisesByFocus(exercises, focus);
-
   const plannedMin = base.plannedMin ?? 45;
 
-  return { base, exercises: filtered, focus, plannedMin };
+  // on renvoie base avec le titre (qpTitle prioritaire pour cohérence UI)
+  const finalBase = { ...base, title: qpTitle || base.title };
+
+  return { base: finalBase, exercises: filtered, focus, plannedMin };
 }
 
-/* ======================== UI Helpers ======================== */
+/* ======================== UI helpers ======================== */
 function Chip({ label, value, title }: { label: string; value: string; title?: string }) {
   if (!value) return null;
   return (
@@ -208,7 +193,18 @@ const PageView: React.FC<{
 }> = ({ base, exercises, focus, plannedMin }) => {
   return (
     <div>
-      <style dangerouslySetInnerHTML={{ __html: styles }} />
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+  .compact-card { padding: 12px; border-radius: 16px; background:#fff; box-shadow: 0 1px 0 rgba(17,24,39,.05); border:1px solid #e5e7eb; }
+  .h1-compact { margin-bottom:2px; font-size: clamp(20px, 2.2vw, 24px); line-height:1.15; font-weight:800; }
+  .lead-compact { margin-top:4px; font-size: clamp(12px, 1.6vw, 14px); line-height:1.35; color:#4b5563; }
+  .exoname { font-size: 15.5px; line-height:1.25; font-weight:700; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .btn-ghost { background:#fff; color:#111827; border:1px solid #e5e7eb; border-radius:8px; padding:6px 10px; font-weight:600; }
+          `,
+        }}
+      />
 
       <div className="mb-2 flex items-center justify-between no-print" style={{ paddingInline: 12 }}>
         <a href="/dashboard/profile" className="btn-ghost">← Retour</a>
@@ -218,7 +214,7 @@ const PageView: React.FC<{
       <div className="mx-auto w-full" style={{ maxWidth: 640, paddingInline: 12, paddingBottom: 24 }}>
         <div className="page-header">
           <div>
-            <h1 className="h1-compact">{displayTitle(base.title, focus, true)}</h1>
+            <h1 className="h1-compact">{base.title || focusLabel(focus)}</h1>
             <p className="lead-compact">{plannedMin} min · {base.type}</p>
           </div>
         </div>
@@ -266,3 +262,4 @@ export default async function Page({
 
   return <PageView base={base} exercises={exercises} focus={focus} plannedMin={plannedMin} />;
 }
+
