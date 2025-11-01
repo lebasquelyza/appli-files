@@ -6,6 +6,9 @@ import {
   buildProfileFromAnswers,
   generateProgrammeFromAnswers,
   type Profile as ProfileT,
+  type AiSession as AiSessionT,
+  type NormalizedExercise,
+  type WorkoutType,
 } from "../../../lib/coach/ai";
 
 import { planProgrammeFromEmail } from "../../../lib/coach/beton";
@@ -31,6 +34,94 @@ async function getEmailFromSupabaseSession(): Promise<string> {
   } catch {
     return "";
   }
+}
+
+/* ===== Helpers bodyweight ===== */
+function requiresEquipmentName(s: string): boolean {
+  const t = s.toLowerCase();
+  return /(halt[eè]re|dumbbell|barre|barbell|kettlebell|kettle|machine|poulie|c(â|a)ble|smith|presse|leg press|bench\b|banc|[ée]lastique|band|trx|sangle|med(?:ecine)? ball|ballon|bosu|roue abdo|wheel|rameur|rower|v[ée]lo|assault bike|tapis|stepper|erg)/i.test(
+    t
+  );
+}
+function requiresEquipment(ex: NormalizedExercise): boolean {
+  return requiresEquipmentName(`${ex.name || ""} ${ex.notes || ""}`);
+}
+function isUpper(ex: NormalizedExercise): boolean {
+  const t = `${ex.name || ""} ${ex.target || ""}`.toLowerCase();
+  return /(d[ée]velopp[ée]|bench|pec|chest|row|tirage|pull(?:-?up)?|traction|dos|back|[ée]paul|shoulder|delts?|biceps?|triceps?|curl|extension triceps)/i.test(
+    t
+  );
+}
+function isLower(ex: NormalizedExercise): boolean {
+  const t = `${ex.name || ""} ${ex.target || ""}`.toLowerCase();
+  return /(squat|fente|deadlift|soulev[ée] de terre|hip|glute|fess|ischio|quad|quads|quadriceps|hamstring|mollet|calf|leg(?!\s*raise))/i.test(
+    t
+  );
+}
+function isCoreOrNeutral(ex: NormalizedExercise): boolean {
+  const t = `${ex.name || ""} ${ex.target || ""}`.toLowerCase();
+  return /(gainage|planche|plank|abdo|core|hollow|dead bug|oiseau|bird dog|good morning|pont|bridge|mobilit[eé]|respiration)/i.test(
+    t
+  );
+}
+function genericFallback(type: WorkoutType, equip: "full" | "none"): NormalizedExercise[] {
+  if (type === "cardio") {
+    return [
+      { name: "Échauffement Z1", reps: "8–10 min", block: "echauffement" },
+      { name: "Cardio continu Z2", reps: "25–35 min", block: "principal" },
+      { name: "Retour au calme + mobilité", reps: "5–8 min", block: "fin" },
+      { name: "Marche progressive Z1→Z2", reps: "10–15 min", block: "fin" },
+    ];
+  }
+  if (type === "mobilité") {
+    return [
+      { name: "Respiration diaphragmatique", reps: "2–3 min", block: "echauffement" },
+      { name: "90/90 hanches", reps: "8–10/ côté", block: "principal" },
+      { name: "T-spine rotations", reps: "8–10/ côté", block: "principal" },
+      { name: "Down-Dog → Cobra", reps: "6–8", block: "fin" },
+    ];
+  }
+  if (equip === "none") {
+    return [
+      { name: "Squat au poids du corps", sets: 3, reps: "12–15", rest: "60–75s", block: "principal" },
+      { name: "Pompes", sets: 3, reps: "8–15", rest: "60–75s", block: "principal" },
+      { name: "Fentes alternées", sets: 3, reps: "10–12/ côté", rest: "60–75s", block: "principal" },
+      { name: "Planche", sets: 2, reps: "30–45s", rest: "45s", block: "fin" },
+    ];
+  }
+  return [
+    { name: "Goblet Squat", sets: 3, reps: "8–12", rest: "75s", block: "principal" },
+    { name: "Développé haltères", sets: 3, reps: "8–12", rest: "75s", block: "principal" },
+    { name: "Rowing unilatéral", sets: 3, reps: "10–12/ côté", rest: "75s", block: "principal" },
+    { name: "Planche", sets: 2, reps: "30–45s", rest: "45s", block: "fin" },
+  ];
+}
+function scoreExercise(ex: NormalizedExercise): number {
+  let s = 0;
+  if ((ex.block || "").toLowerCase() === "principal") s += 3;
+  if (/(squat|fente|deadlift|soulev[ée] de terre|row|tirage|pull(?:-?up)?|traction|d[ée]velopp[ée]|press|hip|glute)/i.test((ex.name || "").toLowerCase())) s += 2;
+  if (ex.sets && ex.reps) s += 1;
+  return s;
+}
+function uniqByName(list: NormalizedExercise[]) {
+  const seen = new Set<string>();
+  return list.filter((ex) => {
+    const k = (ex.name || "").trim().toLowerCase();
+    if (!k || seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+function ensureAtLeast4(list: NormalizedExercise[], type: WorkoutType, equip: "full" | "none") {
+  const out = [...list];
+  if (out.length >= 4) return uniqByName(out);
+  const fb = genericFallback(type, equip);
+  fb.sort((a, b) => scoreExercise(b) - scoreExercise(a));
+  for (const ex of fb) {
+    if (out.length >= 4) break;
+    out.push(ex);
+  }
+  return uniqByName(out).slice(0, 4);
 }
 
 /* Loaders — Mes infos */
@@ -82,26 +173,32 @@ async function loadProfile(searchParams?: Record<string, string | string[] | und
   return { emailForDisplay, profile, debugInfo, forceBlank };
 }
 
-/* Loader — Programme IA côté serveur (SSR)
-   - défaut: logique existante (avec matériel)
-   - si equip=none: on force answers.equipLevel="none" puis on génère via generateProgrammeFromAnswers
-   - si equip=full: on force "full" explicitement
-*/
+/* Loader — Programme IA côté serveur (liste) */
 async function loadInitialSessions(email: string, equipParam?: string) {
   if (!email) return [];
-  const equip = String(equipParam || "").toLowerCase();
+  const equip = (String(equipParam || "") === "none") ? "none" : (String(equipParam || "") === "full" ? "full" : "");
 
   try {
     if (equip === "none" || equip === "full") {
       const answers = await getAnswersForEmail(email, { fresh: true });
       if (!answers) return [];
-      if (equip === "none") (answers as any).equipLevel = "none";
-      if (equip === "full") (answers as any).equipLevel = "full";
+      (answers as any).equipLevel = equip === "none" ? "none" : "full";
       const prog = generateProgrammeFromAnswers(answers);
-      return prog.sessions || [];
+      const sessions: AiSessionT[] = prog.sessions || [];
+
+      // ⬇️ Nettoyage “strict bodyweight” pour la variante sans matériel
+      if (equip === "none") {
+        return sessions.map((s) => {
+          const type = (s.type || "muscu") as WorkoutType;
+          const exs = (s.exercises || []).filter((ex) => !requiresEquipment(ex));
+          const ensured = ensureAtLeast4(exs, type, "none");
+          return { ...s, exercises: ensured };
+        });
+      }
+      return sessions;
     }
 
-    // Chemin par défaut (avec matériel)
+    // Par défaut : logique existante (avec matériel)
     const { sessions } = await planProgrammeFromEmail(email);
     return sessions || [];
   } catch {
@@ -120,7 +217,7 @@ export default async function Page({
   const equipParam = String(searchParams?.equip || "").toLowerCase();
   const equipMode: "full" | "none" = equipParam === "none" ? "none" : "full";
 
-  // Liste calculée selon l'équipement (même logique)
+  // Liste calculée selon l'équipement (avec filtre bodyweight si none)
   const initialSessions = await loadInitialSessions(emailForDisplay, equipMode);
 
   const showPlaceholders = !forceBlank;
@@ -312,8 +409,11 @@ export default async function Page({
           email={emailForDisplay}
           questionnaireBase={QUESTIONNAIRE_BASE}
           initialSessions={initialSessions}
+          // 👉 ajoute ce param aux liens de séance (voir patch GenerateClient ci-dessous)
+          linkQuery={equipMode === "none" ? "equip=none" : undefined}
         />
       </section>
     </div>
   );
 }
+
