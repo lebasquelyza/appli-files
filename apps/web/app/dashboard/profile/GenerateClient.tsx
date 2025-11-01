@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { AiSession } from "../../../lib/coach/ai"; // depuis app/dashboard/profile -> app -> web -> lib
+import type { AiSession } from "../../../lib/coach/ai"; // app/dashboard/profile -> app -> web -> lib
 
 type Props = {
   email: string;
@@ -30,8 +30,19 @@ function extractNameFromTitle(raw?: string) {
   const s = String(raw || "");
   return (s.match(/S[ée]ance\s+pour\s+([^—–-]+)/i)?.[1] || "").trim();
 }
+
+/* Supprime les variantes “— A”, “- B”, “· C”, “(D)” éventuelles */
+function stripVariantLetter(s?: string) {
+  return String(s || "")
+    .replace(/\s*[—–-]\s*[A-Z]\b/gi, "")  // "— A" / "- B"
+    .replace(/\s*·\s*[A-Z]\b/gi, "")      // "· C"
+    .replace(/\s*\(([A-Z])\)\s*$/gi, "")  // "(D)"
+    .trim();
+}
+
 function makeTitle(raw: string | undefined, focus: Focus) {
-  const name = extractNameFromTitle(raw);
+  const base = stripVariantLetter(raw);
+  const name = extractNameFromTitle(base);
   const label = focusLabel(focus);
   return name ? `Séance pour ${name} — ${label}` : label;
 }
@@ -41,8 +52,6 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
   const [sessions, setSessions] = useState<AiSession[]>(initialSessions);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // charge le goal depuis /api/answers pour orienter le cycle
   const [goal, setGoal] = useState<string>("");
 
   useEffect(() => {
@@ -82,8 +91,7 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
         const f = cycle[i % cycle.length];
         return {
           ...s,
-          // on inscrit le focus dans le titre pour que la page détail le retrouve
-          title: makeTitle(s.title, f),
+          title: makeTitle(s.title, f), // inscrit focus + sans lettre A/B/C
         };
       });
 
@@ -141,9 +149,8 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
       {!loading && sessions && sessions.length > 0 && (
         <ul className="space-y-2 list-none pl-0">
           {sessions.map((s, i) => {
-            // passe aussi le title dans l’URL: si les IDs bougent à la régénération,
-            // la page détail pourra matcher par title pour la bonne séance
-            const href = `/dashboard/seance/${encodeURIComponent(s.id)}?title=${encodeURIComponent(s.title)}&type=${encodeURIComponent(s.type)}`;
+            const cleanTitle = stripVariantLetter(s.title);
+            const href = `/dashboard/seance/${encodeURIComponent(s.id)}?title=${encodeURIComponent(cleanTitle)}&type=${encodeURIComponent(s.type)}`;
             return (
               <li
                 key={s.id || `s-${i}`}
@@ -154,7 +161,7 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="font-medium text-sm">
-                      {s.title || "Séance"}
+                      {cleanTitle || "Séance"}
                     </div>
                     <div className="text-xs text-gray-500">
                       {s.type}{s.plannedMin ? ` · ${s.plannedMin} min` : ""}
@@ -173,3 +180,4 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
     </section>
   );
 }
+
