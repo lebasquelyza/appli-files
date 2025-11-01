@@ -1,5 +1,5 @@
 // apps/web/app/dashboard/profile/page.tsx
-import { cookies, headers } from "next/headers";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import {
@@ -140,7 +140,8 @@ export default async function Page({
       ? `/dashboard/seance/${encodeURIComponent(firstSession.id)}?title=${encodeURIComponent(
           String(firstSession.title || "")
         )}&equip=none`
-      : ""; // pas de séance => pas de bouton
+      : "";
+  // pas de séance => pas de bouton
 
   return (
     <div className="container" style={{ paddingTop: 24, paddingBottom: 32, fontSize: "var(--settings-fs, 12px)" }}>
@@ -224,4 +225,70 @@ export default async function Page({
           {(emailForDisplay || showPlaceholders) && (
             <div
               className="text-sm"
-              style={{ m
+              style={{ marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
+              title={emailForDisplay || (showPlaceholders ? "Non renseigné" : "")}
+            >
+              <b>Mail :</b>{" "}
+              {emailForDisplay ? (
+                <a href={`mailto:${emailForDisplay}`} className="underline">
+                  {emailForDisplay}
+                </a>
+              ) : showPlaceholders ? (
+                <span className="text-gray-400">Non renseigné</span>
+              ) : null}
+            </div>
+          )}
+
+          <div className="text-sm" style={{ marginTop: 10 }}>
+            <a href={questionnaireUrl} className="underline">
+              Mettre à jour mes réponses au questionnaire
+            </a>
+          </div>
+        </div>
+      </section>
+
+      {/* ===== Mon programme (header + bouton sur la même ligne) ===== */}
+      <section className="section" style={{ marginTop: 16 }}>
+        <div
+          className="section-head"
+          style={{
+            marginBottom: 8,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <h2 style={{ margin: 0 }}>Mon programme</h2>
+
+          {firstSession && (
+            <div
+              className="inline-flex items-center"
+              style={{ display: "inline-flex", alignItems: "center", gap: 10 }}
+            >
+              <div className="text-sm" style={{ color: "#374151", whiteSpace: "nowrap" }}>
+                Par défaut, tes séances avec <b>ton matériel</b> sont affichées — sinon
+              </div>
+              <div aria-hidden style={{ fontSize: 18, lineHeight: 1, color: "#9CA3AF" }}>➜</div>
+              <a
+                href={hrefNone}
+                className="inline-flex items-center rounded-md border border-neutral-800 bg-neutral-900 px-3 py-1.5 text-sm font-semibold text-white"
+                title="Voir la séance en version sans matériel"
+              >
+                Sans matériel
+              </a>
+            </div>
+          )}
+        </div>
+
+        {/* Le composant existant affiche le programme (inchangé) */}
+        <GenerateClient
+          email={emailForDisplay}
+          questionnaireBase={QUESTIONNAIRE_BASE}
+          initialSessions={initialSessions}
+        />
+      </section>
+    </div>
+  );
+}
