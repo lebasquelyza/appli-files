@@ -133,6 +133,15 @@ export default async function Page({
   const displayedSuccess = searchParams?.success || "";
   const showDebug = String(searchParams?.debug || "") === "1";
 
+  // Lien "Sans matériel" vers la première séance en mode equip=none
+  const firstSession = Array.isArray(initialSessions) && initialSessions.length > 0 ? initialSessions[0] : null;
+  const hrefNone =
+    firstSession
+      ? `/dashboard/seance/${encodeURIComponent(firstSession.id)}?title=${encodeURIComponent(
+          String(firstSession.title || "")
+        )}&equip=none`
+      : ""; // pas de séance => pas de bouton
+
   return (
     <div className="container" style={{ paddingTop: 24, paddingBottom: 32, fontSize: "var(--settings-fs, 12px)" }}>
       <div className="page-header">
@@ -215,34 +224,4 @@ export default async function Page({
           {(emailForDisplay || showPlaceholders) && (
             <div
               className="text-sm"
-              style={{ marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
-              title={emailForDisplay || (showPlaceholders ? "Non renseigné" : "")}
-            >
-              <b>Mail :</b>{" "}
-              {emailForDisplay ? (
-                <a href={`mailto:${emailForDisplay}`} className="underline">
-                  {emailForDisplay}
-                </a>
-              ) : showPlaceholders ? (
-                <span className="text-gray-400">Non renseigné</span>
-              ) : null}
-            </div>
-          )}
-
-          <div className="text-sm" style={{ marginTop: 10 }}>
-            <a href={questionnaireUrl} className="underline">
-              Mettre à jour mes réponses au questionnaire
-            </a>
-          </div>
-        </div>
-      </section>
-
-      {/* ===== Mon programme ===== */}
-      <GenerateClient
-        email={emailForDisplay}
-        questionnaireBase={QUESTIONNAIRE_BASE}
-        initialSessions={initialSessions}
-      />
-    </div>
-  );
-}
+              style={{ m
