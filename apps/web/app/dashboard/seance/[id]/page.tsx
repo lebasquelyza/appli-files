@@ -4,14 +4,15 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import {
   getAnswersForEmail,
+  buildProfileFromAnswers,
   generateProgrammeFromAnswers,
   type AiSession,
   type NormalizedExercise,
   type WorkoutType,
-} from "../../../../lib/coach/ai"; // ⬅️ CORRIGÉ: ../../../lib/coach/ai
+  type Profile,
+} from "../../../../lib/coach/ai";
 
 /* ======================== Utils ======================== */
-// Email depuis cookie uniquement (pas d'import lib/auth)
 async function getSignedInEmail(): Promise<string> {
   return cookies().get("app_email")?.value || "";
 }
@@ -52,76 +53,119 @@ function cleanText(s?: string): string {
     .trim();
 }
 
-/* ===== Titre basé UNIQUEMENT sur le titre brut ===== */
-function sessionTitleFromRaw(raw?: string, opts: { keepName?: boolean } = { keepName: true }) {
-  const s = String(raw || "");
-  const name = (s.match(/S[ée]ance\s+pour\s+([^—–-]+)/i)?.[1] || "").trim();
+/* ===== Détection du FOCUS (haut / bas / mix / full) ===== */
+type Focus = "upper" | "lower" | "mix" | "full";
 
-  let t = s.replace(/S[ée]ance\s+pour\s+[^—–-]+[—–-]\s*/i, "");
-  t = t.replace(/[—–-]\s*[A-Z]\b/g, "").replace(/·\s*[A-Z]\b/g, "");
-
-  const lowPat = /\b(bas du corps|lower|jambes|legs)\b/i;
-  const upPat  = /\b(haut du corps|upper|push|pull)\b/i;
-
-  let sideLabel: string | null = null;
-  if (lowPat.test(t) && !upPat.test(t)) sideLabel = "Bas du corps";
-  else if (upPat.test(t) && !lowPat.test(t)) sideLabel = "Haut du corps";
-
-  const title = sideLabel || "Séance";
-  return opts.keepName && name ? `Séance pour ${name} — ${title}` : title;
+function inferFocusFromTitle(title?: string): Focus | null {
+  const s = String(title || "").toLowerCase();
+  if (/(haut du corps|upper|push|haut\b)/i.test(s)) return "upper";
+  if (/(bas du corps|lower|jambes|legs|bas\b)/i.test(s)) return "lower";
+  if (/\bmix|total body|complet|full body|full\b/i.test(s)) return /full\b/i.test(s) ? "full" : "mix";
+  return null;
 }
 
-/* ======================== Styles & Const ======================== */
-const blockNames: Record<string, string> = {
-  echauffement: "Échauffement",
-  principal: "Bloc principal",
-  accessoires: "Accessoires",
-  fin: "Fin / retour au calme",
-};
+function inferFocusFromProfile(profile?: Profile | null): Focus | null {
+  const g = String(profile?.goal || "").toLowerCase();
+  if (!g) return null;
+  if (g === "hypertrophy" || g === "strength") {
+    // Hypertrophie/force : par défaut on aime des splits ⇒ mix si on ne sait pas
+    return "mix";
+  }
+  if (g === "fatloss" || g === "endurance" || g === "general" || g === "mobility") {
+    // Ces objectifs tolèrent mieux full-body si rien n'est précisé
+    return "full";
+  }
+  return null;
+}
 
+/** Classe les exos par groupe musculaire (grossier mais efficace). */
+function isLower(ex: NormalizedExercise): boolean {
+  const t = `${ex.name || ""} ${ex.target || ""} ${ex.notes || ""}`.toLowerCase();
+  return /(squat|fente|deadlift|soulev[ée] de terre|hip|glute|fess|ischio|quad|quads|quadriceps|hamstring|mollet|calf|leg(?!\s*raise))/i.test(t);
+}
+function isUpper(ex: NormalizedExercise): boolean {
+  const t = `${ex.name || ""} ${ex.target || ""} ${ex.notes || ""}`.toLowerCase();
+  return /(d[ée]velopp[ée]|bench|pec|chest|row|tirage|pull(?:-?up)?|traction|dos|back|[ée]paul|shoulder|delts?|biceps?|triceps?|curl|extension triceps)/i.test(t);
+}
+function isCoreOrNeutral(ex: NormalizedExercise): boolean {
+  const t = `${ex.name || ""} ${ex.target || ""} ${ex.notes || ""}`.toLowerCase();
+  return /(gainage|planche|plank|abdo|core|hollow|dead bug|oiseau|bird dog|good morning|pont|bridge|mobilit[eé]|respiration)/i.test(t);
+}
+
+/** Filtre les exos selon le focus choisi. Garde toujours le core/neutral. */
+function filterExercisesByFocus(exs: NormalizedExercise[], focus: Focus): NormalizedExercise[] {
+  if (focus === "mix" || focus === "full") return exs.slice(); // pas de filtre
+  const out: NormalizedExercise[] = [];
+  for (const ex of exs) {
+    if (isCoreOrNeutral(ex)) { out.push(ex); continue; }
+    if (focus === "upper" && isUpper(ex)) out.push(ex);
+    if (focus === "lower" && isLower(ex)) out.push(ex);
+  }
+  // Si filtre trop agressif → garde programme original (mieux que vide)
+  return out.length >= Math.min(3, exs.length) ? out : exs;
+}
+
+/* ===== Titre affiché (montre le focus proprement) ===== */
+function focusLabel(focus: Focus): string {
+  return focus === "upper" ? "Haut du corps" :
+         focus === "lower" ? "Bas du corps" :
+         focus === "full"  ? "Full body" :
+                              "Mix";
+}
+function displayTitle(raw?: string, focus?: Focus, keepName = true): string {
+  const s = String(raw || "");
+  const name = (s.match(/S[ée]ance\s+pour\s+([^—–-]+)/i)?.[1] || "").trim();
+  const label = focus ? focusLabel(focus) : "Séance";
+  return keepName && name ? `Séance pour ${name} — ${label}` : label;
+}
+
+/* ======================== Styles ======================== */
 const styles = String.raw`
   .compact-card { padding: 12px; border-radius: 16px; background:#fff; box-shadow: 0 1px 0 rgba(17,24,39,.05); border:1px solid #e5e7eb; }
   .h1-compact { margin-bottom:2px; font-size: clamp(20px, 2.2vw, 24px); line-height:1.15; font-weight:800; }
   .lead-compact { margin-top:4px; font-size: clamp(12px, 1.6vw, 14px); line-height:1.35; color:#4b5563; }
-  .section-title { font-size: clamp(16px,1.9vw,18px); line-height:1.2; margin:0; font-weight:800; }
   .exoname { font-size: 15.5px; line-height:1.25; font-weight:700; }
   .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
-  .btn { display:inline-flex; align-items:center; justify-content:center; border-radius:10px; border:1px solid #e5e7eb; background:#111827; color:#fff; font-weight:700; padding:8px 12px; line-height:1.2; }
-  .btn-ghost { background:#fff; color:#111827; }
-  @media print { .no-print { display: none !important; } }
+  .btn-ghost { background:#fff; color:#111827; border:1px solid #e5e7eb; border-radius:8px; padding:6px 10px; font-weight:600; }
 `;
 
-/* ====================== Data Loader (IA + fallback) ====================== */
+/* ====================== Chargement (IA + filtre focus) ====================== */
 async function loadData(
   id: string,
   searchParams?: Record<string, string | string[] | undefined>
 ): Promise<{
-  base?: AiSession;
+  base: AiSession;
   exercises: NormalizedExercise[];
+  focus: Focus;
+  plannedMin: number;
 }> {
   const equipParam = String(searchParams?.equip || "").toLowerCase();
+
+  // 1) Lire réponses du Sheet
+  const email = await getSignedInEmail();
+  let answers: Record<string, any> | null = null;
+  let profile: Profile | null = null;
+
+  if (email) {
+    answers = await getAnswersForEmail(email);
+    if (answers) profile = buildProfileFromAnswers(answers) as Profile;
+  }
+
+  // 2) Générer programme depuis réponses
   let base: AiSession | undefined;
   let exercises: NormalizedExercise[] = [];
 
-  // IA depuis Google Sheet
-  try {
-    const email = await getSignedInEmail();
-    if (email) {
-      const answers = await getAnswersForEmail(email);
-      if (answers) {
-        if (equipParam === "none") (answers as any).equipLevel = "none";
-        if (equipParam === "full") (answers as any).equipLevel = "full";
+  if (answers) {
+    if (equipParam === "none") (answers as any).equipLevel = "none";
+    if (equipParam === "full") (answers as any).equipLevel = "full";
 
-        const regenProg = generateProgrammeFromAnswers(answers); // 🧠 IA ici
-        const regen = regenProg.sessions || [];
-        base = regen.find((s) => s.id === id) || regen[0];
+    const regenProg = generateProgrammeFromAnswers(answers);
+    const regen = regenProg.sessions || [];
+    base = regen.find((s) => s.id === id) || regen[0];
+    if (base?.exercises?.length) exercises = base.exercises!;
+  }
 
-        if (base?.exercises?.length) exercises = base.exercises!;
-      }
-    }
-  } catch {}
-
-  // Filets
+  // 3) Filets
   if (!base) {
     base = { id, title: "Séance personnalisée", date: "", type: "muscu", plannedMin: 45 } as AiSession;
   }
@@ -129,10 +173,20 @@ async function loadData(
     exercises = genericFallback((base?.type ?? "muscu") as WorkoutType);
   }
 
-  return { base, exercises };
+  // 4) Déduire le focus, puis filtrer les exos
+  const focus =
+    inferFocusFromTitle(base.title) ||
+    inferFocusFromProfile(profile) ||
+    "mix";
+
+  const filtered = filterExercisesByFocus(exercises, focus);
+
+  const plannedMin = base.plannedMin ?? 45;
+
+  return { base, exercises: filtered, focus, plannedMin };
 }
 
-/* ======================== Small UI ======================== */
+/* ======================== UI Helpers ======================== */
 function Chip({ label, value, title }: { label: string; value: string; title?: string }) {
   if (!value) return null;
   return (
@@ -145,64 +199,50 @@ function Chip({ label, value, title }: { label: string; value: string; title?: s
   );
 }
 
-/* ======================== View (JSX) ======================== */
+/* ======================== View ======================== */
 const PageView: React.FC<{
   base: AiSession;
-  groups: Record<string, NormalizedExercise[]>;
+  exercises: NormalizedExercise[];
+  focus: Focus;
   plannedMin: number;
-}> = ({ base, groups, plannedMin }) => {
+}> = ({ base, exercises, focus, plannedMin }) => {
   return (
     <div>
       <style dangerouslySetInnerHTML={{ __html: styles }} />
 
       <div className="mb-2 flex items-center justify-between no-print" style={{ paddingInline: 12 }}>
-        <a href="/dashboard/profile" className="btn btn-ghost" style={{ borderColor:"#e5e7eb", padding: "6px 10px", borderRadius: 8 }}>
-          ← Retour
-        </a>
+        <a href="/dashboard/profile" className="btn-ghost">← Retour</a>
         <div className="text-xs text-gray-400">Programme IA</div>
       </div>
 
       <div className="mx-auto w-full" style={{ maxWidth: 640, paddingInline: 12, paddingBottom: 24 }}>
         <div className="page-header">
           <div>
-            <h1 className="h1-compact">{sessionTitleFromRaw(base.title, { keepName: true })}</h1>
-            {/* pas de date */}
+            <h1 className="h1-compact">{displayTitle(base.title, focus, true)}</h1>
             <p className="lead-compact">{plannedMin} min · {base.type}</p>
           </div>
         </div>
 
-        {["echauffement", "principal", "accessoires", "fin"].map((k) => {
-          const list = groups[k] || [];
-          if (!list.length) return null;
-          return (
-            <section key={k} className="section" style={{ marginTop: 12 }}>
-              <div className="section-head" style={{ marginBottom: 8 }}>
-                <h2 className="section-title">{blockNames[k]}</h2>
-              </div>
-
-              <div className="grid gap-3">
-                {list.map((ex, i) => {
-                  const reps = cleanText(ex.reps ? String(ex.reps) : ex.durationSec ? `${ex.durationSec}s` : "");
-                  const rest = cleanText(ex.rest || "");
-                  return (
-                    <article key={`${k}-${i}`} className="compact-card">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="exoname">{ex.name}</div>
-                        {/* badge de bloc supprimé */}
-                      </div>
-
-                      <div className="chips">
-                        {typeof ex.sets === "number" && <Chip label="🧱" value={`${ex.sets} séries`} title="Séries" />}
-                        {reps && <Chip label="🔁" value={reps} title="Rép./Durée" />}
-                        {rest && <Chip label="⏲️" value={rest} title="Repos" />}
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-            </section>
-          );
-        })}
+        <section className="section" style={{ marginTop: 12 }}>
+          <div className="grid gap-3">
+            {exercises.map((ex, i) => {
+              const reps = cleanText(ex.reps ? String(ex.reps) : ex.durationSec ? `${ex.durationSec}s` : "");
+              const rest = cleanText(ex.rest || "");
+              return (
+                <article key={i} className="compact-card">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="exoname">{ex.name}</div>
+                  </div>
+                  <div className="chips">
+                    {typeof ex.sets === "number" && <Chip label="🧱" value={`${ex.sets} séries`} title="Séries" />}
+                    {reps && <Chip label="🔁" value={reps} title="Rép./Durée" />}
+                    {rest && <Chip label="⏲️" value={rest} title="Repos" />}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </section>
       </div>
     </div>
   );
@@ -221,23 +261,8 @@ export default async function Page({
     redirect("/dashboard/profile?error=Seance%20introuvable");
   }
 
-  const { base, exercises } = await loadData(id, searchParams);
+  const { base, exercises, focus, plannedMin } = await loadData(id, searchParams);
   if (!base) redirect("/dashboard/profile?error=Seance%20introuvable");
 
-  const plannedMin = base.plannedMin ?? 45;
-
-  // tri + groupage par bloc
-  const blockOrder = { echauffement: 0, principal: 1, accessoires: 2, fin: 3 } as const;
-  const exs = exercises.slice().sort((a, b) => {
-    const A = a.block ? (blockOrder as any)[a.block] ?? 99 : 50;
-    const B = b.block ? (blockOrder as any)[b.block] ?? 99 : 50;
-    return A - B;
-  });
-  const groups: Record<string, NormalizedExercise[]> = {};
-  for (const ex of exs) {
-    const k = ex.block || "principal";
-    (groups[k] ||= []).push(ex);
-  }
-
-  return <PageView base={base} groups={groups} plannedMin={plannedMin} />;
+  return <PageView base={base} exercises={exercises} focus={focus} plannedMin={plannedMin} />;
 }
