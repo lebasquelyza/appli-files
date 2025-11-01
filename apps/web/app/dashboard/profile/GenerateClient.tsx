@@ -8,6 +8,8 @@ type Props = {
   email: string;
   questionnaireBase: string;
   initialSessions?: AiSession[];
+  /** Optionnel : ex. "equip=none" pour conserver le mode dans les liens des séances */
+  linkQuery?: string;
 };
 
 type Focus = "upper" | "lower" | "mix" | "full";
@@ -47,7 +49,7 @@ function makeTitle(raw: string | undefined, focus: Focus) {
   return name ? `Séance pour ${name} — ${label}` : label;
 }
 
-export default function GenerateClient({ email, questionnaireBase, initialSessions = [] }: Props) {
+export default function GenerateClient({ email, questionnaireBase, initialSessions = [], linkQuery }: Props) {
   const router = useRouter();
   const [sessions, setSessions] = useState<AiSession[]>(initialSessions);
   const [loading, setLoading] = useState(false);
@@ -150,7 +152,9 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
         <ul className="space-y-2 list-none pl-0">
           {sessions.map((s, i) => {
             const cleanTitle = stripVariantLetter(s.title);
-            const href = `/dashboard/seance/${encodeURIComponent(s.id)}?title=${encodeURIComponent(cleanTitle)}&type=${encodeURIComponent(s.type)}`;
+            const baseHref = `/dashboard/seance/${encodeURIComponent(s.id)}?title=${encodeURIComponent(cleanTitle)}&type=${encodeURIComponent(s.type)}`;
+            const href = linkQuery ? `${baseHref}&${linkQuery}` : baseHref;
+
             return (
               <li
                 key={s.id || `s-${i}`}
@@ -180,4 +184,5 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
     </section>
   );
 }
+
 
