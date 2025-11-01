@@ -101,7 +101,7 @@ function focusLabel(focus: Focus): string {
                               "Mix";
 }
 
-/** Tag zone grossier */
+/** Tags zones */
 function isLower(ex: NormalizedExercise): boolean {
   const t = `${ex.name || ""} ${ex.target || ""} ${ex.notes || ""}`.toLowerCase();
   return /(squat|fente|deadlift|soulev[ée] de terre|hip|glute|fess|ischio|quad|quads|quadriceps|hamstring|mollet|calf|leg(?!\s*raise))/i.test(t);
@@ -114,15 +114,6 @@ function isCoreOrNeutral(ex: NormalizedExercise): boolean {
   const t = `${ex.name || ""} ${ex.target || ""} ${ex.notes || ""}`.toLowerCase();
   return /(gainage|planche|plank|abdo|core|hollow|dead bug|oiseau|bird dog|good morning|pont|bridge|mobilit[eé]|respiration)/i.test(t);
 }
-
-/* ===== Détection “nécessite matériel” (pour equip=none) ===== */
-function requiresEquipment(ex: NormalizedExercise): boolean {
-  const t = `${ex.name || ""} ${ex.notes || ""}`.toLowerCase();
-  // Liste non exhaustive, mais couvre 99% des cas courants
-  return /(halt[eè]re|dumbbell|barre|barbell|kettlebell|kettle|machine|poulie|c(â|a)ble|smith|presse|leg press|bench\b|banc|[ée]lastique|band|trx|sangle|med(?:ecine)? ball|ballon|bosu|roue abdo|wheel|rameur|rower|v[ée]lo|assault bike|tapis|stepper|erg)/i.test(t);
-}
-
-/* ===== Filtre Focus + Matériel ===== */
 function filterExercisesByFocus(exs: NormalizedExercise[], focus: Focus): NormalizedExercise[] {
   if (focus === "mix" || focus === "full") return exs.slice();
   const out: NormalizedExercise[] = [];
@@ -132,6 +123,12 @@ function filterExercisesByFocus(exs: NormalizedExercise[], focus: Focus): Normal
     if (focus === "lower" && isLower(ex)) out.push(ex);
   }
   return out.length >= Math.min(3, exs.length) ? out : exs;
+}
+
+/* ===== Détection “nécessite matériel” (strict) ===== */
+function requiresEquipment(ex: NormalizedExercise): boolean {
+  const t = `${ex.name || ""} ${ex.notes || ""}`.toLowerCase();
+  return /halt[eè]re|dumbbell|barre|barbell|kettlebell|kettle|machine|poulie|c(?:â|a)ble|smith|presse|leg\s*press|bench\b|banc|box jump|box\b|step(?:per)?|[ée]lastique|band|trx|sangle|anneaux|rings?|med(?:ecine)?\s*ball|ballon|bosu|ab\s*wheel|roue\s*abdo|rameur|rower|erg|assault\s*bike|v[ée]lo|tapis|pull-?up|tractions?|dips?|barre\s*fixe|chaise|table/i.test(t);
 }
 
 /* ===== Helpers backfill (≥ 4 exercices) ===== */
@@ -144,7 +141,6 @@ function uniqByName(list: NormalizedExercise[]): NormalizedExercise[] {
     return true;
   });
 }
-
 function scoreExerciseForBackfill(ex: NormalizedExercise): number {
   const name = (ex.name || "").toLowerCase();
   let score = 0;
@@ -153,7 +149,6 @@ function scoreExerciseForBackfill(ex: NormalizedExercise): number {
   if (ex.sets && ex.reps) score += 1;
   return score;
 }
-
 function ensureAtLeast4Exercises(
   filtered: NormalizedExercise[],
   type: WorkoutType,
@@ -173,6 +168,7 @@ function ensureAtLeast4Exercises(
 
   for (const ex of remainingFromOriginal) {
     if (combined.length >= 4) break;
+    if (equip === "none" && requiresEquipment(ex)) continue;
     combined.push(ex);
   }
 
@@ -180,6 +176,7 @@ function ensureAtLeast4Exercises(
     const fallbacks = genericFallback(type, equip);
     for (const ex of fallbacks) {
       if (combined.length >= 4) break;
+      if (equip === "none" && requiresEquipment(ex)) continue;
       if (focus === "upper" && !(isUpper(ex) || isCoreOrNeutral(ex))) continue;
       if (focus === "lower" && !(isLower(ex) || isCoreOrNeutral(ex))) continue;
       combined.push(ex);
@@ -187,6 +184,7 @@ function ensureAtLeast4Exercises(
     if (combined.length < 4) {
       for (const ex of fallbacks) {
         if (combined.length >= 4) break;
+        if (equip === "none" && requiresEquipment(ex)) continue;
         combined.push(ex);
       }
     }
@@ -195,7 +193,7 @@ function ensureAtLeast4Exercises(
   return uniqByName(combined).slice(0, Math.max(4, filtered.length));
 }
 
-/* ====================== Chargement (IA + filtre focus + filtre matériel) ====================== */
+/* ====================== Chargement (IA + focus + matériel) ====================== */
 async function loadData(
   id: string,
   searchParams?: Record<string, string | string[] | undefined>
@@ -205,8 +203,9 @@ async function loadData(
   focus: Focus;
   plannedMin: number;
 }> {
-  // Par défaut, on force "full" (avec matériel) si aucun paramètre n'est fourni
-  const equipParam = (String(searchParams?.equip || "full").toLowerCase() === "none") ? "none" : "full";
+  // Par défaut = avec matériel
+  const equipParam: "full" | "none" =
+    String(searchParams?.equip || "full").toLowerCase() === "none" ? "none" : "full";
   const qpTitle = typeof searchParams?.title === "string" ? searchParams!.title : "";
 
   // 1) Lire réponses du Sheet
@@ -224,14 +223,13 @@ async function loadData(
   let exercises: NormalizedExercise[] = [];
 
   if (answers) {
-    // Respect strict de l'équipement demandé
     if (equipParam === "none") (answers as any).equipLevel = "none";
     if (equipParam === "full") (answers as any).equipLevel = "full";
 
-    const regenProg = generateProgrammeFromAnswers(answers); // IA
+    const regenProg = generateProgrammeFromAnswers(answers);
     const regen = regenProg.sessions || [];
 
-    // Match par title d'abord (on passe le title depuis la liste), sinon par id
+    // Match par title d'abord, sinon par id
     base = (qpTitle && regen.find((s) => stripVariantLetter(s.title) === stripVariantLetter(qpTitle))) || undefined;
     if (!base) base = regen.find((s) => s.id === id);
     if (!base) base = regen[0];
@@ -247,21 +245,20 @@ async function loadData(
     exercises = genericFallback((base?.type ?? "muscu") as WorkoutType, equipParam);
   }
 
-  // 4) Déduire le focus
+  // 4) Déduire le focus puis filtrer
   const focus =
     inferFocusFromTitle(qpTitle || base.title) ||
     inferFocusFromProfile(profile) ||
     "mix";
 
-  // 5) Filtrer par focus
   let filtered = filterExercisesByFocus(exercises, focus);
 
-  // 6) Si equip=none → supprimer tout ce qui demande du matériel
+  // 5) Si equip=none → strict bodyweight
   if (equipParam === "none") {
     filtered = filtered.filter((ex) => !requiresEquipment(ex));
   }
 
-  // 7) Filet ≥ 4 exos, avec fallback adapté à l’équipement
+  // 6) Filet ≥ 4
   const ensured = ensureAtLeast4Exercises(
     filtered,
     (base?.type ?? "muscu") as WorkoutType,
@@ -271,8 +268,6 @@ async function loadData(
   );
 
   const plannedMin = base.plannedMin ?? 45;
-
-  // titre sans lettres
   const finalBase = { ...base, title: stripVariantLetter(qpTitle || base.title) };
 
   return { base: finalBase, exercises: ensured, focus, plannedMin };
@@ -297,7 +292,8 @@ const PageView: React.FC<{
   exercises: NormalizedExercise[];
   focus: Focus;
   plannedMin: number;
-}> = ({ base, exercises, focus, plannedMin }) => {
+  backHref: string;
+}> = ({ base, exercises, focus, plannedMin, backHref }) => {
   return (
     <div>
       <style
@@ -314,7 +310,7 @@ const PageView: React.FC<{
       />
 
       <div className="mb-2 flex items-center justify-between no-print" style={{ paddingInline: 12 }}>
-        <a href="/dashboard/profile" className="btn-ghost">← Retour</a>
+        <a href={backHref} className="btn-ghost">← Retour</a>
         <div className="text-xs text-gray-400">Programme IA</div>
       </div>
 
@@ -367,5 +363,8 @@ export default async function Page({
   const { base, exercises, focus, plannedMin } = await loadData(id, searchParams);
   if (!base) redirect("/dashboard/profile?error=Seance%20introuvable");
 
-  return <PageView base={base} exercises={exercises} focus={focus} plannedMin={plannedMin} />;
+  const equip = String(searchParams?.equip || "").toLowerCase() === "none" ? "none" : "full";
+  const backHref = equip === "none" ? "/dashboard/profile?equip=none" : "/dashboard/profile";
+
+  return <PageView base={base} exercises={exercises} focus={focus} plannedMin={plannedMin} backHref={backHref} />;
 }
