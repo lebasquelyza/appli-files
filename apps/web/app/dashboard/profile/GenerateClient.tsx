@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import type { AiSession } from "../../lib/coach/ai"; // ⬅️ CORRIGÉ: ../../lib/coach/ai
+import type { AiSession } from "../../../lib/coach/ai"; // ⬅️ CORRIGÉ: ../../lib/coach/ai
 
 type Props = {
   email: string;
