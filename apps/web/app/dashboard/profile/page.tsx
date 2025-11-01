@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import {
   getAnswersForEmail,
   buildProfileFromAnswers,
-  generateProgrammeFromAnswers, // pour générer la variante avec/ sans matériel en conservant la logique
+  generateProgrammeFromAnswers, // utilisé pour forcer l'équipement en conservant la logique
   type AiSession as AiSessionT,
   type Profile as ProfileT,
 } from "../../../lib/coach/ai";
@@ -83,9 +83,9 @@ async function loadProfile(searchParams?: Record<string, string | string[] | und
 }
 
 /* Loader — Programme IA côté serveur (SSR)
-   - défaut: flux existant (avec matériel)
+   - défaut: logique existante (avec matériel)
    - si equip=none: on force answers.equipLevel="none" puis on génère via generateProgrammeFromAnswers
-   - si equip=full: on force "full" pour être explicite
+   - si equip=full: on force "full" explicitement
 */
 async function loadInitialSessions(email: string, equipParam?: string) {
   if (!email) return [];
@@ -101,7 +101,7 @@ async function loadInitialSessions(email: string, equipParam?: string) {
       return prog.sessions || [];
     }
 
-    // Chemin par défaut (avec matériel) — logique existante
+    // Chemin par défaut (avec matériel)
     const { sessions } = await planProgrammeFromEmail(email);
     return sessions || [];
   } catch {
@@ -116,11 +116,11 @@ export default async function Page({
 }) {
   const { emailForDisplay, profile, debugInfo, forceBlank } = await loadProfile(searchParams);
 
-  // Equipement demandé pour la liste : '' (défaut = matériel), 'none' ou 'full'
-  const equipParam = String(searchParams?.equip || "").toLowerCase(); // '', 'none', 'full'
+  // Mode liste: '' (défaut = matériel), 'none' ou 'full'
+  const equipParam = String(searchParams?.equip || "").toLowerCase();
   const equipMode: "full" | "none" = equipParam === "none" ? "none" : "full";
 
-  // Liste calculée selon l'équipement voulu (même logique que matériel)
+  // Liste calculée selon l'équipement (même logique)
   const initialSessions = await loadInitialSessions(emailForDisplay, equipMode);
 
   const showPlaceholders = !forceBlank;
@@ -295,7 +295,7 @@ export default async function Page({
             </a>
             <a
               href={hrefNone}
-              className={
+              className{
                 equipMode === "none"
                   ? "inline-flex items-center rounded-md border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-sm font-semibold text-white"
                   : "inline-flex items-center rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-semibold text-neutral-900"
@@ -312,8 +312,6 @@ export default async function Page({
           email={emailForDisplay}
           questionnaireBase={QUESTIONNAIRE_BASE}
           initialSessions={initialSessions}
-          // optionnel : pour que GenerateClient puisse appendre `equip` aux liens des séances
-          equipMode={equipMode as any}
         />
       </section>
     </div>
