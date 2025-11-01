@@ -17,6 +17,15 @@ async function getSignedInEmail(): Promise<string> {
   return cookies().get("app_email")?.value || "";
 }
 
+/* Supprime lettres variantes “— A”, “- B”, “· C”, “(D)” */
+function stripVariantLetter(s?: string) {
+  return String(s || "")
+    .replace(/\s*[—–-]\s*[A-Z]\b/gi, "")
+    .replace(/\s*·\s*[A-Z]\b/gi, "")
+    .replace(/\s*\(([A-Z])\)\s*$/gi, "")
+    .trim();
+}
+
 /* ====== Fallback exercices si jamais rien ne remonte ====== */
 function genericFallback(type: WorkoutType): NormalizedExercise[] {
   if (type === "cardio")
@@ -78,7 +87,7 @@ function focusLabel(focus: Focus): string {
                               "Mix";
 }
 
-/** tag simple par zones */
+/** Tag zone grossier */
 function isLower(ex: NormalizedExercise): boolean {
   const t = `${ex.name || ""} ${ex.target || ""} ${ex.notes || ""}`.toLowerCase();
   return /(squat|fente|deadlift|soulev[ée] de terre|hip|glute|fess|ischio|quad|quads|quadriceps|hamstring|mollet|calf|leg(?!\s*raise))/i.test(t);
@@ -136,13 +145,9 @@ async function loadData(
     const regenProg = generateProgrammeFromAnswers(answers); // IA
     const regen = regenProg.sessions || [];
 
-    // ⬅️ ESSAI 1: match par title (on passe le title depuis la liste)
-    base = (qpTitle && regen.find((s) => s.title === qpTitle)) || undefined;
-
-    // ⬅️ ESSAI 2: fallback par id
+    // Match par title d'abord (on passe le title depuis la liste), sinon par id
+    base = (qpTitle && regen.find((s) => stripVariantLetter(s.title) === stripVariantLetter(qpTitle))) || undefined;
     if (!base) base = regen.find((s) => s.id === id);
-
-    // ⬅️ Dernier filet: 1ère séance
     if (!base) base = regen[0];
 
     if (base?.exercises?.length) exercises = base.exercises!;
@@ -165,8 +170,8 @@ async function loadData(
   const filtered = filterExercisesByFocus(exercises, focus);
   const plannedMin = base.plannedMin ?? 45;
 
-  // on renvoie base avec le titre (qpTitle prioritaire pour cohérence UI)
-  const finalBase = { ...base, title: qpTitle || base.title };
+  // titre sans lettres
+  const finalBase = { ...base, title: stripVariantLetter(qpTitle || base.title) };
 
   return { base: finalBase, exercises: filtered, focus, plannedMin };
 }
@@ -214,7 +219,7 @@ const PageView: React.FC<{
       <div className="mx-auto w-full" style={{ maxWidth: 640, paddingInline: 12, paddingBottom: 24 }}>
         <div className="page-header">
           <div>
-            <h1 className="h1-compact">{base.title || focusLabel(focus)}</h1>
+            <h1 className="h1-compact">{stripVariantLetter(base.title) || focusLabel(focus)}</h1>
             <p className="lead-compact">{plannedMin} min · {base.type}</p>
           </div>
         </div>
@@ -262,4 +267,3 @@ export default async function Page({
 
   return <PageView base={base} exercises={exercises} focus={focus} plannedMin={plannedMin} />;
 }
-
