@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import {
   getAnswersForEmail,
   buildProfileFromAnswers,
-  generateProgrammeFromAnswers, // ⬅️ ajouté pour générer la variante sans matériel
+  generateProgrammeFromAnswers, // pour générer la variante avec/ sans matériel en conservant la logique
   type AiSession as AiSessionT,
   type Profile as ProfileT,
 } from "../../../lib/coach/ai";
@@ -85,6 +85,7 @@ async function loadProfile(searchParams?: Record<string, string | string[] | und
 /* Loader — Programme IA côté serveur (SSR)
    - défaut: flux existant (avec matériel)
    - si equip=none: on force answers.equipLevel="none" puis on génère via generateProgrammeFromAnswers
+   - si equip=full: on force "full" pour être explicite
 */
 async function loadInitialSessions(email: string, equipParam?: string) {
   if (!email) return [];
@@ -92,7 +93,6 @@ async function loadInitialSessions(email: string, equipParam?: string) {
 
   try {
     if (equip === "none" || equip === "full") {
-      // Génération avec la même logique que d’habitude, en forçant le niveau d’équipement
       const answers = await getAnswersForEmail(email, { fresh: true });
       if (!answers) return [];
       if (equip === "none") (answers as any).equipLevel = "none";
@@ -101,7 +101,7 @@ async function loadInitialSessions(email: string, equipParam?: string) {
       return prog.sessions || [];
     }
 
-    // Chemin par défaut (avec matériel comme actuellement)
+    // Chemin par défaut (avec matériel) — logique existante
     const { sessions } = await planProgrammeFromEmail(email);
     return sessions || [];
   } catch {
@@ -116,9 +116,12 @@ export default async function Page({
 }) {
   const { emailForDisplay, profile, debugInfo, forceBlank } = await loadProfile(searchParams);
 
-  // ⬇️ on regarde si l’utilisateur demande la liste "sans matériel"
+  // Equipement demandé pour la liste : '' (défaut = matériel), 'none' ou 'full'
   const equipParam = String(searchParams?.equip || "").toLowerCase(); // '', 'none', 'full'
-  const initialSessions = await loadInitialSessions(emailForDisplay, equipParam);
+  const equipMode: "full" | "none" = equipParam === "none" ? "none" : "full";
+
+  // Liste calculée selon l'équipement voulu (même logique que matériel)
+  const initialSessions = await loadInitialSessions(emailForDisplay, equipMode);
 
   const showPlaceholders = !forceBlank;
 
@@ -153,8 +156,11 @@ export default async function Page({
   const displayedSuccess = searchParams?.success || "";
   const showDebug = String(searchParams?.debug || "") === "1";
 
-  // Bouton "Sans matériel" -> liste, pas une séance
-  const hrefNone = `/dashboard/profile?equip=none`;
+  // Liens de bascule liste matériel / sans matériel
+  const hrefFull = `/dashboard/profile`; // par défaut (avec matériel)
+  const hrefNone = `/dashboard/profile?equip=none`; // liste sans matériel
+
+  const titleList = equipMode === "none" ? "Mes séances (sans matériel)" : "Mes séances";
 
   return (
     <div className="container" style={{ paddingTop: 24, paddingBottom: 32, fontSize: "var(--settings-fs, 12px)" }}>
@@ -260,7 +266,7 @@ export default async function Page({
         </div>
       </section>
 
-      {/* ===== Mon programme (header + bouton sur la même ligne) ===== */}
+      {/* ===== Mes séances + bascule matériel/sans matériel ===== */}
       <section className="section" style={{ marginTop: 16 }}>
         <div
           className="section-head"
@@ -273,30 +279,41 @@ export default async function Page({
             flexWrap: "wrap",
           }}
         >
-          <h2 style={{ margin: 0 }}>Mon programme</h2>
+          <h2 style={{ margin: 0 }}>{titleList}</h2>
 
-          <div
-            className="inline-flex items-center"
-            style={{ display: "inline-flex", alignItems: "center", gap: 10 }}
-          >
-            <div className="text-sm" style={{ color: "#374151", whiteSpace: "nowrap" }}>
-              Par défaut, les séances <b>avec matériel</b> sont affichées, sinon
-            </div>
+          <div className="inline-flex items-center" style={{ display: "inline-flex", gap: 8 }}>
+            <a
+              href={hrefFull}
+              className={
+                equipMode === "full"
+                  ? "inline-flex items-center rounded-md border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-sm font-semibold text-white"
+                  : "inline-flex items-center rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-semibold text-neutral-900"
+              }
+              title="Voir la liste avec matériel"
+            >
+              Matériel
+            </a>
             <a
               href={hrefNone}
-              className="inline-flex items-center rounded-md border border-neutral-800 bg-neutral-900 px-3 py-1.5 text-sm font-semibold text-white"
-              title="Voir la liste en version sans matériel"
+              className={
+                equipMode === "none"
+                  ? "inline-flex items-center rounded-md border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-sm font-semibold text-white"
+                  : "inline-flex items-center rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-semibold text-neutral-900"
+              }
+              title="Voir la liste sans matériel"
             >
               Sans matériel
             </a>
           </div>
         </div>
 
-        {/* Le composant existant affiche le programme (inchangé) */}
+        {/* Le composant existant affiche la liste (inchangé) */}
         <GenerateClient
           email={emailForDisplay}
           questionnaireBase={QUESTIONNAIRE_BASE}
           initialSessions={initialSessions}
+          // optionnel : pour que GenerateClient puisse appendre `equip` aux liens des séances
+          equipMode={equipMode as any}
         />
       </section>
     </div>
