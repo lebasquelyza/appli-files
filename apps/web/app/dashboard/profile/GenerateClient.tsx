@@ -184,5 +184,3 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
     </section>
   );
 }
-
-
