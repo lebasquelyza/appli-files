@@ -268,9 +268,8 @@ export default async function Page({
               style={{ display: "inline-flex", alignItems: "center", gap: 10 }}
             >
               <div className="text-sm" style={{ color: "#374151", whiteSpace: "nowrap" }}>
-                Par défaut, tes séances avec <b>ton matériel</b> sont affichées — sinon
+                Par défaut, les séances <b>avec matériel</b> sont affichées, sinon
               </div>
-              <div aria-hidden style={{ fontSize: 18, lineHeight: 1, color: "#9CA3AF" }}>➜</div>
               <a
                 href={hrefNone}
                 className="inline-flex items-center rounded-md border border-neutral-800 bg-neutral-900 px-3 py-1.5 text-sm font-semibold text-white"
@@ -292,3 +291,4 @@ export default async function Page({
     </div>
   );
 }
+
