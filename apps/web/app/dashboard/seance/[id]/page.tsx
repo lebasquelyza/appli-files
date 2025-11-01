@@ -33,6 +33,7 @@ function genericFallback(type: WorkoutType): NormalizedExercise[] {
       { name: "Échauffement Z1", reps: "8–10 min", block: "echauffement" },
       { name: "Cardio continu Z2", reps: "25–35 min", block: "principal" },
       { name: "Retour au calme + mobilité", reps: "5–8 min", block: "fin" },
+      { name: "Marche progressive Z1→Z2", reps: "10–15 min", block: "fin" },
     ];
   if (type === "mobilité")
     return [
@@ -111,6 +112,77 @@ function filterExercisesByFocus(exs: NormalizedExercise[], focus: Focus): Normal
   return out.length >= Math.min(3, exs.length) ? out : exs;
 }
 
+/* ===== Helpers backfill (≥ 4 exercices) ===== */
+function uniqByName(list: NormalizedExercise[]): NormalizedExercise[] {
+  const seen = new Set<string>();
+  return list.filter((ex) => {
+    const k = (ex.name || "").trim().toLowerCase();
+    if (!k || seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
+/** Priorise des exos "coach" pour le backfill : bloc principal, polyarticulaires, puis le reste */
+function scoreExerciseForBackfill(ex: NormalizedExercise): number {
+  const name = (ex.name || "").toLowerCase();
+  let score = 0;
+  if ((ex.block || "").toLowerCase() === "principal") score += 3;
+  // polyarticulaires fréquents
+  if (/(squat|fente|deadlift|soulev[ée] de terre|row|tirage|pull(?:-?up)?|traction|d[ée]velopp[ée]|press|hip|glute)/i.test(name)) score += 2;
+  // temps/rep clair
+  if (ex.sets && ex.reps) score += 1;
+  return score;
+}
+
+/**
+ * Complète la liste filtrée pour garantir >= 4 exercices,
+ * sans casser l’ordre initial : on garde d’abord `filtered`,
+ * puis on pioche dans `original` (non inclus), puis dans le fallback générique.
+ */
+function ensureAtLeast4Exercises(
+  filtered: NormalizedExercise[],
+  type: WorkoutType,
+  focus: Focus,
+  original: NormalizedExercise[]
+): NormalizedExercise[] {
+  const need = Math.max(0, 4 - filtered.length);
+  if (need === 0) return uniqByName(filtered);
+
+  // Candidats restants depuis la séance d’origine (non présents dans filtered)
+  const filteredKeys = new Set(filtered.map((e) => (e.name || "").trim().toLowerCase()));
+  const remainingFromOriginal = original
+    .filter((e) => !filteredKeys.has((e.name || "").trim().toLowerCase()))
+    .sort((a, b) => scoreExerciseForBackfill(b) - scoreExerciseForBackfill(a));
+
+  const combined: NormalizedExercise[] = [...filtered];
+
+  for (const ex of remainingFromOriginal) {
+    if (combined.length >= 4) break;
+    combined.push(ex);
+  }
+
+  if (combined.length < 4) {
+    const fallbacks = genericFallback(type);
+    // D'abord: fallbacks compatibles focus (upper/lower conservent core/neutral)
+    for (const ex of fallbacks) {
+      if (combined.length >= 4) break;
+      if (focus === "upper" && !(isUpper(ex) || isCoreOrNeutral(ex))) continue;
+      if (focus === "lower" && !(isLower(ex) || isCoreOrNeutral(ex))) continue;
+      combined.push(ex);
+    }
+    // Si toujours pas assez, on autorise n'importe quel fallback restant (pour assurer le ≥4)
+    if (combined.length < 4) {
+      for (const ex of fallbacks) {
+        if (combined.length >= 4) break;
+        combined.push(ex);
+      }
+    }
+  }
+
+  return uniqByName(combined).slice(0, Math.max(4, filtered.length));
+}
+
 /* ====================== Chargement (IA + filtre focus) ====================== */
 async function loadData(
   id: string,
@@ -168,12 +240,13 @@ async function loadData(
     "mix";
 
   const filtered = filterExercisesByFocus(exercises, focus);
+  const ensured = ensureAtLeast4Exercises(filtered, (base?.type ?? "muscu") as WorkoutType, focus, exercises);
   const plannedMin = base.plannedMin ?? 45;
 
   // titre sans lettres
   const finalBase = { ...base, title: stripVariantLetter(qpTitle || base.title) };
 
-  return { base: finalBase, exercises: filtered, focus, plannedMin };
+  return { base: finalBase, exercises: ensured, focus, plannedMin };
 }
 
 /* ======================== UI helpers ======================== */
@@ -267,3 +340,4 @@ export default async function Page({
 
   return <PageView base={base} exercises={exercises} focus={focus} plannedMin={plannedMin} />;
 }
+
