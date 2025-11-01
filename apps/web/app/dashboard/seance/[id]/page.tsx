@@ -122,24 +122,14 @@ function uniqByName(list: NormalizedExercise[]): NormalizedExercise[] {
     return true;
   });
 }
-
-/** Priorise des exos "coach" pour le backfill : bloc principal, polyarticulaires, puis le reste */
 function scoreExerciseForBackfill(ex: NormalizedExercise): number {
   const name = (ex.name || "").toLowerCase();
   let score = 0;
   if ((ex.block || "").toLowerCase() === "principal") score += 3;
-  // polyarticulaires fréquents
   if (/(squat|fente|deadlift|soulev[ée] de terre|row|tirage|pull(?:-?up)?|traction|d[ée]velopp[ée]|press|hip|glute)/i.test(name)) score += 2;
-  // temps/rep clair
   if (ex.sets && ex.reps) score += 1;
   return score;
 }
-
-/**
- * Complète la liste filtrée pour garantir >= 4 exercices,
- * sans casser l’ordre initial : on garde d’abord `filtered`,
- * puis on pioche dans `original` (non inclus), puis dans le fallback générique.
- */
 function ensureAtLeast4Exercises(
   filtered: NormalizedExercise[],
   type: WorkoutType,
@@ -149,7 +139,6 @@ function ensureAtLeast4Exercises(
   const need = Math.max(0, 4 - filtered.length);
   if (need === 0) return uniqByName(filtered);
 
-  // Candidats restants depuis la séance d’origine (non présents dans filtered)
   const filteredKeys = new Set(filtered.map((e) => (e.name || "").trim().toLowerCase()));
   const remainingFromOriginal = original
     .filter((e) => !filteredKeys.has((e.name || "").trim().toLowerCase()))
@@ -164,14 +153,12 @@ function ensureAtLeast4Exercises(
 
   if (combined.length < 4) {
     const fallbacks = genericFallback(type);
-    // D'abord: fallbacks compatibles focus (upper/lower conservent core/neutral)
     for (const ex of fallbacks) {
       if (combined.length >= 4) break;
       if (focus === "upper" && !(isUpper(ex) || isCoreOrNeutral(ex))) continue;
       if (focus === "lower" && !(isLower(ex) || isCoreOrNeutral(ex))) continue;
       combined.push(ex);
     }
-    // Si toujours pas assez, on autorise n'importe quel fallback restant (pour assurer le ≥4)
     if (combined.length < 4) {
       for (const ex of fallbacks) {
         if (combined.length >= 4) break;
@@ -268,7 +255,8 @@ const PageView: React.FC<{
   exercises: NormalizedExercise[];
   focus: Focus;
   plannedMin: number;
-}> = ({ base, exercises, focus, plannedMin }) => {
+  hrefNone: string; // lien vers la version "sans matériel"
+}> = ({ base, exercises, focus, plannedMin, hrefNone }) => {
   return (
     <div>
       <style
@@ -280,6 +268,7 @@ const PageView: React.FC<{
   .exoname { font-size: 15.5px; line-height:1.25; font-weight:700; }
   .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
   .btn-ghost { background:#fff; color:#111827; border:1px solid #e5e7eb; border-radius:8px; padding:6px 10px; font-weight:600; }
+  .btn-primary { background:#111827; color:#fff; border:1px solid #111827; border-radius:10px; padding:8px 12px; font-weight:700; }
           `,
         }}
       />
@@ -290,11 +279,16 @@ const PageView: React.FC<{
       </div>
 
       <div className="mx-auto w-full" style={{ maxWidth: 640, paddingInline: 12, paddingBottom: 24 }}>
-        <div className="page-header">
+        <div className="page-header flex items-center justify-between">
           <div>
             <h1 className="h1-compact">{stripVariantLetter(base.title) || focusLabel(focus)}</h1>
             <p className="lead-compact">{plannedMin} min · {base.type}</p>
           </div>
+
+          {/* Bouton unique "Sans matériel" */}
+          <a className="btn-primary no-print" href={hrefNone} title="Voir la même séance sans matériel">
+            Sans matériel
+          </a>
         </div>
 
         <section className="section" style={{ marginTop: 12 }}>
@@ -338,6 +332,23 @@ export default async function Page({
   const { base, exercises, focus, plannedMin } = await loadData(id, searchParams);
   if (!base) redirect("/dashboard/profile?error=Seance%20introuvable");
 
-  return <PageView base={base} exercises={exercises} focus={focus} plannedMin={plannedMin} />;
-}
+  // Construire le lien "Sans matériel" en conservant les paramètres utiles (title/type) si présents
+  const titleQP = typeof searchParams?.title === "string" ? searchParams!.title : "";
+  const typeQP = typeof searchParams?.type === "string" ? searchParams!.type : "";
+  const basePath = `/dashboard/seance/${encodeURIComponent(id)}`;
+  const qsCore = [
+    `title=${encodeURIComponent(stripVariantLetter(titleQP || base.title || ""))}`,
+    typeQP ? `type=${encodeURIComponent(typeQP)}` : "",
+  ].filter(Boolean).join("&");
+  const hrefNone = `${basePath}?${qsCore}&equip=none`;
 
+  return (
+    <PageView
+      base={base}
+      exercises={exercises}
+      focus={focus}
+      plannedMin={plannedMin}
+      hrefNone={hrefNone}
+    />
+  );
+}
