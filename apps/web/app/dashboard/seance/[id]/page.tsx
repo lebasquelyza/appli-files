@@ -1,4 +1,3 @@
-// apps/web/app/dashboard/seance/[id]/page.tsx
 import React from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -26,22 +25,36 @@ function stripVariantLetter(s?: string) {
     .trim();
 }
 
-/* ====== Fallback exercices si jamais rien ne remonte ====== */
-function genericFallback(type: WorkoutType): NormalizedExercise[] {
-  if (type === "cardio")
+/* ====== Fallback exercices (respecte l'équipement) ====== */
+function genericFallback(type: WorkoutType, equip: "full" | "none" = "full"): NormalizedExercise[] {
+  if (type === "cardio") {
     return [
       { name: "Échauffement Z1", reps: "8–10 min", block: "echauffement" },
       { name: "Cardio continu Z2", reps: "25–35 min", block: "principal" },
       { name: "Retour au calme + mobilité", reps: "5–8 min", block: "fin" },
       { name: "Marche progressive Z1→Z2", reps: "10–15 min", block: "fin" },
     ];
-  if (type === "mobilité")
+  }
+  if (type === "mobilité") {
     return [
       { name: "Respiration diaphragmatique", reps: "2–3 min", block: "echauffement" },
       { name: "90/90 hanches", reps: "8–10/ côté", block: "principal" },
       { name: "T-spine rotations", reps: "8–10/ côté", block: "principal" },
       { name: "Down-Dog → Cobra", reps: "6–8", block: "fin" },
     ];
+  }
+
+  if (equip === "none") {
+    // Muscu, SANS matériel (bodyweight only)
+    return [
+      { name: "Squat au poids du corps", sets: 3, reps: "12–15", rest: "60–75s", block: "principal" },
+      { name: "Pompes", sets: 3, reps: "8–15", rest: "60–75s", block: "principal" },
+      { name: "Fentes alternées", sets: 3, reps: "10–12/ côté", rest: "60–75s", block: "principal" },
+      { name: "Planche", sets: 2, reps: "30–45s", rest: "45s", block: "fin" },
+    ];
+  }
+
+  // Muscu, AVEC matériel (par défaut)
   return [
     { name: "Goblet Squat", sets: 3, reps: "8–12", rest: "75s", block: "principal" },
     { name: "Développé haltères", sets: 3, reps: "8–12", rest: "75s", block: "principal" },
@@ -136,13 +149,14 @@ function scoreExerciseForBackfill(ex: NormalizedExercise): number {
 /**
  * Complète la liste filtrée pour garantir >= 4 exercices,
  * sans casser l’ordre initial : on garde d’abord `filtered`,
- * puis on pioche dans `original` (non inclus), puis le fallback générique.
+ * puis on pioche dans `original` (non inclus), puis des fallbacks adaptés à l’équipement.
  */
 function ensureAtLeast4Exercises(
   filtered: NormalizedExercise[],
   type: WorkoutType,
   focus: Focus,
-  original: NormalizedExercise[]
+  original: NormalizedExercise[],
+  equip: "full" | "none"
 ): NormalizedExercise[] {
   const need = Math.max(0, 4 - filtered.length);
   if (need === 0) return uniqByName(filtered);
@@ -160,13 +174,14 @@ function ensureAtLeast4Exercises(
   }
 
   if (combined.length < 4) {
-    const fallbacks = genericFallback(type);
+    const fallbacks = genericFallback(type, equip);
     for (const ex of fallbacks) {
       if (combined.length >= 4) break;
       if (focus === "upper" && !(isUpper(ex) || isCoreOrNeutral(ex))) continue;
       if (focus === "lower" && !(isLower(ex) || isCoreOrNeutral(ex))) continue;
       combined.push(ex);
     }
+    // Au cas où (très rare), on autorise le reste du fallback pour assurer ≥4
     if (combined.length < 4) {
       for (const ex of fallbacks) {
         if (combined.length >= 4) break;
@@ -188,7 +203,8 @@ async function loadData(
   focus: Focus;
   plannedMin: number;
 }> {
-  const equipParam = String(searchParams?.equip || "").toLowerCase();
+  // Par défaut, on force "full" (avec matériel) si aucun paramètre n'est fourni
+  const equipParam = (String(searchParams?.equip || "full").toLowerCase() === "none") ? "none" : "full";
   const qpTitle = typeof searchParams?.title === "string" ? searchParams!.title : "";
 
   // 1) Lire réponses du Sheet
@@ -206,6 +222,7 @@ async function loadData(
   let exercises: NormalizedExercise[] = [];
 
   if (answers) {
+    // Respect strict de l'équipement demandé
     if (equipParam === "none") (answers as any).equipLevel = "none";
     if (equipParam === "full") (answers as any).equipLevel = "full";
 
@@ -225,7 +242,7 @@ async function loadData(
     base = { id, title: "Séance personnalisée", date: "", type: "muscu", plannedMin: 45 } as AiSession;
   }
   if (!exercises.length) {
-    exercises = genericFallback((base?.type ?? "muscu") as WorkoutType);
+    exercises = genericFallback((base?.type ?? "muscu") as WorkoutType, equipParam);
   }
 
   // 4) Déduire le focus, puis filtrer
@@ -235,7 +252,13 @@ async function loadData(
     "mix";
 
   const filtered = filterExercisesByFocus(exercises, focus);
-  const ensured = ensureAtLeast4Exercises(filtered, (base?.type ?? "muscu") as WorkoutType, focus, exercises);
+  const ensured = ensureAtLeast4Exercises(
+    filtered,
+    (base?.type ?? "muscu") as WorkoutType,
+    focus,
+    exercises,
+    equipParam
+  );
   const plannedMin = base.plannedMin ?? 45;
 
   // titre sans lettres
