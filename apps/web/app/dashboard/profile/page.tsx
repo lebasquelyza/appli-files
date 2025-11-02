@@ -462,25 +462,20 @@ export default async function Page({
         )}
       </section>
 
-      {/* ===== Bloc bas de page : Enregistrées ✅ / À faire plus tard ⏳ ===== */}
+      {/* ===== Bloc bas de page : Séance faite ✅ / À faire plus tard ⏳ ===== */}
       <section className="section" style={{ marginTop: 20 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
           <h2 style={{ margin: 0 }}>Mes listes</h2>
         </div>
 
+        {/* deux colonnes sur la même ligne */}
         <div className="grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          {/* Séances enregistrées */}
+          {/* Séance faite ✅ */}
           <div className="card">
             <div className="text-sm" style={{ fontWeight: 600, marginBottom: 6 }}>
-              Séances enregistrées <span aria-hidden>✅</span>
+              Séance faite <span aria-hidden>✅</span>
             </div>
-            {savedList.length === 0 ? (
-              <div className="text-sm text-gray-500">
-                {hasGenerate
-                  ? "Aucune séance enregistrée."
-                  : "Aucune séance enregistrée. Générer vos séances ou enregistrez-en depuis la liste quand elle sera affichée."}
-              </div>
-            ) : (
+            {savedList.length > 0 && (
               <ul className="text-sm" style={{ listStyle: "disc", paddingLeft: 18, margin: 0 }}>
                 {savedList.map(({ s, idx, key }) => (
                   <li key={key} style={{ marginBottom: 4 }}>
@@ -490,20 +485,15 @@ export default async function Page({
                 ))}
               </ul>
             )}
+            {/* si vide: ne rien afficher */}
           </div>
 
-          {/* À faire plus tard */}
+          {/* À faire plus tard ⏳ */}
           <div className="card">
             <div className="text-sm" style={{ fontWeight: 600, marginBottom: 6 }}>
               À faire plus tard <span aria-hidden>⏳</span>
             </div>
-            {laterList.length === 0 ? (
-              <div className="text-sm text-gray-500">
-                {hasGenerate
-                  ? "Aucune séance dans la liste « plus tard »."
-                  : "Aucune séance « plus tard ». Ajoutez-en depuis la liste quand elle sera affichée."}
-              </div>
-            ) : (
+            {laterList.length > 0 && (
               <ul className="text-sm" style={{ listStyle: "disc", paddingLeft: 18, margin: 0 }}>
                 {laterList.map(({ s, idx, key }) => (
                   <li key={key} style={{ marginBottom: 4 }}>
@@ -513,13 +503,8 @@ export default async function Page({
                 ))}
               </ul>
             )}
+            {/* si vide: ne rien afficher */}
           </div>
-        </div>
-
-        {/* Légende / contrat d’URL */}
-        <div className="text-xs" style={{ marginTop: 8, color: "#6b7280" }}>
-          Astuce dev : naviguez vers <code>?{["saved=s0,s2", "later=s1"].join("&")}</code> pour préremplir ces listes
-          sans changer la logique (IDs basés sur l’index : <code>s&#123;index&#125;</code>).
         </div>
       </section>
     </div>
