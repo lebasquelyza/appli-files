@@ -191,10 +191,28 @@ async function loadInitialSessions(email: string, equipParam?: string) {
   }
 }
 
+/* Utilitaires d’URL → listes (sans changer la logique de génération) */
+function parseIdList(param?: string | string[]) {
+  const raw = Array.isArray(param) ? param[0] : param || "";
+  return new Set(
+    raw
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+  );
+}
+function sessionKey(s: AiSessionT, idx: number) {
+  // clé stable "s{index}" pour être simple et sans toucher aux données métier
+  return `s${idx}`;
+}
+
 export default async function Page({
   searchParams,
 }: {
-  searchParams?: { success?: string; error?: string; debug?: string; blank?: string; empty?: string; equip?: string; generate?: string };
+  searchParams?: {
+    success?: string; error?: string; debug?: string; blank?: string; empty?: string;
+    equip?: string; generate?: string; saved?: string; later?: string;
+  };
 }) {
   const { emailForDisplay, profile, debugInfo, forceBlank } = await loadProfile(searchParams);
 
@@ -207,6 +225,18 @@ export default async function Page({
 
   // Liste calculée selon l'équipement (≥4 exos assuré dans loadInitialSessions)
   const initialSessions = await loadInitialSessions(emailForDisplay, equipMode);
+
+  // Buckets depuis l’URL (aucune persistance serveur, aucune logique IA modifiée)
+  const savedIds = parseIdList(searchParams?.saved);
+  const laterIds = parseIdList(searchParams?.later);
+
+  // Dérive les deux listes pour l’affichage bas de page
+  const savedList = initialSessions
+    .map((s, i) => ({ s, idx: i, key: sessionKey(s, i) }))
+    .filter(({ key }) => savedIds.has(key));
+  const laterList = initialSessions
+    .map((s, i) => ({ s, idx: i, key: sessionKey(s, i) }))
+    .filter(({ key }) => laterIds.has(key));
 
   const showPlaceholders = !forceBlank;
 
@@ -242,8 +272,8 @@ export default async function Page({
   const showDebug = String(searchParams?.debug || "") === "1";
 
   // Liens de bascule liste matériel / sans matériel (visibles uniquement si hasGenerate)
-  const hrefFull = hasGenerate ? `/dashboard/profile?generate=1` : `/dashboard/profile`;
-  const hrefNone = hasGenerate ? `/dashboard/profile?generate=1&equip=none` : `/dashboard/profile?equip=none`;
+  const hrefFull = hasGenerate ? `/dashboard/profile?generate=1${savedIds.size ? `&saved=${[...savedIds].join(",")}` : ""}${laterIds.size ? `&later=${[...laterIds].join(",")}` : ""}` : `/dashboard/profile`;
+  const hrefNone = hasGenerate ? `/dashboard/profile?generate=1&equip=none${savedIds.size ? `&saved=${[...savedIds].join(",")}` : ""}${laterIds.size ? `&later=${[...laterIds].join(",")}` : ""}` : `/dashboard/profile?equip=none`;
 
   const titleList = equipMode === "none" ? "Mes séances (sans matériel)" : "Mes séances";
 
@@ -420,10 +450,72 @@ export default async function Page({
             email={emailForDisplay}
             questionnaireBase={QUESTIONNAIRE_BASE}
             initialSessions={initialSessions}
-            linkQuery={equipMode === "none" ? "equip=none&generate=1" : "generate=1"}
+            linkQuery={
+              [
+                equipMode === "none" ? "equip=none" : undefined,
+                "generate=1",
+                savedIds.size ? `saved=${[...savedIds].join(",")}` : undefined,
+                laterIds.size ? `later=${[...laterIds].join(",")}` : undefined,
+              ].filter(Boolean).join("&")
+            }
           />
         )}
       </section>
+
+      {/* ===== Bloc bas de page : Enregistrées ✅ / À faire plus tard ⏳ ===== */}
+      {hasGenerate && (
+        <section className="section" style={{ marginTop: 20 }}>
+          <div className="section-head" style={{ marginBottom: 8 }}>
+            <h2 style={{ margin: 0 }}>Mes listes</h2>
+          </div>
+
+          <div className="grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            {/* Séances enregistrées */}
+            <div className="card">
+              <div className="text-sm" style={{ fontWeight: 600, marginBottom: 6 }}>
+                Séances enregistrées <span aria-hidden>✅</span>
+              </div>
+              {savedList.length === 0 ? (
+                <div className="text-sm text-gray-500">Aucune séance enregistrée.</div>
+              ) : (
+                <ul className="text-sm" style={{ listStyle: "disc", paddingLeft: 18, margin: 0 }}>
+                  {savedList.map(({ s, idx, key }) => (
+                    <li key={key} style={{ marginBottom: 4 }}>
+                      <span style={{ fontWeight: 600 }}>{s.title || s.name || `Séance ${idx + 1}`}</span>
+                      {s.type ? <span style={{ color: "#6b7280" }}> · {s.type}</span> : null}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            {/* À faire plus tard */}
+            <div className="card">
+              <div className="text-sm" style={{ fontWeight: 600, marginBottom: 6 }}>
+                À faire plus tard <span aria-hidden>⏳</span>
+              </div>
+              {laterList.length === 0 ? (
+                <div className="text-sm text-gray-500">Aucune séance dans la liste « plus tard ».</div>
+              ) : (
+                <ul className="text-sm" style={{ listStyle: "disc", paddingLeft: 18, margin: 0 }}>
+                  {laterList.map(({ s, idx, key }) => (
+                    <li key={key} style={{ marginBottom: 4 }}>
+                      <span style={{ fontWeight: 600 }}>{s.title || s.name || `Séance ${idx + 1}`}</span>
+                      {s.type ? <span style={{ color: "#6b7280" }}> · {s.type}</span> : null}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+
+          {/* Légende / contrat d’URL pour vos boutons dans GenerateClient */}
+          <div className="text-xs" style={{ marginTop: 8, color: "#6b7280" }}>
+            Astuce développeur : pour remplir ces listes sans changer la logique, faites naviguer vers
+            <code> ?generate=1&saved=s0,s2&later=s1 </code> (où <code>s{`{index}`}</code> est l’index de la séance).
+          </div>
+        </section>
+      )}
     </div>
   );
 }
