@@ -201,8 +201,8 @@ function parseIdList(param?: string | string[]) {
       .filter(Boolean)
   );
 }
-function sessionKey(s: AiSessionT, idx: number) {
-  // clé stable "s{index}" pour être simple et sans toucher aux données métier
+function sessionKey(_s: AiSessionT, idx: number) {
+  // clé stable "s{index}"
   return `s${idx}`;
 }
 
@@ -216,21 +216,21 @@ export default async function Page({
 }) {
   const { emailForDisplay, profile, debugInfo, forceBlank } = await loadProfile(searchParams);
 
-  // Flag "générer" : on n'affiche la liste + bascule qu'après clic
+  // Flag "générer" : on n'affiche la liste principale qu'après clic
   const hasGenerate = String(searchParams?.generate || "").toLowerCase() === "1";
 
   // Mode liste: '' (défaut = matériel), 'none' ou 'full'
   const equipParam = String(searchParams?.equip || "").toLowerCase();
   const equipMode: "full" | "none" = equipParam === "none" ? "none" : "full";
 
-  // Liste calculée selon l'équipement (≥4 exos assuré dans loadInitialSessions)
+  // Liste (toujours chargée côté serveur, logique inchangée)
   const initialSessions = await loadInitialSessions(emailForDisplay, equipMode);
 
   // Buckets depuis l’URL (aucune persistance serveur, aucune logique IA modifiée)
   const savedIds = parseIdList(searchParams?.saved);
   const laterIds = parseIdList(searchParams?.later);
 
-  // Dérive les deux listes pour l’affichage bas de page
+  // Dérive les deux listes pour le bloc "Mes listes"
   const savedList = initialSessions
     .map((s, i) => ({ s, idx: i, key: sessionKey(s, i) }))
     .filter(({ key }) => savedIds.has(key));
@@ -271,19 +271,17 @@ export default async function Page({
   const displayedSuccess = searchParams?.success || "";
   const showDebug = String(searchParams?.debug || "") === "1";
 
-  // Liens de bascule liste matériel / sans matériel (visibles uniquement si hasGenerate)
+  // Conserver saved/later quand on bascule de mode
   const qsKeep = [
-    "generate=1",
+    hasGenerate ? "generate=1" : undefined,
     savedIds.size ? `saved=${[...savedIds].join(",")}` : undefined,
     laterIds.size ? `later=${[...laterIds].join(",")}` : undefined,
   ].filter(Boolean).join("&");
-  const hrefFull = hasGenerate ? `/dashboard/profile?${qsKeep}` : `/dashboard/profile`;
-  const hrefNone = hasGenerate ? `/dashboard/profile?equip=none&${qsKeep}` : `/dashboard/profile?equip=none`;
+  const hrefFull = `/dashboard/profile${qsKeep ? `?${qsKeep}` : ""}`;
+  const hrefNone = `/dashboard/profile?equip=none${qsKeep ? `&${qsKeep}` : ""}`;
 
   const titleList = equipMode === "none" ? "Mes séances (sans matériel)" : "Mes séances";
-
-  // Lien pour lancer la génération
-  const hrefGenerate = `/dashboard/profile?generate=1${equipMode === "none" ? "&equip=none" : ""}`;
+  const hrefGenerate = `/dashboard/profile?generate=1${equipMode === "none" ? "&equip=none" : ""}${qsKeep ? `&${qsKeep}` : ""}`;
 
   return (
     <div className="container" style={{ paddingTop: 24, paddingBottom: 32, fontSize: "var(--settings-fs, 12px)" }}>
@@ -391,7 +389,6 @@ export default async function Page({
 
       {/* ===== Génération / Mes séances + bascule matériel/sans matériel ===== */}
       <section className="section" style={{ marginTop: 16 }}>
-        {/* Header section : titre + toggle visible uniquement après "Générer" */}
         <div
           className="section-head"
           style={{
@@ -433,7 +430,6 @@ export default async function Page({
           )}
         </div>
 
-        {/* Avant clic sur Générer : CTA simple */}
         {!hasGenerate && (
           <div className="card" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
             <div className="text-sm" style={{ color: "#4b5563" }}>
@@ -449,7 +445,6 @@ export default async function Page({
           </div>
         )}
 
-        {/* Après clic sur Générer : on affiche la liste (aucune logique modifiée) */}
         {hasGenerate && (
           <GenerateClient
             email={emailForDisplay}
@@ -468,60 +463,65 @@ export default async function Page({
       </section>
 
       {/* ===== Bloc bas de page : Enregistrées ✅ / À faire plus tard ⏳ ===== */}
-      {hasGenerate && (
-        <section className="section" style={{ marginTop: 20 }}>
-          <div className="section-head" style={{ marginBottom: 8 }}>
-            <h2 style={{ margin: 0 }}>Mes listes</h2>
-          </div>
+      <section className="section" style={{ marginTop: 20 }}>
+        <div className="section-head" style={{ marginBottom: 8 }}>
+          <h2 style={{ margin: 0 }}>Mes listes</h2>
+        </div>
 
-          <div className="grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            {/* Séances enregistrées */}
-            <div className="card">
-              <div className="text-sm" style={{ fontWeight: 600, marginBottom: 6 }}>
-                Séances enregistrées <span aria-hidden>✅</span>
-              </div>
-              {savedList.length === 0 ? (
-                <div className="text-sm text-gray-500">Aucune séance enregistrée.</div>
-              ) : (
-                <ul className="text-sm" style={{ listStyle: "disc", paddingLeft: 18, margin: 0 }}>
-                  {savedList.map(({ s, idx, key }) => (
-                    <li key={key} style={{ marginBottom: 4 }}>
-                      <span style={{ fontWeight: 600 }}>{s.title || `Séance ${idx + 1}`}</span>
-                      {s.type ? <span style={{ color: "#6b7280" }}> · {s.type}</span> : null}
-                    </li>
-                  ))}
-                </ul>
-              )}
+        <div className="grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          {/* Séances enregistrées */}
+          <div className="card">
+            <div className="text-sm" style={{ fontWeight: 600, marginBottom: 6 }}>
+              Séances enregistrées <span aria-hidden>✅</span>
             </div>
-
-            {/* À faire plus tard */}
-            <div className="card">
-              <div className="text-sm" style={{ fontWeight: 600, marginBottom: 6 }}>
-                À faire plus tard <span aria-hidden>⏳</span>
+            {savedList.length === 0 ? (
+              <div className="text-sm text-gray-500">
+                {hasGenerate
+                  ? "Aucune séance enregistrée."
+                  : "Aucune séance enregistrée. Générer vos séances ou enregistrez-en depuis la liste quand elle sera affichée."}
               </div>
-              {laterList.length === 0 ? (
-                <div className="text-sm text-gray-500">Aucune séance dans la liste « plus tard ».</div>
-              ) : (
-                <ul className="text-sm" style={{ listStyle: "disc", paddingLeft: 18, margin: 0 }}>
-                  {laterList.map(({ s, idx, key }) => (
-                    <li key={key} style={{ marginBottom: 4 }}>
-                      <span style={{ fontWeight: 600 }}>{s.title || `Séance ${idx + 1}`}</span>
-                      {s.type ? <span style={{ color: "#6b7280" }}> · {s.type}</span> : null}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
+            ) : (
+              <ul className="text-sm" style={{ listStyle: "disc", paddingLeft: 18, margin: 0 }}>
+                {savedList.map(({ s, idx, key }) => (
+                  <li key={key} style={{ marginBottom: 4 }}>
+                    <span style={{ fontWeight: 600 }}>{s.title || `Séance ${idx + 1}`}</span>
+                    {s.type ? <span style={{ color: "#6b7280" }}> · {s.type}</span> : null}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
-          {/* Légende / contrat d’URL pour vos boutons dans GenerateClient */}
-          <div className="text-xs" style={{ marginTop: 8, color: "#6b7280" }}>
-            Astuce développeur : pour remplir ces listes sans changer la logique, faites naviguer vers
-            <code> ?generate=1&saved=s0,s2&later=s1 </code> (où <code>s{`{index}`}</code> est l’index de la séance).
+          {/* À faire plus tard */}
+          <div className="card">
+            <div className="text-sm" style={{ fontWeight: 600, marginBottom: 6 }}>
+              À faire plus tard <span aria-hidden>⏳</span>
+            </div>
+            {laterList.length === 0 ? (
+              <div className="text-sm text-gray-500">
+                {hasGenerate
+                  ? "Aucune séance dans la liste « plus tard »."
+                  : "Aucune séance « plus tard ». Ajoutez-en depuis la liste quand elle sera affichée."}
+              </div>
+            ) : (
+              <ul className="text-sm" style={{ listStyle: "disc", paddingLeft: 18, margin: 0 }}>
+                {laterList.map(({ s, idx, key }) => (
+                  <li key={key} style={{ marginBottom: 4 }}>
+                    <span style={{ fontWeight: 600 }}>{s.title || `Séance ${idx + 1}`}</span>
+                    {s.type ? <span style={{ color: "#6b7280" }}> · {s.type}</span> : null}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
-        </section>
-      )}
+        </div>
+
+        {/* Légende / contrat d’URL */}
+        <div className="text-xs" style={{ marginTop: 8, color: "#6b7280" }}>
+          Astuce dev : naviguez vers <code>?{["saved=s0,s2", "later=s1"].join("&")}</code> pour préremplir ces listes
+          sans changer la logique (IDs basés sur l’index : <code>s&#123;index&#125;</code>).
+        </div>
+      </section>
     </div>
   );
 }
-
