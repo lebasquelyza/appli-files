@@ -272,8 +272,13 @@ export default async function Page({
   const showDebug = String(searchParams?.debug || "") === "1";
 
   // Liens de bascule liste matériel / sans matériel (visibles uniquement si hasGenerate)
-  const hrefFull = hasGenerate ? `/dashboard/profile?generate=1${savedIds.size ? `&saved=${[...savedIds].join(",")}` : ""}${laterIds.size ? `&later=${[...laterIds].join(",")}` : ""}` : `/dashboard/profile`;
-  const hrefNone = hasGenerate ? `/dashboard/profile?generate=1&equip=none${savedIds.size ? `&saved=${[...savedIds].join(",")}` : ""}${laterIds.size ? `&later=${[...laterIds].join(",")}` : ""}` : `/dashboard/profile?equip=none`;
+  const qsKeep = [
+    "generate=1",
+    savedIds.size ? `saved=${[...savedIds].join(",")}` : undefined,
+    laterIds.size ? `later=${[...laterIds].join(",")}` : undefined,
+  ].filter(Boolean).join("&");
+  const hrefFull = hasGenerate ? `/dashboard/profile?${qsKeep}` : `/dashboard/profile`;
+  const hrefNone = hasGenerate ? `/dashboard/profile?equip=none&${qsKeep}` : `/dashboard/profile?equip=none`;
 
   const titleList = equipMode === "none" ? "Mes séances (sans matériel)" : "Mes séances";
 
@@ -481,7 +486,7 @@ export default async function Page({
                 <ul className="text-sm" style={{ listStyle: "disc", paddingLeft: 18, margin: 0 }}>
                   {savedList.map(({ s, idx, key }) => (
                     <li key={key} style={{ marginBottom: 4 }}>
-                      <span style={{ fontWeight: 600 }}>{s.title || s.name || `Séance ${idx + 1}`}</span>
+                      <span style={{ fontWeight: 600 }}>{s.title || `Séance ${idx + 1}`}</span>
                       {s.type ? <span style={{ color: "#6b7280" }}> · {s.type}</span> : null}
                     </li>
                   ))}
@@ -500,7 +505,7 @@ export default async function Page({
                 <ul className="text-sm" style={{ listStyle: "disc", paddingLeft: 18, margin: 0 }}>
                   {laterList.map(({ s, idx, key }) => (
                     <li key={key} style={{ marginBottom: 4 }}>
-                      <span style={{ fontWeight: 600 }}>{s.title || s.name || `Séance ${idx + 1}`}</span>
+                      <span style={{ fontWeight: 600 }}>{s.title || `Séance ${idx + 1}`}</span>
                       {s.type ? <span style={{ color: "#6b7280" }}> · {s.type}</span> : null}
                     </li>
                   ))}
@@ -519,3 +524,4 @@ export default async function Page({
     </div>
   );
 }
+
