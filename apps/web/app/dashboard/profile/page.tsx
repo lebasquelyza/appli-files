@@ -163,7 +163,7 @@ async function loadInitialSessions(email: string, equipParam?: string) {
       if (!answers) return [];
       (answers as any).equipLevel = equip === "none" ? "none" : "full";
       const prog = generateProgrammeFromAnswers(answers);
-      const sessions: AiSessionT[] = prog.sessions || [];
+      const sessions: AiSessionT[] = (prog.sessions || []);
 
       // ⬇️ Applique ≥4 exos dans les deux modes
       return sessions.map((s) => {
@@ -194,9 +194,12 @@ async function loadInitialSessions(email: string, equipParam?: string) {
 export default async function Page({
   searchParams,
 }: {
-  searchParams?: { success?: string; error?: string; debug?: string; blank?: string; empty?: string; equip?: string };
+  searchParams?: { success?: string; error?: string; debug?: string; blank?: string; empty?: string; equip?: string; generate?: string };
 }) {
   const { emailForDisplay, profile, debugInfo, forceBlank } = await loadProfile(searchParams);
+
+  // Flag "générer" : on n'affiche la liste + bascule qu'après clic
+  const hasGenerate = String(searchParams?.generate || "").toLowerCase() === "1";
 
   // Mode liste: '' (défaut = matériel), 'none' ou 'full'
   const equipParam = String(searchParams?.equip || "").toLowerCase();
@@ -238,11 +241,14 @@ export default async function Page({
   const displayedSuccess = searchParams?.success || "";
   const showDebug = String(searchParams?.debug || "") === "1";
 
-  // Liens de bascule liste matériel / sans matériel
-  const hrefFull = `/dashboard/profile`;
-  const hrefNone = `/dashboard/profile?equip=none`;
+  // Liens de bascule liste matériel / sans matériel (visibles uniquement si hasGenerate)
+  const hrefFull = hasGenerate ? `/dashboard/profile?generate=1` : `/dashboard/profile`;
+  const hrefNone = hasGenerate ? `/dashboard/profile?generate=1&equip=none` : `/dashboard/profile?equip=none`;
 
   const titleList = equipMode === "none" ? "Mes séances (sans matériel)" : "Mes séances";
+
+  // Lien pour lancer la génération
+  const hrefGenerate = `/dashboard/profile?generate=1${equipMode === "none" ? "&equip=none" : ""}`;
 
   return (
     <div className="container" style={{ paddingTop: 24, paddingBottom: 32, fontSize: "var(--settings-fs, 12px)" }}>
@@ -348,8 +354,9 @@ export default async function Page({
         </div>
       </section>
 
-      {/* ===== Mes séances + bascule matériel/sans matériel ===== */}
+      {/* ===== Génération / Mes séances + bascule matériel/sans matériel ===== */}
       <section className="section" style={{ marginTop: 16 }}>
+        {/* Header section : titre + toggle visible uniquement après "Générer" */}
         <div
           className="section-head"
           style={{
@@ -361,41 +368,61 @@ export default async function Page({
             flexWrap: "wrap",
           }}
         >
-          <h2 style={{ margin: 0 }}>{titleList}</h2>
+          <h2 style={{ margin: 0 }}>{hasGenerate ? titleList : "Mes séances"}</h2>
 
-          <div className="inline-flex items-center" style={{ display: "inline-flex", gap: 8 }}>
-            <a
-              href={hrefFull}
-              className={
-                equipMode === "full"
-                  ? "inline-flex items-center rounded-md border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-sm font-semibold text-white"
-                  : "inline-flex items-center rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-semibold text-neutral-900"
-              }
-              title="Voir la liste avec matériel"
-            >
-              Matériel
-            </a>
-            <a
-              href={hrefNone}
-              className={
-                equipMode === "none"
-                  ? "inline-flex items-center rounded-md border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-sm font-semibold text-white"
-                  : "inline-flex items-center rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-semibold text-neutral-900"
-              }
-              title="Voir la liste sans matériel"
-            >
-              Sans matériel
-            </a>
-          </div>
+          {hasGenerate && (
+            <div className="inline-flex items-center" style={{ display: "inline-flex", gap: 8 }}>
+              <a
+                href={hrefFull}
+                className={
+                  equipMode === "full"
+                    ? "inline-flex items-center rounded-md border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-sm font-semibold text-white"
+                    : "inline-flex items-center rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-semibold text-neutral-900"
+                }
+                title="Voir la liste avec matériel"
+              >
+                Matériel
+              </a>
+              <a
+                href={hrefNone}
+                className={
+                  equipMode === "none"
+                    ? "inline-flex items-center rounded-md border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-sm font-semibold text-white"
+                    : "inline-flex items-center rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-semibold text-neutral-900"
+                }
+                title="Voir la liste sans matériel"
+              >
+                Sans matériel
+              </a>
+            </div>
+          )}
         </div>
 
-        {/* La liste a déjà ≥4 exos par séance (appliqué en amont) */}
-        <GenerateClient
-          email={emailForDisplay}
-          questionnaireBase={QUESTIONNAIRE_BASE}
-          initialSessions={initialSessions}
-          linkQuery={equipMode === "none" ? "equip=none" : undefined}
-        />
+        {/* Avant clic sur Générer : CTA simple */}
+        {!hasGenerate && (
+          <div className="card" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+            <div className="text-sm" style={{ color: "#4b5563" }}>
+              Cliquez sur « Générer » pour afficher vos séances personnalisées.
+            </div>
+            <a
+              href={hrefGenerate}
+              className="inline-flex items-center rounded-md border border-neutral-900 bg-neutral-900 px-4 py-2 text-sm font-semibold text-white"
+              title="Générer mes séances"
+            >
+              Générer
+            </a>
+          </div>
+        )}
+
+        {/* Après clic sur Générer : on affiche la liste (aucune logique modifiée) */}
+        {hasGenerate && (
+          <GenerateClient
+            email={emailForDisplay}
+            questionnaireBase={QUESTIONNAIRE_BASE}
+            initialSessions={initialSessions}
+            linkQuery={equipMode === "none" ? "equip=none&generate=1" : "generate=1"}
+          />
+        )}
       </section>
     </div>
   );
