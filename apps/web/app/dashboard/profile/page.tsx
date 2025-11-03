@@ -26,7 +26,9 @@ async function getEmailFromSupabaseSession(): Promise<string> {
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       { cookies: { get: (n: string) => cookieStore.get(n)?.value } }
     );
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     return user?.email?.trim().toLowerCase() || "";
   } catch {
     return "";
@@ -87,7 +89,12 @@ function uniqByName(list: NormalizedExercise[]): NormalizedExercise[] {
 function scoreExercise(ex: NormalizedExercise): number {
   let s = 0;
   if ((ex.block || "").toLowerCase() === "principal") s += 3;
-  if (/(squat|fente|deadlift|soulev[ée] de terre|row|tirage|pull(?:-?up)?|traction|d[ée]velopp[ée]|press|hip|glute)/i.test((ex.name || "").toLowerCase())) s += 2;
+  if (
+    /(squat|fente|deadlift|soulev[ée] de terre|row|tirage|pull(?:-?up)?|traction|d[ée]velopp[ée]|press|hip|glute)/i.test(
+      (ex.name || "").toLowerCase()
+    )
+  )
+    s += 2;
   if (ex.sets && ex.reps) s += 1;
   return s;
 }
@@ -155,7 +162,12 @@ async function loadProfile(searchParams?: Record<string, string | string[] | und
 /* Loader — Programme IA côté serveur (liste) */
 async function loadInitialSessions(email: string, equipParam?: string) {
   if (!email) return [];
-  const equip = (String(equipParam || "") === "none") ? "none" : (String(equipParam || "") === "full" ? "full" : "");
+  const equip =
+    String(equipParam || "") === "none"
+      ? "none"
+      : String(equipParam || "") === "full"
+      ? "full"
+      : "";
 
   try {
     if (equip === "none" || equip === "full") {
@@ -163,7 +175,7 @@ async function loadInitialSessions(email: string, equipParam?: string) {
       if (!answers) return [];
       (answers as any).equipLevel = equip === "none" ? "none" : "full";
       const prog = generateProgrammeFromAnswers(answers);
-      const sessions: AiSessionT[] = (prog.sessions || []);
+      const sessions: AiSessionT[] = prog.sessions || [];
 
       // ⬇️ Applique ≥4 exos dans les deux modes
       return sessions.map((s) => {
@@ -182,7 +194,7 @@ async function loadInitialSessions(email: string, equipParam?: string) {
     const { sessions } = await planProgrammeFromEmail(email);
     const safe = (sessions || []).map((s) => {
       const type = (s.type || "muscu") as WorkoutType;
-      const ensured = ensureAtLeast4((s.exercises || []), type, "full");
+      const ensured = ensureAtLeast4(s.exercises || [], type, "full");
       return { ...s, exercises: ensured };
     });
     return safe;
@@ -210,8 +222,15 @@ export default async function Page({
   searchParams,
 }: {
   searchParams?: {
-    success?: string; error?: string; debug?: string; blank?: string; empty?: string;
-    equip?: string; generate?: string; saved?: string; later?: string;
+    success?: string;
+    error?: string;
+    debug?: string;
+    blank?: string;
+    empty?: string;
+    equip?: string;
+    generate?: string;
+    saved?: string;
+    later?: string;
   };
 }) {
   const { emailForDisplay, profile, debugInfo, forceBlank } = await loadProfile(searchParams);
@@ -276,12 +295,16 @@ export default async function Page({
     hasGenerate ? "generate=1" : undefined,
     savedIds.size ? `saved=${[...savedIds].join(",")}` : undefined,
     laterIds.size ? `later=${[...laterIds].join(",")}` : undefined,
-  ].filter(Boolean).join("&");
+  ]
+    .filter(Boolean)
+    .join("&");
   const hrefFull = `/dashboard/profile${qsKeep ? `?${qsKeep}` : ""}`;
   const hrefNone = `/dashboard/profile?equip=none${qsKeep ? `&${qsKeep}` : ""}`;
 
   const titleList = equipMode === "none" ? "Mes séances (sans matériel)" : "Mes séances";
-  const hrefGenerate = `/dashboard/profile?generate=1${equipMode === "none" ? "&equip=none" : ""}${qsKeep ? `&${qsKeep}` : ""}`;
+  const hrefGenerate = `/dashboard/profile?generate=1${
+    equipMode === "none" ? "&equip=none" : ""
+  }${qsKeep ? `&${qsKeep}` : ""}`;
 
   // Base de query pour les liens vers les détails de séance (et pour garder les listes)
   const baseLinkQuery = [
@@ -289,10 +312,15 @@ export default async function Page({
     "generate=1",
     savedIds.size ? `saved=${[...savedIds].join(",")}` : undefined,
     laterIds.size ? `later=${[...laterIds].join(",")}` : undefined,
-  ].filter(Boolean).join("&");
+  ]
+    .filter(Boolean)
+    .join("&");
 
   return (
-    <div className="container" style={{ paddingTop: 24, paddingBottom: 32, fontSize: "var(--settings-fs, 12px)" }}>
+    <div
+      className="container"
+      style={{ paddingTop: 24, paddingBottom: 32, fontSize: "var(--settings-fs, 12px)" }}
+    >
       <div className="page-header">
         <div>
           <h1 className="h1" style={{ fontSize: 22 }}>
@@ -313,7 +341,11 @@ export default async function Page({
         {!!displayedSuccess && (
           <div
             className="card"
-            style={{ border: "1px solid rgba(16,185,129,.35)", background: "rgba(16,185,129,.08)", fontWeight: 600 }}
+            style={{
+              border: "1px solid rgba(16,185,129,.35)",
+              background: "rgba(16,185,129,.08)",
+              fontWeight: 600,
+            }}
           >
             {displayedSuccess === "programme"
               ? "✓ Programme IA mis à jour à partir de vos dernières réponses au questionnaire."
@@ -339,7 +371,13 @@ export default async function Page({
       <section className="section" style={{ marginTop: 12 }}>
         <div
           className="section-head"
-          style={{ marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}
+          style={{
+            marginBottom: 8,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+          }}
         >
           <h2>Mes infos</h2>
         </div>
@@ -358,7 +396,9 @@ export default async function Page({
                 {typeof clientAge === "number"
                   ? `${clientAge} ans`
                   : showPlaceholders
-                  ? <i className="text-gray-400">Non renseigné</i>
+                  ? (
+                    <i className="text-gray-400">Non renseigné</i>
+                    )
                   : null}
               </span>
             )}
@@ -373,7 +413,12 @@ export default async function Page({
           {(emailForDisplay || showPlaceholders) && (
             <div
               className="text-sm"
-              style={{ marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
+              style={{
+                marginTop: 6,
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
               title={emailForDisplay || (showPlaceholders ? "Non renseigné" : "")}
             >
               <b>Mail :</b>{" "}
@@ -439,7 +484,15 @@ export default async function Page({
         </div>
 
         {!hasGenerate && (
-          <div className="card" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <div
+            className="card"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+            }}
+          >
             <div className="text-sm" style={{ color: "#4b5563" }}>
               Cliquez sur « Générer » pour afficher vos séances personnalisées.
             </div>
@@ -458,14 +511,14 @@ export default async function Page({
             email={emailForDisplay}
             questionnaireBase={QUESTIONNAIRE_BASE}
             initialSessions={initialSessions}
-            linkQuery={
-              [
-                equipMode === "none" ? "equip=none" : undefined,
-                "generate=1",
-                savedIds.size ? `saved=${[...savedIds].join(",")}` : undefined,
-                laterIds.size ? `later=${[...laterIds].join(",")}` : undefined,
-              ].filter(Boolean).join("&")
-            }
+            linkQuery={[
+              equipMode === "none" ? "equip=none" : undefined,
+              "generate=1",
+              savedIds.size ? `saved=${[...savedIds].join(",")}` : undefined,
+              laterIds.size ? `later=${[...laterIds].join(",")}` : undefined,
+            ]
+              .filter(Boolean)
+              .join("&")}
           />
         )}
       </section>
@@ -477,28 +530,38 @@ export default async function Page({
         </div>
 
         {/* deux colonnes sur la même ligne */}
-        <div className="grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <div
+          className="grid"
+          style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}
+        >
           {/* Séance faite ✅ */}
           <div className="card">
             <div className="text-sm" style={{ fontWeight: 600, marginBottom: 6 }}>
               Séance faite <span aria-hidden>✅</span>
             </div>
             {savedList.length > 0 && (
-              <ul className="text-sm" style={{ listStyle: "disc", paddingLeft: 18, margin: 0 }}>
+              <ul
+                className="text-sm"
+                style={{ listStyle: "disc", paddingLeft: 18, margin: 0 }}
+              >
                 {savedList.map(({ s, idx, key }) => {
-                  const detailHref = `/dashboard/seance/${encodeURIComponent(s.id || key)}${
-                    baseLinkQuery ? `?${baseLinkQuery}` : ""
-                  }`;
+                  const detailHref = `/dashboard/seance/${encodeURIComponent(
+                    s.id || key
+                  )}${baseLinkQuery ? `?${baseLinkQuery}` : ""}`;
 
-                  // Construire une URL qui supprime uniquement cette séance de la liste "saved"
+                  // URL qui supprime uniquement cette séance de la liste "saved"
                   const newSavedKeys = [...savedIds].filter((k) => k !== key);
                   const removeQuery = [
                     "generate=1",
                     equipMode === "none" ? "equip=none" : undefined,
                     newSavedKeys.length ? `saved=${newSavedKeys.join(",")}` : undefined,
                     laterIds.size ? `later=${[...laterIds].join(",")}` : undefined,
-                  ].filter(Boolean).join("&");
-                  const removeHref = `/dashboard/profile${removeQuery ? `?${removeQuery}` : ""}`;
+                  ]
+                    .filter(Boolean)
+                    .join("&");
+                  const removeHref = `/dashboard/profile${
+                    removeQuery ? `?${removeQuery}` : ""
+                  }`;
 
                   return (
                     <li
@@ -513,24 +576,34 @@ export default async function Page({
                     >
                       <a
                         href={detailHref}
-                        style={{ fontWeight: 600, textDecoration: "underline", textUnderlineOffset: 2 }}
+                        style={{
+                          fontWeight: 600,
+                          textDecoration: "underline",
+                          textUnderlineOffset: 2,
+                        }}
                       >
                         {s.title || `Séance ${idx + 1}`}
-                        {s.type ? <span style={{ color: "#6b7280" }}> · {s.type}</span> : null}
+                        {s.type ? (
+                          <span style={{ color: "#6b7280" }}> · {s.type}</span>
+                        ) : null}
                       </a>
                       <a
                         href={removeHref}
+                        aria-label="Supprimer cette séance"
                         className="text-xs"
                         style={{
-                          fontSize: 11,
-                          padding: "2px 6px",
+                          fontSize: 12,
+                          padding: "2px 4px",
                           borderRadius: 999,
                           border: "1px solid #e5e7eb",
                           color: "#6b7280",
-                          whiteSpace: "nowrap",
+                          lineHeight: 1,
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
                         }}
                       >
-                        Supprimer
+                        🗑️
                       </a>
                     </li>
                   );
@@ -546,21 +619,28 @@ export default async function Page({
               À faire plus tard <span aria-hidden>⏳</span>
             </div>
             {laterList.length > 0 && (
-              <ul className="text-sm" style={{ listStyle: "disc", paddingLeft: 18, margin: 0 }}>
+              <ul
+                className="text-sm"
+                style={{ listStyle: "disc", paddingLeft: 18, margin: 0 }}
+              >
                 {laterList.map(({ s, idx, key }) => {
-                  const detailHref = `/dashboard/seance/${encodeURIComponent(s.id || key)}${
-                    baseLinkQuery ? `?${baseLinkQuery}` : ""
-                  }`;
+                  const detailHref = `/dashboard/seance/${encodeURIComponent(
+                    s.id || key
+                  )}${baseLinkQuery ? `?${baseLinkQuery}` : ""}`;
 
-                  // Construire une URL qui supprime uniquement cette séance de la liste "later"
+                  // URL qui supprime uniquement cette séance de la liste "later"
                   const newLaterKeys = [...laterIds].filter((k) => k !== key);
                   const removeQuery = [
                     "generate=1",
                     equipMode === "none" ? "equip=none" : undefined,
                     savedIds.size ? `saved=${[...savedIds].join(",")}` : undefined,
                     newLaterKeys.length ? `later=${newLaterKeys.join(",")}` : undefined,
-                  ].filter(Boolean).join("&");
-                  const removeHref = `/dashboard/profile${removeQuery ? `?${removeQuery}` : ""}`;
+                  ]
+                    .filter(Boolean)
+                    .join("&");
+                  const removeHref = `/dashboard/profile${
+                    removeQuery ? `?${removeQuery}` : ""
+                  }`;
 
                   return (
                     <li
@@ -575,24 +655,34 @@ export default async function Page({
                     >
                       <a
                         href={detailHref}
-                        style={{ fontWeight: 600, textDecoration: "underline", textUnderlineOffset: 2 }}
+                        style={{
+                          fontWeight: 600,
+                          textDecoration: "underline",
+                          textUnderlineOffset: 2,
+                        }}
                       >
                         {s.title || `Séance ${idx + 1}`}
-                        {s.type ? <span style={{ color: "#6b7280" }}> · {s.type}</span> : null}
+                        {s.type ? (
+                          <span style={{ color: "#6b7280" }}> · {s.type}</span>
+                        ) : null}
                       </a>
                       <a
                         href={removeHref}
+                        aria-label="Supprimer cette séance"
                         className="text-xs"
                         style={{
-                          fontSize: 11,
-                          padding: "2px 6px",
+                          fontSize: 12,
+                          padding: "2px 4px",
                           borderRadius: 999,
                           border: "1px solid #e5e7eb",
                           color: "#6b7280",
-                          whiteSpace: "nowrap",
+                          lineHeight: 1,
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
                         }}
                       >
-                        Supprimer
+                        🗑️
                       </a>
                     </li>
                   );
