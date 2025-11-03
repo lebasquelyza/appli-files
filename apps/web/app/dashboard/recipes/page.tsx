@@ -1,4 +1,3 @@
-
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 
@@ -8,6 +7,7 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 /* ===================== Types ===================== */
+type Plan = "BASIC" | "PLUS" | "PREMIUM";
 type Rework = { ingredient: string; tips: string[] };
 type Recipe = {
   id: string;
@@ -17,29 +17,25 @@ type Recipe = {
   timeMin?: number;
   tags: string[];
   goals: string[];
+  minPlan: Plan;
   ingredients: string[];
   steps: string[];
   rework?: Rework[];
 };
 
 /* ===================== Utils ===================== */
+function planRank(p?: Plan) { return p === "PREMIUM" ? 3 : p === "PLUS" ? 2 : 1; }
+function isUnlocked(r: Recipe, userPlan: Plan) { return planRank(userPlan) >= planRank(r.minPlan); }
 function parseCsv(value?: string | string[]): string[] {
   const raw = Array.isArray(value) ? value.join(",") : value ?? "";
   return raw.split(/[,|]/).map((s) => s.trim().toLowerCase()).filter(Boolean);
 }
 
 /* --- random déterministe --- */
-function seededPRNG(seed: number) {
-  let s = seed >>> 0;
-  return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 2 ** 32);
-}
+function seededPRNG(seed: number) { let s = seed >>> 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 2 ** 32); }
 function seededShuffle<T>(arr: T[], seed: number): T[] {
-  const rand = seededPRNG(seed);
-  const a = arr.slice();
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(rand() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
+  const rand = seededPRNG(seed); const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
   return a;
 }
 function pickRandomSeeded<T>(arr: T[], n: number, seed: number): T[] {
@@ -81,47 +77,49 @@ const REWORK_TIPS: Record<string, string[]> = {
 /* ---- base healthy (dispo pour tous) ---- */
 const HEALTHY_BASE: Recipe[] = [
   { id:"salade-quinoa", title:"Salade de quinoa croquante", subtitle:"Pois chiches, concombre, citron",
-    kcal:520, timeMin:15, tags:["végétarien","sans-gluten"], goals:["equilibre"],
+    kcal:520, timeMin:15, tags:["végétarien","sans-gluten"], goals:["equilibre"], minPlan:"BASIC",
     ingredients:["quinoa","pois chiches","concombre","citron","huile d'olive","sel","poivre","persil"], steps:["Rincer, cuire, assaisonner"] },
   { id:"bowl-poulet-riz", title:"Bowl poulet & riz complet", subtitle:"Avocat, maïs, yaourt grec",
-    kcal:640, timeMin:20, tags:["protéiné"], goals:["prise de masse","equilibre"],
+    kcal:640, timeMin:20, tags:["protéiné"], goals:["prise de masse","equilibre"], minPlan:"BASIC",
     ingredients:["poulet","riz complet","avocat","maïs","yaourt grec","cumin","citron","sel","poivre"], steps:["Cuire riz, saisir poulet, assembler"] },
   { id:"omelette-herbes", title:"Omelette champignons & fines herbes", subtitle:"Rapide du matin",
-    kcal:420, timeMin:10, tags:["rapide","sans-gluten"], goals:["equilibre"],
+    kcal:420, timeMin:10, tags:["rapide","sans-gluten"], goals:["equilibre"], minPlan:"BASIC",
     ingredients:["œufs","champignons","ciboulette","beurre","sel","poivre","parmesan"], steps:["Battre, cuire, plier"] },
   { id:"saumon-four", title:"Saumon au four & légumes rôtis", subtitle:"Carottes, brocoli, citron",
-    kcal:580, timeMin:25, tags:["omega-3","sans-gluten"], goals:["equilibre","santé"],
+    kcal:580, timeMin:25, tags:["omega-3","sans-gluten"], goals:["equilibre","santé"], minPlan:"BASIC",
     ingredients:["saumon","brocoli","carottes","citron","huile d'olive","ail","sel","poivre"], steps:["Préchauffer, rôtir, servir"] },
   { id:"curry-chiche", title:"Curry de pois chiches coco", subtitle:"Vegan & réconfortant",
-    kcal:600, timeMin:30, tags:["vegan","sans-gluten"], goals:["equilibre"],
+    kcal:600, timeMin:30, tags:["vegan","sans-gluten"], goals:["equilibre"], minPlan:"BASIC",
     ingredients:["pois chiches","lait de coco","tomates concassées","oignon","ail","curry","riz basmati","sel"], steps:["Suer, mijoter, servir"] },
   { id:"tofu-brocoli-wok", title:"Tofu sauté au brocoli (wok)", subtitle:"Sauce soja-sésame",
-    kcal:530, timeMin:15, tags:["vegan","rapide"], goals:["sèche","equilibre"],
+    kcal:530, timeMin:15, tags:["vegan","rapide"], goals:["sèche","equilibre"], minPlan:"BASIC",
     ingredients:["tofu ferme","brocoli","sauce soja","ail","gingembre","graines de sésame","huile","maïzena"], steps:["Saisir, lier, napper"] },
 ];
 
 /* ---- base Bar à prot' (typée Recipe pour réutiliser Card) ---- */
 const SHAKES_BASE: Recipe[] = [
   { id:"shake-choco-banane", title:"Choco-banane protéiné", subtitle:"Lait, whey chocolat",
-    kcal:360, timeMin:5, tags:["shake","rapide"], goals:["prise de masse","equilibre"],
+    kcal:360, timeMin:5, tags:["shake","rapide"], goals:["prise de masse","equilibre"], minPlan:"BASIC",
     ingredients:["banane","lait (ou végétal)","whey chocolat","beurre de cacahuète","glaçons"], steps:["Mixer 30–40 s","Servir bien frais"] },
   { id:"shake-vanille-cafe", title:"Vanille café frappé", subtitle:"Skyr, vanille",
-    kcal:280, timeMin:5, tags:["shake","café"], goals:["sèche","equilibre"],
+    kcal:280, timeMin:5, tags:["shake","café"], goals:["sèche","equilibre"], minPlan:"BASIC",
     ingredients:["skyr","lait (ou végétal)","expresso froid","vanille","édulcorant (option)","glaçons"], steps:["Verser au blender","Mixer et déguster"] },
   { id:"shake-fruits-rouges", title:"Fruits rouges & yaourt grec", subtitle:"Frais & onctueux",
-    kcal:320, timeMin:5, tags:["shake","fruité"], goals:["equilibre"],
+    kcal:320, timeMin:5, tags:["shake","fruité"], goals:["equilibre"], minPlan:"BASIC",
     ingredients:["yaourt grec 0%","lait (ou végétal)","fruits rouges surgelés","whey neutre","miel (option)"], steps:["Mixer fin","Goûter et ajuster"] },
   { id:"shake-tropical", title:"Tropical coco", subtitle:"Mangue, coco",
-    kcal:340, timeMin:5, tags:["shake","fruité"], goals:["equilibre"],
+    kcal:340, timeMin:5, tags:["shake","fruité"], goals:["equilibre"], minPlan:"BASIC",
     ingredients:["lait de coco léger","mangue","ananas","whey neutre ou pois","citron vert"], steps:["Mixer 40 s","Servir avec glaçons"] },
 ];
 
-/* ========= Mode IA (gratuit) ========= */
+/* ========= Mode IA ========= */
 async function generateAIRecipes({
+  plan,
   kcal, kcalMin, kcalMax,
   allergens, dislikes,
   count = 12,
 }: {
+  plan: Plan;
   kcal?: number; kcalMin?: number; kcalMax?: number;
   allergens: string[]; dislikes: string[];
   count?: number;
@@ -144,7 +142,7 @@ async function generateAIRecipes({
   const prompt =
 `Tu es un chef-nutritionniste. Renvoie UNIQUEMENT du JSON valide (pas de texte).
 Utilisateur:
-- App gratuite, pas d'abonnement
+- Plan (info interne): ${plan}
 - Allergènes/Intolérances: ${allergens.join(", ") || "aucun"}
 - Aliments non aimés (à re-travailler): ${dislikes.join(", ") || "aucun"}
 - Nombre de recettes: ${count}
@@ -156,11 +154,13 @@ Schéma TypeScript (exemple):
 Recipe = {
   id: string, title: string, subtitle?: string,
   kcal?: number, timeMin?: number, tags: string[],
-  goals: string[], ingredients: string[], steps: string[],
+  goals: string[], minPlan: "BASIC" | "PLUS" | "PREMIUM",
+  ingredients: string[], steps: string[],
   rework?: { ingredient: string, tips: string[] }[]
 }
 
 Règles:
+- minPlan = "${plan}" pour toutes les recettes.
 - Variété: végétarien/vegan/protéiné/rapide/sans-gluten...
 - Ingrédients simples du quotidien.
 - steps = 3–6 étapes courtes.
@@ -203,6 +203,7 @@ Règles:
             tips: Array.isArray(x?.tips) ? x.tips.map((t: any) => String(t)) : []
           }))
         : undefined;
+      const minPlan: Plan = (plan === "PREMIUM" ? "PREMIUM" : "PLUS");
 
       return {
         id, title,
@@ -211,6 +212,7 @@ Règles:
         timeMin: typeof raw?.timeMin === "number" ? raw.timeMin : undefined,
         tags: Array.isArray(raw?.tags) ? raw.tags.map((t: any) => String(t)) : [],
         goals: Array.isArray(raw?.goals) ? raw.goals.map((g: any) => String(g)) : [],
+        minPlan,
         ingredients: ingr,
         steps,
         rework,
@@ -232,11 +234,11 @@ Règles:
 
 /* ---- fallback si IA indisponible ---- */
 function personalizeFallback({
-  base, kcal, kcalMin, kcalMax, allergens, dislikes,
+  base, kcal, kcalMin, kcalMax, allergens, dislikes, plan,
 }: {
   base: Recipe[];
   kcal?: number; kcalMin?: number; kcalMax?: number;
-  allergens: string[]; dislikes: string[];
+  allergens: string[]; dislikes: string[]; plan: Plan;
 }): Recipe[] {
   let filtered = base.filter(r => {
     const ing = r.ingredients.map(i => i.toLowerCase());
@@ -255,12 +257,13 @@ function personalizeFallback({
   const out: Recipe[] = filtered.map<Recipe>(r => {
     const ingLower = r.ingredients.map(i => i.toLowerCase());
     const hits = [...dislikesSet].filter(d => ingLower.includes(d));
-    if (!hits.length) return { ...r };
+    const minPlan: Plan = (plan === "PREMIUM" ? "PREMIUM" : "PLUS");
+    if (!hits.length) return { ...r, minPlan };
     const tips: Rework[] = hits.map(h => ({
       ingredient: h,
-      tips: REWORK_TIPS[h] ?? ["Changer la cuisson", "Assaisonnement différent", "Mixer/hacher pour texture"],
+      tips: REWORK_TIPS[h] ?? ["Changer la cuisson", "Assaisonnement différent", "Mixer/hacher pour texture"]
     }));
-    return { ...r, rework: tips };
+    return { ...r, minPlan, rework: tips };
   });
   return out;
 }
@@ -333,6 +336,14 @@ export default async function Page({
 }: {
   searchParams?: { kcal?: string; kcalMin?: string; kcalMax?: string; allergens?: string; dislikes?: string; rnd?: string; view?: string };
 }) {
+  // Lecture session — mais on ne bloque plus rien selon le plan
+  let plan: Plan = "BASIC";
+  try {
+    const mod = await import("@/lib/session");
+    const s: any = await mod.getSession().catch(() => ({}));
+    plan = (s?.plan as Plan) || "BASIC";
+  } catch {}
+
   const kcal = Number(searchParams?.kcal ?? "");
   const kcalMin = Number(searchParams?.kcalMin ?? "");
   const kcalMax = Number(searchParams?.kcalMax ?? "");
@@ -347,12 +358,13 @@ export default async function Page({
 
   const healthy = HEALTHY_BASE;
 
-  // Bloc IA : toujours actif (app 100% gratuite)
+  // bloc IA : maintenant pour tout le monde (pas de restriction BASIC/PLUS)
   let personalized: Recipe[] = [];
   let relaxedNote: string | null = null;
 
   {
     const ai = await generateAIRecipes({
+      plan,
       kcal: hasKcalTarget ? kcal : undefined,
       kcalMin: hasKcalMin ? kcalMin : undefined,
       kcalMax: hasKcalMax ? kcalMax : undefined,
@@ -367,16 +379,16 @@ export default async function Page({
           kcal: hasKcalTarget ? kcal : undefined,
           kcalMin: hasKcalMin ? kcalMin : undefined,
           kcalMax: hasKcalMax ? kcalMax : undefined,
-          allergens, dislikes,
+          allergens, dislikes, plan,
         });
 
     if (personalized.length === 0) {
-      const relaxed = personalizeFallback({ base: HEALTHY_BASE, allergens, dislikes });
+      const relaxed = personalizeFallback({ base: HEALTHY_BASE, allergens, dislikes, plan });
       if (relaxed.length) {
         personalized = relaxed;
         relaxedNote = "Ajustement automatique : contrainte calories relâchée (allergènes respectés).";
       } else {
-        personalized = HEALTHY_BASE;
+        personalized = HEALTHY_BASE.map(r => ({ ...r, minPlan: plan }));
         relaxedNote = "Ajustement automatique : suggestions healthy compatibles avec vos contraintes.";
       }
     }
@@ -434,6 +446,7 @@ export default async function Page({
               {(!hasKcalTarget && !hasKcalMin && !hasKcalMax && !allergens.length && !dislikes.length) && " aucun"}
             </div>
           </div>
+          {/* plus d'affichage de "Votre formule : BASIC/PLUS/... */}
         </div>
 
         {/* =================== Choix rapide (blocs cliquables) =================== */}
@@ -463,6 +476,8 @@ export default async function Page({
           </a>
         </div>
 
+        {/* === plus de bandeau "Passez à PLUS" === */}
+
         {/* =================== Contraintes & filtres (les deux vues) =================== */}
         {(view==="meals" || view==="shakes") && (
           <div className="section" style={{ marginTop: 12 }}>
@@ -470,9 +485,11 @@ export default async function Page({
               <h2 style={{ margin:0, fontSize:"clamp(16px,1.9vw,18px)", lineHeight:1.2 }}>
                 Contraintes & filtres
               </h2>
+              {/* plus de badge "Réservé PLUS/PREMIUM" */}
             </div>
 
             <form action={applyFiltersAction} className="grid gap-6 lg:grid-cols-2" >
+              {/* plus de disabled: tout le monde a accès */}
               <fieldset style={{ display:"contents" }}>
                 <div>
                   <label className="label">Cible calories (kcal)</label>
@@ -511,6 +528,7 @@ export default async function Page({
                   <a href="/dashboard/recipes" className="btn btn-outline" style={{ color: "#111" }}>
                     Réinitialiser
                   </a>
+                  {/* plus de disabled ici */}
                   <button className="btn btn-dash" type="submit">Régénérer</button>
                 </div>
               </div>
@@ -562,7 +580,7 @@ export default async function Page({
               </div>
             </section>
 
-            {/* Personnalisées IA */}
+            {/* Personnalisées IA — maintenant pour tout le monde */}
             <section className="section" style={{ marginTop: 12 }}>
               <div className="section-head" style={{ marginBottom: 8 }}>
                 <h2>Recettes personnalisées (IA)</h2>
@@ -639,6 +657,7 @@ function Card({
     <article className="card" style={{ overflow: "hidden" }}>
       <div className="flex items-center justify-between">
         <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>{r.title}</h3>
+        {/* plus de badge de plan ici */}
       </div>
 
       <div className="text-sm" style={{ marginTop: 10, display: "flex", gap: 12, flexWrap: "wrap" }}>
