@@ -283,6 +283,14 @@ export default async function Page({
   const titleList = equipMode === "none" ? "Mes séances (sans matériel)" : "Mes séances";
   const hrefGenerate = `/dashboard/profile?generate=1${equipMode === "none" ? "&equip=none" : ""}${qsKeep ? `&${qsKeep}` : ""}`;
 
+  // Base de query pour les liens vers les détails de séance (et pour garder les listes)
+  const baseLinkQuery = [
+    equipMode === "none" ? "equip=none" : undefined,
+    "generate=1",
+    savedIds.size ? `saved=${[...savedIds].join(",")}` : undefined,
+    laterIds.size ? `later=${[...laterIds].join(",")}` : undefined,
+  ].filter(Boolean).join("&");
+
   return (
     <div className="container" style={{ paddingTop: 24, paddingBottom: 32, fontSize: "var(--settings-fs, 12px)" }}>
       <div className="page-header">
@@ -477,12 +485,56 @@ export default async function Page({
             </div>
             {savedList.length > 0 && (
               <ul className="text-sm" style={{ listStyle: "disc", paddingLeft: 18, margin: 0 }}>
-                {savedList.map(({ s, idx, key }) => (
-                  <li key={key} style={{ marginBottom: 4 }}>
-                    <span style={{ fontWeight: 600 }}>{s.title || `Séance ${idx + 1}`}</span>
-                    {s.type ? <span style={{ color: "#6b7280" }}> · {s.type}</span> : null}
-                  </li>
-                ))}
+                {savedList.map(({ s, idx, key }) => {
+                  const detailHref = `/dashboard/seance/${encodeURIComponent(s.id || key)}${
+                    baseLinkQuery ? `?${baseLinkQuery}` : ""
+                  }`;
+
+                  // Construire une URL qui supprime uniquement cette séance de la liste "saved"
+                  const newSavedKeys = [...savedIds].filter((k) => k !== key);
+                  const removeQuery = [
+                    "generate=1",
+                    equipMode === "none" ? "equip=none" : undefined,
+                    newSavedKeys.length ? `saved=${newSavedKeys.join(",")}` : undefined,
+                    laterIds.size ? `later=${[...laterIds].join(",")}` : undefined,
+                  ].filter(Boolean).join("&");
+                  const removeHref = `/dashboard/profile${removeQuery ? `?${removeQuery}` : ""}`;
+
+                  return (
+                    <li
+                      key={key}
+                      style={{
+                        marginBottom: 4,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: 8,
+                      }}
+                    >
+                      <a
+                        href={detailHref}
+                        style={{ fontWeight: 600, textDecoration: "underline", textUnderlineOffset: 2 }}
+                      >
+                        {s.title || `Séance ${idx + 1}`}
+                        {s.type ? <span style={{ color: "#6b7280" }}> · {s.type}</span> : null}
+                      </a>
+                      <a
+                        href={removeHref}
+                        className="text-xs"
+                        style={{
+                          fontSize: 11,
+                          padding: "2px 6px",
+                          borderRadius: 999,
+                          border: "1px solid #e5e7eb",
+                          color: "#6b7280",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        Supprimer
+                      </a>
+                    </li>
+                  );
+                })}
               </ul>
             )}
             {/* si vide: ne rien afficher */}
@@ -495,12 +547,56 @@ export default async function Page({
             </div>
             {laterList.length > 0 && (
               <ul className="text-sm" style={{ listStyle: "disc", paddingLeft: 18, margin: 0 }}>
-                {laterList.map(({ s, idx, key }) => (
-                  <li key={key} style={{ marginBottom: 4 }}>
-                    <span style={{ fontWeight: 600 }}>{s.title || `Séance ${idx + 1}`}</span>
-                    {s.type ? <span style={{ color: "#6b7280" }}> · {s.type}</span> : null}
-                  </li>
-                ))}
+                {laterList.map(({ s, idx, key }) => {
+                  const detailHref = `/dashboard/seance/${encodeURIComponent(s.id || key)}${
+                    baseLinkQuery ? `?${baseLinkQuery}` : ""
+                  }`;
+
+                  // Construire une URL qui supprime uniquement cette séance de la liste "later"
+                  const newLaterKeys = [...laterIds].filter((k) => k !== key);
+                  const removeQuery = [
+                    "generate=1",
+                    equipMode === "none" ? "equip=none" : undefined,
+                    savedIds.size ? `saved=${[...savedIds].join(",")}` : undefined,
+                    newLaterKeys.length ? `later=${newLaterKeys.join(",")}` : undefined,
+                  ].filter(Boolean).join("&");
+                  const removeHref = `/dashboard/profile${removeQuery ? `?${removeQuery}` : ""}`;
+
+                  return (
+                    <li
+                      key={key}
+                      style={{
+                        marginBottom: 4,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: 8,
+                      }}
+                    >
+                      <a
+                        href={detailHref}
+                        style={{ fontWeight: 600, textDecoration: "underline", textUnderlineOffset: 2 }}
+                      >
+                        {s.title || `Séance ${idx + 1}`}
+                        {s.type ? <span style={{ color: "#6b7280" }}> · {s.type}</span> : null}
+                      </a>
+                      <a
+                        href={removeHref}
+                        className="text-xs"
+                        style={{
+                          fontSize: 11,
+                          padding: "2px 6px",
+                          borderRadius: 999,
+                          border: "1px solid #e5e7eb",
+                          color: "#6b7280",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        Supprimer
+                      </a>
+                    </li>
+                  );
+                })}
               </ul>
             )}
             {/* si vide: ne rien afficher */}
