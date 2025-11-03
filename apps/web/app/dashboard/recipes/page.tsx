@@ -342,9 +342,6 @@ export default async function Page({
     plan = (s?.plan as Plan) || "BASIC";
   } catch {}
 
-  // Appli gratuite : on considère tout le monde comme ayant le plan PLUS
-  plan = "PLUS";
-
   const kcal = Number(searchParams?.kcal ?? "");
   const kcalMin = Number(searchParams?.kcalMin ?? "");
   const kcalMax = Number(searchParams?.kcalMax ?? "");
@@ -359,11 +356,11 @@ export default async function Page({
 
   const healthy = HEALTHY_BASE;
 
-  // bloc IA (PLUS/PREMIUM) pour recettes — maintenant actif pour tout le monde via plan = "PLUS"
+  // bloc IA pour recettes — maintenant pour tout le monde (plus de condition sur BASIC/PLUS)
   let personalized: Recipe[] = [];
   let relaxedNote: string | null = null;
 
-  if (plan !== "BASIC") {
+  {
     const ai = await generateAIRecipes({
       plan,
       kcal: hasKcalTarget ? kcal : undefined,
@@ -413,8 +410,6 @@ export default async function Page({
   const baseQS = qsParts.length ? `${qsParts.join("&")}&` : "";
   const encode = (r: Recipe) => `?${baseQS}data=${encodeB64UrlJson(r)}`;
 
-  const disabled = plan === "BASIC";
-
   // Lecture des recettes enregistrées (cookie)
   const saved = readSaved();
   const savedSet = new Set(saved.map(s => s.id));
@@ -436,7 +431,7 @@ export default async function Page({
               Recettes
             </h1>
             <p className="lead" style={{ marginTop: 4, fontSize: "clamp(12px, 1.6vw, 14px)", lineHeight: 1.35, color: "#4b5563" }}>
-              Healthy pour tous. Pour PLUS/PREMIUM, l’IA adapte aux calories, allergies et aliments à re-travailler.
+              Healthy pour tous. L’IA adapte aux calories, allergies et aliments à re-travailler — pour tout le monde.
             </p>
 
             {/* Récap filtres actifs */}
@@ -482,17 +477,6 @@ export default async function Page({
           </a>
         </div>
 
-        {/* =================== CTA upgrade pour BASIC (visible dans les deux vues) =================== */}
-        {plan === "BASIC" && (
-          <div className="card" style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:12, marginTop:12 }}>
-            <div>
-              <strong>Débloquez la personnalisation IA</strong>
-              <div className="text-sm" style={{ color:"#6b7280" }}>Filtre calories, exclusions allergènes & “re-travailler” les aliments non aimés.</div>
-            </div>
-            <a className="btn btn-dash" href="/dashboard/abonnement">Passer à PLUS</a>
-          </div>
-        )}
-
         {/* =================== Contraintes & filtres (les deux vues) =================== */}
         {(view==="meals" || view==="shakes") && (
           <div className="section" style={{ marginTop: 12 }}>
@@ -500,15 +484,11 @@ export default async function Page({
               <h2 style={{ margin:0, fontSize:"clamp(16px,1.9vw,18px)", lineHeight:1.2 }}>
                 Contraintes & filtres
               </h2>
-              {plan==="BASIC" && (
-                <span className="badge" style={{ display: "inline-block", whiteSpace: "nowrap", verticalAlign: "middle" }}>
-                  Réservé PLUS/PREMIUM
-                </span>
-              )}
             </div>
 
             <form action={applyFiltersAction} className="grid gap-6 lg:grid-cols-2" >
-              <fieldset disabled={plan==="BASIC"} style={{ display:"contents" }}>
+              {/* plus de disabled ici : filtres dispo pour tous */}
+              <fieldset style={{ display:"contents" }}>
                 <div>
                   <label className="label">Cible calories (kcal)</label>
                   <input className="input" type="number" name="kcal" placeholder="ex: 600" defaultValue={!isNaN(kcal) && kcal>0 ? String(kcal) : ""} />
@@ -540,13 +520,13 @@ export default async function Page({
 
               <div className="flex items-center justify-between lg:col-span-2">
                 <div className="text-sm" style={{ color: "#6b7280" }}>
-                  {plan==="BASIC" ? "Passez à PLUS pour activer les filtres." : "Ajustez les filtres puis régénérez."}
+                  Ajustez les filtres puis régénérez.
                 </div>
                 <div style={{ display: "flex", gap: 10 }}>
                   <a href="/dashboard/recipes" className="btn btn-outline" style={{ color: "#111" }}>
                     Réinitialiser
                   </a>
-                  <button className="btn btn-dash" type="submit" disabled={plan==="BASIC"}>Régénérer</button>
+                  <button className="btn btn-dash" type="submit">Régénérer</button>
                 </div>
               </div>
             </form>
@@ -597,39 +577,37 @@ export default async function Page({
               </div>
             </section>
 
-            {/* Personnalisées IA */}
-            {plan !== "BASIC" && (
-              <section className="section" style={{ marginTop: 12 }}>
-                <div className="section-head" style={{ marginBottom: 8 }}>
-                  <h2>Recettes personnalisées (IA)</h2>
+            {/* Personnalisées IA — maintenant pour tout le monde */}
+            <section className="section" style={{ marginTop: 12 }}>
+              <div className="section-head" style={{ marginBottom: 8 }}>
+                <h2>Recettes personnalisées (IA)</h2>
+              </div>
+
+              {relaxedNote && (
+                <div className="text-xs" style={{ color:"#6b7280", marginBottom:8 }}>
+                  {relaxedNote}
                 </div>
+              )}
 
-                {relaxedNote && (
-                  <div className="text-xs" style={{ color:"#6b7280", marginBottom:8 }}>
-                    {relaxedNote}
-                  </div>
-                )}
-
-                {personalizedPick.length ? (
-                  <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
-                    {personalizedPick.map((r) => (
-                      <Card
-                        key={r.id}
-                        r={r}
-                        detailQS={encode(r)}
-                        isSaved={savedSet.has(r.id)}
-                        currentUrl={currentUrl || "/dashboard/recipes"}
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <div className="card text-sm" style={{ color:"#6b7280" }}>
-                    Aucune recette correspondant exactement à vos filtres pour le moment.
-                    Essayez d’élargir la plage calorique ou de réduire les exclusions.
-                  </div>
-                )}
-              </section>
-            )}
+              {personalizedPick.length ? (
+                <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
+                  {personalizedPick.map((r) => (
+                    <Card
+                      key={r.id}
+                      r={r}
+                      detailQS={encode(r)}
+                      isSaved={savedSet.has(r.id)}
+                      currentUrl={currentUrl || "/dashboard/recipes"}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="card text-sm" style={{ color:"#6b7280" }}>
+                  Aucune recette correspondant exactement à vos filtres pour le moment.
+                  Essayez d’élargir la plage calorique ou de réduire les exclusions.
+                </div>
+              )}
+            </section>
           </>
         ) : (
           /* ===== view: shakes ===== */
