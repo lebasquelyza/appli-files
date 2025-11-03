@@ -1,3 +1,4 @@
+
 import React from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -363,8 +364,39 @@ export default async function Page({
   const { base, exercises, focus, plannedMin } = await loadData(id, searchParams);
   if (!base) redirect("/dashboard/profile?error=Seance%20introuvable");
 
-  const equip = String(searchParams?.equip || "").toLowerCase() === "none" ? "none" : "full";
-  const backHref = equip === "none" ? "/dashboard/profile?equip=none" : "/dashboard/profile";
+  // Helper pour gérer string | string[]
+  const getParam = (name: string) => {
+    const v = searchParams?.[name];
+    return Array.isArray(v) ? v[0] : v;
+  };
 
-  return <PageView base={base} exercises={exercises} focus={focus} plannedMin={plannedMin} backHref={backHref} />;
+  const equip = String(getParam("equip") || "").toLowerCase() === "none" ? "none" : "full";
+
+  const qs = new URLSearchParams();
+
+  // On force generate=1 pour que le programme soit réaffiché au retour
+  qs.set("generate", "1");
+
+  // On garde le mode sans matériel si besoin
+  if (equip === "none") {
+    qs.set("equip", "none");
+  }
+
+  // Si tu utilises saved / later pour les listes, on les propage aussi
+  const saved = getParam("saved");
+  const later = getParam("later");
+  if (saved) qs.set("saved", saved);
+  if (later) qs.set("later", later);
+
+  const backHref = `/dashboard/profile${qs.toString() ? `?${qs.toString()}` : ""}`;
+
+  return (
+    <PageView
+      base={base}
+      exercises={exercises}
+      focus={focus}
+      plannedMin={plannedMin}
+      backHref={backHref}
+    />
+  );
 }
