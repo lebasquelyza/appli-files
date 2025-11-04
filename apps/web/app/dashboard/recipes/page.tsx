@@ -342,7 +342,7 @@ function personalizeFallback({
 async function applyFiltersAction(formData: FormData): Promise<void> {
   "use server";
   const params = new URLSearchParams();
-  const fields = ["kcal", "kcalMin", "kcalMax", "allergens", "dislikes"] as const;
+  const fields = ["kcal", "kcalMin", "kcalMax", "allergens", "dislikes", "view"] as const;
   for (const f of fields) {
     const val = (formData.get(f) ?? "").toString().trim();
     if (val) params.set(f, val);
@@ -469,7 +469,7 @@ export default async function Page({
   const personalizedPick = pickRandomSeeded(personalized, 6, seed);
   const shakesPick = pickRandomSeeded(SHAKES_BASE, 6, seed + 7);
 
-  // QS gardés
+  // QS gardés (sans view, on le gère à part)
   const qsParts: string[] = [];
   if (hasKcalTarget) qsParts.push(`kcal=${kcal}`);
   if (hasKcalMin) qsParts.push(`kcalMin=${kcalMin}`);
@@ -622,6 +622,9 @@ export default async function Page({
             </div>
 
             <form action={applyFiltersAction} className="grid gap-6 lg:grid-cols-2">
+              {/* 🔒 On garde la vue actuelle (meals/shakes) */}
+              <input type="hidden" name="view" value={view} />
+
               <fieldset style={{ display: "contents" }}>
                 <div>
                   <label className="label">Cible calories (kcal)</label>
