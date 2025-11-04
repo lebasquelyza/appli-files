@@ -287,7 +287,156 @@ const SHAKES_BASE: Recipe[] = [
   },
 ];
 
-/* ========= Fallback de personnalisation (sans appel API) ========= */
+/* ========= IA OpenAI (utilise process.env.OPENAI_API_KEY) ========= */
+async function generateAIRecipes({
+  plan,
+  kcal,
+  kcalMin,
+  kcalMax,
+  allergens,
+  dislikes,
+  count = 12,
+}: {
+  plan: Plan;
+  kcal?: number;
+  kcalMin?: number;
+  kcalMax?: number;
+  allergens: string[];
+  dislikes: string[];
+  count?: number;
+}): Promise<Recipe[]> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return []; // pas de clé => pas d'IA, on laisse le fallback gérer
+
+  const constraints: string[] = [];
+  if (typeof kcal === "number" && !isNaN(kcal) && kcal > 0) {
+    constraints.push(`- Viser ~${kcal} kcal par recette (±10%).`);
+  } else {
+    const hasMin = typeof kcalMin === "number" && !isNaN(kcalMin) && kcalMin > 0;
+    const hasMax = typeof kcalMax === "number" && !isNaN(kcalMax) && kcalMax > 0;
+    if (hasMin && hasMax) constraints.push(`- Respecter une plage ${kcalMin}-${kcalMax} kcal.`);
+    else if (hasMin) constraints.push(`- Minimum ${kcalMin} kcal.`);
+    else if (hasMax) constraints.push(`- Maximum ${kcalMax} kcal.`);
+  }
+  if (allergens.length) constraints.push(`- Exclure strictement: ${allergens.join(", ")}.`);
+  if (dislikes.length)
+    constraints.push(
+      `- Si un ingrédient non-aimé apparaît, ne pas le supprimer: proposer une section "rework" avec 2-3 façons de le cuisiner autrement.`
+    );
+
+  const prompt = `Tu es un chef-nutritionniste. Renvoie UNIQUEMENT du JSON valide (pas de texte).
+Utilisateur:
+- Plan: ${plan}
+- Allergènes/Intolérances: ${allergens.join(", ") || "aucun"}
+- Aliments non aimés (à re-travailler): ${dislikes.join(", ") || "aucun"}
+- Nombre de recettes: ${count}
+
+Contraintes:
+${constraints.join("\n")}
+
+Schéma TypeScript (exemple):
+Recipe = {
+  id: string, title: string, subtitle?: string,
+  kcal?: number, timeMin?: number, tags: string[],
+  goals: string[], minPlan: "BASIC" | "PLUS" | "PREMIUM",
+  ingredients: string[], steps: string[],
+  rework?: { ingredient: string, tips: string[] }[]
+}
+
+Règles:
+- minPlan = "${plan}" pour toutes les recettes.
+- Variété: végétarien/vegan/protéiné/rapide/sans-gluten...
+- Ingrédients simples du quotidien.
+- steps = 3–6 étapes courtes.
+- Renvoyer {"recipes": Recipe[]}.`;
+
+  try {
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        temperature: 0.7,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: "Tu parles français et tu réponds en JSON strict." },
+          { role: "user", content: prompt },
+        ],
+      }),
+      cache: "no-store",
+    });
+
+    if (!res.ok) {
+      // erreur HTTP => on laisse le fallback s'occuper de proposer des recettes
+      return [];
+    }
+
+    const data = await res.json();
+    let payload: any = {};
+    try {
+      payload = JSON.parse(data?.choices?.[0]?.message?.content ?? "{}");
+    } catch {
+      return [];
+    }
+
+    const arr: any[] = Array.isArray(payload?.recipes) ? payload.recipes : [];
+    const seen = new Set<string>();
+
+    const clean: Recipe[] = arr
+      .map((raw) => {
+        const title = String(raw?.title ?? "").trim();
+        const id = String(raw?.id || title || Math.random().toString(36).slice(2))
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9-]+/g, "-");
+        const ingr = Array.isArray(raw?.ingredients)
+          ? raw.ingredients.map((x: any) => String(x))
+          : [];
+        const steps = Array.isArray(raw?.steps)
+          ? raw.steps.map((x: any) => String(x))
+          : [];
+        const rework: Rework[] | undefined = Array.isArray(raw?.rework)
+          ? raw.rework.map((x: any) => ({
+              ingredient: String(x?.ingredient || "").toLowerCase(),
+              tips: Array.isArray(x?.tips) ? x.tips.map((t: any) => String(t)) : [],
+            }))
+          : undefined;
+        const minPlan: Plan = plan === "PREMIUM" ? "PREMIUM" : "PLUS";
+
+        return {
+          id,
+          title,
+          subtitle: raw?.subtitle ? String(raw.subtitle) : undefined,
+          kcal: typeof raw?.kcal === "number" ? raw.kcal : undefined,
+          timeMin: typeof raw?.timeMin === "number" ? raw.timeMin : undefined,
+          tags: Array.isArray(raw?.tags) ? raw.tags.map((t: any) => String(t)) : [],
+          goals: Array.isArray(raw?.goals) ? raw.goals.map((g: any) => String(g)) : [],
+          minPlan,
+          ingredients: ingr,
+          steps,
+          rework,
+        } as Recipe;
+      })
+      .filter((r) => {
+        if (!r.title) return false;
+        if (seen.has(r.id)) return false;
+        seen.add(r.id);
+        const ingLow = r.ingredients.map((i) => i.toLowerCase());
+        if (allergens.some((a) => ingLow.includes(a))) return false;
+        return true;
+      });
+
+    return clean;
+  } catch {
+    // cas "Connection closed" ou autre => on renvoie [] et on laisse le fallback bosser
+    return [];
+  }
+}
+
+/* ========= Fallback de personnalisation ========= */
 function personalizeFallback({
   base,
   kcal,
@@ -313,9 +462,7 @@ function personalizeFallback({
   if (typeof kcal === "number" && !isNaN(kcal) && kcal > 0) {
     const tol = Math.max(75, Math.round(kcal * 0.15));
     filtered = filtered.filter(
-      (r) =>
-        typeof r.kcal === "number" &&
-        Math.abs((r.kcal || 0) - kcal) <= tol
+      (r) => typeof r.kcal === "number" && Math.abs((r.kcal || 0) - kcal) <= tol
     );
   } else {
     const hasMin = typeof kcalMin === "number" && !isNaN(kcalMin) && kcalMin > 0;
@@ -423,7 +570,7 @@ export default async function Page({
     view?: string;
   };
 }) {
-  // Plan figé, mais plus utilisé pour bloquer quoi que ce soit
+  // On ne bloque plus rien par plan, on fixe juste une valeur pour le prompt IA
   const plan: Plan = "PLUS";
 
   const kcal = Number(searchParams?.kcal ?? "");
@@ -440,17 +587,44 @@ export default async function Page({
 
   const healthy = HEALTHY_BASE;
 
-  // "Personnalisées" via fallback local, sans appel API
-  let personalized: Recipe[] = personalizeFallback({
-    base: HEALTHY_BASE,
-    kcal: hasKcalTarget ? kcal : undefined,
-    kcalMin: hasKcalMin ? kcalMin : undefined,
-    kcalMax: hasKcalMax ? kcalMax : undefined,
-    allergens,
-    dislikes,
-    plan,
-  });
+  // IA + fallback robuste
+  let personalized: Recipe[] = [];
   let relaxedNote: string | null = null;
+
+  try {
+    const ai = await generateAIRecipes({
+      plan,
+      kcal: hasKcalTarget ? kcal : undefined,
+      kcalMin: hasKcalMin ? kcalMin : undefined,
+      kcalMax: hasKcalMax ? kcalMax : undefined,
+      allergens,
+      dislikes,
+      count: 16,
+    });
+
+    personalized =
+      ai.length > 0
+        ? ai
+        : personalizeFallback({
+            base: HEALTHY_BASE,
+            kcal: hasKcalTarget ? kcal : undefined,
+            kcalMin: hasKcalMin ? kcalMin : undefined,
+            kcalMax: hasKcalMax ? kcalMax : undefined,
+            allergens,
+            dislikes,
+            plan,
+          });
+  } catch {
+    personalized = personalizeFallback({
+      base: HEALTHY_BASE,
+      kcal: hasKcalTarget ? kcal : undefined,
+      kcalMin: hasKcalMin ? kcalMin : undefined,
+      kcalMax: hasKcalMax ? kcalMax : undefined,
+      allergens,
+      dislikes,
+      plan,
+    });
+  }
 
   if (personalized.length === 0) {
     const relaxed = personalizeFallback({
@@ -465,7 +639,8 @@ export default async function Page({
         "Ajustement automatique : contrainte calories relâchée (allergènes respectés).";
     } else {
       personalized = HEALTHY_BASE.map((r) => ({ ...r, minPlan: plan }));
-      relaxedNote = "Ajustement automatique : suggestions healthy compatibles avec vos contraintes.";
+      relaxedNote =
+        "Ajustement automatique : suggestions healthy compatibles avec vos contraintes.";
     }
   }
 
@@ -520,8 +695,8 @@ export default async function Page({
                 color: "#4b5563",
               }}
             >
-              Healthy pour tous. L’IA (ou plutôt la logique de personnalisation) adapte aux calories,
-              allergies et aliments à re-travailler — sans abonnement.
+              Healthy pour tous. L’IA adapte aux calories, allergies et aliments à re-travailler —
+              sans abonnement.
             </p>
 
             {/* Récap filtres actifs */}
@@ -773,10 +948,10 @@ export default async function Page({
               </div>
             </section>
 
-            {/* Personnalisées (fallback local) */}
+            {/* Personnalisées IA */}
             <section className="section" style={{ marginTop: 12 }}>
               <div className="section-head" style={{ marginBottom: 8 }}>
-                <h2>Recettes personnalisées</h2>
+                <h2>Recettes personnalisées (IA)</h2>
               </div>
 
               {relaxedNote && (
