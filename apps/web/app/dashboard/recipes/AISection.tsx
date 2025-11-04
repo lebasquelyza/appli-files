@@ -23,7 +23,6 @@ export function AISection({
   initialRecipes,
   filters,
   relaxedNote,
-  renderCard,
 }: {
   initialRecipes: Recipe[];
   filters: {
@@ -35,7 +34,6 @@ export function AISection({
     dislikes: string[];
   };
   relaxedNote: string | null;
-  renderCard: (r: Recipe) => React.ReactNode;
 }) {
   const [recipes, setRecipes] = useState<Recipe[]>(initialRecipes);
   const [loading, setLoading] = useState(false);
@@ -67,7 +65,6 @@ export function AISection({
         if (cancelled) return;
 
         if (Array.isArray(data.recipes) && data.recipes.length) {
-          // Normalisation simple
           const mapped: Recipe[] = data.recipes.map((raw: any) => {
             const title = String(raw?.title ?? "").trim() || "Recette";
             const id = String(raw?.id || title || Math.random().toString(36).slice(2))
@@ -100,16 +97,15 @@ export function AISection({
               rework,
             };
           });
+
           setRecipes(mapped);
         }
 
         if (data.error && !cancelled) {
           setError(data.error);
         }
-      } catch (e: any) {
-        if (!cancelled) {
-          setError("Erreur de connexion à l’IA");
-        }
+      } catch {
+        if (!cancelled) setError("Erreur de connexion à l’IA");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -154,7 +150,51 @@ export function AISection({
 
       {recipes.length ? (
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
-          {recipes.map((r) => renderCard(r))}
+          {recipes.map((r) => {
+            const ing = Array.isArray(r.ingredients) ? r.ingredients : [];
+            const shown = ing.slice(0, 8);
+            const more = Math.max(0, ing.length - shown.length);
+
+            return (
+              <article key={r.id} className="card" style={{ overflow: "hidden" }}>
+                <div className="flex items-center justify-between">
+                  <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>{r.title}</h3>
+                </div>
+
+                <div
+                  className="text-sm"
+                  style={{ marginTop: 10, display: "flex", gap: 12, flexWrap: "wrap" }}
+                >
+                  {typeof r.kcal === "number" && <span className="badge">{r.kcal} kcal</span>}
+                  {typeof r.timeMin === "number" && (
+                    <span className="badge">{r.timeMin} min</span>
+                  )}
+                </div>
+
+                <div className="text-sm" style={{ marginTop: 10 }}>
+                  <strong>Ingrédients</strong>
+                  <ul style={{ margin: "6px 0 0 16px" }}>
+                    {shown.map((i, idx) => (
+                      <li key={idx}>{i}</li>
+                    ))}
+                    {more > 0 && <li>+ {more} autre(s)…</li>}
+                  </ul>
+                </div>
+
+                {Array.isArray(r.steps) && r.steps.length > 0 && (
+                  <div className="text-sm" style={{ marginTop: 10 }}>
+                    <strong>Préparation</strong>
+                    <ul style={{ margin: "6px 0 0 16px" }}>
+                      {r.steps.slice(0, 3).map((s, idx) => (
+                        <li key={idx}>{s}</li>
+                      ))}
+                      {r.steps.length > 3 && <li>…</li>}
+                    </ul>
+                  </div>
+                )}
+              </article>
+            );
+          })}
         </div>
       ) : (
         <div className="card text-sm" style={{ color: "#6b7280" }}>
@@ -164,3 +204,4 @@ export function AISection({
     </section>
   );
 }
+
