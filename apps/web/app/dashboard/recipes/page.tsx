@@ -308,9 +308,7 @@ function personalizeFallback({
   if (typeof kcal === "number" && !isNaN(kcal) && kcal > 0) {
     const tol = Math.max(75, Math.round(kcal * 0.15));
     filtered = filtered.filter(
-      (r) =>
-        typeof r.kcal === "number" &&
-        Math.abs((r.kcal || 0) - kcal) <= tol
+      (r) => typeof r.kcal === "number" && Math.abs((r.kcal || 0) - kcal) <= tol
     );
   } else {
     const hasMin = typeof kcalMin === "number" && !isNaN(kcalMin) && kcalMin > 0;
@@ -418,7 +416,7 @@ export default async function Page({
     view?: string;
   };
 }) {
-  // On ne bloque plus rien par plan, on fixe juste une valeur pour filtrage / IA
+  // Plan "virtuel" juste pour le filtrage / IA (appli gratuite)
   const plan: Plan = "PLUS";
 
   const kcal = Number(searchParams?.kcal ?? "");
@@ -484,7 +482,9 @@ export default async function Page({
   // Lecture des recettes enregistrées (cookie)
   const saved = readSaved();
   const savedSet = new Set(saved.map((s) => s.id));
-  const currentUrl = `/dashboard/recipes?${qsParts.join("&")}`;
+  const currentUrl = qsParts.length
+    ? `/dashboard/recipes?${qsParts.join("&")}`
+    : "/dashboard/recipes";
 
   // Liens nav bloc
   const linkMeals = `/dashboard/recipes?${baseQS}view=meals`;
@@ -781,15 +781,6 @@ export default async function Page({
                 dislikes,
               }}
               relaxedNote={relaxedNote}
-              renderCard={(r) => (
-                <Card
-                  key={r.id}
-                  r={r}
-                  detailQS={encode(r)}
-                  isSaved={savedSet.has(r.id)}
-                  currentUrl={currentUrl || "/dashboard/recipes"}
-                />
-              )}
             />
           </>
         ) : (
