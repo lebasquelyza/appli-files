@@ -32,17 +32,13 @@ function isUnlocked(r: Recipe, userPlan: Plan) {
 }
 function parseCsv(value?: string | string[]): string[] {
   const raw = Array.isArray(value) ? value.join(",") : value ?? "";
-  return raw
-    .split(/[,|]/)
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean);
+  return raw.split(/[,|]/).map((s) => s.trim().toLowerCase()).filter(Boolean);
 }
 
 /* --- random déterministe --- */
 function seededPRNG(seed: number) {
   let s = seed >>> 0;
-  return () =>
-    ((s = (s * 1664525 + 1013904223) >>> 0) / 2 ** 32);
+  return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 2 ** 32);
 }
 function seededShuffle<T>(arr: T[], seed: number): T[] {
   const rand = seededPRNG(seed);
@@ -54,10 +50,7 @@ function seededShuffle<T>(arr: T[], seed: number): T[] {
   return a;
 }
 function pickRandomSeeded<T>(arr: T[], n: number, seed: number): T[] {
-  return seededShuffle(arr, seed).slice(
-    0,
-    Math.max(0, Math.min(n, arr.length))
-  );
+  return seededShuffle(arr, seed).slice(0, Math.max(0, Math.min(n, arr.length)));
 }
 
 /* ---- base64url JSON ---- */
@@ -74,53 +67,25 @@ function encodeB64UrlJson(data: any): string {
   }
   const bytes = new TextEncoder().encode(json);
   let bin = "";
-  for (let i = 0; i < bytes.length; i++)
-    bin += String.fromCharCode(bytes[i]);
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
   const btoaFn: ((s: string) => string) | undefined = (globalThis as any).btoa;
   let b64: string;
   if (typeof btoaFn === "function") b64 = btoaFn(bin);
   else if (B?.from) b64 = B.from(bin, "binary").toString("base64");
   else b64 = "";
-  return b64
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/, "");
+  return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
 /* ---- dictionnaire "re-travailler" (fallback) ---- */
 const REWORK_TIPS: Record<string, string[]> = {
-  brocoli: [
-    "Rôti au four parmesan-citron",
-    "Wok soja-sésame",
-    "Velouté crème légère",
-  ],
-  saumon: [
-    "Mariné miso/soja",
-    "Papillote citron-aneth",
-    "Rillettes au yaourt",
-  ],
-  tofu: [
-    "Mariné puis snacké",
-    "Panure maïzena + sauce douce",
-    "Émietté façon brouillade",
-  ],
+  brocoli: ["Rôti au four parmesan-citron", "Wok soja-sésame", "Velouté crème légère"],
+  saumon: ["Mariné miso/soja", "Papillote citron-aneth", "Rillettes au yaourt"],
+  tofu: ["Mariné puis snacké", "Panure maïzena + sauce douce", "Émietté façon brouillade"],
   poivron: ["Confit puis pelé", "Coulis doux", "Grillé salade"],
-  champignons: [
-    "Poêlés très chauds",
-    "Hachés en bolo",
-    "Rôtis entiers",
-  ],
-  courgette: [
-    "Tagliatelles ail-citron",
-    "Gratin ricotta-menthe",
-    "Galettes râpées",
-  ],
+  champignons: ["Poêlés très chauds", "Hachés en bolo", "Rôtis entiers"],
+  courgette: ["Tagliatelles ail-citron", "Gratin ricotta-menthe", "Galettes râpées"],
   épinards: ["Sautés minute", "Pesto doux", "Fondue légère"],
-  lentilles: [
-    "Dal coco",
-    "Salade tiède",
-    "Soupe carotte-cumin",
-  ],
+  lentilles: ["Dal coco", "Salade tiède", "Soupe carotte-cumin"],
 };
 
 /* ---- base healthy (dispo pour tous) ---- */
@@ -177,15 +142,7 @@ const HEALTHY_BASE: Recipe[] = [
     tags: ["rapide", "sans-gluten"],
     goals: ["equilibre"],
     minPlan: "BASIC",
-    ingredients: [
-      "œufs",
-      "champignons",
-      "ciboulette",
-      "beurre",
-      "sel",
-      "poivre",
-      "parmesan",
-    ],
+    ingredients: ["œufs", "champignons", "ciboulette", "beurre", "sel", "poivre", "parmesan"],
     steps: ["Battre, cuire, plier"],
   },
   {
@@ -253,7 +210,7 @@ const HEALTHY_BASE: Recipe[] = [
   },
 ];
 
-/* ---- base Bar à prot' (typée Recipe pour réutiliser Card) ---- */
+/* ---- base Bar à prot' ---- */
 const SHAKES_BASE: Recipe[] = [
   {
     id: "shake-choco-banane",
@@ -330,199 +287,7 @@ const SHAKES_BASE: Recipe[] = [
   },
 ];
 
-/* ========= Mode IA (même logique, pour tout le monde) ========= */
-async function generateAIRecipes({
-  plan,
-  kcal,
-  kcalMin,
-  kcalMax,
-  allergens,
-  dislikes,
-  count = 12,
-}: {
-  plan: Plan;
-  kcal?: number;
-  kcalMin?: number;
-  kcalMax?: number;
-  allergens: string[];
-  dislikes: string[];
-  count?: number;
-}): Promise<Recipe[]> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return [];
-  const constraints: string[] = [];
-  if (typeof kcal === "number" && !isNaN(kcal) && kcal > 0) {
-    constraints.push(
-      `- Viser ~${kcal} kcal par recette (±10%).`
-    );
-  } else {
-    const hasMin =
-      typeof kcalMin === "number" && !isNaN(kcalMin) && kcalMin > 0;
-    const hasMax =
-      typeof kcalMax === "number" && !isNaN(kcalMax) && kcalMax > 0;
-    if (hasMin && hasMax)
-      constraints.push(
-        `- Respecter une plage ${kcalMin}-${kcalMax} kcal.`
-      );
-    else if (hasMin)
-      constraints.push(`- Minimum ${kcalMin} kcal.`);
-    else if (hasMax)
-      constraints.push(`- Maximum ${kcalMax} kcal.`);
-  }
-  if (allergens.length)
-    constraints.push(
-      `- Exclure strictement: ${allergens.join(", ")}.`
-    );
-  if (dislikes.length)
-    constraints.push(
-      `- Si un ingrédient non-aimé apparaît, ne pas le supprimer: proposer une section "rework" avec 2-3 façons de le cuisiner autrement.`
-    );
-
-  const prompt = `Tu es un chef-nutritionniste. Renvoie UNIQUEMENT du JSON valide (pas de texte).
-Utilisateur:
-- Plan: ${plan}
-- Allergènes/Intolérances: ${
-    allergens.join(", ") || "aucun"
-  }
-- Aliments non aimés (à re-travailler): ${
-    dislikes.join(", ") || "aucun"
-  }
-- Nombre de recettes: ${count}
-
-Contraintes:
-${constraints.join("\n")}
-
-Schéma TypeScript (exemple):
-Recipe = {
-  id: string, title: string, subtitle?: string,
-  kcal?: number, timeMin?: number, tags: string[],
-  goals: string[], minPlan: "BASIC" | "PLUS" | "PREMIUM",
-  ingredients: string[], steps: string[],
-  rework?: { ingredient: string, tips: string[] }[]
-}
-
-Règles:
-- minPlan = "${plan}" pour toutes les recettes.
-- Variété: végétarien/vegan/protéiné/rapide/sans-gluten...
-- Ingrédients simples du quotidien.
-- steps = 3–6 étapes courtes.
-- Renvoyer {"recipes": Recipe[]}.`;
-
-  try {
-    const res = await fetch(
-      "https://api.openai.com/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "gpt-4o-mini",
-          temperature: 0.7,
-          response_format: { type: "json_object" },
-          messages: [
-            {
-              role: "system",
-              content:
-                "Tu parles français et tu réponds en JSON strict.",
-            },
-            { role: "user", content: prompt },
-          ],
-        }),
-        cache: "no-store",
-      }
-    );
-
-    if (!res.ok) return [];
-    const data = await res.json();
-    let payload: any = {};
-    try {
-      payload = JSON.parse(
-        data?.choices?.[0]?.message?.content ?? "{}"
-      );
-    } catch {}
-    const arr: any[] = Array.isArray(payload?.recipes)
-      ? payload.recipes
-      : [];
-    const seen = new Set<string>();
-    const clean: Recipe[] = arr
-      .map((raw) => {
-        const title = String(raw?.title ?? "").trim();
-        const id = String(
-          raw?.id ||
-            title ||
-            Math.random().toString(36).slice(2)
-        )
-          .trim()
-          .toLowerCase()
-          .replace(/[^a-z0-9-]+/g, "-");
-        const ingr = Array.isArray(raw?.ingredients)
-          ? raw.ingredients.map((x: any) => String(x))
-          : [];
-        const steps = Array.isArray(raw?.steps)
-          ? raw.steps.map((x: any) => String(x))
-          : [];
-        const rework: Rework[] | undefined = Array.isArray(
-          raw?.rework
-        )
-          ? raw.rework.map((x: any) => ({
-              ingredient: String(
-                x?.ingredient || ""
-              ).toLowerCase(),
-              tips: Array.isArray(x?.tips)
-                ? x.tips.map((t: any) => String(t))
-                : [],
-            }))
-          : undefined;
-        const minPlan: Plan =
-          plan === "PREMIUM" ? "PREMIUM" : "PLUS";
-
-        return {
-          id,
-          title,
-          subtitle: raw?.subtitle
-            ? String(raw.subtitle)
-            : undefined,
-          kcal:
-            typeof raw?.kcal === "number"
-              ? raw.kcal
-              : undefined,
-          timeMin:
-            typeof raw?.timeMin === "number"
-              ? raw.timeMin
-              : undefined,
-          tags: Array.isArray(raw?.tags)
-            ? raw.tags.map((t: any) => String(t))
-            : [],
-          goals: Array.isArray(raw?.goals)
-            ? raw.goals.map((g: any) => String(g))
-            : [],
-          minPlan,
-          ingredients: ingr,
-          steps,
-          rework,
-        } as Recipe;
-      })
-      .filter((r) => {
-        if (!r.title) return false;
-        if (seen.has(r.id)) return false;
-        seen.add(r.id);
-        const ingLow = r.ingredients.map((i) =>
-          i.toLowerCase()
-        );
-        if (allergens.some((a) => ingLow.includes(a)))
-          return false;
-        return true;
-      });
-
-    return clean;
-  } catch {
-    return [];
-  }
-}
-
-/* ---- fallback si IA indisponible ---- */
+/* ========= Fallback de personnalisation (sans appel API) ========= */
 function personalizeFallback({
   base,
   kcal,
@@ -544,6 +309,7 @@ function personalizeFallback({
     const ing = r.ingredients.map((i) => i.toLowerCase());
     return !allergens.some((a) => ing.includes(a));
   });
+
   if (typeof kcal === "number" && !isNaN(kcal) && kcal > 0) {
     const tol = Math.max(75, Math.round(kcal * 0.15));
     filtered = filtered.filter(
@@ -552,29 +318,17 @@ function personalizeFallback({
         Math.abs((r.kcal || 0) - kcal) <= tol
     );
   } else {
-    const hasMin =
-      typeof kcalMin === "number" && !isNaN(kcalMin) && kcalMin > 0;
-    const hasMax =
-      typeof kcalMax === "number" && !isNaN(kcalMax) && kcalMax > 0;
-    if (hasMin)
-      filtered = filtered.filter(
-        (r) => (r.kcal || 0) >= (kcalMin as number)
-      );
-    if (hasMax)
-      filtered = filtered.filter(
-        (r) => (r.kcal || 0) <= (kcalMax as number)
-      );
+    const hasMin = typeof kcalMin === "number" && !isNaN(kcalMin) && kcalMin > 0;
+    const hasMax = typeof kcalMax === "number" && !isNaN(kcalMax) && kcalMax > 0;
+    if (hasMin) filtered = filtered.filter((r) => (r.kcal || 0) >= (kcalMin as number));
+    if (hasMax) filtered = filtered.filter((r) => (r.kcal || 0) <= (kcalMax as number));
   }
+
   const dislikesSet = new Set(dislikes);
   const out: Recipe[] = filtered.map<Recipe>((r) => {
-    const ingLower = r.ingredients.map((i) =>
-      i.toLowerCase()
-    );
-    const hits = [...dislikesSet].filter((d) =>
-      ingLower.includes(d)
-    );
-    const minPlan: Plan =
-      plan === "PREMIUM" ? "PREMIUM" : "PLUS";
+    const ingLower = r.ingredients.map((i) => i.toLowerCase());
+    const hits = [...dislikesSet].filter((d) => ingLower.includes(d));
+    const minPlan: Plan = plan === "PREMIUM" ? "PREMIUM" : "PLUS";
     if (!hits.length) return { ...r, minPlan };
     const tips: Rework[] = hits.map((h) => ({
       ingredient: h,
@@ -587,26 +341,17 @@ function personalizeFallback({
     }));
     return { ...r, minPlan, rework: tips };
   });
+
   return out;
 }
 
 /* ===================== Filtres (Server Action) ===================== */
-async function applyFiltersAction(
-  formData: FormData
-): Promise<void> {
+async function applyFiltersAction(formData: FormData): Promise<void> {
   "use server";
   const params = new URLSearchParams();
-  const fields = [
-    "kcal",
-    "kcalMin",
-    "kcalMax",
-    "allergens",
-    "dislikes",
-  ] as const;
+  const fields = ["kcal", "kcalMin", "kcalMax", "allergens", "dislikes"] as const;
   for (const f of fields) {
-    const val = (formData.get(f) ?? "")
-      .toString()
-      .trim();
+    const val = (formData.get(f) ?? "").toString().trim();
     if (val) params.set(f, val);
   }
   params.set("rnd", String(Date.now()));
@@ -622,12 +367,7 @@ function readSaved(): SavedItem[] {
     const raw = cookies().get(SAVED_COOKIE)?.value ?? "[]";
     const arr = JSON.parse(raw);
     return Array.isArray(arr)
-      ? arr.filter(
-          (x) =>
-            x &&
-            typeof x.id === "string" &&
-            typeof x.title === "string"
-        )
+      ? arr.filter((x) => x && typeof x.id === "string" && typeof x.title === "string")
       : [];
   } catch {
     return [];
@@ -647,9 +387,7 @@ async function saveRecipeAction(formData: FormData) {
   "use server";
   const id = String(formData.get("id") ?? "");
   const title = String(formData.get("title") ?? "");
-  const returnTo = String(
-    formData.get("returnTo") ?? "/dashboard/recipes"
-  );
+  const returnTo = String(formData.get("returnTo") ?? "/dashboard/recipes");
   if (!id || !title) redirect(returnTo);
 
   const cur = readSaved();
@@ -663,9 +401,7 @@ async function saveRecipeAction(formData: FormData) {
 async function removeRecipeAction(formData: FormData) {
   "use server";
   const id = String(formData.get("id") ?? "");
-  const returnTo = String(
-    formData.get("returnTo") ?? "/dashboard/recipes"
-  );
+  const returnTo = String(formData.get("returnTo") ?? "/dashboard/recipes");
   if (!id) redirect(returnTo);
 
   const cur = readSaved().filter((x) => x.id !== id);
@@ -687,13 +423,8 @@ export default async function Page({
     view?: string;
   };
 }) {
-  // Lecture session — on ne bloque plus rien selon le plan
-  let plan: Plan = "BASIC";
-  try {
-    const mod = await import("@/lib/session");
-    const s: any = await mod.getSession().catch(() => ({}));
-    plan = (s?.plan as Plan) || "BASIC";
-  } catch {}
+  // Plan figé, mais plus utilisé pour bloquer quoi que ce soit
+  const plan: Plan = "PLUS";
 
   const kcal = Number(searchParams?.kcal ?? "");
   const kcalMin = Number(searchParams?.kcalMin ?? "");
@@ -705,58 +436,36 @@ export default async function Page({
   const hasKcalMin = !isNaN(kcalMin) && kcalMin > 0;
   const hasKcalMax = !isNaN(kcalMax) && kcalMax > 0;
 
-  const view = (searchParams?.view === "shakes"
-    ? "shakes"
-    : "meals") as "meals" | "shakes";
+  const view = (searchParams?.view === "shakes" ? "shakes" : "meals") as "meals" | "shakes";
 
   const healthy = HEALTHY_BASE;
 
-  // bloc IA : maintenant actif pour tout le monde
-  let personalized: Recipe[] = [];
+  // "Personnalisées" via fallback local, sans appel API
+  let personalized: Recipe[] = personalizeFallback({
+    base: HEALTHY_BASE,
+    kcal: hasKcalTarget ? kcal : undefined,
+    kcalMin: hasKcalMin ? kcalMin : undefined,
+    kcalMax: hasKcalMax ? kcalMax : undefined,
+    allergens,
+    dislikes,
+    plan,
+  });
   let relaxedNote: string | null = null;
 
-  {
-    const ai = await generateAIRecipes({
-      plan,
-      kcal: hasKcalTarget ? kcal : undefined,
-      kcalMin: hasKcalMin ? kcalMin : undefined,
-      kcalMax: hasKcalMax ? kcalMax : undefined,
+  if (personalized.length === 0) {
+    const relaxed = personalizeFallback({
+      base: HEALTHY_BASE,
       allergens,
       dislikes,
-      count: 16,
+      plan,
     });
-
-    personalized = ai.length
-      ? ai
-      : personalizeFallback({
-          base: HEALTHY_BASE,
-          kcal: hasKcalTarget ? kcal : undefined,
-          kcalMin: hasKcalMin ? kcalMin : undefined,
-          kcalMax: hasKcalMax ? kcalMax : undefined,
-          allergens,
-          dislikes,
-          plan,
-        });
-
-    if (personalized.length === 0) {
-      const relaxed = personalizeFallback({
-        base: HEALTHY_BASE,
-        allergens,
-        dislikes,
-        plan,
-      });
-      if (relaxed.length) {
-        personalized = relaxed;
-        relaxedNote =
-          "Ajustement automatique : contrainte calories relâchée (allergènes respectés).";
-      } else {
-        personalized = HEALTHY_BASE.map((r) => ({
-          ...r,
-          minPlan: plan,
-        }));
-        relaxedNote =
-          "Ajustement automatique : suggestions healthy compatibles avec vos contraintes.";
-      }
+    if (relaxed.length) {
+      personalized = relaxed;
+      relaxedNote =
+        "Ajustement automatique : contrainte calories relâchée (allergènes respectés).";
+    } else {
+      personalized = HEALTHY_BASE.map((r) => ({ ...r, minPlan: plan }));
+      relaxedNote = "Ajustement automatique : suggestions healthy compatibles avec vos contraintes.";
     }
   }
 
@@ -764,8 +473,6 @@ export default async function Page({
   const seed = Number(searchParams?.rnd ?? "0") || 123456789;
   const healthyPick = pickRandomSeeded(healthy, 4, seed);
   const personalizedPick = pickRandomSeeded(personalized, 6, seed);
-
-  // Bar à prot' : liste simple (même Card)
   const shakesPick = pickRandomSeeded(SHAKES_BASE, 6, seed + 7);
 
   // QS gardés
@@ -773,19 +480,10 @@ export default async function Page({
   if (hasKcalTarget) qsParts.push(`kcal=${kcal}`);
   if (hasKcalMin) qsParts.push(`kcalMin=${kcalMin}`);
   if (hasKcalMax) qsParts.push(`kcalMax=${kcalMax}`);
-  if (allergens.length)
-    qsParts.push(
-      `allergens=${encodeURIComponent(allergens.join(","))}`
-    );
-  if (dislikes.length)
-    qsParts.push(
-      `dislikes=${encodeURIComponent(dislikes.join(","))}`
-    );
-  const baseQS = qsParts.length
-    ? `${qsParts.join("&")}&`
-    : "";
-  const encode = (r: Recipe) =>
-    `?${baseQS}data=${encodeB64UrlJson(r)}`;
+  if (allergens.length) qsParts.push(`allergens=${encodeURIComponent(allergens.join(","))}`);
+  if (dislikes.length) qsParts.push(`dislikes=${encodeURIComponent(dislikes.join(","))}`);
+  const baseQS = qsParts.length ? `${qsParts.join("&")}&` : "";
+  const encode = (r: Recipe) => `?${baseQS}data=${encodeB64UrlJson(r)}`;
 
   // Lecture des recettes enregistrées (cookie)
   const saved = readSaved();
@@ -798,13 +496,9 @@ export default async function Page({
 
   return (
     <>
-      {/* spacer pour laisser passer un topbar fixe éventuel */}
       <div className="h-10" aria-hidden="true" />
 
-      <div
-        className="container"
-        style={{ paddingTop: 24, paddingBottom: 32 }}
-      >
+      <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
         <div className="page-header">
           <div>
             <h1
@@ -826,31 +520,22 @@ export default async function Page({
                 color: "#4b5563",
               }}
             >
-              Healthy pour tous. L’IA adapte aux calories,
-              allergies et aliments à re-travailler.
+              Healthy pour tous. L’IA (ou plutôt la logique de personnalisation) adapte aux calories,
+              allergies et aliments à re-travailler — sans abonnement.
             </p>
 
             {/* Récap filtres actifs */}
-            <div
-              className="text-xs"
-              style={{ color: "#6b7280", marginTop: 8 }}
-            >
+            <div className="text-xs" style={{ color: "#6b7280", marginTop: 8 }}>
               Filtres actifs —
               {hasKcalTarget && <> cible: ~{kcal} kcal</>}
-              {!hasKcalTarget &&
-                (hasKcalMin || hasKcalMax) && (
-                  <>
-                    {" "}
-                    plage: {hasKcalMin ? kcalMin : "…"}–
-                    {hasKcalMax ? kcalMax : "…"} kcal
-                  </>
-                )}
-              {allergens.length ? (
-                <> · allergènes: {allergens.join(", ")}</>
-              ) : null}
-              {dislikes.length ? (
-                <> · non aimés: {dislikes.join(", ")}</>
-              ) : null}
+              {!hasKcalTarget && (hasKcalMin || hasKcalMax) && (
+                <>
+                  {" "}
+                  plage: {hasKcalMin ? kcalMin : "…"}–{hasKcalMax ? kcalMax : "…"} kcal
+                </>
+              )}
+              {allergens.length ? <> · allergènes: {allergens.join(", ")}</> : null}
+              {dislikes.length ? <> · non aimés: {dislikes.join(", ")}</> : null}
               {!hasKcalTarget &&
                 !hasKcalMin &&
                 !hasKcalMax &&
@@ -859,22 +544,17 @@ export default async function Page({
                 " aucun"}
             </div>
           </div>
-          {/* on n'affiche plus "Votre formule : BASIC/PLUS..." */}
         </div>
 
         {/* =================== Choix rapide (blocs cliquables) =================== */}
-        <div
-          className="grid gap-4 sm:grid-cols-2"
-          style={{ marginTop: 12 }}
-        >
+        <div className="grid gap-4 sm:grid-cols-2" style={{ marginTop: 12 }}>
           <a
             href={linkMeals}
             className="card"
             style={{
               textDecoration: "none",
               color: "inherit",
-              borderColor:
-                view === "meals" ? "#111" : undefined,
+              borderColor: view === "meals" ? "#111" : undefined,
             }}
           >
             <div
@@ -885,18 +565,12 @@ export default async function Page({
               }}
             >
               <div>
-                {/* libellé "Recettes — Healthy" */}
                 <strong>Recettes — Healthy</strong>
-                <div
-                  className="text-sm"
-                  style={{ color: "#6b7280" }}
-                >
+                <div className="text-sm" style={{ color: "#6b7280" }}>
                   Base healthy pour tous
                 </div>
               </div>
-              {view === "meals" && (
-                <span className="badge">Actif</span>
-              )}
+              {view === "meals" && <span className="badge">Actif</span>}
             </div>
           </a>
 
@@ -906,8 +580,7 @@ export default async function Page({
             style={{
               textDecoration: "none",
               color: "inherit",
-              borderColor:
-                view === "shakes" ? "#111" : undefined,
+              borderColor: view === "shakes" ? "#111" : undefined,
             }}
           >
             <div
@@ -919,26 +592,18 @@ export default async function Page({
             >
               <div>
                 <strong>Bar à prot’ — Boissons protéinées</strong>
-                <div
-                  className="text-sm"
-                  style={{ color: "#6b7280" }}
-                >
+                <div className="text-sm" style={{ color: "#6b7280" }}>
                   Shakes/smoothies protéinés en 5 min
                 </div>
               </div>
-              {view === "shakes" && (
-                <span className="badge">Actif</span>
-              )}
+              {view === "shakes" && <span className="badge">Actif</span>}
             </div>
           </a>
         </div>
 
-        {/* =================== Contraintes & filtres (les deux vues) =================== */}
+        {/* =================== Contraintes & filtres =================== */}
         {(view === "meals" || view === "shakes") && (
-          <div
-            className="section"
-            style={{ marginTop: 12 }}
-          >
+          <div className="section" style={{ marginTop: 12 }}>
             <div
               className="section-head"
               style={{
@@ -958,70 +623,45 @@ export default async function Page({
               >
                 Contraintes & filtres
               </h2>
-              {/* plus de badge "Réservé PLUS/PREMIUM" */}
             </div>
 
-            <form
-              action={applyFiltersAction}
-              className="grid gap-6 lg:grid-cols-2"
-            >
+            <form action={applyFiltersAction} className="grid gap-6 lg:grid-cols-2">
               <fieldset style={{ display: "contents" }}>
                 <div>
-                  <label className="label">
-                    Cible calories (kcal)
-                  </label>
+                  <label className="label">Cible calories (kcal)</label>
                   <input
                     className="input"
                     type="number"
                     name="kcal"
                     placeholder="ex: 600"
-                    defaultValue={
-                      !isNaN(kcal) && kcal > 0
-                        ? String(kcal)
-                        : ""
-                    }
+                    defaultValue={!isNaN(kcal) && kcal > 0 ? String(kcal) : ""}
                   />
                 </div>
                 <div className="grid gap-6 sm:grid-cols-2">
                   <div>
-                    <label className="label">
-                      Min kcal
-                    </label>
+                    <label className="label">Min kcal</label>
                     <input
                       className="input"
                       type="number"
                       name="kcalMin"
                       placeholder="ex: 450"
-                      defaultValue={
-                        !isNaN(kcalMin) && kcalMin > 0
-                          ? String(kcalMin)
-                          : ""
-                      }
+                      defaultValue={!isNaN(kcalMin) && kcalMin > 0 ? String(kcalMin) : ""}
                     />
                   </div>
                   <div>
-                    <label className="label">
-                      Max kcal
-                    </label>
+                    <label className="label">Max kcal</label>
                     <input
                       className="input"
                       type="number"
                       name="kcalMax"
                       placeholder="ex: 700"
-                      defaultValue={
-                        !isNaN(kcalMax) && kcalMax > 0
-                          ? String(kcalMax)
-                          : ""
-                      }
+                      defaultValue={!isNaN(kcalMax) && kcalMax > 0 ? String(kcalMax) : ""}
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="label">
-                    Allergènes / intolérances (séparés par
-                    virgules)
-                  </label>
+                  <label className="label">Allergènes / intolérances (séparés par virgules)</label>
                   <input
                     className="input"
                     type="text"
@@ -1032,9 +672,7 @@ export default async function Page({
                 </div>
 
                 <div>
-                  <label className="label">
-                    Aliments non aimés (re-travailler)
-                  </label>
+                  <label className="label">Aliments non aimés (re-travailler)</label>
                   <input
                     className="input"
                     type="text"
@@ -1042,38 +680,21 @@ export default async function Page({
                     placeholder="brocoli, saumon, tofu..."
                     defaultValue={dislikes.join(", ")}
                   />
-                  <div
-                    className="text-xs"
-                    style={{
-                      color: "#6b7280",
-                      marginTop: 4,
-                    }}
-                  >
-                    On les garde, mais on propose une autre
-                    façon de les cuisiner.
+                  <div className="text-xs" style={{ color: "#6b7280", marginTop: 4 }}>
+                    On les garde, mais on propose une autre façon de les cuisiner.
                   </div>
                 </div>
               </fieldset>
 
               <div className="flex items-center justify-between lg:col-span-2">
-                <div
-                  className="text-sm"
-                  style={{ color: "#6b7280" }}
-                >
+                <div className="text-sm" style={{ color: "#6b7280" }}>
                   Ajustez les filtres puis régénérez.
                 </div>
                 <div style={{ display: "flex", gap: 10 }}>
-                  <a
-                    href="/dashboard/recipes"
-                    className="btn btn-outline"
-                    style={{ color: "#111" }}
-                  >
+                  <a href="/dashboard/recipes" className="btn btn-outline" style={{ color: "#111" }}>
                     Réinitialiser
                   </a>
-                  <button
-                    className="btn btn-dash"
-                    type="submit"
-                  >
+                  <button className="btn btn-dash" type="submit">
                     Régénérer
                   </button>
                 </div>
@@ -1087,14 +708,8 @@ export default async function Page({
           <>
             {/* Vos recettes enregistrées */}
             {saved.length > 0 && (
-              <section
-                className="section"
-                style={{ marginTop: 12 }}
-              >
-                <div
-                  className="section-head"
-                  style={{ marginBottom: 8 }}
-                >
+              <section className="section" style={{ marginTop: 12 }}>
+                <div className="section-head" style={{ marginBottom: 8 }}>
                   <h2>Vos recettes enregistrées</h2>
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-2">
@@ -1120,25 +735,16 @@ export default async function Page({
                         {s.title}
                       </a>
                       <form action={removeRecipeAction}>
-                        <input
-                          type="hidden"
-                          name="id"
-                          value={s.id}
-                        />
+                        <input type="hidden" name="id" value={s.id} />
                         <input
                           type="hidden"
                           name="returnTo"
-                          value={
-                            currentUrl ||
-                            "/dashboard/recipes"
-                          }
+                          value={currentUrl || "/dashboard/recipes"}
                         />
                         <button
                           type="submit"
                           className="btn btn-outline"
-                          style={{
-                            color: "var(--text, #111)",
-                          }}
+                          style={{ color: "var(--text, #111)" }}
                         >
                           Retirer
                         </button>
@@ -1150,14 +756,8 @@ export default async function Page({
             )}
 
             {/* Healthy pour tous */}
-            <section
-              className="section"
-              style={{ marginTop: 12 }}
-            >
-              <div
-                className="section-head"
-                style={{ marginBottom: 8 }}
-              >
+            <section className="section" style={{ marginTop: 12 }}>
+              <div className="section-head" style={{ marginBottom: 8 }}>
                 <h2>Healthy (pour tous)</h2>
               </div>
               <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
@@ -1167,34 +767,20 @@ export default async function Page({
                     r={r}
                     detailQS={encode(r)}
                     isSaved={savedSet.has(r.id)}
-                    currentUrl={
-                      currentUrl || "/dashboard/recipes"
-                    }
+                    currentUrl={currentUrl || "/dashboard/recipes"}
                   />
                 ))}
               </div>
             </section>
 
-            {/* Personnalisées IA — maintenant pour tout le monde */}
-            <section
-              className="section"
-              style={{ marginTop: 12 }}
-            >
-              <div
-                className="section-head"
-                style={{ marginBottom: 8 }}
-              >
-                <h2>Recettes personnalisées (IA)</h2>
+            {/* Personnalisées (fallback local) */}
+            <section className="section" style={{ marginTop: 12 }}>
+              <div className="section-head" style={{ marginBottom: 8 }}>
+                <h2>Recettes personnalisées</h2>
               </div>
 
               {relaxedNote && (
-                <div
-                  className="text-xs"
-                  style={{
-                    color: "#6b7280",
-                    marginBottom: 8,
-                  }}
-                >
+                <div className="text-xs" style={{ color: "#6b7280", marginBottom: 8 }}>
                   {relaxedNote}
                 </div>
               )}
@@ -1207,35 +793,22 @@ export default async function Page({
                       r={r}
                       detailQS={encode(r)}
                       isSaved={savedSet.has(r.id)}
-                      currentUrl={
-                        currentUrl || "/dashboard/recipes"
-                      }
+                      currentUrl={currentUrl || "/dashboard/recipes"}
                     />
                   ))}
                 </div>
               ) : (
-                <div
-                  className="card text-sm"
-                  style={{ color: "#6b7280" }}
-                >
-                  Aucune recette correspondant exactement à
-                  vos filtres pour le moment. Essayez
-                  d’élargir la plage calorique ou de réduire
-                  les exclusions.
+                <div className="card text-sm" style={{ color: "#6b7280" }}>
+                  Aucune recette correspondant exactement à vos filtres pour le moment.
+                  Essayez d’élargir la plage calorique ou de réduire les exclusions.
                 </div>
               )}
             </section>
           </>
         ) : (
           /* ===== view: shakes ===== */
-          <section
-            className="section"
-            style={{ marginTop: 12 }}
-          >
-            <div
-              className="section-head"
-              style={{ marginBottom: 8 }}
-            >
+          <section className="section" style={{ marginTop: 12 }}>
+            <div className="section-head" style={{ marginBottom: 8 }}>
               <h2>Bar à prot’ — Boissons protéinées</h2>
             </div>
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
@@ -1245,9 +818,7 @@ export default async function Page({
                   r={r}
                   detailQS={encode(r)}
                   isSaved={savedSet.has(r.id)}
-                  currentUrl={
-                    currentUrl || "/dashboard/recipes"
-                  }
+                  currentUrl={currentUrl || "/dashboard/recipes"}
                 />
               ))}
             </div>
@@ -1276,50 +847,22 @@ function Card({
   const more = Math.max(0, ing.length - shown.length);
 
   return (
-    <article
-      className="card"
-      style={{ overflow: "hidden" }}
-    >
+    <article className="card" style={{ overflow: "hidden" }}>
       <div className="flex items-center justify-between">
-        <h3
-          style={{
-            margin: 0,
-            fontSize: 18,
-            fontWeight: 800,
-          }}
-        >
-          {r.title}
-        </h3>
-        {/* on ne montre plus le badge de plan ici */}
+        <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>{r.title}</h3>
       </div>
 
       <div
         className="text-sm"
-        style={{
-          marginTop: 10,
-          display: "flex",
-          gap: 12,
-          flexWrap: "wrap",
-        }}
+        style={{ marginTop: 10, display: "flex", gap: 12, flexWrap: "wrap" }}
       >
-        {typeof r.kcal === "number" && (
-          <span className="badge">{r.kcal} kcal</span>
-        )}
-        {typeof r.timeMin === "number" && (
-          <span className="badge">{r.timeMin} min</span>
-        )}
+        {typeof r.kcal === "number" && <span className="badge">{r.kcal} kcal</span>}
+        {typeof r.timeMin === "number" && <span className="badge">{r.timeMin} min</span>}
       </div>
 
-      <div
-        className="text-sm"
-        style={{ marginTop: 10 }}
-      >
+      <div className="text-sm" style={{ marginTop: 10 }}>
         <strong>Ingrédients</strong>
-        <ul
-          style={{
-            margin: "6px 0 0 16px",
-          }}
-        >
+        <ul style={{ margin: "6px 0 0 16px" }}>
           {shown.map((i, idx) => (
             <li key={idx}>{i}</li>
           ))}
@@ -1327,14 +870,7 @@ function Card({
         </ul>
       </div>
 
-      <div
-        style={{
-          display: "flex",
-          gap: 10,
-          marginTop: 12,
-          flexWrap: "wrap",
-        }}
-      >
+      <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
         <a className="btn btn-dash" href={href}>
           Voir la recette
         </a>
@@ -1342,11 +878,7 @@ function Card({
         {isSaved ? (
           <form action={removeRecipeAction}>
             <input type="hidden" name="id" value={r.id} />
-            <input
-              type="hidden"
-              name="returnTo"
-              value={currentUrl}
-            />
+            <input type="hidden" name="returnTo" value={currentUrl} />
             <button
               type="submit"
               className="btn btn-outline"
@@ -1358,16 +890,8 @@ function Card({
         ) : (
           <form action={saveRecipeAction}>
             <input type="hidden" name="id" value={r.id} />
-            <input
-              type="hidden"
-              name="title"
-              value={r.title}
-            />
-            <input
-              type="hidden"
-              name="returnTo"
-              value={currentUrl}
-            />
+            <input type="hidden" name="title" value={r.title} />
+            <input type="hidden" name="returnTo" value={currentUrl} />
             <button
               type="submit"
               className="btn btn-outline"
