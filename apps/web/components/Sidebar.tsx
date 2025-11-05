@@ -29,7 +29,6 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard/recipes", label: "Recettes", icon: BookOpen },
   { href: "/dashboard/calories", label: "Calories", icon: Flame },
   { href: "/dashboard/connect", label: "Connecte tes données", icon: Plug2 },
-  { href: "/dashboard/abonnement", label: "Abonnement", icon: CreditCard },
   { href: "/dashboard/bmi", label: "IMC", icon: ClipboardList },
   { href: "/dashboard/music", label: "Musique", icon: Music2 },
   { href: "/dashboard/settings", label: "Réglages", icon: Settings },
