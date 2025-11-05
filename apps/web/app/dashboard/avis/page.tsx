@@ -10,6 +10,7 @@ async function sendFeedback(formData: FormData) {
   "use server";
 
   const message = (formData.get("feedback") || "").toString().trim();
+  const email = (formData.get("email") || "").toString().trim();
 
   if (!message) {
     redirect("/dashboard/avis?error=empty");
@@ -21,6 +22,9 @@ async function sendFeedback(formData: FormData) {
     redirect("/dashboard/avis?error=server");
   }
 
+  const safeMessage = message.replace(/</g, "&lt;");
+  const safeEmail = email.replace(/</g, "&lt;");
+
   // Même style d'appel que dans /api/auth/send-reset
   const resp = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -29,7 +33,6 @@ async function sendFeedback(formData: FormData) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      // on réutilise le même "from" qui fonctionne déjà pour toi
       from: "Files Coaching <no-reply@appli.files-coaching.com>",
       to: "sportifandpro@gmail.com",
       subject: "Nouvel avis utilisateur",
@@ -37,9 +40,22 @@ async function sendFeedback(formData: FormData) {
         <div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto">
           <h2 style="color:#111">Nouvel avis utilisateur</h2>
           <p>Un utilisateur a envoyé un avis depuis l'app Files Coaching :</p>
-          <div style="margin:16px 0;padding:12px 14px;border-radius:8px;background:#f3f4f6;white-space:pre-wrap;">
-            ${message.replace(/</g, "&lt;")}
+
+          <div style="margin:8px 0 16px 0;padding:10px 12px;border-radius:8px;background:#e5e7eb;">
+            <p style="margin:0 0 4px 0;font-size:14px;">
+              <strong>Email du client :</strong>
+              ${
+                safeEmail
+                  ? safeEmail
+                  : '<span style="color:#6b7280;font-style:italic;">non renseigné</span>'
+              }
+            </p>
           </div>
+
+          <div style="margin:16px 0;padding:12px 14px;border-radius:8px;background:#f3f4f6;white-space:pre-wrap;">
+            ${safeMessage}
+          </div>
+
           <hr style="border:none;border-top:1px solid #eee;margin:18px 0"/>
           <p style="font-size:12px;color:#888">Cet e-mail a été généré automatiquement par la page &laquo; Votre avis &raquo;.</p>
         </div>
@@ -138,6 +154,24 @@ export default function Page({
       <section className="section" style={{ marginTop: 12 }}>
         <div className="card">
           <form action={sendFeedback}>
+            {/* Champ email */}
+            <label
+              htmlFor="email"
+              className="label"
+              style={{ display: "block", fontWeight: 700, marginBottom: 6 }}
+            >
+              Ton e-mail (si tu veux qu&apos;on te réponde)
+            </label>
+            <input
+              id="email"
+              name="email"
+              type="email"
+              className="input"
+              style={{ width: "100%", marginBottom: 12 }}
+              placeholder="ton.email@exemple.com"
+            />
+
+            {/* Champ message */}
             <label
               htmlFor="feedback"
               className="label"
