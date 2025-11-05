@@ -13,7 +13,7 @@ import {
   BookOpen,
   Flame,
   Plug2,
-  CreditCard,
+ MessageCircle,
   ClipboardList,
   Music2,
   Settings,
