@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 
-export const runtime = "nodejs"; // important: exécuter côté Node (pas edge)
+export const runtime = "nodejs"; // exécution côté Node
 
 type Plan = "BASIC" | "PLUS" | "PREMIUM";
 
 const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
 const OPENAI_MODEL = "gpt-4o-mini";
-const OPENAI_TIMEOUT_MS = 8000; // 8 secondes max pour OpenAI
+const OPENAI_TIMEOUT_MS = 15000; // 15s max
 
 async function callOpenAI(prompt: string, apiKey: string) {
   const controller = new AbortController();
@@ -42,6 +42,15 @@ async function callOpenAI(prompt: string, apiKey: string) {
     const data = await res.json();
     return { ok: true, data };
   } catch (e: any) {
+    if (e?.name === "AbortError") {
+      console.error("[recipes/ai] OPENAI_TIMEOUT");
+      return {
+        ok: false,
+        error: "OPENAI_TIMEOUT",
+        detail: `Timeout après ${OPENAI_TIMEOUT_MS}ms`,
+      };
+    }
+
     console.error("[recipes/ai] OPENAI_FETCH_ERROR", e);
     return {
       ok: false,
@@ -58,7 +67,7 @@ export async function POST(req: Request) {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
       console.error("[recipes/ai] Pas de OPENAI_API_KEY dans l'env");
-      // On renvoie quand même 200 pour ne pas déclencher d'erreur HTTP côté client
+      // On renvoie 200 pour que le front ne traite pas ça comme une erreur HTTP
       return NextResponse.json({ recipes: [], error: "NO_API_KEY" }, { status: 200 });
     }
 
@@ -141,7 +150,6 @@ Règles:
     const result = await callOpenAI(prompt, apiKey);
 
     if (!result.ok) {
-      // On renvoie toujours 200 pour que le front n'affiche pas "IA indisponible" à cause du HTTP
       return NextResponse.json(
         { recipes: [], error: result.error, detail: result.detail },
         { status: 200 }
@@ -162,7 +170,6 @@ Règles:
     return NextResponse.json({ recipes: arr }, { status: 200 });
   } catch (e: any) {
     console.error("[recipes/ai] FATAL_ERROR", e);
-    // Ici aussi on renvoie 200 pour éviter le 504 côté client
     return NextResponse.json(
       { recipes: [], error: "FATAL_ERROR", detail: String(e?.message ?? e) },
       { status: 200 }
