@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
-import { AIExtraSection } from "./AIExtraSection";
+import { AIExtraSection } from "./AISection";
 
 /* ===================== Config Next ===================== */
 export const runtime = "nodejs";
