@@ -23,6 +23,8 @@ export function AISection({
   initialRecipes,
   filters,
   relaxedNote,
+  variant = "meals",
+  title,
 }: {
   initialRecipes: Recipe[];
   filters: {
@@ -34,6 +36,8 @@ export function AISection({
     dislikes: string[];
   };
   relaxedNote: string | null;
+  variant?: "meals" | "shakes";
+  title?: string;
 }) {
   const [recipes, setRecipes] = useState<Recipe[]>(initialRecipes);
   const [loading, setLoading] = useState(false);
@@ -57,6 +61,7 @@ export function AISection({
             allergens: filters.allergens,
             dislikes: filters.dislikes,
             count: 16,
+            kind: variant, // 👈 meals ou shakes
           }),
         });
 
@@ -122,12 +127,13 @@ export function AISection({
     filters.kcalMax,
     filters.allergens.join(","),
     filters.dislikes.join(","),
+    variant,
   ]);
 
   return (
     <section className="section" style={{ marginTop: 12 }}>
       <div className="section-head" style={{ marginBottom: 8 }}>
-        <h2>Recettes personnalisées (IA)</h2>
+        <h2>{title ?? "Recettes personnalisées (IA)"}</h2>
       </div>
 
       {relaxedNote && (
