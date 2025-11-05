@@ -48,7 +48,6 @@ export function AIExtraSection({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // string pour dépendances
   const allergensKey = allergens.join(",");
   const dislikesKey = dislikes.join(",");
 
@@ -95,10 +94,9 @@ export function AIExtraSection({
         const data = await res.json();
         console.log("[AIExtraSection] data:", data);
 
-        // ⬇️ NOUVEAU : si l'API renvoie un champ "error", on l'affiche comme erreur
         if (!cancelled && data && data.error) {
           console.error("[AIExtraSection] API logical error:", data.error, data.detail);
-          setError("IA indisponible pour le moment.");
+          setError(`IA indisponible pour le moment. (${data.error})`);
           setLoading(false);
           return;
         }
@@ -111,14 +109,13 @@ export function AIExtraSection({
       } catch (e) {
         console.error("[AIExtraSection] fetch error /api/recipes/ai:", e);
         if (!cancelled) {
-          setError("IA indisponible pour le moment.");
+          setError("IA indisponible pour le moment. (FETCH_ERROR)");
           setLoading(false);
         }
       }
     };
 
     run();
-
     return () => {
       cancelled = true;
     };
@@ -133,28 +130,24 @@ export function AIExtraSection({
         </p>
       </div>
 
-      {/* État erreur */}
       {error && (
         <div className="card text-xs" style={{ color: "#6b7280" }}>
           {error}
         </div>
       )}
 
-      {/* État chargement (si pas d'erreur) */}
       {!error && loading && recipes.length === 0 && (
         <div className="card text-xs" style={{ color: "#6b7280" }}>
           Génération en cours…
         </div>
       )}
 
-      {/* État "pas de recettes" (vraiment aucun résultat, sans erreur) */}
       {!error && !loading && recipes.length === 0 && (
         <div className="card text-xs" style={{ color: "#6b7280" }}>
           Pas encore de suggestions IA pour ces filtres.
         </div>
       )}
 
-      {/* État avec recettes */}
       {!error && recipes.length > 0 && (
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
           {recipes.map((r) => {
@@ -213,3 +206,4 @@ export function AIExtraSection({
     </section>
   );
 }
+
