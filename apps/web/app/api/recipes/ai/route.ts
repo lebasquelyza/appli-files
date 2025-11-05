@@ -1,12 +1,121 @@
 import { NextResponse } from "next/server";
 
-export const runtime = "nodejs"; // exécution côté Node
+export const runtime = "nodejs";
 
 type Plan = "BASIC" | "PLUS" | "PREMIUM";
 
 const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
 const OPENAI_MODEL = "gpt-4o-mini";
-const OPENAI_TIMEOUT_MS = 15000; // 15s max
+const OPENAI_TIMEOUT_MS = 15000;
+
+// Fallback simple si l'IA est KO (timeout / fetch error)
+function fallbackRecipes(kind: "meals" | "shakes") {
+  if (kind === "shakes") {
+    return [
+      {
+        id: "fallback-shake-choco",
+        title: "Shake choco protéiné (fallback)",
+        subtitle: "Banane, lait, whey chocolat",
+        kcal: 350,
+        timeMin: 5,
+        tags: ["shake", "rapide", "protéiné"],
+        goals: ["equilibre"],
+        minPlan: "BASIC" as Plan,
+        ingredients: [
+          "lait (ou lait végétal)",
+          "banane",
+          "whey chocolat",
+          "beurre de cacahuète (option)",
+          "glaçons",
+        ],
+        steps: [
+          "Mettre tous les ingrédients dans le blender.",
+          "Mixer jusqu'à texture lisse.",
+          "Goûter et ajuster avec lait ou glaçons.",
+        ],
+      },
+      {
+        id: "fallback-shake-fruits",
+        title: "Smoothie fruits rouges protéiné (fallback)",
+        subtitle: "Yaourt grec, fruits rouges",
+        kcal: 320,
+        timeMin: 5,
+        tags: ["shake", "fruité"],
+        goals: ["equilibre"],
+        minPlan: "BASIC" as Plan,
+        ingredients: [
+          "fruits rouges surgelés",
+          "yaourt grec 0%",
+          "lait (ou lait végétal)",
+          "whey neutre ou vanille",
+          "miel ou édulcorant (option)",
+        ],
+        steps: [
+          "Mettre fruits, yaourt, whey et lait dans le blender.",
+          "Mixer finement.",
+          "Sucrer légèrement si besoin.",
+        ],
+      },
+    ];
+  }
+
+  // kind === "meals"
+  return [
+    {
+      id: "fallback-bowl-poulet",
+      title: "Bowl poulet & riz (fallback IA)",
+      subtitle: "Version équilibrée rapide",
+      kcal: 600,
+      timeMin: 20,
+      tags: ["protéiné", "equilibre"],
+      goals: ["equilibre"],
+      minPlan: "BASIC" as Plan,
+      ingredients: [
+        "poulet",
+        "riz complet",
+        "avocat",
+        "tomates cerises",
+        "maïs",
+        "huile d'olive",
+        "citron",
+        "sel",
+        "poivre",
+      ],
+      steps: [
+        "Cuire le riz complet selon les indications.",
+        "Saisir le poulet en dés avec sel, poivre et un filet d'huile.",
+        "Assembler dans un bol : riz, poulet, avocat, tomates et maïs, arroser de citron.",
+      ],
+    },
+    {
+      id: "fallback-salade-legumes",
+      title: "Salade complète légumes & pois chiches (fallback IA)",
+      subtitle: "Froide, rapide, riche en fibres",
+      kcal: 500,
+      timeMin: 15,
+      tags: ["végétarien", "equilibre"],
+      goals: ["equilibre"],
+      minPlan: "BASIC" as Plan,
+      ingredients: [
+        "pois chiches en boîte",
+        "concombre",
+        "poivron",
+        "tomates",
+        "feta (ou tofu)",
+        "huile d'olive",
+        "citron",
+        "herbes (persil, ciboulette)",
+        "sel",
+        "poivre",
+      ],
+      steps: [
+        "Rincer et égoutter les pois chiches.",
+        "Couper les légumes en dés et la feta.",
+        "Mélanger le tout avec huile d'olive, citron, herbes, sel et poivre.",
+      ],
+    },
+  ];
+}
 
 async function callOpenAI(prompt: string, apiKey: string) {
   const controller = new AbortController();
@@ -67,7 +176,6 @@ export async function POST(req: Request) {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
       console.error("[recipes/ai] Pas de OPENAI_API_KEY dans l'env");
-      // On renvoie 200 pour que le front ne traite pas ça comme une erreur HTTP
       return NextResponse.json({ recipes: [], error: "NO_API_KEY" }, { status: 200 });
     }
 
@@ -150,13 +258,13 @@ Règles:
     const result = await callOpenAI(prompt, apiKey);
 
     if (!result.ok) {
-      // 👇 Cas particulier : TIMEOUT → on renvoie juste "aucune suggestion", sans error
-      if (result.error === "OPENAI_TIMEOUT") {
-        console.warn("[recipes/ai] Timeout OpenAI, on renvoie 0 recette sans error");
-        return NextResponse.json({ recipes: [] }, { status: 200 });
+      // Si timeout ou fetch error → on renvoie un fallback IA
+      if (result.error === "OPENAI_TIMEOUT" || result.error === "OPENAI_FETCH_ERROR") {
+        console.warn("[recipes/ai] IA KO, utilisation des recettes fallback");
+        return NextResponse.json({ recipes: fallbackRecipes(mode) }, { status: 200 });
       }
 
-      // Autres erreurs : on les remonte au front (data.error)
+      // Autres erreurs: on renvoie error pour que le front affiche "IA indisponible..."
       return NextResponse.json(
         { recipes: [], error: result.error, detail: result.detail },
         { status: 200 }
