@@ -95,6 +95,14 @@ export function AIExtraSection({
         const data = await res.json();
         console.log("[AIExtraSection] data:", data);
 
+        // ⬇️ NOUVEAU : si l'API renvoie un champ "error", on l'affiche comme erreur
+        if (!cancelled && data && data.error) {
+          console.error("[AIExtraSection] API logical error:", data.error, data.detail);
+          setError("IA indisponible pour le moment.");
+          setLoading(false);
+          return;
+        }
+
         const arr: Recipe[] = Array.isArray(data?.recipes) ? data.recipes : [];
         if (!cancelled) {
           setRecipes(arr);
@@ -139,7 +147,7 @@ export function AIExtraSection({
         </div>
       )}
 
-      {/* État "pas de recettes" (pas d'erreur, pas de loading, pas de recettes) */}
+      {/* État "pas de recettes" (vraiment aucun résultat, sans erreur) */}
       {!error && !loading && recipes.length === 0 && (
         <div className="card text-xs" style={{ color: "#6b7280" }}>
           Pas encore de suggestions IA pour ces filtres.
