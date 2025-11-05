@@ -5,7 +5,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-/** Server Action : envoi l'avis via l'API Resend (sans dépendance npm) */
+/** Server Action : envoie l'avis via l'API Resend (comme /api/auth/send-reset) */
 async function sendFeedback(formData: FormData) {
   "use server";
 
@@ -17,25 +17,39 @@ async function sendFeedback(formData: FormData) {
 
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
-    // Si la clé n'est pas configurée on évite de planter
+    console.error("[avis] RESEND_API_KEY manquante");
     redirect("/dashboard/avis?error=server");
   }
 
-  const res = await fetch("https://api.resend.com/emails", {
+  // Même style d'appel que dans /api/auth/send-reset
+  const resp = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${apiKey}`,
+      Authorization: `Bearer ${apiKey!}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      from: "Files App <no-reply@files-app.test>", // tu peux adapter le from
-      to: ["sportifandpro@gmail.com"],
+      // on réutilise le même "from" qui fonctionne déjà pour toi
+      from: "Files Coaching <no-reply@appli.files-coaching.com>",
+      to: "sportifandpro@gmail.com",
       subject: "Nouvel avis utilisateur",
-      text: message,
+      html: `
+        <div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto">
+          <h2 style="color:#111">Nouvel avis utilisateur</h2>
+          <p>Un utilisateur a envoyé un avis depuis l'app Files Coaching :</p>
+          <div style="margin:16px 0;padding:12px 14px;border-radius:8px;background:#f3f4f6;white-space:pre-wrap;">
+            ${message.replace(/</g, "&lt;")}
+          </div>
+          <hr style="border:none;border-top:1px solid #eee;margin:18px 0"/>
+          <p style="font-size:12px;color:#888">Cet e-mail a été généré automatiquement par la page &laquo; Votre avis &raquo;.</p>
+        </div>
+      `.trim(),
     }),
   });
 
-  if (!res.ok) {
+  if (!resp.ok) {
+    const txt = await resp.text().catch(() => "");
+    console.error("[avis] Resend API error:", resp.status, txt);
     redirect("/dashboard/avis?error=send");
   }
 
@@ -102,7 +116,7 @@ export default function Page({
             fontWeight: 600,
           }}
         >
-          Une erreur est survenue côté serveur (clé API manquante). Réessaie plus tard.
+          Une erreur est survenue côté serveur (configuration e-mail). Réessaie plus tard.
         </div>
       )}
 
