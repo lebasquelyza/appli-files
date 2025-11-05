@@ -1,18 +1,65 @@
 import { NextResponse } from "next/server";
 
-export const runtime = "nodejs"; // important pour avoir process.env & fetch Node
+export const runtime = "nodejs"; // important: exécuter côté Node (pas edge)
 
 type Plan = "BASIC" | "PLUS" | "PREMIUM";
+
+const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
+const OPENAI_MODEL = "gpt-4o-mini";
+const OPENAI_TIMEOUT_MS = 8000; // 8 secondes max pour OpenAI
+
+async function callOpenAI(prompt: string, apiKey: string) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), OPENAI_TIMEOUT_MS);
+
+  try {
+    console.log("[recipes/ai] Appel OpenAI…");
+
+    const res = await fetch(OPENAI_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: OPENAI_MODEL,
+        temperature: 0.7,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: "Tu parles français et tu réponds en JSON strict." },
+          { role: "user", content: prompt },
+        ],
+      }),
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      console.error("[recipes/ai] OPENAI_HTTP_ERROR", res.status, errText);
+      return { ok: false, error: "OPENAI_HTTP_ERROR", detail: errText };
+    }
+
+    const data = await res.json();
+    return { ok: true, data };
+  } catch (e: any) {
+    console.error("[recipes/ai] OPENAI_FETCH_ERROR", e);
+    return {
+      ok: false,
+      error: "OPENAI_FETCH_ERROR",
+      detail: String(e?.message ?? e),
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 export async function POST(req: Request) {
   try {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
       console.error("[recipes/ai] Pas de OPENAI_API_KEY dans l'env");
-      return NextResponse.json(
-        { recipes: [], error: "NO_API_KEY" },
-        { status: 200 }
-      );
+      // On renvoie quand même 200 pour ne pas déclencher d'erreur HTTP côté client
+      return NextResponse.json({ recipes: [], error: "NO_API_KEY" }, { status: 200 });
     }
 
     const body = await req.json().catch(() => ({}));
@@ -91,44 +138,23 @@ Règles:
 - Pour le mode "shakes": uniquement des boissons à boire, préparation au blender, 5–10 min.
 - Renvoyer {"recipes": Recipe[]}.`;
 
-    console.log("[recipes/ai] Appel OpenAI…");
+    const result = await callOpenAI(prompt, apiKey);
 
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        temperature: 0.7,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: "Tu parles français et tu réponds en JSON strict." },
-          { role: "user", content: prompt },
-        ],
-      }),
-    });
-
-    if (!res.ok) {
-      const errText = await res.text().catch(() => "");
-      console.error("[recipes/ai] OPENAI_HTTP_ERROR", res.status, errText);
+    if (!result.ok) {
+      // On renvoie toujours 200 pour que le front n'affiche pas "IA indisponible" à cause du HTTP
       return NextResponse.json(
-        { recipes: [], error: "OPENAI_HTTP_ERROR", detail: errText },
+        { recipes: [], error: result.error, detail: result.detail },
         { status: 200 }
       );
     }
 
-    const data = await res.json();
+    const data = result.data as any;
     let payload: any = {};
     try {
       payload = JSON.parse(data?.choices?.[0]?.message?.content ?? "{}");
     } catch (e) {
       console.error("[recipes/ai] PARSE_ERROR", e);
-      return NextResponse.json(
-        { recipes: [], error: "PARSE_ERROR" },
-        { status: 200 }
-      );
+      return NextResponse.json({ recipes: [], error: "PARSE_ERROR" }, { status: 200 });
     }
 
     const arr: any[] = Array.isArray(payload?.recipes) ? payload.recipes : [];
@@ -136,7 +162,7 @@ Règles:
     return NextResponse.json({ recipes: arr }, { status: 200 });
   } catch (e: any) {
     console.error("[recipes/ai] FATAL_ERROR", e);
-    // important: ici AUSSI on renvoie 200 pour que res.ok soit true côté client
+    // Ici aussi on renvoie 200 pour éviter le 504 côté client
     return NextResponse.json(
       { recipes: [], error: "FATAL_ERROR", detail: String(e?.message ?? e) },
       { status: 200 }
