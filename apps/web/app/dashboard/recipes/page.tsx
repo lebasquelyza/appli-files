@@ -433,7 +433,7 @@ export default async function Page({
 
   const healthy = HEALTHY_BASE;
 
-  // Personnalisation fallback serveur (base si l'IA ne répond pas)
+  // Personnalisation fallback serveur (pour la section IA plats)
   let personalized: Recipe[] = personalizeFallback({
     base: HEALTHY_BASE,
     kcal: hasKcalTarget ? kcal : undefined,
@@ -622,7 +622,7 @@ export default async function Page({
             </div>
 
             <form action={applyFiltersAction} className="grid gap-6 lg:grid-cols-2">
-              {/* 🔒 On garde la vue actuelle (meals/shakes) */}
+              {/* On garde la vue actuelle (meals/shakes) */}
               <input type="hidden" name="view" value={view} />
 
               <fieldset style={{ display: "contents" }}>
@@ -754,10 +754,13 @@ export default async function Page({
               </section>
             )}
 
-            {/* Healthy pour tous */}
+            {/* Healthy pour tous (fixe) */}
             <section className="section" style={{ marginTop: 12 }}>
               <div className="section-head" style={{ marginBottom: 8 }}>
-                <h2>Healthy (pour tous)</h2>
+                <h2>Recettes fixes</h2>
+                <p className="text-xs" style={{ color: "#6b7280", marginTop: 4 }}>
+                  Base healthy créée par nous.
+                </p>
               </div>
               <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
                 {healthyPick.map((r) => (
@@ -772,7 +775,7 @@ export default async function Page({
               </div>
             </section>
 
-            {/* Personnalisées IA côté client */}
+            {/* Personnalisées IA côté client (plats) */}
             <AISection
               initialRecipes={personalizedPick}
               filters={{
@@ -784,26 +787,49 @@ export default async function Page({
                 dislikes,
               }}
               relaxedNote={relaxedNote}
+              variant="meals"
+              title="Recettes personnalisées (perso IA)"
             />
           </>
         ) : (
           /* ===== view: shakes ===== */
-          <section className="section" style={{ marginTop: 12 }}>
-            <div className="section-head" style={{ marginBottom: 8 }}>
-              <h2>Bar à prot’ — Boissons protéinées</h2>
-            </div>
-            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
-              {shakesPick.map((r) => (
-                <Card
-                  key={r.id}
-                  r={r}
-                  detailQS={encode(r)}
-                  isSaved={savedSet.has(r.id)}
-                  currentUrl={currentUrl || "/dashboard/recipes"}
-                />
-              ))}
-            </div>
-          </section>
+          <>
+            <section className="section" style={{ marginTop: 12 }}>
+              <div className="section-head" style={{ marginBottom: 8 }}>
+                <h2>Bar à prot’ — Boissons protéinées</h2>
+                <p className="text-xs" style={{ color: "#6b7280", marginTop: 4 }}>
+                  Shakes fixes proposés par défaut.
+                </p>
+              </div>
+              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
+                {shakesPick.map((r) => (
+                  <Card
+                    key={r.id}
+                    r={r}
+                    detailQS={encode(r)}
+                    isSaved={savedSet.has(r.id)}
+                    currentUrl={currentUrl || "/dashboard/recipes"}
+                  />
+                ))}
+              </div>
+            </section>
+
+            {/* Shakes personnalisés IA */}
+            <AISection
+              initialRecipes={[]} // on laisse l’IA remplir
+              filters={{
+                plan,
+                kcal: hasKcalTarget ? kcal : undefined,
+                kcalMin: hasKcalMin ? kcalMin : undefined,
+                kcalMax: hasKcalMax ? kcalMax : undefined,
+                allergens,
+                dislikes,
+              }}
+              relaxedNote={null}
+              variant="shakes"
+              title="Shakes personnalisés (perso IA)"
+            />
+          </>
         )}
       </div>
     </>
