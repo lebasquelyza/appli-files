@@ -1,42 +1,45 @@
 // apps/web/app/dashboard/avis/page.tsx
-import nodemailer from "nodemailer";
 import { redirect } from "next/navigation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-/** Server Action : envoi l'avis par email */
+/** Server Action : envoi l'avis via l'API Resend (sans dépendance npm) */
 async function sendFeedback(formData: FormData) {
   "use server";
 
   const message = (formData.get("feedback") || "").toString().trim();
 
   if (!message) {
-    // Pas de message -> on revient avec une petite erreur
     redirect("/dashboard/avis?error=empty");
   }
 
-  // Transporteur SMTP (à configurer dans tes variables d'environnement)
-  const transporter = nodemailer.createTransport({
-    host: process.env.EMAIL_HOST,
-    port: Number(process.env.EMAIL_PORT || 587),
-    secure: process.env.EMAIL_SECURE === "true", // true si port 465
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    // Si la clé n'est pas configurée on évite de planter
+    redirect("/dashboard/avis?error=server");
+  }
+
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
     },
+    body: JSON.stringify({
+      from: "Files App <no-reply@files-app.test>", // tu peux adapter le from
+      to: ["sportifandpro@gmail.com"],
+      subject: "Nouvel avis utilisateur",
+      text: message,
+    }),
   });
 
-  // Email qui part vers TA boîte
-  await transporter.sendMail({
-    from: `"Files App" <no-reply@files-app.test>`, // adapte le domaine si tu veux
-    to: "sportifandpro@gmail.com",
-    subject: "Nouvel avis utilisateur",
-    text: message,
-  });
+  if (!res.ok) {
+    redirect("/dashboard/avis?error=send");
+  }
 
-  // On revient sur la même page avec un flag de succès
+  // Succès -> on revient sur la page avec un flag "sent"
   redirect("/dashboard/avis?sent=1");
 }
 
@@ -46,7 +49,7 @@ export default function Page({
   searchParams?: { sent?: string; error?: string };
 }) {
   const sent = searchParams?.sent === "1";
-  const hasError = searchParams?.error === "empty";
+  const error = searchParams?.error;
 
   return (
     <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
@@ -60,7 +63,7 @@ export default function Page({
         </div>
       </div>
 
-      {/* Message de succès */}
+      {/* Messages de statut */}
       {sent && (
         <div
           className="card"
@@ -75,8 +78,7 @@ export default function Page({
         </div>
       )}
 
-      {/* Message d'erreur si texte vide */}
-      {hasError && (
+      {error === "empty" && (
         <div
           className="card"
           style={{
@@ -87,6 +89,34 @@ export default function Page({
           }}
         >
           Oups 😅 Merci d&apos;écrire un petit message avant d&apos;envoyer.
+        </div>
+      )}
+
+      {error === "server" && (
+        <div
+          className="card"
+          style={{
+            marginTop: 12,
+            border: "1px solid rgba(239,68,68,.35)",
+            background: "rgba(239,68,68,.08)",
+            fontWeight: 600,
+          }}
+        >
+          Une erreur est survenue côté serveur (clé API manquante). Réessaie plus tard.
+        </div>
+      )}
+
+      {error === "send" && (
+        <div
+          className="card"
+          style={{
+            marginTop: 12,
+            border: "1px solid rgba(239,68,68,.35)",
+            background: "rgba(239,68,68,.08)",
+            fontWeight: 600,
+          }}
+        >
+          Impossible d&apos;envoyer ton avis pour le moment 😕 Réessaie un peu plus tard.
         </div>
       )}
 
