@@ -144,17 +144,11 @@ export function AIExtraSection({
         </div>
       )}
 
-      {/* ⬇️ On ne montre PLUS le message "Pas encore de suggestions IA..." */}
-      {/* Quand il n'y a ni erreur ni loading et 0 recettes, on affiche juste le header au-dessus */}
-
       {/* État avec recettes */}
       {!error && recipes.length > 0 && (
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
           {recipes.map((r) => {
             const href = `/dashboard/recipes/${r.id}?${baseQS}data=${encodeB64UrlJsonBrowser(r)}`;
-            const ing = Array.isArray(r.ingredients) ? r.ingredients : [];
-            const shown = ing.slice(0, 8);
-            const more = Math.max(0, ing.length - shown.length);
 
             return (
               <article key={r.id} className="card" style={{ overflow: "hidden" }}>
@@ -162,6 +156,12 @@ export function AIExtraSection({
                   <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>{r.title}</h3>
                   <span className="badge">perso IA</span>
                 </div>
+
+                {r.subtitle && (
+                  <p className="text-sm" style={{ marginTop: 4, color: "#6b7280" }}>
+                    {r.subtitle}
+                  </p>
+                )}
 
                 <div
                   className="text-sm"
@@ -173,18 +173,12 @@ export function AIExtraSection({
                   }}
                 >
                   {typeof r.kcal === "number" && <span className="badge">{r.kcal} kcal</span>}
-                  {typeof r.timeMin === "number" && <span className="badge">{r.timeMin} min</span>}
+                  {typeof r.timeMin === "number" && (
+                    <span className="badge">{r.timeMin} min</span>
+                  )}
                 </div>
 
-                <div className="text-sm" style={{ marginTop: 10 }}>
-                  <strong>Ingrédients</strong>
-                  <ul style={{ margin: "6px 0 0 16px" }}>
-                    {shown.map((i, idx) => (
-                      <li key={idx}>{i}</li>
-                    ))}
-                    {more > 0 && <li>+ {more} autre(s)…</li>}
-                  </ul>
-                </div>
+                {/* 🔹 plus d'ingrédients visibles sur la carte IA */}
 
                 <div
                   style={{
@@ -206,5 +200,3 @@ export function AIExtraSection({
     </section>
   );
 }
-
-
