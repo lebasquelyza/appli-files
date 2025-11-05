@@ -9,8 +9,11 @@ export const revalidate = 0;
 async function sendFeedback(formData: FormData) {
   "use server";
 
-  const message = (formData.get("feedback") || "").toString().trim();
-  const email = (formData.get("email") || "").toString().trim();
+  const messageRaw = formData.get("feedback");
+  const emailRaw = formData.get("email");
+
+  const message = (messageRaw ?? "").toString().trim();
+  const email = (emailRaw ?? "").toString().trim();
 
   if (!message) {
     redirect("/dashboard/avis?error=empty");
@@ -25,11 +28,22 @@ async function sendFeedback(formData: FormData) {
   const safeMessage = message.replace(/</g, "&lt;");
   const safeEmail = email.replace(/</g, "&lt;");
 
-  // Même style d'appel que dans /api/auth/send-reset
+  const emailBlock = email
+    ? `
+      <p style="margin:0 0 12px 0;font-size:14px;">
+        <strong>Email du client :</strong> ${safeEmail}
+      </p>
+    `
+    : `
+      <p style="margin:0 0 12px 0;font-size:12px;color:#6b7280;font-style:italic;">
+        Email non renseigné
+      </p>
+    `;
+
   const resp = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${apiKey!}`,
+      Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -41,23 +55,16 @@ async function sendFeedback(formData: FormData) {
           <h2 style="color:#111">Nouvel avis utilisateur</h2>
           <p>Un utilisateur a envoyé un avis depuis l'app Files Coaching :</p>
 
-          <div style="margin:8px 0 16px 0;padding:10px 12px;border-radius:8px;background:#e5e7eb;">
-            <p style="margin:0 0 4px 0;font-size:14px;">
-              <strong>Email du client :</strong>
-              ${
-                safeEmail
-                  ? safeEmail
-                  : '<span style="color:#6b7280;font-style:italic;">non renseigné</span>'
-              }
-            </p>
-          </div>
+          ${emailBlock}
 
           <div style="margin:16px 0;padding:12px 14px;border-radius:8px;background:#f3f4f6;white-space:pre-wrap;">
             ${safeMessage}
           </div>
 
           <hr style="border:none;border-top:1px solid #eee;margin:18px 0"/>
-          <p style="font-size:12px;color:#888">Cet e-mail a été généré automatiquement par la page &laquo; Votre avis &raquo;.</p>
+          <p style="font-size:12px;color:#888">
+            Cet e-mail a été généré automatiquement par la page &laquo; Votre avis &raquo;.
+          </p>
         </div>
       `.trim(),
     }),
@@ -69,7 +76,6 @@ async function sendFeedback(formData: FormData) {
     redirect("/dashboard/avis?error=send");
   }
 
-  // Succès -> on revient sur la page avec un flag "sent"
   redirect("/dashboard/avis?sent=1");
 }
 
