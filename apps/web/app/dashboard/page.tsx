@@ -71,12 +71,6 @@ export default async function Page() {
           href="/dashboard/profile"
           manageLabel="Gérer"
         />
-        <KpiCard
-          title="Abonnement"
-          value={s?.plan || "BASIC"}
-          href="/dashboard/abonnement"
-          manageLabel="Gérer"
-        />
       </section>
 
       {/* Actions rapides — SANS bouton Gérer */}
