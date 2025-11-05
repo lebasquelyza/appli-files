@@ -2,9 +2,6 @@
 
 import { useEffect, useState } from "react";
 
-type Plan = "BASIC" | "PLUS" | "PREMIUM";
-
-type Rework = { ingredient: string; tips: string[] };
 type Recipe = {
   id: string;
   title: string;
@@ -13,201 +10,191 @@ type Recipe = {
   timeMin?: number;
   tags: string[];
   goals: string[];
-  minPlan: Plan;
+  minPlan: "BASIC" | "PLUS" | "PREMIUM";
   ingredients: string[];
   steps: string[];
-  rework?: Rework[];
+  rework?: { ingredient: string; tips: string[] }[];
 };
 
-export function AISection({
-  initialRecipes,
-  filters,
-  relaxedNote,
-  variant = "meals",
-  title,
-}: {
-  initialRecipes: Recipe[];
-  filters: {
-    plan: Plan;
-    kcal?: number;
-    kcalMin?: number;
-    kcalMax?: number;
-    allergens: string[];
-    dislikes: string[];
-  };
-  relaxedNote: string | null;
-  variant?: "meals" | "shakes";
-  title?: string;
-}) {
-  const [recipes, setRecipes] = useState<Recipe[]>(initialRecipes);
+type Props = {
+  kind: "meals" | "shakes";
+  baseQS: string;
+  kcal?: number;
+  kcalMin?: number;
+  kcalMax?: number;
+  allergens: string[];
+  dislikes: string[];
+};
+
+function encodeB64UrlJsonBrowser(data: any): string {
+  const json = JSON.stringify(data);
+  const bytes = new TextEncoder().encode(json);
+  let bin = "";
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  const b64 = btoa(bin);
+  return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+export function AIExtraSection({
+  kind,
+  baseQS,
+  kcal,
+  kcalMin,
+  kcalMax,
+  allergens,
+  dislikes,
+}: Props) {
+  const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // string pour dépendances
+  const allergensKey = allergens.join(",");
+  const dislikesKey = dislikes.join(",");
+
   useEffect(() => {
     let cancelled = false;
-
-    async function load() {
+    const run = async () => {
       setLoading(true);
       setError(null);
+      setRecipes([]);
+
       try {
-        const res = await fetch("/api/recipes-ai", {
+        const res = await fetch("/api/recipes/ai", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            plan: filters.plan,
-            kcal: filters.kcal,
-            kcalMin: filters.kcalMin,
-            kcalMax: filters.kcalMax,
-            allergens: filters.allergens,
-            dislikes: filters.dislikes,
-            count: 16,
-            kind: variant, // 👈 meals ou shakes
+            kind,
+            kcal,
+            kcalMin,
+            kcalMax,
+            allergens,
+            dislikes,
+            count: 8,
           }),
         });
 
-        const data = await res.json().catch(() => ({} as any));
-
-        if (cancelled) return;
-
-        if (Array.isArray(data.recipes) && data.recipes.length) {
-          const mapped: Recipe[] = data.recipes.map((raw: any) => {
-            const title = String(raw?.title ?? "").trim() || "Recette";
-            const id = String(raw?.id || title || Math.random().toString(36).slice(2))
-              .trim()
-              .toLowerCase()
-              .replace(/[^a-z0-9-]+/g, "-");
-
-            const rework: Rework[] | undefined = Array.isArray(raw?.rework)
-              ? raw.rework.map((x: any) => ({
-                  ingredient: String(x?.ingredient || "").toLowerCase(),
-                  tips: Array.isArray(x?.tips) ? x.tips.map((t: any) => String(t)) : [],
-                }))
-              : undefined;
-
-            return {
-              id,
-              title,
-              subtitle: raw?.subtitle ? String(raw.subtitle) : undefined,
-              kcal: typeof raw?.kcal === "number" ? raw.kcal : undefined,
-              timeMin: typeof raw?.timeMin === "number" ? raw.timeMin : undefined,
-              tags: Array.isArray(raw?.tags) ? raw.tags.map((t: any) => String(t)) : [],
-              goals: Array.isArray(raw?.goals) ? raw.goals.map((g: any) => String(g)) : [],
-              minPlan: (["BASIC", "PLUS", "PREMIUM"].includes(raw?.minPlan)
-                ? raw.minPlan
-                : filters.plan) as Plan,
-              ingredients: Array.isArray(raw?.ingredients)
-                ? raw.ingredients.map((x: any) => String(x))
-                : [],
-              steps: Array.isArray(raw?.steps) ? raw.steps.map((x: any) => String(x)) : [],
-              rework,
-            };
-          });
-
-          setRecipes(mapped);
+        if (!res.ok) {
+          if (!cancelled) {
+            setError("IA indisponible pour le moment.");
+            setLoading(false);
+          }
+          return;
         }
 
-        if (data.error && !cancelled) {
-          setError(data.error);
+        const data = await res.json();
+        const arr: Recipe[] = Array.isArray(data?.recipes) ? data.recipes : [];
+        if (!cancelled) {
+          setRecipes(arr);
+          setLoading(false);
         }
       } catch {
-        if (!cancelled) setError("Erreur de connexion à l’IA");
-      } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setError("IA indisponible pour le moment.");
+          setLoading(false);
+        }
       }
-    }
+    };
 
-    load();
+    run();
     return () => {
       cancelled = true;
     };
-  }, [
-    filters.plan,
-    filters.kcal,
-    filters.kcalMin,
-    filters.kcalMax,
-    filters.allergens.join(","),
-    filters.dislikes.join(","),
-    variant,
-  ]);
+  }, [kind, kcal, kcalMin, kcalMax, allergensKey, dislikesKey]);
+
+  if (!loading && !recipes.length && !error) {
+    // rien à afficher (pas d'IA)
+    return null;
+  }
 
   return (
     <section className="section" style={{ marginTop: 12 }}>
       <div className="section-head" style={{ marginBottom: 8 }}>
-        <h2>{title ?? "Recettes personnalisées (IA)"}</h2>
+        <h2>Suggestions perso IA</h2>
+        <p className="text-xs" style={{ color: "#6b7280", marginTop: 4 }}>
+          Générées en direct avec l&apos;IA selon tes filtres.
+        </p>
       </div>
 
-      {relaxedNote && (
-        <div className="text-xs" style={{ color: "#6b7280", marginBottom: 4 }}>
-          {relaxedNote}
-        </div>
-      )}
-
-      {loading && (
-        <div className="text-sm" style={{ color: "#6b7280", marginBottom: 8 }}>
-          Génération des recettes avec l’IA…
-        </div>
-      )}
-
       {error && (
-        <div className="card text-sm" style={{ color: "#b91c1c", marginBottom: 8 }}>
-          {error} — affichage des suggestions de base.
+        <div className="card text-xs" style={{ color: "#6b7280" }}>
+          {error}
         </div>
       )}
 
-      {recipes.length ? (
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
-          {recipes.map((r) => {
-            const ing = Array.isArray(r.ingredients) ? r.ingredients : [];
-            const shown = ing.slice(0, 8);
-            const more = Math.max(0, ing.length - shown.length);
+      {!error && (
+        <>
+          {loading && recipes.length === 0 && (
+            <div className="card text-xs" style={{ color: "#6b7280" }}>
+              Génération en cours…
+            </div>
+          )}
 
-            return (
-              <article key={r.id} className="card" style={{ overflow: "hidden" }}>
-                <div className="flex items-center justify-between">
-                  <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>{r.title}</h3>
-                </div>
+          {recipes.length > 0 && (
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
+              {recipes.map((r) => {
+                const href = `/dashboard/recipes/${r.id}?${baseQS}data=${encodeB64UrlJsonBrowser(
+                  r
+                )}`;
+                const ing = Array.isArray(r.ingredients) ? r.ingredients : [];
+                const shown = ing.slice(0, 8);
+                const more = Math.max(0, ing.length - shown.length);
 
-                <div
-                  className="text-sm"
-                  style={{ marginTop: 10, display: "flex", gap: 12, flexWrap: "wrap" }}
-                >
-                  {typeof r.kcal === "number" && <span className="badge">{r.kcal} kcal</span>}
-                  {typeof r.timeMin === "number" && (
-                    <span className="badge">{r.timeMin} min</span>
-                  )}
-                </div>
+                return (
+                  <article key={r.id} className="card" style={{ overflow: "hidden" }}>
+                    <div className="flex items-center justify-between">
+                      <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>{r.title}</h3>
+                      <span className="badge">perso IA</span>
+                    </div>
 
-                <div className="text-sm" style={{ marginTop: 10 }}>
-                  <strong>Ingrédients</strong>
-                  <ul style={{ margin: "6px 0 0 16px" }}>
-                    {shown.map((i, idx) => (
-                      <li key={idx}>{i}</li>
-                    ))}
-                    {more > 0 && <li>+ {more} autre(s)…</li>}
-                  </ul>
-                </div>
+                    <div
+                      className="text-sm"
+                      style={{
+                        marginTop: 10,
+                        display: "flex",
+                        gap: 12,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      {typeof r.kcal === "number" && (
+                        <span className="badge">{r.kcal} kcal</span>
+                      )}
+                      {typeof r.timeMin === "number" && (
+                        <span className="badge">{r.timeMin} min</span>
+                      )}
+                    </div>
 
-                {Array.isArray(r.steps) && r.steps.length > 0 && (
-                  <div className="text-sm" style={{ marginTop: 10 }}>
-                    <strong>Préparation</strong>
-                    <ul style={{ margin: "6px 0 0 16px" }}>
-                      {r.steps.slice(0, 3).map((s, idx) => (
-                        <li key={idx}>{s}</li>
-                      ))}
-                      {r.steps.length > 3 && <li>…</li>}
-                    </ul>
-                  </div>
-                )}
-              </article>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="card text-sm" style={{ color: "#6b7280" }}>
-          Aucune recette personnalisée pour le moment.
-        </div>
+                    <div className="text-sm" style={{ marginTop: 10 }}>
+                      <strong>Ingrédients</strong>
+                      <ul style={{ margin: "6px 0 0 16px" }}>
+                        {shown.map((i, idx) => (
+                          <li key={idx}>{i}</li>
+                        ))}
+                        {more > 0 && <li>+ {more} autre(s)…</li>}
+                      </ul>
+                    </div>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 10,
+                        marginTop: 12,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <a className="btn btn-dash" href={href}>
+                        Voir la recette
+                      </a>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </>
       )}
     </section>
   );
 }
+
 
