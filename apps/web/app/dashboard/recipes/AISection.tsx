@@ -130,24 +130,24 @@ export function AIExtraSection({
         </p>
       </div>
 
+      {/* État erreur */}
       {error && (
         <div className="card text-xs" style={{ color: "#6b7280" }}>
           {error}
         </div>
       )}
 
+      {/* État chargement (si pas d'erreur) */}
       {!error && loading && recipes.length === 0 && (
         <div className="card text-xs" style={{ color: "#6b7280" }}>
           Génération en cours…
         </div>
       )}
 
-      {!error && !loading && recipes.length === 0 && (
-        <div className="card text-xs" style={{ color: "#6b7280" }}>
-          Pas encore de suggestions IA pour ces filtres.
-        </div>
-      )}
+      {/* ⬇️ On ne montre PLUS le message "Pas encore de suggestions IA..." */}
+      {/* Quand il n'y a ni erreur ni loading et 0 recettes, on affiche juste le header au-dessus */}
 
+      {/* État avec recettes */}
       {!error && recipes.length > 0 && (
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
           {recipes.map((r) => {
@@ -206,4 +206,5 @@ export function AIExtraSection({
     </section>
   );
 }
+
 
