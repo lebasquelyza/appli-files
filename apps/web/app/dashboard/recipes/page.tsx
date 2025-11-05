@@ -281,6 +281,174 @@ const SHAKES_BASE: Recipe[] = [
   },
 ];
 
+/* ========= IA OpenAI (serveur) ========= */
+async function generateAIRecipes({
+  kind,
+  plan,
+  kcal,
+  kcalMin,
+  kcalMax,
+  allergens,
+  dislikes,
+  count = 8,
+}: {
+  kind: "meals" | "shakes";
+  plan: Plan;
+  kcal?: number;
+  kcalMin?: number;
+  kcalMax?: number;
+  allergens: string[];
+  dislikes: string[];
+  count?: number;
+}): Promise<Recipe[]> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return [];
+
+  const constraints: string[] = [];
+
+  if (typeof kcal === "number" && !isNaN(kcal) && kcal > 0) {
+    constraints.push(`- Viser ~${kcal} kcal par recette (±10%).`);
+  } else {
+    const hasMin = typeof kcalMin === "number" && !isNaN(kcalMin) && kcalMin > 0;
+    const hasMax = typeof kcalMax === "number" && !isNaN(kcalMax) && kcalMax > 0;
+    if (hasMin && hasMax) constraints.push(`- Respecter une plage ${kcalMin}-${kcalMax} kcal.`);
+    else if (hasMin) constraints.push(`- Minimum ${kcalMin} kcal.`);
+    else if (hasMax) constraints.push(`- Maximum ${kcalMax} kcal.`);
+  }
+
+  if (allergens.length) constraints.push(`- Exclure strictement: ${allergens.join(", ")}.`);
+  if (dislikes.length)
+    constraints.push(
+      `- Si un ingrédient non-aimé apparaît, ne pas le supprimer: proposer une section "rework" avec 2-3 façons de le cuisiner autrement.`
+    );
+
+  const typeLine =
+    kind === "shakes"
+      ? "- Toutes les recettes sont des BOISSONS protéinées (shakes / smoothies) à boire, préparées au blender, prêtes en 5–10 min. Pas de plats solides."
+      : "- Recettes de repas (petit-déjeuner, déjeuner, dîner, bowls, etc.).";
+
+  const prompt = `Tu es un chef-nutritionniste. Renvoie UNIQUEMENT du JSON valide (pas de texte).
+Utilisateur:
+- Plan: ${plan}
+- Type de recettes: ${kind === "shakes" ? "shakes / smoothies protéinés" : "repas (plats)"}
+- Allergènes/Intolérances: ${allergens.join(", ") || "aucun"}
+- Aliments non aimés (à re-travailler): ${dislikes.join(", ") || "aucun"}
+- Nombre de recettes: ${count}
+
+Contraintes:
+${typeLine}
+${constraints.join("\n")}
+
+Schéma TypeScript (exemple):
+Recipe = {
+  id: string, title: string, subtitle?: string,
+  kcal?: number, timeMin?: number, tags: string[],
+  goals: string[], minPlan: "BASIC" | "PLUS" | "PREMIUM",
+  ingredients: string[], steps: string[],
+  rework?: { ingredient: string, tips: string[] }[]
+}
+
+Règles:
+- minPlan = "${plan}" pour toutes les recettes.
+- Variété: végétarien/vegan/protéiné/rapide/sans-gluten...
+- Ingrédients simples du quotidien.
+- steps = 3–6 étapes courtes.
+- Ajouter le tag "perso-ia" dans tags pour toutes les recettes.
+- Renvoyer {"recipes": Recipe[]}.`;
+
+  try {
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        temperature: 0.7,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: "Tu parles français et tu réponds en JSON strict." },
+          { role: "user", content: prompt },
+        ],
+      }),
+      cache: "no-store",
+    });
+
+    if (!res.ok) return [];
+
+    const data = await res.json().catch(() => ({} as any));
+    let payload: any = {};
+    try {
+      payload = JSON.parse(data?.choices?.[0]?.message?.content ?? "{}");
+    } catch {
+      return [];
+    }
+
+    const arr: any[] = Array.isArray(payload?.recipes) ? payload.recipes : [];
+    const seen = new Set<string>();
+
+    const clean: Recipe[] = arr
+      .map((raw) => {
+        const title = String(raw?.title ?? "").trim();
+        if (!title) return null;
+
+        const id = String(raw?.id || title || Math.random().toString(36).slice(2))
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9-]+/g, "-");
+
+        let tags: string[] = Array.isArray(raw?.tags)
+          ? raw.tags.map((t: any) => String(t))
+          : [];
+        if (!tags.some((t) => t.toLowerCase() === "perso-ia")) {
+          tags = [...tags, "perso-ia"];
+        }
+
+        const rework: Rework[] | undefined = Array.isArray(raw?.rework)
+          ? raw.rework.map((x: any) => ({
+              ingredient: String(x?.ingredient || "").toLowerCase(),
+              tips: Array.isArray(x?.tips) ? x.tips.map((t: any) => String(t)) : [],
+            }))
+          : undefined;
+
+        const ingredients: string[] = Array.isArray(raw?.ingredients)
+          ? raw.ingredients.map((x: any) => String(x))
+          : [];
+        const steps: string[] = Array.isArray(raw?.steps)
+          ? raw.steps.map((x: any) => String(x))
+          : [];
+
+        return {
+          id,
+          title,
+          subtitle: raw?.subtitle ? String(raw.subtitle) : undefined,
+          kcal: typeof raw?.kcal === "number" ? raw.kcal : undefined,
+          timeMin: typeof raw?.timeMin === "number" ? raw.timeMin : undefined,
+          tags,
+          goals: Array.isArray(raw?.goals) ? raw.goals.map((g: any) => String(g)) : [],
+          minPlan: plan,
+          ingredients,
+          steps,
+          rework,
+        } as Recipe;
+      })
+      .filter((r): r is Recipe => !!r)
+      .filter((r) => {
+        if (seen.has(r.id)) return false;
+        seen.add(r.id);
+        const ingLow = r.ingredients.map((i) => i.toLowerCase());
+        if (allergens.some((a) => ingLow.includes(a))) return false;
+        return true;
+      });
+
+    return clean;
+  } catch {
+    // en cas d'erreur réseau / "connection closed" → on renvoie []
+    return [];
+  }
+}
+
 /* ========= "Perso" local (fallback, sans API) ========= */
 function personalizeFallback({
   base,
@@ -341,6 +509,51 @@ function personalizeFallback({
   });
 
   return out;
+}
+
+/* ========= IA + fallback combiné ========= */
+async function getPersoRecipes({
+  kind,
+  base,
+  kcal,
+  kcalMin,
+  kcalMax,
+  allergens,
+  dislikes,
+  plan,
+}: {
+  kind: "meals" | "shakes";
+  base: Recipe[];
+  kcal?: number;
+  kcalMin?: number;
+  kcalMax?: number;
+  allergens: string[];
+  dislikes: string[];
+  plan: Plan;
+}): Promise<Recipe[]> {
+  // 1) on tente l'IA OpenAI
+  const ai = await generateAIRecipes({
+    kind,
+    plan,
+    kcal,
+    kcalMin,
+    kcalMax,
+    allergens,
+    dislikes,
+    count: 8,
+  });
+
+  if (ai.length) return ai;
+
+  // 2) si IA KO ou vide → fallback local (comme avant)
+  return personalizeFallback({
+    base,
+    kcal,
+    kcalMin,
+    kcalMax,
+    allergens,
+    dislikes,
+  });
 }
 
 /* ===================== Filtres (Server Action) ===================== */
@@ -442,23 +655,33 @@ export default async function Page({
   const healthyPick = pickRandomSeeded(HEALTHY_BASE, 4, seed);
   const shakesPick = pickRandomSeeded(SHAKES_BASE, 4, seed + 7);
 
-  // "Perso IA" local (sans API)
-  const persoMeals = personalizeFallback({
-    base: HEALTHY_BASE,
-    kcal: hasKcalTarget ? kcal : undefined,
-    kcalMin: hasKcalMin ? kcalMin : undefined,
-    kcalMax: hasKcalMax ? kcalMax : undefined,
-    allergens,
-    dislikes,
-  });
-  const persoShakes = personalizeFallback({
-    base: SHAKES_BASE,
-    kcal: hasKcalTarget ? kcal : undefined,
-    kcalMin: hasKcalMin ? kcalMin : undefined,
-    kcalMax: hasKcalMax ? kcalMax : undefined,
-    allergens,
-    dislikes,
-  });
+  // Recettes perso (IA + fallback) selon la vue
+  let persoMeals: Recipe[] = [];
+  let persoShakes: Recipe[] = [];
+
+  if (view === "meals") {
+    persoMeals = await getPersoRecipes({
+      kind: "meals",
+      base: HEALTHY_BASE,
+      kcal: hasKcalTarget ? kcal : undefined,
+      kcalMin: hasKcalMin ? kcalMin : undefined,
+      kcalMax: hasKcalMax ? kcalMax : undefined,
+      allergens,
+      dislikes,
+      plan,
+    });
+  } else if (view === "shakes") {
+    persoShakes = await getPersoRecipes({
+      kind: "shakes",
+      base: SHAKES_BASE,
+      kcal: hasKcalTarget ? kcal : undefined,
+      kcalMin: hasKcalMin ? kcalMin : undefined,
+      kcalMax: hasKcalMax ? kcalMax : undefined,
+      allergens,
+      dislikes,
+      plan,
+    });
+  }
 
   // Mélange fixe + perso
   const mixedMeals = seededShuffle([...healthyPick, ...persoMeals], seed + 99);
