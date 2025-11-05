@@ -150,6 +150,13 @@ Règles:
     const result = await callOpenAI(prompt, apiKey);
 
     if (!result.ok) {
+      // 👇 Cas particulier : TIMEOUT → on renvoie juste "aucune suggestion", sans error
+      if (result.error === "OPENAI_TIMEOUT") {
+        console.warn("[recipes/ai] Timeout OpenAI, on renvoie 0 recette sans error");
+        return NextResponse.json({ recipes: [] }, { status: 200 });
+      }
+
+      // Autres erreurs : on les remonte au front (data.error)
       return NextResponse.json(
         { recipes: [], error: result.error, detail: result.detail },
         { status: 200 }
