@@ -31,6 +31,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard/connect", label: "Connecte tes données", icon: Plug2 },
   { href: "/dashboard/bmi", label: "IMC", icon: ClipboardList },
   { href: "/dashboard/music", label: "Musique", icon: Music2 },
+   { href: "/dashboard/avis", label: "Votre avis", icon: MessageCircle },
   { href: "/dashboard/settings", label: "Réglages", icon: Settings },
 ];
 
