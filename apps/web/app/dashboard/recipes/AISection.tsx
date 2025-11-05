@@ -116,11 +116,6 @@ export function AIExtraSection({
     };
   }, [kind, kcal, kcalMin, kcalMax, allergensKey, dislikesKey]);
 
-  // Si pas de chargement, pas de recettes et pas d'erreur → pas de section du tout
-  if (!loading && !recipes.length && !error) {
-    return null;
-  }
-
   return (
     <section className="section" style={{ marginTop: 12 }}>
       <div className="section-head" style={{ marginBottom: 8 }}>
@@ -130,82 +125,82 @@ export function AIExtraSection({
         </p>
       </div>
 
+      {/* État erreur */}
       {error && (
         <div className="card text-xs" style={{ color: "#6b7280" }}>
           {error}
         </div>
       )}
 
-      {!error && (
-        <>
-          {loading && recipes.length === 0 && (
-            <div className="card text-xs" style={{ color: "#6b7280" }}>
-              Génération en cours…
-            </div>
-          )}
+      {/* État chargement (si pas d'erreur) */}
+      {!error && loading && recipes.length === 0 && (
+        <div className="card text-xs" style={{ color: "#6b7280" }}>
+          Génération en cours…
+        </div>
+      )}
 
-          {recipes.length > 0 && (
-            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
-              {recipes.map((r) => {
-                const href = `/dashboard/recipes/${r.id}?${baseQS}data=${encodeB64UrlJsonBrowser(
-                  r
-                )}`;
-                const ing = Array.isArray(r.ingredients) ? r.ingredients : [];
-                const shown = ing.slice(0, 8);
-                const more = Math.max(0, ing.length - shown.length);
+      {/* État "pas de recettes" (pas d'erreur, pas de loading, pas de recettes) */}
+      {!error && !loading && recipes.length === 0 && (
+        <div className="card text-xs" style={{ color: "#6b7280" }}>
+          Pas encore de suggestions IA pour ces filtres.
+        </div>
+      )}
 
-                return (
-                  <article key={r.id} className="card" style={{ overflow: "hidden" }}>
-                    <div className="flex items-center justify-between">
-                      <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>{r.title}</h3>
-                      <span className="badge">perso IA</span>
-                    </div>
+      {/* État avec recettes */}
+      {!error && recipes.length > 0 && (
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
+          {recipes.map((r) => {
+            const href = `/dashboard/recipes/${r.id}?${baseQS}data=${encodeB64UrlJsonBrowser(r)}`;
+            const ing = Array.isArray(r.ingredients) ? r.ingredients : [];
+            const shown = ing.slice(0, 8);
+            const more = Math.max(0, ing.length - shown.length);
 
-                    <div
-                      className="text-sm"
-                      style={{
-                        marginTop: 10,
-                        display: "flex",
-                        gap: 12,
-                        flexWrap: "wrap",
-                      }}
-                    >
-                      {typeof r.kcal === "number" && (
-                        <span className="badge">{r.kcal} kcal</span>
-                      )}
-                      {typeof r.timeMin === "number" && (
-                        <span className="badge">{r.timeMin} min</span>
-                      )}
-                    </div>
+            return (
+              <article key={r.id} className="card" style={{ overflow: "hidden" }}>
+                <div className="flex items-center justify-between">
+                  <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>{r.title}</h3>
+                  <span className="badge">perso IA</span>
+                </div>
 
-                    <div className="text-sm" style={{ marginTop: 10 }}>
-                      <strong>Ingrédients</strong>
-                      <ul style={{ margin: "6px 0 0 16px" }}>
-                        {shown.map((i, idx) => (
-                          <li key={idx}>{i}</li>
-                        ))}
-                        {more > 0 && <li>+ {more} autre(s)…</li>}
-                      </ul>
-                    </div>
+                <div
+                  className="text-sm"
+                  style={{
+                    marginTop: 10,
+                    display: "flex",
+                    gap: 12,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  {typeof r.kcal === "number" && <span className="badge">{r.kcal} kcal</span>}
+                  {typeof r.timeMin === "number" && <span className="badge">{r.timeMin} min</span>}
+                </div>
 
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: 10,
-                        marginTop: 12,
-                        flexWrap: "wrap",
-                      }}
-                    >
-                      <a className="btn btn-dash" href={href}>
-                        Voir la recette
-                      </a>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          )}
-        </>
+                <div className="text-sm" style={{ marginTop: 10 }}>
+                  <strong>Ingrédients</strong>
+                  <ul style={{ margin: "6px 0 0 16px" }}>
+                    {shown.map((i, idx) => (
+                      <li key={idx}>{i}</li>
+                    ))}
+                    {more > 0 && <li>+ {more} autre(s)…</li>}
+                  </ul>
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 10,
+                    marginTop: 12,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <a className="btn btn-dash" href={href}>
+                    Voir la recette
+                  </a>
+                </div>
+              </article>
+            );
+          })}
+        </div>
       )}
     </section>
   );
