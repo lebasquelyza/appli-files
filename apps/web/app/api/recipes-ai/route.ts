@@ -9,6 +9,7 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json().catch(() => ({}));
+
   const {
     plan = "PLUS",
     kcal,
@@ -17,7 +18,8 @@ export async function POST(req: Request) {
     allergens = [],
     dislikes = [],
     count = 12,
-  }: {
+    kind = "meals",
+  } = body as {
     plan?: Plan;
     kcal?: number;
     kcalMin?: number;
@@ -25,9 +27,13 @@ export async function POST(req: Request) {
     allergens?: string[];
     dislikes?: string[];
     count?: number;
-  } = body;
+    kind?: "meals" | "shakes";
+  };
+
+  const mode: "meals" | "shakes" = kind === "shakes" ? "shakes" : "meals";
 
   const constraints: string[] = [];
+
   if (typeof kcal === "number" && !isNaN(kcal) && kcal > 0) {
     constraints.push(`- Viser ~${kcal} kcal par recette (±10%).`);
   } else {
@@ -37,20 +43,28 @@ export async function POST(req: Request) {
     else if (hasMin) constraints.push(`- Minimum ${kcalMin} kcal.`);
     else if (hasMax) constraints.push(`- Maximum ${kcalMax} kcal.`);
   }
+
   if (allergens.length) constraints.push(`- Exclure strictement: ${allergens.join(", ")}.`);
   if (dislikes.length)
     constraints.push(
       `- Si un ingrédient non-aimé apparaît, ne pas le supprimer: proposer une section "rework" avec 2-3 façons de le cuisiner autrement.`
     );
 
+  const typeLine =
+    mode === "shakes"
+      ? "- Toutes les recettes sont des BOISSONS protéinées (shakes / smoothies) à boire, préparées au blender, prêtes en 5–10 min. Pas de plats solides."
+      : "- Recettes de repas (petit-déjeuner, déjeuner, dîner, bowls, etc.).";
+
   const prompt = `Tu es un chef-nutritionniste. Renvoie UNIQUEMENT du JSON valide (pas de texte).
 Utilisateur:
 - Plan: ${plan}
+- Type de recettes: ${mode === "shakes" ? "shakes / smoothies protéinés" : "repas (plats)"}
 - Allergènes/Intolérances: ${allergens.join(", ") || "aucun"}
 - Aliments non aimés (à re-travailler): ${dislikes.join(", ") || "aucun"}
 - Nombre de recettes: ${count}
 
 Contraintes:
+${typeLine}
 ${constraints.join("\n")}
 
 Schéma TypeScript (exemple):
@@ -67,6 +81,7 @@ Règles:
 - Variété: végétarien/vegan/protéiné/rapide/sans-gluten...
 - Ingrédients simples du quotidien.
 - steps = 3–6 étapes courtes.
+- Pour le mode "shakes": uniquement des boissons à boire, préparation au blender, 5–10 min.
 - Renvoyer {"recipes": Recipe[]}.`;
 
   try {
@@ -77,7 +92,7 @@ Règles:
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "gpt-4o-mini", // change si besoin (ex: "gpt-3.5-turbo")
+        model: "gpt-4o-mini",
         temperature: 0.7,
         response_format: { type: "json_object" },
         messages: [
