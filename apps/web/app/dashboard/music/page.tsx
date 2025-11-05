@@ -67,6 +67,150 @@ function useAudioChime() {
   return { unlock, tick, chimeStrong };
 }
 
+/* ---------------- Minuteur simple réglable ---------------- */
+function SimpleTimer() {
+  const { unlock, chimeStrong } = useAudioChime();
+
+  const [minutes, setMinutes] = useState(0);
+  const [seconds, setSeconds] = useState(30);
+  const [remaining, setRemaining] = useState(30); // en secondes
+  const [running, setRunning] = useState(false);
+  const [hasStarted, setHasStarted] = useState(false);
+
+  const totalSec = useMemo(
+    () => Math.max(1, minutes * 60 + seconds),
+    [minutes, seconds]
+  );
+
+  // Met à jour le restant quand l'utilisateur change le temps et que ce n'est pas en cours
+  useEffect(() => {
+    if (!running && !hasStarted) {
+      setRemaining(totalSec);
+    }
+  }, [totalSec, running, hasStarted]);
+
+  const start = () => {
+    if (totalSec < 1) return;
+    setRemaining(totalSec);
+    setHasStarted(true);
+    setRunning(true);
+  };
+
+  const pause = () => setRunning(false);
+  const resume = () => setRunning(true);
+
+  const reset = () => {
+    setRunning(false);
+    setHasStarted(false);
+    setRemaining(totalSec);
+  };
+
+  // Interval 1s + bip fort à la fin
+  useEffect(() => {
+    if (!running) return;
+
+    const id = setInterval(() => {
+      setRemaining((prev) => {
+        if (prev <= 1) {
+          void chimeStrong();
+          setRunning(false);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(id);
+  }, [running, chimeStrong]);
+
+  const pct = Math.round(((totalSec - remaining) / totalSec) * 100);
+
+  const mm = Math.floor(remaining / 60);
+  const ss = remaining % 60;
+
+  return (
+    <div
+      onPointerDown={unlock}
+      onKeyDown={unlock as any}
+      style={{ display: "grid", gap: 8 }}
+    >
+      <div style={{ display: "flex", gap: 8 }}>
+        <label className="label" style={{ fontSize: 12, flex: 1 }}>
+          Minutes
+          <input
+            className="input"
+            type="number"
+            min={0}
+            max={120}
+            value={minutes}
+            onChange={(e) =>
+              setMinutes(Math.max(0, Math.min(120, Number(e.target.value) || 0)))
+            }
+            style={{ marginTop: 4, padding: "6px 8px", fontSize: 13 }}
+          />
+        </label>
+        <label className="label" style={{ fontSize: 12, flex: 1 }}>
+          Secondes
+          <input
+            className="input"
+            type="number"
+            min={0}
+            max={59}
+            value={seconds}
+            onChange={(e) =>
+              setSeconds(Math.max(0, Math.min(59, Number(e.target.value) || 0)))
+            }
+            style={{ marginTop: 4, padding: "6px 8px", fontSize: 13 }}
+          />
+        </label>
+      </div>
+
+      <div className="panel" style={{ border: "1px solid #e5e7eb", background: "#fff", borderRadius: 12, padding: 10 }}>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+          <div style={{ fontWeight: 700, fontSize: 14, color: "#111827" }}>
+            Minuteur simple
+          </div>
+          <div style={{ fontFamily: "tabular-nums", fontWeight: 800, fontSize: 22 }}>
+            {String(mm).padStart(2, "0")}:{String(ss).padStart(2, "0")}
+          </div>
+        </div>
+
+        <div style={{ height: 8, background: "#f3f4f6", borderRadius: 999, marginTop: 8, overflow: "hidden" }}>
+          <div style={{ width: `${pct}%`, height: "100%", background: "#16a34a" }} />
+        </div>
+
+        <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+          {!hasStarted || (!running && remaining === totalSec) ? (
+            <button className="btn btn-dash" style={{ fontSize: 13 }} onClick={start}>
+              Démarrer
+            </button>
+          ) : running ? (
+            <button className="btn btn-dash" style={{ fontSize: 13 }} onClick={pause}>
+              Pause
+            </button>
+          ) : (
+            <button className="btn btn-dash" style={{ fontSize: 13 }} onClick={resume}>
+              Reprendre
+            </button>
+          )}
+          <button
+            className="btn"
+            style={{
+              fontSize: 13,
+              background: "#ffffff",
+              color: "#111827",
+              border: "1px solid #d1d5db",
+            }}
+            onClick={reset}
+          >
+            Réinitialiser
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ---------------- Tabata Timer (compact) ---------------- */
 function TabataTimerCompact() {
   const { unlock, tick, chimeStrong } = useAudioChime();
@@ -236,11 +380,6 @@ export default function MusicPage() {
   const PLAYER_SCALE = 0.84;
   const invPlayer = 1 / PLAYER_SCALE;
 
-  // ❌ Suppression de la redirection auto vers Spotify
-  // useEffect(() => {
-  //   if (status === "unauthenticated") signIn("spotify", { callbackUrl: "/dashboard/music" });
-  // }, [status]);
-
   if (status === "loading") {
     return (
       <div className="container"
@@ -292,7 +431,7 @@ export default function MusicPage() {
         <div>
           <h1 className="h1" style={{ fontSize: 20, color: "#111827" }}>Musique</h1>
           <p className="lead" style={{ fontSize: 12, marginTop: 2 }}>
-            Minuteur Tabata + lecteur Spotify.
+            Minuteur simple + Tabata + lecteur Spotify.
           </p>
         </div>
         <div>
@@ -308,7 +447,7 @@ export default function MusicPage() {
           <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
             <h3 style={{ marginTop: 0, fontSize: 16, color: "#111827", fontWeight: 800 }}>Timer</h3>
 
-            {/* Bouton Tabata */}
+            {/* Bouton Tabata pour scroller vers la section Tabata */}
             <button
               type="button"
               className="btn"
@@ -330,8 +469,16 @@ export default function MusicPage() {
             </button>
           </div>
 
-          <div id="tabata-root" style={{ marginTop: 8 }}>
-            <TabataTimerCompact />
+          <div style={{ marginTop: 8, display: "grid", gap: 10 }}>
+            {/* Minuteur simple */}
+            <section>
+              <SimpleTimer />
+            </section>
+
+            {/* Tabata */}
+            <section id="tabata-root">
+              <TabataTimerCompact />
+            </section>
           </div>
         </article>
 
