@@ -54,6 +54,7 @@ export function AIExtraSection({
 
   useEffect(() => {
     let cancelled = false;
+
     const run = async () => {
       setLoading(true);
       setError(null);
@@ -74,21 +75,33 @@ export function AIExtraSection({
           }),
         });
 
+        console.log("[AIExtraSection] /api/recipes/ai status:", res.status);
+
         if (!res.ok) {
+          const text = await res.text().catch(() => "");
+          console.error(
+            "[AIExtraSection] Erreur HTTP /api/recipes/ai:",
+            res.status,
+            res.statusText,
+            text
+          );
           if (!cancelled) {
-            setError("IA indisponible pour le moment.");
+            setError(`IA indisponible pour le moment. (HTTP ${res.status})`);
             setLoading(false);
           }
           return;
         }
 
         const data = await res.json();
+        console.log("[AIExtraSection] data:", data);
+
         const arr: Recipe[] = Array.isArray(data?.recipes) ? data.recipes : [];
         if (!cancelled) {
           setRecipes(arr);
           setLoading(false);
         }
-      } catch {
+      } catch (e) {
+        console.error("[AIExtraSection] fetch error /api/recipes/ai:", e);
         if (!cancelled) {
           setError("IA indisponible pour le moment.");
           setLoading(false);
@@ -97,13 +110,14 @@ export function AIExtraSection({
     };
 
     run();
+
     return () => {
       cancelled = true;
     };
   }, [kind, kcal, kcalMin, kcalMax, allergensKey, dislikesKey]);
 
+  // Si pas de chargement, pas de recettes et pas d'erreur → pas de section du tout
   if (!loading && !recipes.length && !error) {
-    // rien à afficher (pas d'IA)
     return null;
   }
 
@@ -196,5 +210,3 @@ export function AIExtraSection({
     </section>
   );
 }
-
-
