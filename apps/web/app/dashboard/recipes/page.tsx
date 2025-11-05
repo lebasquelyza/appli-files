@@ -660,7 +660,8 @@ export default async function Page({
           <>
             <section className="section" style={{ marginTop: 12 }}>
               <div className="section-head" style={{ marginBottom: 8 }}>
-                <h2>Plats & bowls — base healthy</h2>
+                {/* 🔹 Titre modifié ici */}
+                <h2>Recettes</h2>
                 <p className="text-xs" style={{ color: "#6b7280", marginTop: 4 }}>
                   Recettes fixes, stables et testées.
                 </p>
@@ -741,15 +742,18 @@ function Card({
   currentUrl: string;
 }) {
   const href = `/dashboard/recipes/${r.id}${detailQS}`;
-  const ing = Array.isArray(r.ingredients) ? r.ingredients : [];
-  const shown = ing.slice(0, 8);
-  const more = Math.max(0, ing.length - shown.length);
 
   return (
     <article className="card" style={{ overflow: "hidden" }}>
       <div className="flex items-center justify-between">
         <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>{r.title}</h3>
       </div>
+
+      {r.subtitle && (
+        <p className="text-sm" style={{ marginTop: 4, color: "#6b7280" }}>
+          {r.subtitle}
+        </p>
+      )}
 
       <div
         className="text-sm"
@@ -759,15 +763,7 @@ function Card({
         {typeof r.timeMin === "number" && <span className="badge">{r.timeMin} min</span>}
       </div>
 
-      <div className="text-sm" style={{ marginTop: 10 }}>
-        <strong>Ingrédients</strong>
-        <ul style={{ margin: "6px 0 0 16px" }}>
-          {shown.map((i, idx) => (
-            <li key={idx}>{i}</li>
-          ))}
-          {more > 0 && <li>+ {more} autre(s)…</li>}
-        </ul>
-      </div>
+      {/* 🔹 Ingrédients retirés de la carte pour n'être visibles que dans la page détail */}
 
       <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
         <a className="btn btn-dash" href={href}>
@@ -804,4 +800,3 @@ function Card({
     </article>
   );
 }
-
