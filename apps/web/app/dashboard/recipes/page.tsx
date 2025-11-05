@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
+import { AIExtraSection } from "./AIExtraSection";
 
 /* ===================== Config Next ===================== */
 export const runtime = "nodejs";
@@ -47,7 +48,7 @@ function pickRandomSeeded<T>(arr: T[], n: number, seed: number): T[] {
   return seededShuffle(arr, seed).slice(0, Math.max(0, Math.min(n, arr.length)));
 }
 
-/* ---- base64url JSON ---- */
+/* ---- base64url JSON (côté serveur) ---- */
 function encodeB64UrlJson(data: any): string {
   const json = JSON.stringify(data);
   const B: any = (globalThis as any).Buffer;
@@ -70,7 +71,7 @@ function encodeB64UrlJson(data: any): string {
   return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-/* ---- dictionnaire "re-travailler" (fallback) ---- */
+/* ---- dictionnaire "re-travailler" pour plus tard ---- */
 const REWORK_TIPS: Record<string, string[]> = {
   brocoli: ["Rôti au four parmesan-citron", "Wok soja-sésame", "Velouté crème légère"],
   saumon: ["Mariné miso/soja", "Papillote citron-aneth", "Rillettes au yaourt"],
@@ -281,281 +282,6 @@ const SHAKES_BASE: Recipe[] = [
   },
 ];
 
-/* ========= IA OpenAI (serveur) ========= */
-async function generateAIRecipes({
-  kind,
-  plan,
-  kcal,
-  kcalMin,
-  kcalMax,
-  allergens,
-  dislikes,
-  count = 8,
-}: {
-  kind: "meals" | "shakes";
-  plan: Plan;
-  kcal?: number;
-  kcalMin?: number;
-  kcalMax?: number;
-  allergens: string[];
-  dislikes: string[];
-  count?: number;
-}): Promise<Recipe[]> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return [];
-
-  const constraints: string[] = [];
-
-  if (typeof kcal === "number" && !isNaN(kcal) && kcal > 0) {
-    constraints.push(`- Viser ~${kcal} kcal par recette (±10%).`);
-  } else {
-    const hasMin = typeof kcalMin === "number" && !isNaN(kcalMin) && kcalMin > 0;
-    const hasMax = typeof kcalMax === "number" && !isNaN(kcalMax) && kcalMax > 0;
-    if (hasMin && hasMax) constraints.push(`- Respecter une plage ${kcalMin}-${kcalMax} kcal.`);
-    else if (hasMin) constraints.push(`- Minimum ${kcalMin} kcal.`);
-    else if (hasMax) constraints.push(`- Maximum ${kcalMax} kcal.`);
-  }
-
-  if (allergens.length) constraints.push(`- Exclure strictement: ${allergens.join(", ")}.`);
-  if (dislikes.length)
-    constraints.push(
-      `- Si un ingrédient non-aimé apparaît, ne pas le supprimer: proposer une section "rework" avec 2-3 façons de le cuisiner autrement.`
-    );
-
-  const typeLine =
-    kind === "shakes"
-      ? "- Toutes les recettes sont des BOISSONS protéinées (shakes / smoothies) à boire, préparées au blender, prêtes en 5–10 min. Pas de plats solides."
-      : "- Recettes de repas (petit-déjeuner, déjeuner, dîner, bowls, etc.).";
-
-  const prompt = `Tu es un chef-nutritionniste. Renvoie UNIQUEMENT du JSON valide (pas de texte).
-Utilisateur:
-- Plan: ${plan}
-- Type de recettes: ${kind === "shakes" ? "shakes / smoothies protéinés" : "repas (plats)"}
-- Allergènes/Intolérances: ${allergens.join(", ") || "aucun"}
-- Aliments non aimés (à re-travailler): ${dislikes.join(", ") || "aucun"}
-- Nombre de recettes: ${count}
-
-Contraintes:
-${typeLine}
-${constraints.join("\n")}
-
-Schéma TypeScript (exemple):
-Recipe = {
-  id: string, title: string, subtitle?: string,
-  kcal?: number, timeMin?: number, tags: string[],
-  goals: string[], minPlan: "BASIC" | "PLUS" | "PREMIUM",
-  ingredients: string[], steps: string[],
-  rework?: { ingredient: string, tips: string[] }[]
-}
-
-Règles:
-- minPlan = "${plan}" pour toutes les recettes.
-- Variété: végétarien/vegan/protéiné/rapide/sans-gluten...
-- Ingrédients simples du quotidien.
-- steps = 3–6 étapes courtes.
-- Ajouter le tag "perso-ia" dans tags pour toutes les recettes.
-- Renvoyer {"recipes": Recipe[]}.`;
-
-  try {
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        temperature: 0.7,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: "Tu parles français et tu réponds en JSON strict." },
-          { role: "user", content: prompt },
-        ],
-      }),
-      cache: "no-store",
-    });
-
-    if (!res.ok) return [];
-
-    const data = await res.json().catch(() => ({} as any));
-    let payload: any = {};
-    try {
-      payload = JSON.parse(data?.choices?.[0]?.message?.content ?? "{}");
-    } catch {
-      return [];
-    }
-
-    const arr: any[] = Array.isArray(payload?.recipes) ? payload.recipes : [];
-    const seen = new Set<string>();
-
-    const clean: Recipe[] = arr
-      .map((raw) => {
-        const title = String(raw?.title ?? "").trim();
-        if (!title) return null;
-
-        const id = String(raw?.id || title || Math.random().toString(36).slice(2))
-          .trim()
-          .toLowerCase()
-          .replace(/[^a-z0-9-]+/g, "-");
-
-        let tags: string[] = Array.isArray(raw?.tags)
-          ? raw.tags.map((t: any) => String(t))
-          : [];
-        if (!tags.some((t) => t.toLowerCase() === "perso-ia")) {
-          tags = [...tags, "perso-ia"];
-        }
-
-        const rework: Rework[] | undefined = Array.isArray(raw?.rework)
-          ? raw.rework.map((x: any) => ({
-              ingredient: String(x?.ingredient || "").toLowerCase(),
-              tips: Array.isArray(x?.tips) ? x.tips.map((t: any) => String(t)) : [],
-            }))
-          : undefined;
-
-        const ingredients: string[] = Array.isArray(raw?.ingredients)
-          ? raw.ingredients.map((x: any) => String(x))
-          : [];
-        const steps: string[] = Array.isArray(raw?.steps)
-          ? raw.steps.map((x: any) => String(x))
-          : [];
-
-        return {
-          id,
-          title,
-          subtitle: raw?.subtitle ? String(raw.subtitle) : undefined,
-          kcal: typeof raw?.kcal === "number" ? raw.kcal : undefined,
-          timeMin: typeof raw?.timeMin === "number" ? raw.timeMin : undefined,
-          tags,
-          goals: Array.isArray(raw?.goals) ? raw.goals.map((g: any) => String(g)) : [],
-          minPlan: plan,
-          ingredients,
-          steps,
-          rework,
-        } as Recipe;
-      })
-      .filter((r): r is Recipe => !!r)
-      .filter((r) => {
-        if (seen.has(r.id)) return false;
-        seen.add(r.id);
-        const ingLow = r.ingredients.map((i) => i.toLowerCase());
-        if (allergens.some((a) => ingLow.includes(a))) return false;
-        return true;
-      });
-
-    return clean;
-  } catch {
-    // en cas d'erreur réseau / "connection closed" → on renvoie []
-    return [];
-  }
-}
-
-/* ========= "Perso" local (fallback, sans API) ========= */
-function personalizeFallback({
-  base,
-  kcal,
-  kcalMin,
-  kcalMax,
-  allergens,
-  dislikes,
-}: {
-  base: Recipe[];
-  kcal?: number;
-  kcalMin?: number;
-  kcalMax?: number;
-  allergens: string[];
-  dislikes: string[];
-}): Recipe[] {
-  let filtered = base.filter((r) => {
-    const ing = r.ingredients.map((i) => i.toLowerCase());
-    return !allergens.some((a) => ing.includes(a));
-  });
-
-  if (typeof kcal === "number" && !isNaN(kcal) && kcal > 0) {
-    const tol = Math.max(75, Math.round(kcal * 0.15));
-    filtered = filtered.filter(
-      (r) => typeof r.kcal === "number" && Math.abs((r.kcal || 0) - kcal) <= tol
-    );
-  } else {
-    const hasMin = typeof kcalMin === "number" && !isNaN(kcalMin) && kcalMin > 0;
-    const hasMax = typeof kcalMax === "number" && !isNaN(kcalMax) && kcalMax > 0;
-    if (hasMin) filtered = filtered.filter((r) => (r.kcal || 0) >= (kcalMin as number));
-    if (hasMax) filtered = filtered.filter((r) => (r.kcal || 0) <= (kcalMax as number));
-  }
-
-  const dislikesSet = new Set(dislikes);
-  const out: Recipe[] = filtered.map<Recipe>((r) => {
-    const ingLower = r.ingredients.map((i) => i.toLowerCase());
-    const hits = [...dislikesSet].filter((d) => ingLower.includes(d));
-    if (!hits.length) {
-      return {
-        ...r,
-        tags: Array.from(new Set([...(r.tags || []), "perso-ia"])),
-      };
-    }
-    const tips: Rework[] = hits.map((h) => ({
-      ingredient: h,
-      tips:
-        REWORK_TIPS[h] ?? [
-          "Changer la cuisson",
-          "Assaisonnement différent",
-          "Mixer/hacher pour texture",
-        ],
-    }));
-    return {
-      ...r,
-      tags: Array.from(new Set([...(r.tags || []), "perso-ia"])),
-      rework: tips,
-    };
-  });
-
-  return out;
-}
-
-/* ========= IA + fallback combiné ========= */
-async function getPersoRecipes({
-  kind,
-  base,
-  kcal,
-  kcalMin,
-  kcalMax,
-  allergens,
-  dislikes,
-  plan,
-}: {
-  kind: "meals" | "shakes";
-  base: Recipe[];
-  kcal?: number;
-  kcalMin?: number;
-  kcalMax?: number;
-  allergens: string[];
-  dislikes: string[];
-  plan: Plan;
-}): Promise<Recipe[]> {
-  // 1) on tente l'IA OpenAI
-  const ai = await generateAIRecipes({
-    kind,
-    plan,
-    kcal,
-    kcalMin,
-    kcalMax,
-    allergens,
-    dislikes,
-    count: 8,
-  });
-
-  if (ai.length) return ai;
-
-  // 2) si IA KO ou vide → fallback local (comme avant)
-  return personalizeFallback({
-    base,
-    kcal,
-    kcalMin,
-    kcalMax,
-    allergens,
-    dislikes,
-  });
-}
-
 /* ===================== Filtres (Server Action) ===================== */
 async function applyFiltersAction(formData: FormData): Promise<void> {
   "use server";
@@ -634,8 +360,7 @@ export default async function Page({
     view?: string;
   };
 }) {
-  // Plan virtuel (appli gratuite)
-  const plan: Plan = "PLUS";
+  const plan: Plan = "PLUS"; // tout le monde profite de la logique "PLUS"
 
   const kcal = Number(searchParams?.kcal ?? "");
   const kcalMin = Number(searchParams?.kcalMin ?? "");
@@ -651,41 +376,8 @@ export default async function Page({
 
   const seed = Number(searchParams?.rnd ?? "0") || 123456789;
 
-  // Picks fixes
-  const healthyPick = pickRandomSeeded(HEALTHY_BASE, 4, seed);
-  const shakesPick = pickRandomSeeded(SHAKES_BASE, 4, seed + 7);
-
-  // Recettes perso (IA + fallback) selon la vue
-  let persoMeals: Recipe[] = [];
-  let persoShakes: Recipe[] = [];
-
-  if (view === "meals") {
-    persoMeals = await getPersoRecipes({
-      kind: "meals",
-      base: HEALTHY_BASE,
-      kcal: hasKcalTarget ? kcal : undefined,
-      kcalMin: hasKcalMin ? kcalMin : undefined,
-      kcalMax: hasKcalMax ? kcalMax : undefined,
-      allergens,
-      dislikes,
-      plan,
-    });
-  } else if (view === "shakes") {
-    persoShakes = await getPersoRecipes({
-      kind: "shakes",
-      base: SHAKES_BASE,
-      kcal: hasKcalTarget ? kcal : undefined,
-      kcalMin: hasKcalMin ? kcalMin : undefined,
-      kcalMax: hasKcalMax ? kcalMax : undefined,
-      allergens,
-      dislikes,
-      plan,
-    });
-  }
-
-  // Mélange fixe + perso
-  const mixedMeals = seededShuffle([...healthyPick, ...persoMeals], seed + 99);
-  const mixedShakes = seededShuffle([...shakesPick, ...persoShakes], seed + 123);
+  const healthyPick = pickRandomSeeded(HEALTHY_BASE, 6, seed);
+  const shakesPick = pickRandomSeeded(SHAKES_BASE, 6, seed + 7);
 
   // QS gardés (sans view)
   const qsParts: string[] = [];
@@ -733,8 +425,7 @@ export default async function Page({
                 color: "#4b5563",
               }}
             >
-              Recettes fixes + recettes <strong>perso IA</strong> (adaptées à vos filtres), le tout
-              mélangé.
+              Base healthy pour tous + suggestions <strong>perso IA</strong> selon tes filtres.
             </p>
 
             {/* Récap filtres actifs */}
@@ -756,6 +447,10 @@ export default async function Page({
                 !dislikes.length &&
                 " aucun"}
             </div>
+          </div>
+
+          <div className="text-sm">
+            Votre formule : <span className="badge" style={{ marginLeft: 6 }}>{plan}</span>
           </div>
         </div>
 
@@ -814,7 +509,7 @@ export default async function Page({
           </a>
         </div>
 
-        {/* =================== Contraintes & filtres =================== */}
+        {/* =================== Contraintes & filtres (pour IA) =================== */}
         <div className="section" style={{ marginTop: 12 }}>
           <div
             className="section-head"
@@ -833,7 +528,7 @@ export default async function Page({
                 lineHeight: 1.2,
               }}
             >
-              Contraintes & filtres
+              Contraintes & filtres (pour l&apos;IA)
             </h2>
           </div>
 
@@ -896,15 +591,14 @@ export default async function Page({
                   defaultValue={dislikes.join(", ")}
                 />
                 <div className="text-xs" style={{ color: "#6b7280", marginTop: 4 }}>
-                  On les garde, mais on propose une autre façon de les cuisiner.
+                  L&apos;IA les garde, mais propose une autre façon de les cuisiner.
                 </div>
               </div>
             </fieldset>
 
             <div className="flex items-center justify-between lg:col-span-2">
               <div className="text-sm" style={{ color: "#6b7280" }}>
-                Ajustez les filtres puis régénérez. Les recettes “perso IA” sont mélangées avec la
-                base.
+                Les filtres s&apos;appliquent surtout aux suggestions <strong>perso IA</strong>.
               </div>
               <div style={{ display: "flex", gap: 10 }}>
                 <a href="/dashboard/recipes" className="btn btn-outline" style={{ color: "#111" }}>
@@ -969,52 +663,78 @@ export default async function Page({
 
         {/* =================== CONTENU selon view =================== */}
         {view === "meals" ? (
-          <section className="section" style={{ marginTop: 12 }}>
-            <div className="section-head" style={{ marginBottom: 8 }}>
-              <h2>Plats & bowls</h2>
-              <p className="text-xs" style={{ color: "#6b7280", marginTop: 4 }}>
-                Recettes maison + recettes <strong>perso IA</strong>, mélangées.
-              </p>
-            </div>
-            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
-              {mixedMeals.map((r) => (
-                <Card
-                  key={r.id}
-                  r={r}
-                  detailQS={encode(r)}
-                  isSaved={savedSet.has(r.id)}
-                  currentUrl={currentUrl || "/dashboard/recipes"}
-                />
-              ))}
-            </div>
-          </section>
+          <>
+            <section className="section" style={{ marginTop: 12 }}>
+              <div className="section-head" style={{ marginBottom: 8 }}>
+                <h2>Plats & bowls — base healthy</h2>
+                <p className="text-xs" style={{ color: "#6b7280", marginTop: 4 }}>
+                  Recettes fixes, stables et testées.
+                </p>
+              </div>
+              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
+                {healthyPick.map((r) => (
+                  <Card
+                    key={r.id}
+                    r={r}
+                    detailQS={encode(r)}
+                    isSaved={savedSet.has(r.id)}
+                    currentUrl={currentUrl || "/dashboard/recipes"}
+                  />
+                ))}
+              </div>
+            </section>
+
+            {/* Suggestions IA en plus */}
+            <AIExtraSection
+              kind="meals"
+              baseQS={baseQS}
+              kcal={hasKcalTarget ? kcal : undefined}
+              kcalMin={hasKcalMin ? kcalMin : undefined}
+              kcalMax={hasKcalMax ? kcalMax : undefined}
+              allergens={allergens}
+              dislikes={dislikes}
+            />
+          </>
         ) : (
-          <section className="section" style={{ marginTop: 12 }}>
-            <div className="section-head" style={{ marginBottom: 8 }}>
-              <h2>Boissons protéinées</h2>
-              <p className="text-xs" style={{ color: "#6b7280", marginTop: 4 }}>
-                Shakes fixes + shakes <strong>perso IA</strong>, mélangés.
-              </p>
-            </div>
-            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
-              {mixedShakes.map((r) => (
-                <Card
-                  key={r.id}
-                  r={r}
-                  detailQS={encode(r)}
-                  isSaved={savedSet.has(r.id)}
-                  currentUrl={currentUrl || "/dashboard/recipes"}
-                />
-              ))}
-            </div>
-          </section>
+          <>
+            <section className="section" style={{ marginTop: 12 }}>
+              <div className="section-head" style={{ marginBottom: 8 }}>
+                <h2>Boissons protéinées — base</h2>
+                <p className="text-xs" style={{ color: "#6b7280", marginTop: 4 }}>
+                  Shakes & smoothies rapides.
+                </p>
+              </div>
+              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
+                {shakesPick.map((r) => (
+                  <Card
+                    key={r.id}
+                    r={r}
+                    detailQS={encode(r)}
+                    isSaved={savedSet.has(r.id)}
+                    currentUrl={currentUrl || "/dashboard/recipes"}
+                  />
+                ))}
+              </div>
+            </section>
+
+            {/* Suggestions IA en plus */}
+            <AIExtraSection
+              kind="shakes"
+              baseQS={baseQS}
+              kcal={hasKcalTarget ? kcal : undefined}
+              kcalMin={hasKcalMin ? kcalMin : undefined}
+              kcalMax={hasKcalMax ? kcalMax : undefined}
+              allergens={allergens}
+              dislikes={dislikes}
+            />
+          </>
         )}
       </div>
     </>
   );
 }
 
-/* ===================== Carte Recette ===================== */
+/* ===================== Carte Recette (base) ===================== */
 function Card({
   r,
   detailQS,
@@ -1031,14 +751,10 @@ function Card({
   const shown = ing.slice(0, 8);
   const more = Math.max(0, ing.length - shown.length);
 
-  const isAI =
-    Array.isArray(r.tags) && r.tags.some((t) => t.toLowerCase() === "perso-ia");
-
   return (
     <article className="card" style={{ overflow: "hidden" }}>
       <div className="flex items-center justify-between">
         <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>{r.title}</h3>
-        {isAI && <span className="badge">perso IA</span>}
       </div>
 
       <div
