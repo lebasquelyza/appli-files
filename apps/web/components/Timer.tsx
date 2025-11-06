@@ -4,7 +4,13 @@ import { useEffect, useRef, useState } from "react";
 
 function clamp(n:number, min:number, max:number){ return Math.max(min, Math.min(max, n)); }
 
+type TabataPhase = "idle" | "work" | "rest" | "done";
+
 export default function Timer() {
+  /* ========= MODE ========== */
+  const [mode, setMode] = useState<"simple" | "tabata">("simple");
+
+  /* ========= MINUTEUR SIMPLE ========= */
   // Réglages
   const [minutes, setMinutes] = useState<number>(1);
   const [secAdd, setSecAdd] = useState<0|15|30|45>(0);
@@ -15,7 +21,18 @@ export default function Timer() {
   const initialRef = useRef<number>(60);
   const intervalRef = useRef<number | null>(null);
 
-  // ====== AUDIO (typesafe) ======
+  /* ========= TABATA ========= */
+  const [tabataRounds, setTabataRounds] = useState<number>(8);
+  const [tabataWorkSec, setTabataWorkSec] = useState<number>(20);
+  const [tabataRestSec, setTabataRestSec] = useState<number>(10);
+
+  const [tabataPhase, setTabataPhase] = useState<TabataPhase>("idle");
+  const [tabataRound, setTabataRound] = useState<number>(1);
+  const [tabataRemaining, setTabataRemaining] = useState<number>(tabataWorkSec);
+  const [tabataRunning, setTabataRunning] = useState(false);
+  const tabataIntervalRef = useRef<number | null>(null);
+
+  /* ========= AUDIO partagé ========= */
   const audioCtxRef = useRef<AudioContext | null>(null);
   const audioUnlockedRef = useRef(false); // ✅ iOS: déverrouillé par geste
 
@@ -79,7 +96,8 @@ export default function Timer() {
     makeNote(1318.51, now + 0.00, 0.18); // E6
     makeNote(1760.00, now + 0.20, 0.20); // A6
   }
-  // ====================
+
+  /* ========= LOGIQUE MINUTEUR SIMPLE ========= */
 
   // Recalcule le total quand on modifie minutes/secondes (si à l'arrêt)
   useEffect(() => {
@@ -110,23 +128,21 @@ export default function Timer() {
     };
   }, [running]);
 
-  // ▶️ Démarrer / ⏸️ Pause
-  const toggle = async () => {
+  // ▶️ Démarrer / ⏸️ Pause (simple)
+  const toggleSimple = async () => {
     if (running) {
       setRunning(false);
       return;
     }
-    // ✅ START/RESUME : déverrouille franchement (iOS) + prépare le contexte
     await unlockAudioWithSilence();
     await ensureAudioCtx();
     if (secondsLeft > 0) setRunning(true);
   };
 
-  // 🔄 Réinitialiser
-  const reset  = async () => {
+  // 🔄 Réinitialiser (simple)
+  const resetSimple  = async () => {
     setRunning(false);
     setSecondsLeft(initialRef.current);
-    // Optionnel : on prépare l'audio pour un prochain départ
     await ensureAudioCtx();
   };
 
@@ -139,12 +155,12 @@ export default function Timer() {
     setSecAdd((s===15||s===30||s===45 ? s : 0) as 0|15|30|45);
   }
 
-  // Affichage temps
+  // Affichage temps simple
   const m = Math.floor(secondsLeft / 60);
   const s = secondsLeft % 60;
   const fmt = `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 
-  // === RING (SVG) ===
+  // === RING (SVG) pour le minuteur simple ===
   const size = 220;
   const stroke = 12;
   const r = (size - stroke) / 2;
@@ -154,106 +170,376 @@ export default function Timer() {
   const pctDone = 1 - Math.min(1, Math.max(0, secondsLeft / (initialRef.current || 1)));
   const dashOffset = C * (1 - pctDone);
 
+  /* ========= LOGIQUE TABATA ========= */
+
+  // Quand on modifie la durée de travail et qu'on est au repos/idle/done, on remet le remaining
+  useEffect(() => {
+    if (!tabataRunning && (tabataPhase === "idle" || tabataPhase === "done" || tabataPhase === "work")) {
+      setTabataRemaining(tabataWorkSec);
+    }
+  }, [tabataWorkSec, tabataRunning, tabataPhase]);
+
+  const startTabata = async () => {
+    if (tabataRounds < 1 || tabataWorkSec < 1) return;
+    await unlockAudioWithSilence();
+    await ensureAudioCtx();
+    setTabataRound(1);
+    setTabataPhase("work");
+    setTabataRemaining(tabataWorkSec);
+    setTabataRunning(true);
+  };
+
+  const pauseTabata = () => {
+    setTabataRunning(false);
+  };
+
+  const resumeTabata = async () => {
+    await unlockAudioWithSilence();
+    await ensureAudioCtx();
+    if (tabataPhase === "done") return;
+    setTabataRunning(true);
+  };
+
+  const resetTabata = () => {
+    setTabataRunning(false);
+    setTabataPhase("idle");
+    setTabataRound(1);
+    setTabataRemaining(tabataWorkSec);
+  };
+
+  // Tick Tabata
+  useEffect(() => {
+    if (!tabataRunning) return;
+
+    tabataIntervalRef.current = window.setInterval(() => {
+      setTabataRemaining((r) => {
+        if (r <= 1) {
+          // fin de segment → bip
+          if (audioUnlockedRef.current) void playFinishChime();
+
+          // fin de WORK / REST
+          if (tabataPhase === "work") {
+            if (tabataRound >= tabataRounds) {
+              // Tout terminé
+              setTabataPhase("done");
+              setTabataRunning(false);
+              return 0;
+            } else {
+              // Passage au repos
+              setTabataPhase("rest");
+              return tabataRestSec || 0;
+            }
+          } else if (tabataPhase === "rest") {
+            // Passage au travail + round suivant
+            setTabataPhase("work");
+            setTabataRound((n) => n + 1);
+            return tabataWorkSec;
+          } else {
+            return 0;
+          }
+        }
+        return r - 1;
+      });
+    }, 1000);
+
+    return () => {
+      if (tabataIntervalRef.current) window.clearInterval(tabataIntervalRef.current);
+      tabataIntervalRef.current = null;
+    };
+  }, [tabataRunning, tabataPhase, tabataRound, tabataRounds, tabataWorkSec, tabataRestSec]);
+
+  const tabataLabel =
+    tabataPhase === "work"
+      ? "Travail"
+      : tabataPhase === "rest"
+      ? "Repos"
+      : tabataPhase === "done"
+      ? "Terminé"
+      : "Prêt";
+
+  const tabataMM = Math.floor(tabataRemaining / 60);
+  const tabataSS = tabataRemaining % 60;
+
   return (
     <section
       className="rounded-[14px] space-y-8"
       style={{ background:"var(--bg)", border:"1px solid rgba(0,0,0,.08)", boxShadow:"var(--shadow)", padding:"28px" }}
     >
-      {/* RING + Temps au centre */}
-      <div className="flex justify-center">
-        <div style={{ position:"relative", width:size, height:size }}>
-          <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-            <defs>
-              <linearGradient id="gradBrand" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%"  stopColor="var(--brand)" />
-                <stop offset="100%" stopColor="var(--brand2)" />
-              </linearGradient>
-            </defs>
-            <circle cx={cx} cy={cy} r={r} stroke="rgba(0,0,0,.08)" strokeWidth={stroke} fill="none" />
-            <g transform={`rotate(-90 ${cx} ${cy})`}>
-              <circle
-                cx={cx} cy={cy} r={r}
-                stroke="url(#gradBrand)"
-                strokeWidth={stroke}
-                strokeLinecap="round"
-                strokeDasharray={C}
-                strokeDashoffset={dashOffset}
-                fill="none"
-                style={{ filter:"saturate(.9)" }}
-              />
-            </g>
-          </svg>
-          <div
+      {/* Switch mode Simple / Tabata */}
+      <div className="flex justify-center mb-4">
+        <div
+          style={{
+            display:"inline-flex",
+            padding:"4px",
+            borderRadius:"999px",
+            background:"var(--panel)",
+            border:"1px solid rgba(0,0,0,.06)",
+            gap:"4px",
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => { setMode("simple"); }}
             style={{
-              position:"absolute", inset:0, display:"grid", placeItems:"center",
-              fontFamily:"ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-              fontWeight:700, fontSize:"56px", lineHeight:1, letterSpacing:"0.02em",
+              padding:".4rem .9rem",
+              borderRadius:"999px",
+              fontSize:".85rem",
+              fontWeight:700,
+              border:"none",
+              background: mode === "simple" ? "linear-gradient(90deg,var(--brand),var(--brand2))" : "transparent",
+              color: mode === "simple" ? "#fff" : "var(--muted)",
+              boxShadow: mode === "simple" ? "var(--shadow)" : "none",
             }}
           >
-            {fmt}
+            Minuteur
+          </button>
+          <button
+            type="button"
+            onClick={() => { setMode("tabata"); }}
+            style={{
+              padding:".4rem .9rem",
+              borderRadius:"999px",
+              fontSize:".85rem",
+              fontWeight:700,
+              border:"none",
+              background: mode === "tabata" ? "linear-gradient(90deg,var(--brand),var(--brand2))" : "transparent",
+              color: mode === "tabata" ? "#fff" : "var(--muted)",
+              boxShadow: mode === "tabata" ? "var(--shadow)" : "none",
+            }}
+          >
+            Tabata
+          </button>
+        </div>
+      </div>
+
+      {/* =============== MODE MINUTEUR SIMPLE =============== */}
+      {mode === "simple" && (
+        <>
+          {/* RING + Temps au centre */}
+          <div className="flex justify-center">
+            <div style={{ position:"relative", width:size, height:size }}>
+              <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+                <defs>
+                  <linearGradient id="gradBrand" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%"  stopColor="var(--brand)" />
+                    <stop offset="100%" stopColor="var(--brand2)" />
+                  </linearGradient>
+                </defs>
+                <circle cx={cx} cy={cy} r={r} stroke="rgba(0,0,0,.08)" strokeWidth={stroke} fill="none" />
+                <g transform={`rotate(-90 ${cx} ${cy})`}>
+                  <circle
+                    cx={cx} cy={cy} r={r}
+                    stroke="url(#gradBrand)"
+                    strokeWidth={stroke}
+                    strokeLinecap="round"
+                    strokeDasharray={C}
+                    strokeDashoffset={dashOffset}
+                    fill="none"
+                    style={{ filter:"saturate(.9)" }}
+                  />
+                </g>
+              </svg>
+              <div
+                style={{
+                  position:"absolute", inset:0, display:"grid", placeItems:"center",
+                  fontFamily:"ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                  fontWeight:700, fontSize:"56px", lineHeight:1, letterSpacing:"0.02em",
+                }}
+              >
+                {fmt}
+              </div>
+            </div>
+          </div>
+
+          {/* Sélecteurs centrés */}
+          <div className="flex flex-col items-center gap-4">
+            <div className="flex items-center gap-3">
+              <label className="text-sm" style={{color:"var(--muted)"}}>Minutes</label>
+              <input
+                type="number" min={0} step={1}
+                value={minutes}
+                disabled={running}
+                onChange={(e) => setMinutes(clamp(Number(e.target.value || 0), 0, 600))}
+                className="rounded-[12px] text-sm"
+                style={{ width:"96px", padding:".6rem .75rem", background:"var(--bg)", border:"1px solid rgba(0,0,0,.12)", color:"var(--text)" }}
+              />
+            </div>
+
+            <div
+              className="inline-flex gap-1.5 rounded-[12px]"
+              style={{ padding:"8px", background:"var(--panel)", border:"1px solid rgba(0,0,0,.06)" }}
+            >
+              {[0,15,30,45].map(v => (
+                <button
+                  key={v}
+                  type="button"
+                  disabled={running}
+                  onClick={() => setSecAdd(v as 0|15|30|45)}
+                  style={{
+                    padding:".55rem .9rem", borderRadius:"10px",
+                    fontWeight:700, fontSize:".9rem",
+                    color: v===secAdd ? "#fff" : "var(--muted)",
+                    background: v===secAdd ? "linear-gradient(90deg,var(--brand),var(--brand2))" : "transparent",
+                    boxShadow: v===secAdd ? "var(--shadow)" : "none",
+                  }}
+                >
+                  +{v}s
+                </button>
+              ))}
+            </div>
+
+            <div className="flex flex-wrap justify-center gap-3">
+              <button type="button" disabled={running} onClick={() => applyPreset(30)}
+                style={{ background:"var(--panel)", color:"var(--text)", border:"1px solid rgba(0,0,0,.06)", borderRadius:"var(--radius)", padding:".6rem .9rem", fontWeight:700, fontSize:".9rem", boxShadow:"var(--shadow)" }}>
+                30s
+              </button>
+              <button type="button" disabled={running} onClick={() => applyPreset(90)}
+                style={{ background:"var(--panel)", color:"var(--text)", border:"1px solid rgba(0,0,0,.06)", borderRadius:"var(--radius)", padding:".6rem .9rem", fontWeight:700, fontSize:".9rem", boxShadow:"var(--shadow)" }}>
+                1:30
+              </button>
+              <button type="button" disabled={running} onClick={() => applyPreset(180)}
+                style={{ background:"var(--panel)", color:"var(--text)", border:"1px solid rgba(0,0,0,.06)", borderRadius:"var(--radius)", padding:".6rem .9rem", fontWeight:700, fontSize:".9rem", boxShadow:"var(--shadow)" }}>
+                3:00
+              </button>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex justify-center gap-4">
+            <button onClick={toggleSimple} className="btn-dash">{running ? "Pause" : "Démarrer"}</button>
+            <button onClick={resetSimple} className="btn-dash">Réinitialiser</button>
+          </div>
+        </>
+      )}
+
+      {/* =============== MODE TABATA =============== */}
+      {mode === "tabata" && (
+        <div
+          onPointerDown={unlockAudioWithSilence}
+          onKeyDown={unlockAudioWithSilence as any}
+          className="space-y-4"
+        >
+          {/* Config */}
+          <div className="grid grid-cols-3 gap-3">
+            <label className="text-[12px] space-y-1">
+              Rounds
+              <input
+                type="number"
+                min={1}
+                max={50}
+                value={tabataRounds}
+                onChange={(e) => setTabataRounds(clamp(Number(e.target.value || 0), 1, 50))}
+                className="input"
+                style={{ width:"100%", padding:"6px 8px", fontSize:13 }}
+              />
+            </label>
+            <label className="text-[12px] space-y-1">
+              Travail (s)
+              <input
+                type="number"
+                min={1}
+                max={3600}
+                value={tabataWorkSec}
+                onChange={(e) => setTabataWorkSec(clamp(Number(e.target.value || 0), 1, 3600))}
+                className="input"
+                style={{ width:"100%", padding:"6px 8px", fontSize:13 }}
+              />
+            </label>
+            <label className="text-[12px] space-y-1">
+              Repos (s)
+              <input
+                type="number"
+                min={0}
+                max={3600}
+                value={tabataRestSec}
+                onChange={(e) => setTabataRestSec(clamp(Number(e.target.value || 0), 0, 3600))}
+                className="input"
+                style={{ width:"100%", padding:"6px 8px", fontSize:13 }}
+              />
+            </label>
+          </div>
+
+          {/* Presets rapides */}
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="btn-dash"
+              style={{ fontSize:12 }}
+              onClick={() => { setTabataRounds(8); setTabataWorkSec(20); setTabataRestSec(10); }}
+            >
+              8× 20/10
+            </button>
+            <button
+              type="button"
+              className="btn-dash"
+              style={{ fontSize:12 }}
+              onClick={() => { setTabataRounds(10); setTabataWorkSec(45); setTabataRestSec(15); }}
+            >
+              10× 45/15
+            </button>
+            <button
+              type="button"
+              className="btn-dash"
+              style={{ fontSize:12 }}
+              onClick={() => { setTabataRounds(6); setTabataWorkSec(30); setTabataRestSec(30); }}
+            >
+              6× 30/30
+            </button>
+          </div>
+
+          {/* Affichage compteur */}
+          <div
+            className="panel"
+            style={{ border:"1px solid #e5e7eb", background:"#fff", borderRadius:12, padding:10 }}
+          >
+            <div className="flex items-baseline justify-between">
+              <div style={{ fontWeight:700, fontSize:14, color:"#111827" }}>
+                {tabataLabel}
+                {tabataPhase !== "idle" && tabataPhase !== "done"
+                  ? ` — Round ${tabataRound}/${tabataRounds}`
+                  : ""}
+              </div>
+              <div
+                style={{
+                  fontFamily:"tabular-nums",
+                  fontWeight:800,
+                  fontSize:22,
+                }}
+              >
+                {String(tabataMM).padStart(2,"0")}:{String(tabataSS).padStart(2,"0")}
+              </div>
+            </div>
+
+            {/* Actions Tabata */}
+            <div className="flex gap-2 mt-3 flex-wrap">
+              {tabataPhase === "idle" || tabataPhase === "done" ? (
+                <button className="btn-dash" style={{ fontSize:13 }} onClick={startTabata}>
+                  Démarrer
+                </button>
+              ) : tabataRunning ? (
+                <button className="btn-dash" style={{ fontSize:13 }} onClick={pauseTabata}>
+                  Pause
+                </button>
+              ) : (
+                <button className="btn-dash" style={{ fontSize:13 }} onClick={resumeTabata}>
+                  Reprendre
+                </button>
+              )}
+              <button
+                className="btn-dash"
+                style={{ fontSize:13, background:"#ffffff", color:"#111827", border:"1px solid #d1d5db" }}
+                onClick={resetTabata}
+              >
+                Réinitialiser
+              </button>
+            </div>
+
+            <p style={{ marginTop:8, fontSize:11, color:"#6b7280" }}>
+              Un bip se joue à la fin de chaque période de travail et de repos.
+            </p>
           </div>
         </div>
-      </div>
-
-      {/* Sélecteurs centrés */}
-      <div className="flex flex-col items-center gap-4">
-        <div className="flex items-center gap-3">
-          <label className="text-sm" style={{color:"var(--muted)"}}>Minutes</label>
-          <input
-            type="number" min={0} step={1}
-            value={minutes}
-            disabled={running}
-            onChange={(e) => setMinutes(clamp(Number(e.target.value || 0), 0, 600))}
-            className="rounded-[12px] text-sm"
-            style={{ width:"96px", padding:".6rem .75rem", background:"var(--bg)", border:"1px solid rgba(0,0,0,.12)", color:"var(--text)" }}
-          />
-        </div>
-
-        <div
-          className="inline-flex gap-1.5 rounded-[12px]"
-          style={{ padding:"8px", background:"var(--panel)", border:"1px solid rgba(0,0,0,.06)" }}
-        >
-          {[0,15,30,45].map(v => (
-            <button
-              key={v}
-              type="button"
-              disabled={running}
-              onClick={() => setSecAdd(v as 0|15|30|45)}
-              style={{
-                padding:".55rem .9rem", borderRadius:"10px",
-                fontWeight:700, fontSize:".9rem",
-                color: v===secAdd ? "#fff" : "var(--muted)",
-                background: v===secAdd ? "linear-gradient(90deg,var(--brand),var(--brand2))" : "transparent",
-                boxShadow: v===secAdd ? "var(--shadow)" : "none",
-              }}
-            >
-              +{v}s
-            </button>
-          ))}
-        </div>
-
-        <div className="flex flex-wrap justify-center gap-3">
-          <button type="button" disabled={running} onClick={() => applyPreset(30)}
-            style={{ background:"var(--panel)", color:"var(--text)", border:"1px solid rgba(0,0,0,.06)", borderRadius:"var(--radius)", padding:".6rem .9rem", fontWeight:700, fontSize:".9rem", boxShadow:"var(--shadow)" }}>
-            30s
-          </button>
-          <button type="button" disabled={running} onClick={() => applyPreset(90)}
-            style={{ background:"var(--panel)", color:"var(--text)", border:"1px solid rgba(0,0,0,.06)", borderRadius:"var(--radius)", padding:".6rem .9rem", fontWeight:700, fontSize:".9rem", boxShadow:"var(--shadow)" }}>
-            1:30
-          </button>
-          <button type="button" disabled={running} onClick={() => applyPreset(180)}
-            style={{ background:"var(--panel)", color:"var(--text)", border:"1px solid rgba(0,0,0,.06)", borderRadius:"var(--radius)", padding:".6rem .9rem", fontWeight:700, fontSize:".9rem", boxShadow:"var(--shadow)" }}>
-            3:00
-          </button>
-        </div>
-      </div>
-
-      {/* Actions */}
-      <div className="flex justify-center gap-4">
-        <button onClick={toggle} className="btn-dash">{running ? "Pause" : "Démarrer"}</button>
-        <button onClick={reset} className="btn-dash">Réinitialiser</button>
-      </div>
+      )}
     </section>
   );
 }
-
