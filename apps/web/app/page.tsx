@@ -1,4 +1,3 @@
-// apps/web/app/page.tsx  (ou apps/web/app/signin/page.tsx si ta route est /signin)
 "use client";
 
 import { useEffect, useState } from "react";
@@ -17,6 +16,20 @@ function setAppEmailCookie(val: string) {
       "Max-Age=31536000" // 365 jours
     ].filter(Boolean).join("; ");
   } catch {}
+}
+
+// --- helper pour notifier le backend d'un login / signup ---
+async function notifyAuthEvent(type: "login" | "signup", userEmail: string) {
+  try {
+    await fetch("/api/notify-auth", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type, userEmail }),
+    });
+  } catch (err) {
+    // on ne casse pas le flow utilisateur si l'email échoue
+    console.error("notifyAuthEvent error:", err);
+  }
 }
 
 export default function HomePage() {
@@ -94,7 +107,11 @@ export default function HomePage() {
 
       const { data: { user } } = await supabase.auth.getUser();
       const sessionEmail = (user?.email || emailTrim).trim().toLowerCase();
-      if (sessionEmail) setAppEmailCookie(sessionEmail);
+      if (sessionEmail) {
+        setAppEmailCookie(sessionEmail);
+        // 🔔 NOTIF LOGIN
+        await notifyAuthEvent("login", sessionEmail);
+      }
 
       setMessage("Connexion réussie ✅");
       window.location.href = "/dashboard";
@@ -141,6 +158,9 @@ export default function HomePage() {
       if (data?.session) {
         await supabase.auth.signOut();
       }
+
+      // 🔔 NOTIF SIGNUP (compte créé)
+      await notifyAuthEvent("signup", emailTrim);
 
       // 3) Message clair et on bascule vers le panneau de connexion
       setMessage("Compte créé ✅ Vérifie tes e-mails pour confirmer ton inscription.");
