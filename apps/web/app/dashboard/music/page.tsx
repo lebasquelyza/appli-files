@@ -359,7 +359,8 @@ function TabataTimerCompact() {
           ) : (
             <button className="btn btn-dash" style={{ fontSize: 13 }} onClick={resume}>Reprendre</button>
           )}
-          <button className="btn" style={{ fontSize: 13, background: "#ffffff", color: "#111827", border: "1px solid #d1d5db" }} onClick={reset}>
+          <button className="btn" style={{ fontSize: 13, background: "#ffffff", color: "#111827", border: "1px solid " +
+              "#d1d5db" }} onClick={reset}>
             Réinitialiser
           </button>
         </div>
@@ -398,31 +399,7 @@ export default function MusicPage() {
     );
   }
 
-  if (!session) {
-    return (
-      <div className="container"
-           style={{ paddingTop: 18, paddingBottom: 22, paddingLeft: SIDE_PADDING, paddingRight: SIDE_PADDING, maxWidth: PAGE_MAX_WIDTH, margin: "0 auto" }}>
-        <div className="page-header" style={{ marginBottom: 6 }}>
-          <div>
-            <h1 className="h1" style={{ fontSize: 20, color: "#111827" }}>Musique</h1>
-            <p className="lead" style={{ fontSize: 12, marginTop: 2 }}>Connexion à Spotify requise.</p>
-          </div>
-        </div>
-        <div className="card" style={{ border: "1px solid #d1d5db", background: "#ffffff", padding: 10 }}>
-          <div style={{ display: "flex", gap: 6, alignItems: "center", justifyContent: "space-between" }}>
-            <div style={{ fontSize: 13, color: "#374151" }}>Connecte-toi pour utiliser le lecteur Spotify.</div>
-            <button
-              className="btn btn-dash"
-              onClick={() => signIn("spotify", { callbackUrl: "/dashboard/music" })}
-              style={{ fontSize: 13 }}
-            >
-              Se connecter
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // ❌ On NE bloque PLUS toute la page quand !session
 
   return (
     <div className="container"
@@ -435,9 +412,24 @@ export default function MusicPage() {
           </p>
         </div>
         <div>
-          <button onClick={() => signOut({ callbackUrl: "/dashboard/music" })} className="btn btn-dash" title="Se déconnecter" style={{ fontSize: 13 }}>
-            ⏻ Se déconnecter
-          </button>
+          {session ? (
+            <button
+              onClick={() => signOut({ callbackUrl: "/dashboard/music" })}
+              className="btn btn-dash"
+              title="Se déconnecter"
+              style={{ fontSize: 13 }}
+            >
+              ⏻ Se déconnecter
+            </button>
+          ) : (
+            <button
+              onClick={() => signIn("spotify", { callbackUrl: "/dashboard/music" })}
+              className="btn btn-dash"
+              style={{ fontSize: 13 }}
+            >
+              Se connecter à Spotify
+            </button>
+          )}
         </div>
       </div>
 
@@ -485,20 +477,46 @@ export default function MusicPage() {
         {/* —— Carte Spotify */}
         <article className="card" style={{ padding: 10 }}>
           <h3 style={{ marginTop: 0, fontSize: 14, color: "#111827" }}>Lecteur Spotify</h3>
-          <div className="text-sm" style={{ color: "#6b7280", fontSize: 13, marginTop: 2 }}>
-            Contrôle du lecteur connecté à ton compte.
-          </div>
-          <div
-            style={{
-              marginTop: 8,
-              fontSize: "92%",
-              transform: `scale(${PLAYER_SCALE})`,
-              transformOrigin: "top left",
-              width: `${(invPlayer * 100).toFixed(3)}%`,
-            }}
-          >
-            <SpotifyPlayer />
-          </div>
+
+          {session ? (
+            <>
+              <div className="text-sm" style={{ color: "#6b7280", fontSize: 13, marginTop: 2 }}>
+                Contrôle du lecteur connecté à ton compte.
+              </div>
+              <div
+                style={{
+                  marginTop: 8,
+                  fontSize: "92%",
+                  transform: `scale(${PLAYER_SCALE})`,
+                  transformOrigin: "top left",
+                  width: `${(invPlayer * 100).toFixed(3)}%`,
+                }}
+              >
+                <SpotifyPlayer />
+              </div>
+            </>
+          ) : (
+            <div
+              style={{
+                marginTop: 8,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 8,
+              }}
+            >
+              <div style={{ fontSize: 13, color: "#374151" }}>
+                Connecte-toi pour utiliser le lecteur Spotify.
+              </div>
+              <button
+                className="btn btn-dash"
+                onClick={() => signIn("spotify", { callbackUrl: "/dashboard/music" })}
+                style={{ fontSize: 13 }}
+              >
+                Se connecter
+              </button>
+            </div>
+          )}
         </article>
       </div>
     </div>
