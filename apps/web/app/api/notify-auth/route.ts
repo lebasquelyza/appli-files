@@ -1,61 +1,77 @@
-import { NextRequest, NextResponse } from "next/server";
+// apps/web/app/api/notify-auth/route.ts
+import { NextResponse } from "next/server";
 
-const RESEND_API_URL = "https://api.resend.com/emails";
+export const runtime = "nodejs";           // même logique que send-reset
+export const dynamic = "force-dynamic";    // évite le cache en build
 
-// ✅ OPTION 1 (recommandée) : mettre la clé dans les variables d'env Netlify
-//    (Settings → Build & deploy → Environment → RESEND_API_KEY)
-// const RESEND_API_KEY = process.env.RESEND_API_KEY;
-
-// ❗ OPTION 2 (si tu veux vraiment tout sans env.local)
-//    Hardcode ta clé ici (NE PAS pousser sur un repo public)
-const RESEND_API_KEY = "TA_CLE_API_RESEND_ICI";
-
-export async function POST(req: NextRequest) {
+/** POST /api/notify-auth
+ * body: { type: "login" | "signup", userEmail: string }
+ */
+export async function POST(req: Request) {
   try {
     const { type, userEmail } = await req.json();
 
-    if (!type || !userEmail) {
-      return NextResponse.json({ error: "Missing fields" }, { status: 400 });
-    }
+    const typeStr = String(type || "").trim();
+    const emailTrim = String(userEmail || "").trim().toLowerCase();
 
-    if (!RESEND_API_KEY) {
-      console.error("RESEND_API_KEY manquante");
-      return NextResponse.json({ error: "Missing API key" }, { status: 500 });
+    if (!typeStr || !emailTrim) {
+      return NextResponse.json(
+        { error: "Type et email requis" },
+        { status: 400 }
+      );
     }
 
     const actionText =
-      type === "login" ? "s'est connecté" : "a créé un compte";
+      typeStr === "login" ? "s'est connecté" : "a créé un compte";
 
     const subject =
-      type === "login"
+      typeStr === "login"
         ? "Nouvelle connexion sur Files Coaching"
         : "Nouveau compte créé sur Files Coaching";
 
-    // Appel HTTP vers Resend (pas de lib externe, juste fetch)
-    const response = await fetch(RESEND_API_URL, {
+    // Envoi via l’API Resend avec fetch (même logique que send-reset)
+    const resp = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${RESEND_API_KEY}`,
+        "Authorization": `Bearer ${process.env.RESEND_API_KEY!}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: "Files Coaching <onboarding@resend.dev>", // ou une adresse de ton domaine validé chez Resend
-        to: ["sportifandpro@gmail.com"],
+        from: "Files Coaching <no-reply@appli.files-coaching.com>",
+        to: "sportifandpro@gmail.com",
         subject,
-        text: `Un utilisateur ${actionText} : ${userEmail}`,
+        html: `
+          <div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto">
+            <h2 style="color:#111">${subject}</h2>
+            <p>Bonjour,</p>
+            <p>Un utilisateur ${actionText} sur <strong>Files Coaching</strong>.</p>
+            <p style="margin:12px 0">
+              <strong>Email :</strong> ${emailTrim}
+            </p>
+            <hr style="border:none;border-top:1px solid #eee;margin:18px 0"/>
+            <p style="font-size:12px;color:#888">© ${new Date().getFullYear()} Files Coaching</p>
+          </div>
+        `.trim(),
       }),
     });
 
-    if (!response.ok) {
-      const txt = await response.text();
-      console.error("Resend error:", response.status, txt);
-      return NextResponse.json({ error: "Mail provider error" }, { status: 500 });
+    if (!resp.ok) {
+      const txt = await resp.text().catch(() => "");
+      console.error("[notify-auth] Resend API error:", resp.status, txt);
+      // Réponse simple (le front n’en a pas besoin de toute façon)
+      return NextResponse.json(
+        { ok: false, message: "Erreur lors de l’envoi de l’email." },
+        { status: 500 }
+      );
     }
 
-    return NextResponse.json({ ok: true });
-  } catch (err: any) {
-    console.error("notify-auth error:", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ ok: true }, { status: 200 });
+  } catch (e: any) {
+    console.error("[notify-auth] fatal:", e);
+    return NextResponse.json(
+      { ok: false, message: "Erreur interne." },
+      { status: 500 }
+    );
   }
 }
 
