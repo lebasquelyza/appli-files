@@ -29,42 +29,26 @@ function useAudioChime() {
     } catch {}
   }, [ensureAudioCtx]);
 
-  // Tick discret pour 3-2-1
-  const tick = useCallback(async () => {
+  // 🔔 Bip de fin (un seul “event” sonore)
+  const chimeStrong = useCallback(async () => {
     try {
       const ctx = await ensureAudioCtx();
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
-      osc.type = "sine";
-      osc.frequency.value = 880;
-      gain.gain.value = 0.25;
-      osc.connect(gain); gain.connect(ctx.destination);
-      const t = ctx.currentTime;
-      osc.start(t);
-      osc.stop(t + 0.07);
-    } catch {}
-  }, [ensureAudioCtx]);
-
-  // Bip de transition / fin (plus fort)
-  const chimeStrong = useCallback(async () => {
-    try {
-      const ctx = await ensureAudioCtx();
-      const make = (freq: number, start: number, dur = 0.18, amp = 1.0) => {
-        const o = ctx.createOscillator(); const g = ctx.createGain();
-        o.type = "triangle"; o.frequency.value = freq;
-        o.connect(g); g.connect(ctx.destination);
-        g.gain.setValueAtTime(0.0001, start);
-        g.gain.linearRampToValueAtTime(amp, start + 0.015);
-        g.gain.exponentialRampToValueAtTime(0.001, start + dur);
-        o.start(start); o.stop(start + dur + 0.05);
-      };
+      osc.type = "triangle";
+      osc.frequency.value = 1200;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
       const now = ctx.currentTime;
-      make(1318.51, now + 0.00, 0.18, 1.0);
-      make(1760.0,  now + 0.20, 0.20, 1.0);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.linearRampToValueAtTime(0.9, now + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+      osc.start(now);
+      osc.stop(now + 0.3);
     } catch {}
   }, [ensureAudioCtx]);
 
-  return { unlock, tick, chimeStrong };
+  return { unlock, chimeStrong };
 }
 
 /* ---------------- Minuteur simple réglable ---------------- */
@@ -213,7 +197,7 @@ function SimpleTimer() {
 
 /* ---------------- Tabata Timer (compact) ---------------- */
 function TabataTimerCompact() {
-  const { unlock, tick, chimeStrong } = useAudioChime();
+  const { unlock, chimeStrong } = useAudioChime(); // 👈 plus de tick ici
 
   const [rounds, setRounds] = useState(8);
   const [workSec, setWorkSec] = useState(20);
@@ -256,19 +240,18 @@ function TabataTimerCompact() {
     setRemaining(workSec);
   };
 
-  // Tick 1s + bips 3-2-1 + bip fort à la fin de phase
+  // Tick 1s + ❌ plus de 3-2-1, seulement bip de fin
   useEffect(() => {
     if (!running) return;
     const t = setInterval(() => {
       setRemaining((r) => {
         const next = r - 1;
 
-        if (next === 3 || next === 2 || next === 1) {
-          void tick();
-        }
+        // ❌ on ne joue plus tick() sur 3,2,1
 
         if (r > 1) return next;
 
+        // 🔔 un seul bip à la fin de la phase
         void chimeStrong();
 
         if (phase === "work") {
@@ -359,8 +342,7 @@ function TabataTimerCompact() {
           ) : (
             <button className="btn btn-dash" style={{ fontSize: 13 }} onClick={resume}>Reprendre</button>
           )}
-          <button className="btn" style={{ fontSize: 13, background: "#ffffff", color: "#111827", border: "1px solid " +
-              "#d1d5db" }} onClick={reset}>
+          <button className="btn" style={{ fontSize: 13, background: "#ffffff", color: "#111827", border: "1px solid #d1d5db" }} onClick={reset}>
             Réinitialiser
           </button>
         </div>
@@ -399,8 +381,6 @@ export default function MusicPage() {
     );
   }
 
-  // ❌ On NE bloque PLUS toute la page quand !session
-
   return (
     <div className="container"
          style={{ paddingTop: 18, paddingBottom: 22, paddingLeft: SIDE_PADDING, paddingRight: SIDE_PADDING, maxWidth: PAGE_MAX_WIDTH, margin: "0 auto" }}>
@@ -413,12 +393,7 @@ export default function MusicPage() {
         </div>
         <div>
           {session ? (
-            <button
-              onClick={() => signOut({ callbackUrl: "/dashboard/music" })}
-              className="btn btn-dash"
-              title="Se déconnecter"
-              style={{ fontSize: 13 }}
-            >
+            <button onClick={() => signOut({ callbackUrl: "/dashboard/music" })} className="btn btn-dash" title="Se déconnecter" style={{ fontSize: 13 }}>
               ⏻ Se déconnecter
             </button>
           ) : (
@@ -448,7 +423,7 @@ export default function MusicPage() {
                 padding: "6px 10px",
                 background: "#ffffff",
                 color: "#111827",
-                border: "1px solid #d1d5db",
+                border: "1px solid "#d1d5db",
                 borderRadius: 999,
                 fontWeight: 600,
               }}
@@ -477,37 +452,23 @@ export default function MusicPage() {
         {/* —— Carte Spotify */}
         <article className="card" style={{ padding: 10 }}>
           <h3 style={{ marginTop: 0, fontSize: 14, color: "#111827" }}>Lecteur Spotify</h3>
-
+          <div className="text-sm" style={{ color: "#6b7280", fontSize: 13, marginTop: 2 }}>
+            {session ? "Contrôle du lecteur connecté à ton compte." : "Connecte-toi pour utiliser le lecteur Spotify."}
+          </div>
           {session ? (
-            <>
-              <div className="text-sm" style={{ color: "#6b7280", fontSize: 13, marginTop: 2 }}>
-                Contrôle du lecteur connecté à ton compte.
-              </div>
-              <div
-                style={{
-                  marginTop: 8,
-                  fontSize: "92%",
-                  transform: `scale(${PLAYER_SCALE})`,
-                  transformOrigin: "top left",
-                  width: `${(invPlayer * 100).toFixed(3)}%`,
-                }}
-              >
-                <SpotifyPlayer />
-              </div>
-            </>
-          ) : (
             <div
               style={{
                 marginTop: 8,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 8,
+                fontSize: "92%",
+                transform: `scale(${PLAYER_SCALE})`,
+                transformOrigin: "top left",
+                width: `${(invPlayer * 100).toFixed(3)}%`,
               }}
             >
-              <div style={{ fontSize: 13, color: "#374151" }}>
-                Connecte-toi pour utiliser le lecteur Spotify.
-              </div>
+              <SpotifyPlayer />
+            </div>
+          ) : (
+            <div style={{ marginTop: 8 }}>
               <button
                 className="btn btn-dash"
                 onClick={() => signIn("spotify", { callbackUrl: "/dashboard/music" })}
