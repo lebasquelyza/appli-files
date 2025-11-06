@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 
 const RESEND_API_URL = "https://api.resend.com/emails";
 
-// option recommandé : clé dans une variable d'env (Netlify)
-// tu peux la mettre dans les "Environment variables" Netlify : RESEND_API_KEY=...
-const RESEND_API_KEY = process.env.RESEND_API_KEY;
+// ✅ OPTION 1 (recommandée) : mettre la clé dans les variables d'env Netlify
+//    (Settings → Build & deploy → Environment → RESEND_API_KEY)
+// const RESEND_API_KEY = process.env.RESEND_API_KEY;
 
-// si tu refuses vraiment les env vars, tu peux À LA PLACE hardcoder ta clé ici :
-// const RESEND_API_KEY = "TA_CLE_API_RESEND";
+// ❗ OPTION 2 (si tu veux vraiment tout sans env.local)
+//    Hardcode ta clé ici (NE PAS pousser sur un repo public)
+const RESEND_API_KEY = "TA_CLE_API_RESEND_ICI";
 
 export async function POST(req: NextRequest) {
   try {
@@ -30,7 +31,7 @@ export async function POST(req: NextRequest) {
         ? "Nouvelle connexion sur Files Coaching"
         : "Nouveau compte créé sur Files Coaching";
 
-    // Appel HTTP vers Resend (aucune lib externe)
+    // Appel HTTP vers Resend (pas de lib externe, juste fetch)
     const response = await fetch(RESEND_API_URL, {
       method: "POST",
       headers: {
@@ -38,7 +39,7 @@ export async function POST(req: NextRequest) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: "Files Coaching <onboarding@resend.dev>", // ou ton domaine validé
+        from: "Files Coaching <onboarding@resend.dev>", // ou une adresse de ton domaine validé chez Resend
         to: ["sportifandpro@gmail.com"],
         subject,
         text: `Un utilisateur ${actionText} : ${userEmail}`,
