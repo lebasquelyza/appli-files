@@ -10,10 +10,23 @@ type CoachingNotification = {
   createdAt: string; // ISO
   read: boolean;
   source?: string;   // ex: "Files Coaching"
+  rating?: number;   // 0–5
 };
+
+type DayKey = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 
 const SIDE_PADDING = 16;
 const PAGE_MAX_WIDTH = 740;
+
+const DAY_LABELS: Record<DayKey, string> = {
+  mon: "Lundi",
+  tue: "Mardi",
+  wed: "Mercredi",
+  thu: "Jeudi",
+  fri: "Vendredi",
+  sat: "Samedi",
+  sun: "Dimanche",
+};
 
 function formatTime(dateStr: string) {
   const d = new Date(dateStr);
@@ -32,7 +45,17 @@ export default function MotivationPage() {
   const [filter, setFilter] = useState<"all" | "unread">("all");
   const [sending, setSending] = useState(false);
 
-  // 🔹 Pour l'instant : notifs en dur (local)
+  // Préférences d’envoi
+  const [activeDays, setActiveDays] = useState<DayKey[]>([
+    "mon",
+    "tue",
+    "wed",
+    "thu",
+    "fri",
+  ]);
+  const [prefTime, setPrefTime] = useState("09:00");
+
+  // 🔹 Notifs en dur pour l’instant (mock)
   useEffect(() => {
     setNotifications([
       {
@@ -52,6 +75,7 @@ export default function MotivationPage() {
         createdAt: new Date(Date.now() - 1000 * 60 * 60 * 6).toISOString(),
         read: true,
         source: "Files Coaching",
+        rating: 4,
       },
     ]);
   }, []);
@@ -79,6 +103,21 @@ export default function MotivationPage() {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
   };
 
+  // ⭐ Noter une notification
+  const setRating = (id: string, rating: number) => {
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, rating } : n))
+    );
+  };
+
+  // Toggle jour actif / inactif
+  const toggleDay = (day: DayKey) => {
+    setActiveDays((prev) =>
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
+    );
+  };
+
+  // Simuler une “notification de motivation” reçue
   const sendTestNotification = async () => {
     if (sending) return;
     setSending(true);
@@ -98,6 +137,31 @@ export default function MotivationPage() {
         title: "Tu peux le faire ✨",
         message:
           "Rappelle-toi pourquoi tu as commencé. Tu as déjà traversé plus dur que ça.",
+      },
+      {
+        title: "Ton futur toi te remercie",
+        message:
+          "Chaque décision d’aujourd’hui construit la personne que tu seras dans 3 mois.",
+      },
+      {
+        title: "Mini séance, maxi impact",
+        message:
+          "Si tu n’as pas le temps pour 30 minutes, fais-en 5. Ce qui compte, c’est le mouvement.",
+      },
+      {
+        title: "Recommence autant que nécessaire",
+        message:
+          "Tomber fait partie du jeu. Ce qui compte, c’est à quelle vitesse tu te relèves.",
+      },
+      {
+        title: "Tu n’es pas seul·e",
+        message:
+          "Demander de l’aide, c’est aussi une forme de force. Tu fais ça pour TOI.",
+      },
+      {
+        title: "C’est ton moment",
+        message:
+          "Bloque 10 minutes rien que pour toi maintenant. Ton corps et ta tête te diront merci.",
       },
     ];
 
@@ -178,8 +242,8 @@ export default function MotivationPage() {
               color: "#6b7280",
             }}
           >
-            Messages d’encouragement générés à partir de tes fichiers de
-            coaching (mock pour l’instant).
+            Messages d’encouragement issus de tes fichiers de coaching
+            (mock pour l’instant) + paramètres de réception.
           </p>
         </div>
         {session && (
@@ -198,7 +262,124 @@ export default function MotivationPage() {
         )}
       </div>
 
-      {/* Barre d’actions */}
+      {/* Carte préférences jour/heure */}
+      <div
+        className="card"
+        style={{
+          padding: 10,
+          marginBottom: 10,
+          border: "1px solid #e5e7eb",
+          background: "#ffffff",
+          borderRadius: 12,
+          display: "grid",
+          gap: 8,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 8,
+            alignItems: "center",
+          }}
+        >
+          <div>
+            <div
+              style={{
+                fontSize: 14,
+                fontWeight: 700,
+                color: "#111827",
+              }}
+            >
+              Préférences de notification
+            </div>
+            <div
+              style={{
+                fontSize: 12,
+                color: "#6b7280",
+                marginTop: 2,
+              }}
+            >
+              Choisis les jours et l’heure à laquelle tu souhaites
+              recevoir tes messages de motivation.
+            </div>
+          </div>
+        </div>
+
+        {/* Jours */}
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 6,
+            marginTop: 4,
+          }}
+        >
+          {(Object.keys(DAY_LABELS) as DayKey[]).map((day) => {
+            const active = activeDays.includes(day);
+            return (
+              <button
+                key={day}
+                type="button"
+                onClick={() => toggleDay(day)}
+                style={{
+                  padding: "4px 10px",
+                  borderRadius: 999,
+                  border: "1px solid #e5e7eb",
+                  fontSize: 12,
+                  cursor: "pointer",
+                  background: active ? "#111827" : "#ffffff",
+                  color: active ? "#ffffff" : "#374151",
+                }}
+              >
+                {DAY_LABELS[day]}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Heure */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            marginTop: 4,
+            flexWrap: "wrap",
+          }}
+        >
+          <label
+            style={{
+              fontSize: 12,
+              color: "#374151",
+            }}
+          >
+            Heure préférée :
+          </label>
+          <input
+            type="time"
+            value={prefTime}
+            onChange={(e) => setPrefTime(e.target.value)}
+            style={{
+              fontSize: 12,
+              padding: "4px 8px",
+              borderRadius: 8,
+              border: "1px solid #e5e7eb",
+            }}
+          />
+          <span
+            style={{
+              fontSize: 11,
+              color: "#6b7280",
+            }}
+          >
+            (Ces réglages sont pour l’instant stockés uniquement ici,
+            côté client.)
+          </span>
+        </div>
+      </div>
+
+      {/* Barre d’actions & infos */}
       <div
         className="card"
         style={{
@@ -218,6 +399,16 @@ export default function MotivationPage() {
           <strong>{unreadCount}</strong>{" "}
           notification{unreadCount > 1 ? "s" : ""} non lue
           {unreadCount > 1 ? "s" : ""}.
+          <br />
+          <span style={{ fontSize: 11, color: "#6b7280" }}>
+            Tu as choisi :{" "}
+            {activeDays.length === 0
+              ? "aucun jour"
+              : activeDays
+                  .map((d) => DAY_LABELS[d])
+                  .join(", ")}{" "}
+            à {prefTime}.
+          </span>
         </div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           <div
@@ -384,8 +575,67 @@ export default function MotivationPage() {
               >
                 {n.message}
               </p>
-              {!n.read && (
+
+              {/* ⭐ Notation */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  marginTop: 4,
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 11,
+                    color: "#6b7280",
+                    marginRight: 2,
+                  }}
+                >
+                  Ta note :
+                </span>
                 <div>
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      onClick={() => setRating(n.id, star)}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        padding: 0,
+                        margin: "0 1px",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: 16,
+                          color:
+                            star <= (n.rating ?? 0)
+                              ? "#facc15" // jaune
+                              : "#d1d5db", // gris
+                        }}
+                      >
+                        ★
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                {typeof n.rating === "number" && (
+                  <span
+                    style={{
+                      fontSize: 11,
+                      color: "#6b7280",
+                    }}
+                  >
+                    ({n.rating}/5)
+                  </span>
+                )}
+              </div>
+
+              {!n.read && (
+                <div style={{ marginTop: 4 }}>
                   <button
                     type="button"
                     className="btn btn-dash"
