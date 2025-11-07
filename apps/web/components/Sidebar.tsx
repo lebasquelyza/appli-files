@@ -1,36 +1,6 @@
 // apps/web/components/Sidebar.tsx
 "use client";
-
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
-import {
-  ChevronDown,
-  Home,
-  User2,
-  LineChart,
-  Wand2,
-  BookOpen,
-  Flame,
-  Plug2,
- MessageCircle,
-  ClipboardList,
-  Music2,
-  Settings,
-} from "lucide-react";
-
-type NavItem = { href: string; label: string; icon?: React.ComponentType<{ size?: number }> };
-
-const NAV_ITEMS: NavItem[] = [
-  { href: "/dashboard", label: "Accueil", icon: Home },
-  { href: "/dashboard/profile", label: "Mon profil", icon: User2 },
-  { href: "/dashboard/progress", label: "Mes progrès", icon: LineChart },
-  { href: "/dashboard/corrector", label: "Files te corrige", icon: Wand2 },
-  { href: "/dashboard/recipes", label: "Recettes", icon: BookOpen },
-  { href: "/dashboard/calories", label: "Calories", icon: Flame },
-  { href: "/dashboard/connect", label: "Connecte tes données", icon: Plug2 },
-  { href: "/dashboard/bmi", label: "IMC", icon: ClipboardList },
-  import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
