@@ -1,3 +1,4 @@
+//apps/web/app/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -73,14 +74,39 @@ export default function HomePage() {
     })();
   }, []);
 
+  // --- NOUVEAU : track vue de la "page" de connexion (ouverture du panneau login) ---
+  async function trackLoginPageView(emailValue?: string) {
+    try {
+      await fetch("/api/track-login-view", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          path:
+            typeof window !== "undefined"
+              ? window.location.pathname
+              : "/",
+          email: emailValue || null,
+        }),
+      });
+    } catch (err) {
+      console.error("trackLoginPageView error:", err);
+    }
+  }
+
   function openLogin() {
     setShowLogin((v) => {
       const next = !v;
-      if (next) setShowSignup(false);
+      if (next) {
+        setShowSignup(false);
+        // 🔔 on enregistre la vue de la "page" de connexion
+        const emailTrim = email.trim().toLowerCase();
+        trackLoginPageView(emailTrim || undefined);
+      }
       return next;
     });
     setMessage(null); setError(null);
   }
+
   function openSignup() {
     setShowSignup((v) => {
       const next = !v;
@@ -422,4 +448,3 @@ export default function HomePage() {
     </main>
   );
 }
-
