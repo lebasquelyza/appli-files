@@ -49,28 +49,38 @@ export async function POST(req: Request) {
       ? "SIGN_UP"
       : typeStr.toUpperCase();
 
-    // 1) On enregistre l'événement dans public.auth_events
-    try {
-      const { error: insertError } = await supabaseAdmin
-        .from("auth_events")
-        .insert({
-          event_name: eventName,
-          email: emailTrim,
-          // user_id est optionnel : on le laisse null pour l'instant
-          metadata: {
-            source: "notify-auth",
-            raw_type: typeStr,
-          },
-        });
-
-      if (insertError) {
-        console.error("[notify-auth] Supabase insert error:", insertError);
-      }
-    } catch (e) {
-      console.error("[notify-auth] Supabase insert fatal:", e);
+    // 🔎 1) Vérif rapide des variables d'env (mais sans les afficher)
+    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      console.error("[notify-auth] SUPABASE env vars manquantes");
+      return NextResponse.json(
+        { error: "Supabase env vars missing" },
+        { status: 500 }
+      );
     }
 
-    // 2) On continue à envoyer l'email via Resend (comme avant)
+    // 🔎 2) On enregistre l'événement dans public.auth_events
+    const { data: insertData, error: insertError } = await supabaseAdmin
+      .from("auth_events")
+      .insert({
+        event_name: eventName,
+        email: emailTrim,
+        metadata: {
+          source: "notify-auth",
+          raw_type: typeStr,
+        },
+      })
+      .select("id, event_name, email, created_at")
+      .single();
+
+    if (insertError) {
+      console.error("[notify-auth] Supabase insert error:", insertError);
+      return NextResponse.json(
+        { error: "DB insert error", details: insertError.message },
+        { status: 500 }
+      );
+    }
+
+    // 3) On continue à envoyer l'email via Resend (comme avant)
     const resp = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
@@ -105,7 +115,11 @@ export async function POST(req: Request) {
       );
     }
 
-    return NextResponse.json({ ok: true }, { status: 200 });
+    // 🔎 On renvoie aussi ce qui a été inséré côté DB pour debug
+    return NextResponse.json(
+      { ok: true, inserted: insertData },
+      { status: 200 }
+    );
   } catch (e: any) {
     console.error("[notify-auth] fatal:", e);
     return NextResponse.json(
@@ -114,4 +128,3 @@ export async function POST(req: Request) {
     );
   }
 }
-
