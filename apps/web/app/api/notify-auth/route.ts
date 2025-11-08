@@ -4,11 +4,13 @@ import { createClient } from "@supabase/supabase-js";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// ⚠️ IMPORTANT : ces 2 variables doivent être définies
+// dans l'hébergeur (Netlify / Vercel / autre)
+const SUPABASE_URL = process.env.SUPABASE_URL as string;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY as string;
+
 // Client Supabase admin (service_role) côté serveur
-const supabaseAdmin = createClient(
-  process.env.SUPABASE_URL as string,
-  process.env.SUPABASE_SERVICE_ROLE_KEY as string
-);
+const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 /**
  * POST /api/notify-auth
@@ -28,7 +30,7 @@ export async function POST(req: Request) {
       );
     }
 
-    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
       return NextResponse.json(
         { error: "Supabase env vars missing" },
         { status: 500 }
@@ -44,30 +46,31 @@ export async function POST(req: Request) {
       ? "SIGN_UP"
       : typeStr.toUpperCase();
 
-    const { data, error } = await supabaseAdmin
+    // 1) INSERT dans auth_events
+    const { data: inserted, error: insertError } = await supabaseAdmin
       .from("auth_events")
       .insert({
         event_name: eventName,
         email: emailTrim,
         metadata: {
-          source: "notify-auth-minimal",
+          source: "notify-auth-debug",
           raw_type: typeStr,
         },
       })
       .select("id, event_name, email, created_at")
       .single();
 
-    if (error) {
-      console.error("[notify-auth] insert error:", error);
+    if (insertError) {
+      console.error("[notify-auth] insert error:", insertError);
       return NextResponse.json(
-        { error: "DB insert error", details: error.message },
+        { error: "DB insert error", details: insertError.message },
         { status: 500 }
       );
     }
 
-    // ✅ On renvoie ce qui a été inséré, pour que tu le voies dans Network → Response
+    // 2) On renvoie la ligne insérée → tu la vois dans la console
     return NextResponse.json(
-      { ok: true, inserted: data },
+      { ok: true, inserted },
       { status: 200 }
     );
   } catch (e: any) {
