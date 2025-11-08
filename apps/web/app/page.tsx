@@ -74,7 +74,32 @@ export default function HomePage() {
     })();
   }, []);
 
-  // --- NOUVEAU : track vue de la "page" de connexion (ouverture du panneau login) ---
+  // --- NOUVEAU : track vue de page (landing) ---
+  async function trackPageView(emailValue?: string) {
+    try {
+      await fetch("/api/track-page-view", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          path:
+            typeof window !== "undefined"
+              ? window.location.pathname
+              : "/",
+          email: emailValue || null,
+        }),
+      });
+    } catch (err) {
+      console.error("trackPageView error:", err);
+    }
+  }
+
+  // appelle trackPageView au chargement de la page
+  useEffect(() => {
+    trackPageView();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // --- track vue de la "page" de connexion (ouverture du panneau login) ---
   async function trackLoginPageView(emailValue?: string) {
     try {
       await fetch("/api/track-login-view", {
