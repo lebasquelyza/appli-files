@@ -38,7 +38,7 @@ export async function POST(req: Request) {
           path,
         },
       })
-      .select("id, created_at, email, event_name")
+      .select("id, event_name, email, created_at, metadata")
       .single();
 
     if (error) {
@@ -58,3 +58,4 @@ export async function POST(req: Request) {
     );
   }
 }
+
