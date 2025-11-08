@@ -1,8 +1,14 @@
-// apps/web/app/api/notify-auth/route.ts
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
 export const runtime = "nodejs";           // même logique que send-reset
 export const dynamic = "force-dynamic";    // évite le cache en build
+
+// Client Supabase "admin" (service_role) côté serveur
+const supabaseAdmin = createClient(
+  process.env.SUPABASE_URL as string,
+  process.env.SUPABASE_SERVICE_ROLE_KEY as string
+);
 
 /** POST /api/notify-auth
  * body: { type: "login" | "signup", userEmail: string }
@@ -21,19 +27,54 @@ export async function POST(req: Request) {
       );
     }
 
-    const actionText =
-      typeStr === "login" ? "s'est connecté" : "a créé un compte";
+    const isLogin = typeStr === "login";
+    const isSignup = typeStr === "signup";
 
-    const subject =
-      typeStr === "login"
-        ? "Nouvelle connexion sur Files Coaching"
-        : "Nouveau compte créé sur Files Coaching";
+    const actionText = isLogin
+      ? "s'est connecté"
+      : isSignup
+      ? "a créé un compte"
+      : `a effectué une action : ${typeStr}`;
 
-    // Envoi via l’API Resend avec fetch (même logique que send-reset)
+    const subject = isLogin
+      ? "Nouvelle connexion sur Files Coaching"
+      : isSignup
+      ? "Nouveau compte créé sur Files Coaching"
+      : `Nouvel événement ${typeStr} sur Files Coaching`;
+
+    // Nom d'événement pour la table auth_events
+    const eventName = isLogin
+      ? "LOGIN"
+      : isSignup
+      ? "SIGN_UP"
+      : typeStr.toUpperCase();
+
+    // 1) On enregistre l'événement dans public.auth_events
+    try {
+      const { error: insertError } = await supabaseAdmin
+        .from("auth_events")
+        .insert({
+          event_name: eventName,
+          email: emailTrim,
+          // user_id est optionnel : on le laisse null pour l'instant
+          metadata: {
+            source: "notify-auth",
+            raw_type: typeStr,
+          },
+        });
+
+      if (insertError) {
+        console.error("[notify-auth] Supabase insert error:", insertError);
+      }
+    } catch (e) {
+      console.error("[notify-auth] Supabase insert fatal:", e);
+    }
+
+    // 2) On continue à envoyer l'email via Resend (comme avant)
     const resp = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${process.env.RESEND_API_KEY!}`,
+        Authorization: `Bearer ${process.env.RESEND_API_KEY!}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -58,7 +99,6 @@ export async function POST(req: Request) {
     if (!resp.ok) {
       const txt = await resp.text().catch(() => "");
       console.error("[notify-auth] Resend API error:", resp.status, txt);
-      // Réponse simple (le front n’en a pas besoin de toute façon)
       return NextResponse.json(
         { ok: false, message: "Erreur lors de l’envoi de l’email." },
         { status: 500 }
