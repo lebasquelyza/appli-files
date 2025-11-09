@@ -1,3 +1,4 @@
+// apps/web/app/api/track-session-created/route.ts
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
@@ -22,7 +23,7 @@ async function findUserIdByEmail(supabaseAdmin: any, email: string): Promise<str
 }
 
 /** POST /api/track-session-created
- * body: { email?: string, sessionName: string, durationMinutes?: number, metadata?: any }
+ * body: { email?: string, sessionName: string, durationMinutes?: number, metadata?: any, questionnaireAnswers?: any }
  */
 export async function POST(req: Request) {
   try {
@@ -44,6 +45,7 @@ export async function POST(req: Request) {
     const sessionName = String(body.sessionName || "").trim();
     const durationMinutes = body.durationMinutes ?? null;
     const metadata = body.metadata ?? {};
+    const questionnaireAnswers = body.questionnaireAnswers ?? null;
 
     if (!sessionName) {
       return NextResponse.json(
@@ -70,6 +72,7 @@ export async function POST(req: Request) {
         email,
         user_id: userId,
         metadata,
+        questionnaire_answers: questionnaireAnswers,
       })
       .select("id, session_name, email, created_at")
       .single();
