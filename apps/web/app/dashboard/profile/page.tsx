@@ -1,3 +1,4 @@
+//apps/web/app/dashboard/profile/page.tsx
 import { cookies } from "next/headers";
 
 import {
@@ -110,6 +111,79 @@ function ensureAtLeast4(list: NormalizedExercise[], type: WorkoutType, equip: "f
   return uniqByName(out).slice(0, 4);
 }
 
+/* ===== Helpers analytics → Supabase (questionnaire + séances) ===== */
+
+async function getSupabaseAdmin() {
+  const url = process.env.SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !serviceKey) return null;
+  const { createClient } = await import("@supabase/supabase-js");
+  return createClient(url, serviceKey);
+}
+
+async function logQuestionnaireToSupabase(email: string, answers: any) {
+  try {
+    const supabaseAdmin = await getSupabaseAdmin();
+    if (!supabaseAdmin || !answers) return;
+    const normalizedEmail = (email || "").trim().toLowerCase();
+
+    let userId: string | null = null;
+    if (normalizedEmail) {
+      try {
+        const { data, error } = await supabaseAdmin.auth.admin.listUsersByEmail(normalizedEmail);
+        if (!error && data?.users?.[0]) {
+          userId = data.users[0].id;
+        }
+      } catch (e) {
+        console.error("[logQuestionnaireToSupabase] listUsersByEmail error:", e);
+      }
+    }
+
+    await supabaseAdmin.from("questionnaire_responses").insert({
+      questionnaire_key: "onboarding_v1", // tu peux changer si tu as plusieurs questionnaires
+      email: normalizedEmail || null,
+      user_id: userId,
+      answers,
+    });
+  } catch (e) {
+    console.error("[logQuestionnaireToSupabase] error:", e);
+  }
+}
+
+async function logSessionsToSupabase(email: string, sessions: AiSessionT[]) {
+  try {
+    if (!sessions || !sessions.length) return;
+    const supabaseAdmin = await getSupabaseAdmin();
+    if (!supabaseAdmin) return;
+
+    const normalizedEmail = (email || "").trim().toLowerCase();
+
+    let userId: string | null = null;
+    if (normalizedEmail) {
+      try {
+        const { data, error } = await supabaseAdmin.auth.admin.listUsersByEmail(normalizedEmail);
+        if (!error && data?.users?.[0]) {
+          userId = data.users[0].id;
+        }
+      } catch (e) {
+        console.error("[logSessionsToSupabase] listUsersByEmail error:", e);
+      }
+    }
+
+    const rows = sessions.map((s) => ({
+      session_name: s.title || s.type || "Séance",
+      duration_minutes: (s as any).durationMinutes ?? null,
+      email: normalizedEmail || null,
+      user_id: userId,
+      metadata: s as any,
+    }));
+
+    await supabaseAdmin.from("workout_sessions").insert(rows);
+  } catch (e) {
+    console.error("[logSessionsToSupabase] error:", e);
+  }
+}
+
 /* Loaders — Mes infos */
 async function loadProfile(searchParams?: Record<string, string | string[] | undefined>) {
   const forceBlank = ["1", "true", "yes"].includes(
@@ -146,6 +220,9 @@ async function loadProfile(searchParams?: Record<string, string | string[] | und
       const built = buildProfileFromAnswers(answers);
       profile = { ...built, email: built.email || emailForDisplay };
       debugInfo.sheetHit = true;
+
+      // 🔔 LOG: on enregistre les réponses questionnaire dans Supabase
+      await logQuestionnaireToSupabase(emailForDisplay, answers);
     } else {
       profile = { email: emailForDisplay };
       debugInfo.reason = "Aucune réponse trouvée dans le Sheet";
@@ -178,7 +255,7 @@ async function loadInitialSessions(email: string, equipParam?: string) {
       const sessions: AiSessionT[] = prog.sessions || [];
 
       // ⬇️ Applique ≥4 exos dans les deux modes
-      return sessions.map((s) => {
+      const finalSessions = sessions.map((s) => {
         const type = (s.type || "muscu") as WorkoutType;
         let exs = (s.exercises || []).slice();
         if (equip === "none") {
@@ -188,15 +265,25 @@ async function loadInitialSessions(email: string, equipParam?: string) {
         const ensured = ensureAtLeast4(exs, type, equip);
         return { ...s, exercises: ensured };
       });
+
+      // 🔔 LOG: on enregistre les séances générées dans workout_sessions
+      await logSessionsToSupabase(email, finalSessions);
+
+      return finalSessions;
     }
 
     // Par défaut : logique existante (avec matériel), mais on sécurise ≥4 exos pour l'affichage
     const { sessions } = await planProgrammeFromEmail(email);
-    const safe = (sessions || []).map((s) => {
+    const baseSessions: AiSessionT[] = sessions || [];
+    const safe = baseSessions.map((s) => {
       const type = (s.type || "muscu") as WorkoutType;
       const ensured = ensureAtLeast4(s.exercises || [], type, "full");
       return { ...s, exercises: ensured };
     });
+
+    // 🔔 LOG: on enregistre les séances générées (mode par défaut)
+    await logSessionsToSupabase(email, safe);
+
     return safe;
   } catch {
     return [];
