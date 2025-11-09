@@ -121,24 +121,30 @@ async function getSupabaseAdmin() {
   return createClient(url, serviceKey);
 }
 
+async function findUserIdByEmail(supabaseAdmin: any, email: string): Promise<string | null> {
+  const normalized = (email || "").trim().toLowerCase();
+  if (!normalized) return null;
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("profiles")
+      .select("id")
+      .eq("email", normalized)
+      .single();
+
+    if (error || !data) return null;
+    return data.id as string;
+  } catch {
+    return null;
+  }
+}
+
 async function logQuestionnaireToSupabase(email: string, answers: any) {
   try {
     const supabaseAdmin = await getSupabaseAdmin();
     if (!supabaseAdmin || !answers) return;
     const normalizedEmail = (email || "").trim().toLowerCase();
 
-    let userId: string | null = null;
-    if (normalizedEmail) {
-      try {
-        const { data, error } =
-          await supabaseAdmin.auth.admin.listUsersByEmail(normalizedEmail);
-        if (!error && data?.users?.[0]) {
-          userId = data.users[0].id;
-        }
-      } catch (e) {
-        console.error("[logQuestionnaireToSupabase] listUsersByEmail error:", e);
-      }
-    }
+    const userId = await findUserIdByEmail(supabaseAdmin, normalizedEmail);
 
     await supabaseAdmin.from("questionnaire_responses").insert({
       questionnaire_key: "onboarding_v1", // adapte si tu as plusieurs questionnaires
@@ -158,23 +164,11 @@ async function logSessionsToSupabase(email: string, sessions: AiSessionT[]) {
     if (!supabaseAdmin) return;
 
     const normalizedEmail = (email || "").trim().toLowerCase();
-
-    let userId: string | null = null;
-    if (normalizedEmail) {
-      try {
-        const { data, error } =
-          await supabaseAdmin.auth.admin.listUsersByEmail(normalizedEmail);
-        if (!error && data?.users?.[0]) {
-          userId = data.users[0].id;
-        }
-      } catch (e) {
-        console.error("[logSessionsToSupabase] listUsersByEmail error:", e);
-      }
-    }
+    const userId = await findUserIdByEmail(supabaseAdmin, normalizedEmail);
 
     const rows = sessions.map((s) => ({
       session_name: s.title || s.type || "Séance",
-      duration_minutes: (s as any).durationMinutes ?? null,
+      duration_minutes: (s as any).plannedMin ?? (s as any).durationMinutes ?? null,
       email: normalizedEmail || null,
       user_id: userId,
       metadata: s as any,
@@ -196,19 +190,7 @@ async function logProgrammeInsightToSupabase(
     if (!supabaseAdmin || !sessions || !sessions.length) return;
 
     const normalizedEmail = (email || "").trim().toLowerCase();
-
-    let userId: string | null = null;
-    if (normalizedEmail) {
-      try {
-        const { data, error } =
-          await supabaseAdmin.auth.admin.listUsersByEmail(normalizedEmail);
-        if (!error && data?.users?.[0]) {
-          userId = data.users[0].id;
-        }
-      } catch (e) {
-        console.error("[logProgrammeInsightToSupabase] listUsersByEmail error:", e);
-      }
-    }
+    const userId = await findUserIdByEmail(supabaseAdmin, normalizedEmail);
 
     await supabaseAdmin.from("programme_insights").insert({
       user_id: userId,
