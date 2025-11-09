@@ -1,4 +1,4 @@
-//apps/web/app/dashboard/profile/page.tsx
+// apps/web/app/dashboard/profile/page.tsx
 import { cookies } from "next/headers";
 
 import {
@@ -157,7 +157,11 @@ async function logQuestionnaireToSupabase(email: string, answers: any) {
   }
 }
 
-async function logSessionsToSupabase(email: string, sessions: AiSessionT[]) {
+async function logSessionsToSupabase(
+  email: string,
+  sessions: AiSessionT[],
+  answers?: any
+) {
   try {
     if (!sessions || !sessions.length) return;
     const supabaseAdmin = await getSupabaseAdmin();
@@ -168,10 +172,12 @@ async function logSessionsToSupabase(email: string, sessions: AiSessionT[]) {
 
     const rows = sessions.map((s) => ({
       session_name: s.title || s.type || "Séance",
-      duration_minutes: (s as any).plannedMin ?? (s as any).durationMinutes ?? null,
+      duration_minutes:
+        (s as any).plannedMin ?? (s as any).durationMinutes ?? null,
       email: normalizedEmail || null,
       user_id: userId,
       metadata: s as any,
+      questionnaire_answers: answers || null, // 🔥 réponses du questionnaire ici
     }));
 
     await supabaseAdmin.from("workout_sessions").insert(rows);
@@ -286,8 +292,8 @@ async function loadInitialSessions(email: string, equipParam?: string) {
         return { ...s, exercises: ensured };
       });
 
-      // 🔔 LOG: on enregistre les séances générées dans workout_sessions
-      await logSessionsToSupabase(email, finalSessions);
+      // 🔔 LOG: séances + réponses dans workout_sessions
+      await logSessionsToSupabase(email, finalSessions, answers);
       // 🔔 LOG combiné: réponses + toutes les séances sur UNE ligne
       await logProgrammeInsightToSupabase(email, answers, finalSessions);
 
@@ -311,8 +317,8 @@ async function loadInitialSessions(email: string, equipParam?: string) {
       // silencieux
     }
 
-    // 🔔 LOG: séances individuelles
-    await logSessionsToSupabase(email, safe);
+    // 🔔 LOG: séances individuelles + réponses
+    await logSessionsToSupabase(email, safe, answersForLog);
     // 🔔 LOG combiné
     await logProgrammeInsightToSupabase(email, answersForLog, safe);
 
