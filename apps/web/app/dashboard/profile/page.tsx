@@ -111,7 +111,7 @@ function ensureAtLeast4(list: NormalizedExercise[], type: WorkoutType, equip: "f
   return uniqByName(out).slice(0, 4);
 }
 
-/* ===== Helpers analytics → Supabase (questionnaire + séances) ===== */
+/* ===== Helpers analytics → Supabase (questionnaire + séances + insight combiné) ===== */
 
 async function getSupabaseAdmin() {
   const url = process.env.SUPABASE_URL;
@@ -130,7 +130,8 @@ async function logQuestionnaireToSupabase(email: string, answers: any) {
     let userId: string | null = null;
     if (normalizedEmail) {
       try {
-        const { data, error } = await supabaseAdmin.auth.admin.listUsersByEmail(normalizedEmail);
+        const { data, error } =
+          await supabaseAdmin.auth.admin.listUsersByEmail(normalizedEmail);
         if (!error && data?.users?.[0]) {
           userId = data.users[0].id;
         }
@@ -140,7 +141,7 @@ async function logQuestionnaireToSupabase(email: string, answers: any) {
     }
 
     await supabaseAdmin.from("questionnaire_responses").insert({
-      questionnaire_key: "onboarding_v1", // tu peux changer si tu as plusieurs questionnaires
+      questionnaire_key: "onboarding_v1", // adapte si tu as plusieurs questionnaires
       email: normalizedEmail || null,
       user_id: userId,
       answers,
@@ -161,7 +162,8 @@ async function logSessionsToSupabase(email: string, sessions: AiSessionT[]) {
     let userId: string | null = null;
     if (normalizedEmail) {
       try {
-        const { data, error } = await supabaseAdmin.auth.admin.listUsersByEmail(normalizedEmail);
+        const { data, error } =
+          await supabaseAdmin.auth.admin.listUsersByEmail(normalizedEmail);
         if (!error && data?.users?.[0]) {
           userId = data.users[0].id;
         }
@@ -181,6 +183,42 @@ async function logSessionsToSupabase(email: string, sessions: AiSessionT[]) {
     await supabaseAdmin.from("workout_sessions").insert(rows);
   } catch (e) {
     console.error("[logSessionsToSupabase] error:", e);
+  }
+}
+
+async function logProgrammeInsightToSupabase(
+  email: string,
+  answers: any,
+  sessions: AiSessionT[]
+) {
+  try {
+    const supabaseAdmin = await getSupabaseAdmin();
+    if (!supabaseAdmin || !sessions || !sessions.length) return;
+
+    const normalizedEmail = (email || "").trim().toLowerCase();
+
+    let userId: string | null = null;
+    if (normalizedEmail) {
+      try {
+        const { data, error } =
+          await supabaseAdmin.auth.admin.listUsersByEmail(normalizedEmail);
+        if (!error && data?.users?.[0]) {
+          userId = data.users[0].id;
+        }
+      } catch (e) {
+        console.error("[logProgrammeInsightToSupabase] listUsersByEmail error:", e);
+      }
+    }
+
+    await supabaseAdmin.from("programme_insights").insert({
+      user_id: userId,
+      email: normalizedEmail || null,
+      questionnaire_key: "onboarding_v1", // adapte si tu as plusieurs questionnaires
+      answers: answers || null,
+      sessions: sessions as any,
+    });
+  } catch (e) {
+    console.error("[logProgrammeInsightToSupabase] error:", e);
   }
 }
 
@@ -268,6 +306,8 @@ async function loadInitialSessions(email: string, equipParam?: string) {
 
       // 🔔 LOG: on enregistre les séances générées dans workout_sessions
       await logSessionsToSupabase(email, finalSessions);
+      // 🔔 LOG combiné: réponses + toutes les séances sur UNE ligne
+      await logProgrammeInsightToSupabase(email, answers, finalSessions);
 
       return finalSessions;
     }
@@ -281,8 +321,18 @@ async function loadInitialSessions(email: string, equipParam?: string) {
       return { ...s, exercises: ensured };
     });
 
-    // 🔔 LOG: on enregistre les séances générées (mode par défaut)
+    // on recharge les réponses pour la ligne combinée (si dispo)
+    let answersForLog: any = null;
+    try {
+      answersForLog = await getAnswersForEmail(email, { fresh: true });
+    } catch {
+      // silencieux
+    }
+
+    // 🔔 LOG: séances individuelles
     await logSessionsToSupabase(email, safe);
+    // 🔔 LOG combiné
+    await logProgrammeInsightToSupabase(email, answersForLog, safe);
 
     return safe;
   } catch {
