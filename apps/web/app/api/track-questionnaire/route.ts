@@ -4,6 +4,26 @@ import { createClient } from "@supabase/supabase-js";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+async function findUserIdByEmail(supabaseAdmin: any, email: string): Promise<string | null> {
+  const normalized = (email || "").trim().toLowerCase();
+  if (!normalized) return null;
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("profiles")
+      .select("id")
+      .eq("email", normalized)
+      .single();
+
+    if (error || !data) return null;
+    return data.id as string;
+  } catch {
+    return null;
+  }
+}
+
+/** POST /api/track-questionnaire
+ * body: { questionnaireKey: string, email?: string, answers: any }
+ */
 export async function POST(req: Request) {
   try {
     const supabaseUrl = process.env.SUPABASE_URL;
@@ -36,18 +56,9 @@ export async function POST(req: Request) {
         ? String(rawEmail).trim().toLowerCase()
         : null;
 
-    // optionnel : essayer de retrouver l'user_id par email
     let userId: string | null = null;
     if (email) {
-      try {
-        const { data, error } =
-          await supabaseAdmin.auth.admin.listUsersByEmail(email);
-        if (!error && data?.users?.[0]) {
-          userId = data.users[0].id;
-        }
-      } catch (err) {
-        console.error("[track-questionnaire] listUsersByEmail error:", err);
-      }
+      userId = await findUserIdByEmail(supabaseAdmin, email);
     }
 
     const { data, error } = await supabaseAdmin
