@@ -130,7 +130,10 @@ async function getSupabaseAdmin() {
   return createClient(url, serviceKey);
 }
 
-async function findUserIdByEmail(supabaseAdmin: any, email: string): Promise<string | null> {
+async function findUserIdByEmail(
+  supabaseAdmin: any,
+  email: string
+): Promise<string | null> {
   const normalized = (email || "").trim().toLowerCase();
   if (!normalized) return null;
   try {
@@ -177,12 +180,16 @@ async function logProgrammeInsightToSupabase(
 }
 
 /* Loaders — Mes infos */
-async function loadProfile(searchParams?: Record<string, string | string[] | undefined>) {
+async function loadProfile(
+  searchParams?: Record<string, string | string[] | undefined>
+) {
   const forceBlank = ["1", "true", "yes"].includes(
     String(searchParams?.blank || searchParams?.empty || "").toLowerCase()
   );
 
-  const cookieEmail = (cookies().get("app_email")?.value || "").trim().toLowerCase();
+  const cookieEmail = (cookies().get("app_email")?.value || "")
+    .trim()
+    .toLowerCase();
   const sessionEmail = cookieEmail || (await getEmailFromSupabaseSession());
   const emailForDisplay = sessionEmail;
 
@@ -190,7 +197,11 @@ async function loadProfile(searchParams?: Record<string, string | string[] | und
     return {
       emailForDisplay: "",
       profile: {} as Partial<ProfileT>,
-      debugInfo: { email: emailForDisplay || "", sheetHit: false, reason: "Force blank via ?blank=1" },
+      debugInfo: {
+        email: emailForDisplay || "",
+        sheetHit: false,
+        reason: "Force blank via ?blank=1",
+      },
       forceBlank,
     };
   }
@@ -316,10 +327,12 @@ export default async function Page({
     later?: string;
   };
 }) {
-  const { emailForDisplay, profile, debugInfo, forceBlank } = await loadProfile(searchParams);
+  const { emailForDisplay, profile, debugInfo, forceBlank } =
+    await loadProfile(searchParams);
 
   // Flag "générer" : on n'affiche la liste principale qu'après clic
-  const hasGenerate = String(searchParams?.generate || "").toLowerCase() === "1";
+  const hasGenerate =
+    String(searchParams?.generate || "").toLowerCase() === "1";
 
   // Mode liste: '' (défaut = matériel), 'none' ou 'full'
   const equipParam = String(searchParams?.equip || "").toLowerCase();
@@ -344,11 +357,15 @@ export default async function Page({
 
   const p = (profile ?? {}) as Partial<ProfileT>;
   const clientPrenom =
-    typeof p?.prenom === "string" && p.prenom && !/\d/.test(p.prenom) ? p.prenom : "";
+    typeof p?.prenom === "string" && p.prenom && !/\d/.test(p.prenom)
+      ? p.prenom
+      : "";
   const clientAge = typeof p?.age === "number" && p.age > 0 ? p.age : undefined;
 
   const goalLabel = (() => {
-    const g = String((p as any)?.objectif || (p as any)?.goal || "").toLowerCase();
+    const g = String(
+      (p as any)?.objectif || (p as any)?.goal || ""
+    ).toLowerCase();
     const map: Record<string, string> = {
       hypertrophy: "Hypertrophie / Esthétique",
       fatloss: "Perte de gras",
@@ -384,7 +401,8 @@ export default async function Page({
   const hrefFull = `/dashboard/profile${qsKeep ? `?${qsKeep}` : ""}`;
   const hrefNone = `/dashboard/profile?equip=none${qsKeep ? `&${qsKeep}` : ""}`;
 
-  const titleList = equipMode === "none" ? "Mes séances (sans matériel)" : "Mes séances";
+  const titleList =
+    equipMode === "none" ? "Mes séances (sans matériel)" : "Mes séances";
   const hrefGenerate = `/dashboard/profile?generate=1${
     equipMode === "none" ? "&equip=none" : ""
   }${qsKeep ? `&${qsKeep}` : ""}`;
@@ -402,7 +420,11 @@ export default async function Page({
   return (
     <div
       className="container"
-      style={{ paddingTop: 24, paddingBottom: 32, fontSize: "var(--settings-fs, 12px)" }}
+      style={{
+        paddingTop: 24,
+        paddingBottom: 32,
+        fontSize: "var(--settings-fs, 12px)",
+      }}
     >
       <div className="page-header">
         <div>
@@ -410,9 +432,14 @@ export default async function Page({
             Mon profil
           </h1>
           {showDebug && (
-            <div className="text-xs" style={{ marginTop: 4, color: "#6b7280" }}>
+            <div
+              className="text-xs"
+              style={{ marginTop: 4, color: "#6b7280" }}
+            >
               <b>Debug:</b> email = <code>{emailForDisplay || "—"}</code>{" "}
-              {debugInfo.sheetHit ? "· Sheet OK" : `· ${debugInfo.reason || "Sheet KO"}`}
+              {debugInfo.sheetHit
+                ? "· Sheet OK"
+                : `· ${debugInfo.reason || "Sheet KO"}`}
               {forceBlank ? " · BLANK MODE" : ""}
             </div>
           )}
@@ -466,11 +493,17 @@ export default async function Page({
         </div>
 
         <div className="card">
-          <div className="text-sm" style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+          <div
+            className="text-sm"
+            style={{ display: "flex", gap: 16, flexWrap: "wrap" }}
+          >
             {(clientPrenom || showPlaceholders) && (
               <span>
                 <b>Prénom :</b>{" "}
-                {clientPrenom || (showPlaceholders ? <i className="text-gray-400">Non renseigné</i> : null)}
+                {clientPrenom ||
+                  (showPlaceholders ? (
+                    <i className="text-gray-400">Non renseigné</i>
+                  ) : null)}
               </span>
             )}
             {(typeof clientAge === "number" || showPlaceholders) && (
@@ -488,7 +521,10 @@ export default async function Page({
             {(goalLabel || showPlaceholders) && (
               <span>
                 <b>Objectif actuel :</b>{" "}
-                {goalLabel || (showPlaceholders ? <i className="text-gray-400">Non défini</i> : null)}
+                {goalLabel ||
+                  (showPlaceholders ? (
+                    <i className="text-gray-400">Non défini</i>
+                  ) : null)}
               </span>
             )}
           </div>
@@ -539,7 +575,10 @@ export default async function Page({
           <h2 style={{ margin: 0 }}>{hasGenerate ? titleList : "Mes séances"}</h2>
 
           {hasGenerate && (
-            <div className="inline-flex items-center" style={{ display: "inline-flex", gap: 8 }}>
+            <div
+              className="inline-flex items-center"
+              style={{ display: "inline-flex", gap: 8 }}
+            >
               <a
                 href={hrefFull}
                 className={
@@ -619,7 +658,10 @@ export default async function Page({
         >
           {/* Séance faite ✅ */}
           <div className="card">
-            <div className="text-sm" style={{ fontWeight: 600, marginBottom: 6 }}>
+            <div
+              className="text-sm"
+              style={{ fontWeight: 600, marginBottom: 6 }}
+            >
               Séance faite <span aria-hidden>✅</span>
             </div>
             {savedList.length > 0 && (
@@ -637,8 +679,12 @@ export default async function Page({
                   const removeQuery = [
                     "generate=1",
                     equipMode === "none" ? "equip=none" : undefined,
-                    newSavedKeys.length ? `saved=${newSavedKeys.join(",")}` : undefined,
-                    laterIds.size ? `later=${[...laterIds].join(",")}` : undefined,
+                    newSavedKeys.length
+                      ? `saved=${newSavedKeys.join(",")}`
+                      : undefined,
+                    laterIds.size
+                      ? `later=${[...laterIds].join(",")}`
+                      : undefined,
                   ]
                     .filter(Boolean)
                     .join("&");
@@ -678,7 +724,7 @@ export default async function Page({
                           fontSize: 12,
                           padding: "2px 4px",
                           borderRadius: 999,
-                          border: "1px solid "#e5e7eb",
+                          border: "1px solid #e5e7eb",
                           color: "#6b7280",
                           lineHeight: 1,
                           display: "inline-flex",
@@ -698,7 +744,10 @@ export default async function Page({
 
           {/* À faire plus tard ⏳ */}
           <div className="card">
-            <div className="text-sm" style={{ fontWeight: 600, marginBottom: 6 }}>
+            <div
+              className="text-sm"
+              style={{ fontWeight: 600, marginBottom: 6 }}
+            >
               À faire plus tard <span aria-hidden>⏳</span>
             </div>
             {laterList.length > 0 && (
@@ -716,8 +765,12 @@ export default async function Page({
                   const removeQuery = [
                     "generate=1",
                     equipMode === "none" ? "equip=none" : undefined,
-                    savedIds.size ? `saved=${[...savedIds].join(",")}` : undefined,
-                    newLaterKeys.length ? `later=${newLaterKeys.join(",")}` : undefined,
+                    savedIds.size
+                      ? `saved=${[...savedIds].join(",")}`
+                      : undefined,
+                    newLaterKeys.length
+                      ? `later=${newLaterKeys.join(",")}`
+                      : undefined,
                   ]
                     .filter(Boolean)
                     .join("&");
