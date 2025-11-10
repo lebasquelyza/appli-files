@@ -51,20 +51,38 @@ function DaysDropdown({ value, onChange }: { value: number[]; onChange: (days: n
 
   return (
     <div className="relative inline-block" ref={wrap}>
-      <button type="button" className={`${btnGhost} inline-flex items-center`} onClick={() => setOpen((o) => !o)} style={{ fontSize: "var(--settings-fs)" }}>
+      <button
+        type="button"
+        className={`${btnGhost} inline-flex items-center`}
+        onClick={() => setOpen((o) => !o)}
+        style={{ fontSize: "var(--settings-fs)" }}
+      >
         <span className="font-medium">Jours</span>
       </button>
 
       {open && (
-        <div role="menu" aria-label="Sélection des jours" className="absolute z-50 mt-2 w-64 rounded-2xl border bg-white p-3 shadow-lg dark:bg-slate-900 dark:border-slate-700" style={{ fontSize: "var(--settings-fs)" }}>
+        <div
+          role="menu"
+          aria-label="Sélection des jours"
+          className="absolute z-50 mt-2 w-64 rounded-2xl border bg-white p-3 shadow-lg dark:bg-slate-900 dark:border-slate-700"
+          style={{ fontSize: "var(--settings-fs)" }}
+        >
           <ul className="space-y-2">
             {labelsFull.map((lbl, i) => {
               const d = i + 1;
               const checked = value.includes(d);
               return (
                 <li key={d} className="flex items-center gap-3">
-                  <input id={`day-${d}`} type="checkbox" className="accent-current" checked={checked} onChange={() => toggle(d)} />
-                  <label htmlFor={`day-${d}`} className="cursor-pointer">{lbl}</label>
+                  <input
+                    id={`day-${d}`}
+                    type="checkbox"
+                    className="accent-current"
+                    checked={checked}
+                    onChange={() => toggle(d)}
+                  />
+                  <label htmlFor={`day-${d}`} className="cursor-pointer">
+                    {lbl}
+                  </label>
                 </li>
               );
             })}
@@ -72,8 +90,12 @@ function DaysDropdown({ value, onChange }: { value: number[]; onChange: (days: n
 
           <div className="mt-3 flex items-center justify-end pt-2 border-t dark:border-slate-700">
             <div className="flex gap-2">
-              <button type="button" className={`${btnGhost} px-3 py-1`} onClick={() => setOpen(false)}>OK</button>
-              <button type="button" className={`${btnGhost} px-3 py-1`} onClick={() => onChange([])}>Tout vider</button>
+              <button type="button" className={`${btnGhost} px-3 py-1`} onClick={() => setOpen(false)}>
+                OK
+              </button>
+              <button type="button" className={`${btnGhost} px-3 py-1`} onClick={() => onChange([])}>
+                Tout vider
+              </button>
             </div>
           </div>
         </div>
@@ -110,15 +132,34 @@ function TimeDropdown({ value, onChange }: { value: string; onChange: (time: str
 
   return (
     <div className="relative inline-block" ref={wrap}>
-      <button type="button" className={`${btnGhost} inline-flex items-center`} onClick={() => setOpen((o) => !o)} style={{ fontSize: "var(--settings-fs)" }}>
+      <button
+        type="button"
+        className={`${btnGhost} inline-flex items-center`}
+        onClick={() => setOpen((o) => !o)}
+        style={{ fontSize: "var(--settings-fs)" }}
+      >
         <span className="font-medium">Heure</span>
       </button>
 
       {open && (
-        <div role="dialog" aria-label="Sélection de l'heure" className="absolute right-0 z-50 mt-2 w-56 rounded-2xl border bg-white p-3 shadow-lg dark:bg-slate-900 dark:border-slate-700" style={{ fontSize: "var(--settings-fs)" }}>
-          <input type="time" value={temp} onChange={(e) => setTemp(e.target.value)} step={300} className="w-full rounded-[10px] border px-3 py-2 dark:bg-slate-900 dark:border-slate-700" style={{ fontSize: "var(--settings-fs)" }} />
+        <div
+          role="dialog"
+          aria-label="Sélection de l'heure"
+          className="absolute right-0 z-50 mt-2 w-56 rounded-2xl border bg-white p-3 shadow-lg dark:bg-slate-900 dark:border-slate-700"
+          style={{ fontSize: "var(--settings-fs)" }}
+        >
+          <input
+            type="time"
+            value={temp}
+            onChange={(e) => setTemp(e.target.value)}
+            step={300}
+            className="w-full rounded-[10px] border px-3 py-2 dark:bg-slate-900 dark:border-slate-700"
+            style={{ fontSize: "var(--settings-fs)" }}
+          />
           <div className="mt-3 flex items-center justify-end pt-2 border-t dark:border-slate-700">
-            <button type="button" className={`${btnGhost} px-3 py-1`} onClick={apply}>OK</button>
+            <button type="button" className={`${btnGhost} px-3 py-1`} onClick={apply}>
+              OK
+            </button>
           </div>
         </div>
       )}
@@ -136,7 +177,11 @@ function PushScheduleForm() {
     try {
       const { getDeviceId } = await import("@/lib/pushClient");
       const deviceId = getDeviceId();
-      const res = await fetch("/api/push/prefs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ deviceId, time, days, tz }) });
+      const res = await fetch("/api/push/prefs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deviceId, time, days, tz }),
+      });
       if (!res.ok) throw new Error("Erreur");
       alert("Rappel enregistré ✅");
     } catch (e) {
@@ -153,7 +198,9 @@ function PushScheduleForm() {
         <TimeDropdown value={time} onChange={setTime} />
       </div>
       <div className="flex items-center justify-end">
-        <button type="button" className="btn-dash" onClick={save}>Enregistrer</button>
+        <button type="button" className="btn-dash" onClick={save}>
+          Enregistrer
+        </button>
       </div>
     </div>
   );
@@ -172,7 +219,9 @@ function LegalModal() {
 
   return (
     <div>
-      <button type="button" className={btnGhost} onClick={() => setOpen(true)}>Voir les mentions légales</button>
+      <button type="button" className={btnGhost} onClick={() => setOpen(true)}>
+        Voir les mentions légales
+      </button>
 
       {open && (
         <>
@@ -188,13 +237,21 @@ function LegalModal() {
             >
               <div className="flex items-start justify-between gap-4">
                 <h3 className="text-base font-semibold">Mentions légales</h3>
-                <button aria-label="Fermer" className={btnGhost} onClick={() => setOpen(false)}>Fermer</button>
+                <button aria-label="Fermer" className={btnGhost} onClick={() => setOpen(false)}>
+                  Fermer
+                </button>
               </div>
 
               <div className="mt-3 space-y-4 leading-relaxed">
-                <p className="opacity-80">Ici vos mentions légales (éditeur du site, hébergeur, propriété intellectuelle, données personnelles, cookies, contact, etc.). Remplacez ce texte par votre contenu lorsque vos informations seront prêtes.</p>
+                <p className="opacity-80">
+                  Les informations relatives aux mentions légales du site seront bientôt disponibles. Nous mettons tout en
+                  œuvre pour publier ces éléments dans les meilleurs délais.
+                </p>
                 <h4 className="font-semibold">Cookies</h4>
-                <p className="opacity-80">Ce site utilise des cookies nécessaires au bon fonctionnement et, le cas échéant, pour la mesure d’audience.</p>
+                <p className="opacity-80">
+                  La politique de gestion des cookies est actuellement en cours de rédaction et sera publiée prochainement.
+                  Nous vous remercions pour votre compréhension.
+                </p>
               </div>
             </div>
           </div>
@@ -240,7 +297,10 @@ function DeleteAccountCard() {
         return;
       }
 
-      const payload = { reason: reason || null, reasonText: reason === "other" ? (reasonText.trim() || null) : null };
+      const payload = {
+        reason: reason || null,
+        reasonText: reason === "other" ? reasonText.trim() || null : null,
+      };
 
       const res = await fetch("/api/account/delete", {
         method: "POST",
@@ -271,15 +331,31 @@ function DeleteAccountCard() {
         <label className="font-medium">Pourquoi partez-vous ? (facultatif)</label>
         <div className="grid sm:grid-cols-2 gap-2">
           {REASONS.map((r) => (
-            <label key={r.value} className="flex items-center gap-2 rounded-[10px] border px-3 py-2 dark:bg-slate-900 dark:border-slate-700 cursor-pointer">
-              <input type="radio" name="delete-reason" value={r.value} checked={reason === r.value} onChange={(e) => setReason(e.target.value)} className="accent-current" />
+            <label
+              key={r.value}
+              className="flex items-center gap-2 rounded-[10px] border px-3 py-2 dark:bg-slate-900 dark:border-slate-700 cursor-pointer"
+            >
+              <input
+                type="radio"
+                name="delete-reason"
+                value={r.value}
+                checked={reason === r.value}
+                onChange={(e) => setReason(e.target.value)}
+                className="accent-current"
+              />
               <span>{r.label}</span>
             </label>
           ))}
         </div>
 
         {reason === "other" && (
-          <textarea value={reasonText} onChange={(e) => setReasonText(e.target.value)} rows={3} placeholder="Dites-nous en plus (optionnel)" className="mt-2 w-full rounded-[10px] border px-3 py-2 dark:bg-slate-900 dark:border-slate-700" />
+          <textarea
+            value={reasonText}
+            onChange={(e) => setReasonText(e.target.value)}
+            rows={3}
+            placeholder="Dites-nous en plus (optionnel)"
+            className="mt-2 w-full rounded-[10px] border px-3 py-2 dark:bg-slate-900 dark:border-slate-700"
+          />
         )}
       </div>
 
@@ -287,9 +363,21 @@ function DeleteAccountCard() {
         Cette action est <strong>irréversible</strong> : vos données et accès seront supprimés. Pour confirmer, tapez{" "}
         <code className="px-1 py-0.5 rounded bg-red-50 dark:bg-red-900/30">SUPPRIMER</code> :
       </p>
-      <input type="text" value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="SUPPRIMER" className="w-full rounded-[10px] border px-3 py-2 dark:bg-slate-900 dark:border-slate-700" aria-label="Champ de confirmation de suppression" />
+      <input
+        type="text"
+        value={confirm}
+        onChange={(e) => setConfirm(e.target.value)}
+        placeholder="SUPPRIMER"
+        className="w-full rounded-[10px] border px-3 py-2 dark:bg-slate-900 dark:border-slate-700"
+        aria-label="Champ de confirmation de suppression"
+      />
       <div className="flex items-center justify-end">
-        <button type="button" disabled={!canDelete} onClick={handleDelete} className={`btn ${!canDelete ? "opacity-60 cursor-not-allowed" : ""}`}>
+        <button
+          type="button"
+          disabled={!canDelete}
+          onClick={handleDelete}
+          className={`btn ${!canDelete ? "opacity-60 cursor-not-allowed" : ""}`}
+        >
           {loading ? "Suppression…" : "Supprimer définitivement"}
         </button>
       </div>
@@ -349,7 +437,8 @@ export default function Page() {
     } catch {}
     setPrefs(initial);
 
-    const isDark = hadStored ? initial.theme === "dark" || (initial.theme === "system" && getSystemPrefersDark()) : false;
+    const isDark =
+      hadStored ? initial.theme === "dark" || (initial.theme === "system" && getSystemPrefersDark()) : false;
     applyThemeToRoot(isDark);
 
     setLoaded(true);
@@ -378,7 +467,10 @@ export default function Page() {
   return (
     <div className="container" style={{ paddingTop: 24, paddingBottom: 24 }}>
       <div className="mb-2">
-        <h1 className="h1" style={{ fontSize: "clamp(20px, 2.2vw, 24px)", lineHeight: 1.15, color: "var(--text)" }}>
+        <h1
+          className="h1"
+          style={{ fontSize: "clamp(20px, 2.2vw, 24px)", lineHeight: 1.15, color: "var(--text)" }}
+        >
           Réglages
         </h1>
       </div>
@@ -389,7 +481,14 @@ export default function Page() {
           <div className="grid gap-6 md:grid-cols-2">
             <div className="card space-y-3">
               <h3 className="font-semibold">Langue</h3>
-              <select className="rounded-[10px] border px-3 py-2 w-full dark:bg-slate-900 dark:border-slate-700" value={prefs.language} onChange={(e) => setPrefs((p) => ({ ...p, language: e.target.value as Prefs["language"] }))} disabled={!loaded}>
+              <select
+                className="rounded-[10px] border px-3 py-2 w-full dark:bg-slate-900 dark:border-slate-700"
+                value={prefs.language}
+                onChange={(e) =>
+                  setPrefs((p) => ({ ...p, language: e.target.value as Prefs["language"] }))
+                }
+                disabled={!loaded}
+              >
                 <option value="fr">Français (FR)</option>
                 <option value="en">English (EN)</option>
                 <option value="de">Deutsch (DE)</option>
@@ -408,7 +507,9 @@ export default function Page() {
 
         {/* ======================= Section Cookies & Mentions ======================= */}
         <Section title="Cookies & Mentions légales">
-          <p className="opacity-70 mb-4">Consultez ici notre politique de cookies et les mentions légales du site.</p>
+          <p className="opacity-70 mb-4">
+            Les informations relatives aux cookies et aux mentions légales seront prochainement disponibles.
+          </p>
           <LegalModal />
         </Section>
 
