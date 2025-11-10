@@ -111,7 +111,7 @@ function ensureAtLeast4(list: NormalizedExercise[], type: WorkoutType, equip: "f
   return uniqByName(out).slice(0, 4);
 }
 
-/* ===== Helpers analytics → Supabase (questionnaire + séances + insight combiné) ===== */
+/* ===== Helpers Supabase analytics → programme_insights ===== */
 
 async function getSupabaseAdmin() {
   const url = process.env.SUPABASE_URL;
@@ -138,54 +138,11 @@ async function findUserIdByEmail(supabaseAdmin: any, email: string): Promise<str
   }
 }
 
-async function logQuestionnaireToSupabase(email: string, answers: any) {
-  try {
-    const supabaseAdmin = await getSupabaseAdmin();
-    if (!supabaseAdmin || !answers) return;
-    const normalizedEmail = (email || "").trim().toLowerCase();
-
-    const userId = await findUserIdByEmail(supabaseAdmin, normalizedEmail);
-
-    await supabaseAdmin.from("questionnaire_responses").insert({
-      questionnaire_key: "onboarding_v1", // adapte si tu as plusieurs questionnaires
-      email: normalizedEmail || null,
-      user_id: userId,
-      answers,
-    });
-  } catch (e) {
-    console.error("[logQuestionnaireToSupabase] error:", e);
-  }
-}
-
-async function logSessionsToSupabase(
-  email: string,
-  sessions: AiSessionT[],
-  answers?: any
-) {
-  try {
-    if (!sessions || !sessions.length) return;
-    const supabaseAdmin = await getSupabaseAdmin();
-    if (!supabaseAdmin) return;
-
-    const normalizedEmail = (email || "").trim().toLowerCase();
-    const userId = await findUserIdByEmail(supabaseAdmin, normalizedEmail);
-
-    const rows = sessions.map((s) => ({
-      session_name: s.title || s.type || "Séance",
-      duration_minutes:
-        (s as any).plannedMin ?? (s as any).durationMinutes ?? null,
-      email: normalizedEmail || null,
-      user_id: userId,
-      metadata: s as any,
-      questionnaire_answers: answers || null, // 🔥 réponses du questionnaire ici
-    }));
-
-    await supabaseAdmin.from("workout_sessions").insert(rows);
-  } catch (e) {
-    console.error("[logSessionsToSupabase] error:", e);
-  }
-}
-
+/**
+ * Log unique dans programme_insights :
+ * 1 ligne = 1 génération de programme pour un client
+ * (réponses + toutes les séances)
+ */
 async function logProgrammeInsightToSupabase(
   email: string,
   answers: any,
@@ -246,9 +203,6 @@ async function loadProfile(searchParams?: Record<string, string | string[] | und
       const built = buildProfileFromAnswers(answers);
       profile = { ...built, email: built.email || emailForDisplay };
       debugInfo.sheetHit = true;
-
-      // 🔔 LOG: on enregistre les réponses questionnaire dans Supabase
-      await logQuestionnaireToSupabase(emailForDisplay, answers);
     } else {
       profile = { email: emailForDisplay };
       debugInfo.reason = "Aucune réponse trouvée dans le Sheet";
@@ -292,9 +246,7 @@ async function loadInitialSessions(email: string, equipParam?: string) {
         return { ...s, exercises: ensured };
       });
 
-      // 🔔 LOG: séances + réponses dans workout_sessions
-      await logSessionsToSupabase(email, finalSessions, answers);
-      // 🔔 LOG combiné: réponses + toutes les séances sur UNE ligne
+      // 🔔 LOG UNIQUE : réponses + toutes les séances dans programme_insights
       await logProgrammeInsightToSupabase(email, answers, finalSessions);
 
       return finalSessions;
@@ -309,7 +261,7 @@ async function loadInitialSessions(email: string, equipParam?: string) {
       return { ...s, exercises: ensured };
     });
 
-    // on recharge les réponses pour la ligne combinée (si dispo)
+    // on recharge les réponses pour le log combiné (si dispo)
     let answersForLog: any = null;
     try {
       answersForLog = await getAnswersForEmail(email, { fresh: true });
@@ -317,9 +269,6 @@ async function loadInitialSessions(email: string, equipParam?: string) {
       // silencieux
     }
 
-    // 🔔 LOG: séances individuelles + réponses
-    await logSessionsToSupabase(email, safe, answersForLog);
-    // 🔔 LOG combiné
     await logProgrammeInsightToSupabase(email, answersForLog, safe);
 
     return safe;
