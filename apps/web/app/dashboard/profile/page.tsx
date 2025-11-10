@@ -356,8 +356,10 @@ export default async function Page({
   const equipParam = String(searchParams?.equip || "").toLowerCase();
   const equipMode: "full" | "none" = equipParam === "none" ? "none" : "full";
 
-  // Liste (toujours chargée côté serveur, logique inchangée)
-  const initialSessions = await loadInitialSessions(emailForDisplay, equipMode);
+  // Liste : on NE génère que si hasGenerate = true
+  const initialSessions = hasGenerate
+    ? await loadInitialSessions(emailForDisplay, equipMode)
+    : [];
 
   // Buckets depuis l’URL (aucune persistance serveur, aucune logique IA modifiée)
   const savedIds = parseIdList(searchParams?.saved);
