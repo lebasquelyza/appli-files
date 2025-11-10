@@ -270,6 +270,9 @@ type Prefs = {
 const LS_KEY = "app.prefs.v1";
 const DEFAULT_PREFS: Prefs = { language: "fr", theme: "system", reducedMotion: false };
 
+// Masque / affiche la section Langue
+const SHOW_LANGUAGE = false;
+
 /* ======================= Composant suppression de compte ======================= */
 function DeleteAccountCard() {
   const [confirm, setConfirm] = useState("");
@@ -478,22 +481,24 @@ export default function Page() {
       <div style={{ fontSize: "var(--settings-fs)" }}>
         {/* ======================= Section Général ======================= */}
         <Section title="Général">
-          <div className="grid gap-6 md:grid-cols-2">
-            <div className="card space-y-3">
-              <h3 className="font-semibold">Langue</h3>
-              <select
-                className="rounded-[10px] border px-3 py-2 w-full dark:bg-slate-900 dark:border-slate-700"
-                value={prefs.language}
-                onChange={(e) =>
-                  setPrefs((p) => ({ ...p, language: e.target.value as Prefs["language"] }))
-                }
-                disabled={!loaded}
-              >
-                <option value="fr">Français (FR)</option>
-                <option value="en">English (EN)</option>
-                <option value="de">Deutsch (DE)</option>
-              </select>
-            </div>
+          <div className={`grid gap-6 ${SHOW_LANGUAGE ? "md:grid-cols-2" : ""}`}>
+            {SHOW_LANGUAGE && (
+              <div className="card space-y-3">
+                <h3 className="font-semibold">Langue</h3>
+                <select
+                  className="rounded-[10px] border px-3 py-2 w-full dark:bg-slate-900 dark:border-slate-700"
+                  value={prefs.language}
+                  onChange={(e) =>
+                    setPrefs((p) => ({ ...p, language: e.target.value as Prefs["language"] }))
+                  }
+                  disabled={!loaded}
+                >
+                  <option value="fr">Français (FR)</option>
+                  <option value="en">English (EN)</option>
+                  <option value="de">Deutsch (DE)</option>
+                </select>
+              </div>
+            )}
 
             {/* Supprimer mon compte */}
             <DeleteAccountCard />
