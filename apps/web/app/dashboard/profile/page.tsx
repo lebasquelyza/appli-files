@@ -111,12 +111,21 @@ function ensureAtLeast4(list: NormalizedExercise[], type: WorkoutType, equip: "f
   return uniqByName(out).slice(0, 4);
 }
 
-/* ===== Helpers Supabase analytics → programme_insights ===== */
+/* ===== Helpers Supabase admin → programme_insights ===== */
 
 async function getSupabaseAdmin() {
-  const url = process.env.SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !serviceKey) return null;
+  // On accepte SUPABASE_URL ou, à défaut, NEXT_PUBLIC_SUPABASE_URL
+  const url =
+    process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+
+  if (!url || !serviceKey) {
+    console.error(
+      "[programme_insights] Missing SUPABASE_URL / NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY"
+    );
+    return null;
+  }
+
   const { createClient } = await import("@supabase/supabase-js");
   return createClient(url, serviceKey);
 }
@@ -669,7 +678,7 @@ export default async function Page({
                           fontSize: 12,
                           padding: "2px 4px",
                           borderRadius: 999,
-                          border: "1px solid #e5e7eb",
+                          border: "1px solid "#e5e7eb",
                           color: "#6b7280",
                           lineHeight: 1,
                           display: "inline-flex",
