@@ -154,6 +154,7 @@ async function findUserIdByEmail(
  * Log unique dans programme_insights :
  * 1 ligne = 1 génération de programme pour un client
  * (réponses + toutes les séances)
+ * + anti-doublon (si même mail + questionnaire dans les 10s)
  */
 async function logProgrammeInsightToSupabase(
   email: string,
@@ -165,12 +166,29 @@ async function logProgrammeInsightToSupabase(
     if (!supabaseAdmin || !sessions || !sessions.length) return;
 
     const normalizedEmail = (email || "").trim().toLowerCase();
+    const questionnaireKey = "onboarding_v1";
+
+    // Anti-doublon : si on a déjà une ligne très récente, on skip
+    const tenSecondsAgo = new Date(Date.now() - 10_000).toISOString();
+
+    const { data: existing, error: existingErr } = await supabaseAdmin
+      .from("programme_insights")
+      .select("id")
+      .eq("email", normalizedEmail)
+      .eq("questionnaire_key", questionnaireKey)
+      .gte("created_at", tenSecondsAgo)
+      .limit(1);
+
+    if (!existingErr && existing && existing.length) {
+      return;
+    }
+
     const userId = await findUserIdByEmail(supabaseAdmin, normalizedEmail);
 
     await supabaseAdmin.from("programme_insights").insert({
       user_id: userId,
       email: normalizedEmail || null,
-      questionnaire_key: "onboarding_v1", // adapte si tu as plusieurs questionnaires
+      questionnaire_key: questionnaireKey,
       answers: answers || null,
       sessions: sessions as any,
     });
@@ -254,7 +272,7 @@ async function loadInitialSessions(email: string, equipParam?: string) {
       const prog = generateProgrammeFromAnswers(answers);
       const sessions: AiSessionT[] = prog.sessions || [];
 
-      // ⬇️ Applique ≥4 exos dans les deux modes
+      // Applique ≥4 exos dans les deux modes
       const finalSessions = sessions.map((s) => {
         const type = (s.type || "muscu") as WorkoutType;
         let exs = (s.exercises || []).slice();
@@ -266,7 +284,7 @@ async function loadInitialSessions(email: string, equipParam?: string) {
         return { ...s, exercises: ensured };
       });
 
-      // 🔔 LOG UNIQUE : réponses + toutes les séances dans programme_insights
+      // Log unique dans programme_insights
       await logProgrammeInsightToSupabase(email, answers, finalSessions);
 
       return finalSessions;
