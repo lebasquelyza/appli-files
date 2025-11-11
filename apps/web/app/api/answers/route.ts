@@ -4,8 +4,7 @@ import { cookies } from "next/headers";
 import {
   getAnswersForEmail,
   buildProfileFromAnswers,
-  // ⬇️ on importe le générateur qui produit les séances
-  // (il utilise notre logique d'inférence élargie)
+  // ⬇️ Générateur qui produit les séances (IA + fallback béton)
   generateProgrammeFromAnswers,
 } from "../../../lib/coach/ai";
 
@@ -16,7 +15,9 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const email = String(
       searchParams.get("email") || cookies().get("app_email")?.value || ""
-    ).trim().toLowerCase();
+    )
+      .trim()
+      .toLowerCase();
 
     if (!email) {
       return NextResponse.json(
@@ -26,7 +27,7 @@ export async function GET(req: Request) {
     }
 
     // ✅ Récupère toujours la dernière ligne du Sheet
-    const answers = await getAnswersForEmail(email, { fresh: true } as any);
+    const answers = await getAnswersForEmail(email, { fresh: true });
     if (!answers) {
       return NextResponse.json(
         { answers: null, profile: { email }, sessions: [] },
@@ -37,14 +38,14 @@ export async function GET(req: Request) {
     // ✅ Profil (compat existante)
     const profile = buildProfileFromAnswers(answers);
 
-    // ✅ Séances générées (AUCUN tronquage)
-    const { sessions } = generateProgrammeFromAnswers(answers);
+    // ✅ Séances générées par l’IA (fonction maintenant async → on AWAIT)
+    const { sessions } = await generateProgrammeFromAnswers(answers);
 
     // 👀 Log dev pour vérifier qu’on envoie bien 5 si l’utilisateur est “5 jours”
     if (process.env.NODE_ENV !== "production") {
       console.log("[api/answers] email:", email);
       console.log("[api/answers] sessions.length:", sessions?.length);
-      console.log("[api/answers] titles:", sessions?.map(s => s.title));
+      console.log("[api/answers] titles:", sessions?.map((s) => s.title));
     }
 
     return NextResponse.json({ answers, profile, sessions }, { status: 200 });
