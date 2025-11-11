@@ -8,15 +8,20 @@ async function refreshSpotifyToken(refreshToken: string) {
     client_id: process.env.SPOTIFY_CLIENT_ID!,
     client_secret: process.env.SPOTIFY_CLIENT_SECRET!,
   });
+
   const res = await fetch("https://accounts.spotify.com/api/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body,
   });
+
   const data = await res.json();
-  if (!res.ok) throw new Error((data as any)?.error_description || "Failed to refresh token");
+  if (!res.ok) {
+    throw new Error((data as any)?.error_description || "Failed to refresh token");
+  }
 
   const expiresAt = Date.now() + Number((data as any).expires_in ?? 3600) * 1000;
+
   return {
     accessToken: (data as any).access_token as string,
     refreshToken: ((data as any).refresh_token as string) || refreshToken,
@@ -41,9 +46,9 @@ export const authOptions: NextAuthOptions = {
             "streaming",
             "user-modify-playback-state",
             "user-read-playback-state",
-            "user-library-read", // ✅ titres likés
+            "user-library-read", // ⬅️ accès aux titres likés
           ].join(" "),
-          // show_dialog: true, // à décommenter une fois si tu veux forcer le consentement
+          show_dialog: true, // ⬅️ force le nouvel écran de consentement (tu pourras le remettre en commentaire après)
         },
       },
     }),
@@ -51,6 +56,7 @@ export const authOptions: NextAuthOptions = {
   session: { strategy: "jwt" },
   callbacks: {
     async jwt({ token, account }) {
+      // Premier login ou renouvellement initial
       if (account) {
         const expiresAt =
           typeof (account as any).expires_at === "number"
@@ -58,11 +64,14 @@ export const authOptions: NextAuthOptions = {
             : Date.now() + Number((account as any).expires_in ?? 3600) * 1000;
 
         (token as any).accessToken = (account as any).access_token;
-        (token as any).refreshToken = (account as any).refresh_token ?? (token as any).refreshToken;
+        (token as any).refreshToken =
+          (account as any).refresh_token ?? (token as any).refreshToken;
         (token as any).expiresAt = expiresAt;
+
         return token;
       }
 
+      // Refresh token si proche de l'expiration
       const exp =
         typeof (token as any).expiresAt === "number"
           ? (token as any).expiresAt
@@ -85,6 +94,7 @@ export const authOptions: NextAuthOptions = {
 
       return token;
     },
+
     async session({ session, token }) {
       (session as any).accessToken = (token as any).accessToken;
       return session;
