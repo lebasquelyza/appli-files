@@ -15,8 +15,7 @@ import { planProgrammeFromEmail } from "../../../lib/coach/beton";
 import GenerateClient from "./GenerateClient";
 
 const QUESTIONNAIRE_BASE =
-  process.env.FILES_COACHING_QUESTIONNAIRE_BASE ||
-  "https://questionnaire.files-coaching.com";
+  process.env.FILES_COACHING_QUESTIONNAIRE_BASE || "https://questionnaire.files-coaching.com";
 
 /* Email fallback: session Supabase côté serveur si cookie absent */
 async function getEmailFromSupabaseSession(): Promise<string> {
@@ -255,7 +254,7 @@ async function loadProfile(
   return { emailForDisplay, profile, debugInfo, forceBlank };
 }
 
-/* Loader — Programme IA côté serveur (liste initiale) */
+/* Loader — Programme IA côté serveur (liste) */
 async function loadInitialSessions(email: string, equipParam?: string) {
   if (!email) return [];
   const equip =
@@ -270,9 +269,7 @@ async function loadInitialSessions(email: string, equipParam?: string) {
       const answers = await getAnswersForEmail(email, { fresh: true });
       if (!answers) return [];
       (answers as any).equipLevel = equip === "none" ? "none" : "full";
-
-      // 🔧 generateProgrammeFromAnswers est async → on attend la Promise
-      const prog = await generateProgrammeFromAnswers(answers as any);
+      const prog = generateProgrammeFromAnswers(answers);
       const sessions: AiSessionT[] = prog.sessions || [];
 
       // Applique ≥4 exos dans les deux modes
@@ -351,12 +348,18 @@ export default async function Page({
   const { emailForDisplay, profile, debugInfo, forceBlank } =
     await loadProfile(searchParams);
 
+  // Flag "générer" : on n'affiche la liste principale qu'après clic
+  const hasGenerate =
+    String(searchParams?.generate || "").toLowerCase() === "1";
+
   // Mode liste: '' (défaut = matériel), 'none' ou 'full'
   const equipParam = String(searchParams?.equip || "").toLowerCase();
   const equipMode: "full" | "none" = equipParam === "none" ? "none" : "full";
 
-  // Liste initiale : IA côté serveur (optionnelle)
-  const initialSessions = await loadInitialSessions(emailForDisplay, equipMode);
+  // Liste : on NE génère que si hasGenerate = true
+  const initialSessions = hasGenerate
+    ? await loadInitialSessions(emailForDisplay, equipMode)
+    : [];
 
   // Buckets depuis l’URL (aucune persistance serveur, aucune logique IA modifiée)
   const savedIds = parseIdList(searchParams?.saved);
@@ -409,6 +412,7 @@ export default async function Page({
 
   // Conserver saved/later quand on bascule de mode
   const qsKeep = [
+    hasGenerate ? "generate=1" : undefined,
     savedIds.size ? `saved=${[...savedIds].join(",")}` : undefined,
     laterIds.size ? `later=${[...laterIds].join(",")}` : undefined,
   ]
@@ -419,10 +423,14 @@ export default async function Page({
 
   const titleList =
     equipMode === "none" ? "Mes séances (sans matériel)" : "Mes séances";
+  const hrefGenerate = `/dashboard/profile?generate=1${
+    equipMode === "none" ? "&equip=none" : ""
+  }${qsKeep ? `&${qsKeep}` : ""}`;
 
   // Base de query pour les liens vers les détails de séance (et pour garder les listes)
   const baseLinkQuery = [
     equipMode === "none" ? "equip=none" : undefined,
+    "generate=1",
     savedIds.size ? `saved=${[...savedIds].join(",")}` : undefined,
     laterIds.size ? `later=${[...laterIds].join(",")}` : undefined,
   ]
@@ -550,9 +558,7 @@ export default async function Page({
                 overflow: "hidden",
                 textOverflow: "ellipsis",
               }}
-              title={
-                emailForDisplay || (showPlaceholders ? "Non renseigné" : "")
-              }
+              title={emailForDisplay || (showPlaceholders ? "Non renseigné" : "")}
             >
               <b>Mail :</b>{" "}
               {emailForDisplay ? (
@@ -586,50 +592,77 @@ export default async function Page({
             flexWrap: "wrap",
           }}
         >
-          <h2 style={{ margin: 0 }}>{titleList}</h2>
+          <h2 style={{ margin: 0 }}>{hasGenerate ? titleList : "Mes séances"}</h2>
 
-          <div
-            className="inline-flex items-center"
-            style={{ display: "inline-flex", gap: 8 }}
-          >
-            <a
-              href={hrefFull}
-              className={
-                equipMode === "full"
-                  ? "inline-flex items-center rounded-md border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-sm font-semibold text-white"
-                  : "inline-flex items-center rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-semibold text-neutral-900"
-              }
-              title="Voir la liste avec matériel"
+          {hasGenerate && (
+            <div
+              className="inline-flex items-center"
+              style={{ display: "inline-flex", gap: 8 }}
             >
-              Matériel
-            </a>
-            <a
-              href={hrefNone}
-              className={
-                equipMode === "none"
-                  ? "inline-flex items-center rounded-md border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-sm font-semibold text-white"
-                  : "inline-flex items-center rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-semibold text-neutral-900"
-              }
-              title="Voir la liste sans matériel"
-            >
-              Sans matériel
-            </a>
-          </div>
+              <a
+                href={hrefFull}
+                className={
+                  equipMode === "full"
+                    ? "inline-flex items-center rounded-md border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-sm font-semibold text-white"
+                    : "inline-flex items-center rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-semibold text-neutral-900"
+                }
+                title="Voir la liste avec matériel"
+              >
+                Matériel
+              </a>
+              <a
+                href={hrefNone}
+                className={
+                  equipMode === "none"
+                    ? "inline-flex items-center rounded-md border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-sm font-semibold text-white"
+                    : "inline-flex items-center rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-semibold text-neutral-900"
+                }
+                title="Voir la liste sans matériel"
+              >
+                Sans matériel
+              </a>
+            </div>
+          )}
         </div>
 
-        {/* Bloc Mes séances géré par GenerateClient : bouton "⚙️ Générer" + message "Création de tes séances en cours..." */}
-        <GenerateClient
-          email={emailForDisplay}
-          questionnaireBase={QUESTIONNAIRE_BASE}
-          initialSessions={initialSessions}
-          linkQuery={[
-            equipMode === "none" ? "equip=none" : undefined,
-            savedIds.size ? `saved=${[...savedIds].join(",")}` : undefined,
-            laterIds.size ? `later=${[...laterIds].join(",")}` : undefined,
-          ]
-            .filter(Boolean)
-            .join("&")}
-        />
+        {!hasGenerate && (
+          <div
+            className="card"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+            }}
+          >
+            <div className="text-sm" style={{ color: "#4b5563" }}>
+              Cliquez sur « Générer » pour afficher vos séances personnalisées.
+            </div>
+            <a
+              href={hrefGenerate}
+              className="inline-flex items-center rounded-md border border-neutral-900 bg-neutral-900 px-4 py-2 text-sm font-semibold text-white"
+              title="Générer mes séances"
+            >
+              Générer
+            </a>
+          </div>
+        )}
+
+        {hasGenerate && (
+          <GenerateClient
+            email={emailForDisplay}
+            questionnaireBase={QUESTIONNAIRE_BASE}
+            initialSessions={initialSessions}
+            linkQuery={[
+              equipMode === "none" ? "equip=none" : undefined,
+              "generate=1",
+              savedIds.size ? `saved=${[...savedIds].join(",")}` : undefined,
+              laterIds.size ? `later=${[...laterIds].join(",")}` : undefined,
+            ]
+              .filter(Boolean)
+              .join("&")}
+          />
+        )}
       </section>
 
       {/* ===== Bloc bas de page : Séance faite ✅ / À faire plus tard ⏳ ===== */}
@@ -664,6 +697,7 @@ export default async function Page({
                   // URL qui supprime uniquement cette séance de la liste "saved"
                   const newSavedKeys = [...savedIds].filter((k) => k !== key);
                   const removeQuery = [
+                    "generate=1",
                     equipMode === "none" ? "equip=none" : undefined,
                     newSavedKeys.length
                       ? `saved=${newSavedKeys.join(",")}`
@@ -749,6 +783,7 @@ export default async function Page({
                   // URL qui supprime uniquement cette séance de la liste "later"
                   const newLaterKeys = [...laterIds].filter((k) => k !== key);
                   const removeQuery = [
+                    "generate=1",
                     equipMode === "none" ? "equip=none" : undefined,
                     savedIds.size
                       ? `saved=${[...savedIds].join(",")}`
