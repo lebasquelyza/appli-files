@@ -17,16 +17,21 @@ type Focus = "upper" | "lower" | "mix" | "full";
 /* ===== helpers focus ===== */
 function cycleForGoal(goal?: string): Focus[] {
   const g = String(goal || "").toLowerCase();
-  if (g === "hypertrophy" || g === "strength") return ["upper", "lower", "upper", "lower", "mix", "upper"];
-  if (g === "fatloss" || g === "endurance") return ["full", "mix", "full", "mix", "full", "mix"];
+  if (g === "hypertrophy" || g === "strength")
+    return ["upper", "lower", "upper", "lower", "mix", "upper"];
+  if (g === "fatloss" || g === "endurance")
+    return ["full", "mix", "full", "mix", "full", "mix"];
   if (g === "mobility") return ["mix", "mix", "mix", "mix", "mix", "mix"];
   return ["full", "mix", "upper", "lower", "mix", "full"];
 }
 function focusLabel(f: Focus) {
-  return f === "upper" ? "Haut du corps" :
-         f === "lower" ? "Bas du corps" :
-         f === "full"  ? "Full body" :
-                         "Mix";
+  return f === "upper"
+    ? "Haut du corps"
+    : f === "lower"
+    ? "Bas du corps"
+    : f === "full"
+    ? "Full body"
+    : "Mix";
 }
 function extractNameFromTitle(raw?: string) {
   const s = String(raw || "");
@@ -35,9 +40,9 @@ function extractNameFromTitle(raw?: string) {
 /* Supprime les variantes “— A”, “- B”, “· C”, “(D)” éventuelles */
 function stripVariantLetter(s?: string) {
   return String(s || "")
-    .replace(/\s*[—–-]\s*[A-Z]\b/gi, "")  // "— A" / "- B"
-    .replace(/\s*·\s*[A-Z]\b/gi, "")      // "· C"
-    .replace(/\s*\(([A-Z])\)\s*$/gi, "")  // "(D)"
+    .replace(/\s*[—–-]\s*[A-Z]\b/gi, "") // "— A" / "- B"
+    .replace(/\s*·\s*[A-Z]\b/gi, "") // "· C"
+    .replace(/\s*\(([A-Z])\)\s*$/gi, "") // "(D)"
     .trim();
 }
 function makeTitle(raw: string | undefined, focus: Focus) {
@@ -64,7 +69,12 @@ function sessionKey(_s: AiSession, idx: number) {
   return `s${idx}`;
 }
 
-export default function GenerateClient({ email, questionnaireBase, initialSessions = [], linkQuery }: Props) {
+export default function GenerateClient({
+  email,
+  questionnaireBase,
+  initialSessions = [],
+  linkQuery,
+}: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -78,8 +88,14 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
   const [openIdx, setOpenIdx] = useState<number | null>(null);
 
   // Sets actuels d'après l'URL (pour afficher les pills + cohérence avec "Mes listes")
-  const savedSet = useMemo(() => parseSet(searchParams.get("saved")), [searchParams]);
-  const laterSet = useMemo(() => parseSet(searchParams.get("later")), [searchParams]);
+  const savedSet = useMemo(
+    () => parseSet(searchParams.get("saved")),
+    [searchParams]
+  );
+  const laterSet = useMemo(
+    () => parseSet(searchParams.get("later")),
+    [searchParams]
+  );
 
   useEffect(() => {
     setSessions(initialSessions);
@@ -88,17 +104,21 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
   useEffect(() => {
     (async () => {
       try {
-        const url = email ? `/api/answers?email=${encodeURIComponent(email)}` : `/api/answers`;
+        const url = email
+          ? `/api/answers?email=${encodeURIComponent(email)}`
+          : `/api/answers`;
         const res = await fetch(url, { cache: "no-store" });
         const data = await res.json();
         const raw = String(
           data?.profile?.goal ||
-          data?.answers?.goal ||
-          data?.answers?.objectif ||
-          ""
+            data?.answers?.goal ||
+            data?.answers?.objectif ||
+            ""
         ).toLowerCase();
         setGoal(raw);
-      } catch {}
+      } catch {
+        // silencieux
+      }
     })();
   }, [email]);
 
@@ -106,20 +126,25 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch(`/api/programme?email=${encodeURIComponent(email)}`, { cache: "no-store" });
+      const res = await fetch(
+        `/api/programme?email=${encodeURIComponent(email)}`,
+        { cache: "no-store" }
+      );
       const data = await res.json();
       if (!res.ok || !data.sessions) {
         throw new Error(data.error || "Erreur de génération du programme.");
       }
       // applique un focus par position selon l’objectif
       const cycle = cycleForGoal(goal);
-      const focused: AiSession[] = (data.sessions as AiSession[]).map((s: AiSession, i: number) => {
-        const f = cycle[i % cycle.length];
-        return {
-          ...s,
-          title: makeTitle(s.title, f), // inscrit focus + sans lettre A/B/C
-        };
-      });
+      const focused: AiSession[] = (data.sessions as AiSession[]).map(
+        (s: AiSession, i: number) => {
+          const f = cycle[i % cycle.length];
+          return {
+            ...s,
+            title: makeTitle(s.title, f), // inscrit focus + sans lettre A/B/C
+          };
+        }
+      );
       setSessions(focused);
     } catch (e: any) {
       setError(e?.message || "Erreur inconnue");
@@ -133,8 +158,10 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
     const sp = new URLSearchParams(searchParams?.toString() || "");
     const savedStr = toParam(nextSaved);
     const laterStr = toParam(nextLater);
-    if (savedStr) sp.set("saved", savedStr); else sp.delete("saved");
-    if (laterStr) sp.set("later", laterStr); else sp.delete("later");
+    if (savedStr) sp.set("saved", savedStr);
+    else sp.delete("saved");
+    if (laterStr) sp.set("later", laterStr);
+    else sp.delete("later");
     router.push(`${pathname}?${sp.toString()}`);
   };
 
@@ -160,7 +187,13 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
     <section className="section" style={{ marginTop: 24 }}>
       <div
         className="section-head"
-        style={{ marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}
+        style={{
+          marginBottom: 8,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+        }}
       >
         <h2 className="font-semibold text-lg">Mes séances</h2>
         <button
@@ -183,6 +216,20 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
         </button>
       </div>
 
+      {/* ⚙️ Message pendant la génération */}
+      {loading && (
+        <div
+          className="card"
+          style={{
+            marginBottom: 8,
+            padding: "8px 10px",
+            fontSize: 13,
+          }}
+        >
+          Création de tes séances en cours…
+        </div>
+      )}
+
       {error && (
         <div
           style={{
@@ -203,7 +250,11 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
         <ul className="space-y-2 list-none pl-0">
           {sessions.map((s, i) => {
             const cleanTitle = stripVariantLetter(s.title);
-            const baseHref = `/dashboard/seance/${encodeURIComponent(s.id)}?title=${encodeURIComponent(cleanTitle)}&type=${encodeURIComponent(s.type)}`;
+            const baseHref = `/dashboard/seance/${encodeURIComponent(
+              s.id
+            )}?title=${encodeURIComponent(cleanTitle)}&type=${encodeURIComponent(
+              s.type
+            )}`;
             const href = linkQuery ? `${baseHref}&${linkQuery}` : baseHref;
 
             const key = sessionKey(s, i);
@@ -214,7 +265,11 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
               <li
                 key={s.id || `s-${i}`}
                 className="card hover:bg-gray-50 transition"
-                style={{ padding: 12, border: "1px solid #e5e7eb", borderRadius: 8 }}
+                style={{
+                  padding: 12,
+                  border: "1px solid #e5e7eb",
+                  borderRadius: 8,
+                }}
               >
                 <div className="flex items-center justify-between gap-3">
                   {/* Zone cliquable pour ouvrir la séance */}
@@ -227,18 +282,25 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
                       {cleanTitle || "Séance"}
                     </div>
                     <div className="text-xs text-gray-500">
-                      {s.type}{s.plannedMin ? ` · ${s.plannedMin} min` : ""}
+                      {s.type}
+                      {s.plannedMin ? ` · ${s.plannedMin} min` : ""}
                     </div>
 
                     {/* Badges d'état */}
                     <div className="flex items-center gap-2 mt-1">
                       {isSaved && (
-                        <span className="inline-flex items-center text-[11px] px-2 py-0.5 rounded-full border border-emerald-600" aria-label="Enregistrée">
+                        <span
+                          className="inline-flex items-center text-[11px] px-2 py-0.5 rounded-full border border-emerald-600"
+                          aria-label="Enregistrée"
+                        >
                           ✅ Enregistrée
                         </span>
                       )}
                       {isLater && (
-                        <span className="inline-flex items-center text-[11px] px-2 py-0.5 rounded-full border border-amber-600" aria-label="À faire plus tard">
+                        <span
+                          className="inline-flex items-center text-[11px] px-2 py-0.5 rounded-full border border-amber-600"
+                          aria-label="À faire plus tard"
+                        >
                           ⏳ Plus tard
                         </span>
                       )}
@@ -250,7 +312,10 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
                     <button
                       type="button"
                       className="inline-flex items-center rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-semibold text-neutral-900 hover:border-neutral-400"
-                      onClick={(e) => { e.stopPropagation(); setOpenIdx(openIdx === i ? null : i); }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenIdx(openIdx === i ? null : i);
+                      }}
                       aria-haspopup="menu"
                       aria-expanded={openIdx === i}
                       title="Enregistrer cette séance"
@@ -276,7 +341,10 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
                           boxShadow: "0 8px 24px rgba(0,0,0,.08)",
                         }}
                       >
-                        <div className="text-xs" style={{ color: "#6b7280", marginBottom: 6 }}>
+                        <div
+                          className="text-xs"
+                          style={{ color: "#6b7280", marginBottom: 6 }}
+                        >
                           Choisir une action
                         </div>
                         <div className="space-y-2">
@@ -308,9 +376,10 @@ export default function GenerateClient({ email, questionnaireBase, initialSessio
       )}
 
       {!loading && (!sessions || sessions.length === 0) && (
-        <div className="text-sm text-gray-500">Aucune séance disponible pour le moment.</div>
+        <div className="text-sm text-gray-500">
+          Aucune séance disponible pour le moment.
+        </div>
       )}
     </section>
   );
 }
-
