@@ -1,4 +1,3 @@
-// apps/web/lib/coach/ai.ts
 /** ---------------------------------------------------------------------------
  *  Public Google Sheet (CSV)
  *  - Env requis: SHEET_ID, SHEET_GID, SHEET_RANGE
@@ -318,9 +317,10 @@ export function buildProfileFromAnswers(ans: Record<string, any>): Profile {
 }
 
 /* ============================================================================
- *  3) Générer un programme (branché sur coach/beton)
+ *  3) Générer un programme (branché sur coach/beton + IA LLM)
  * ==========================================================================*/
 import { planProgrammeFromProfile } from "./beton";
+import { generateProgrammeWithLLM } from "./ai-llm";
 
 /* Helpers de normalisation pour champs étendus (D..J) */
 function normLevel(s: string | undefined) {
@@ -422,7 +422,16 @@ function inferMaxSessionsFromText(text?: string | null): number | undefined {
   return undefined;
 }
 
-export function generateProgrammeFromAnswers(ans: Record<string, any>): { sessions: AiSession[] } {
+/**
+ * ⚙️ Fonction principale appelée depuis ton API / logique serveur.
+ * - Lis les réponses formulaire (ans)
+ * - Construit un profil enrichi
+ * - Tente de générer le programme via IA (LLM)
+ * - Si IA KO ou pas de clé → fallback sur le moteur “béton”
+ */
+export async function generateProgrammeFromAnswers(
+  ans: Record<string, any>
+): Promise<{ sessions: AiSession[] }> {
   const profile = buildProfileFromAnswers(ans);
 
   // Lecture “souple” des colonnes D..J (avec fallback col_D..col_J si pas d’en-têtes)
@@ -469,7 +478,7 @@ export function generateProgrammeFromAnswers(ans: Record<string, any>): { sessio
   const equipItems =
     splitList(ans["equipItems"] ?? ans["équipements"] ?? ans["equipements"] ?? ans["col_J"]) || undefined;
 
-  // Payload enrichi pour le moteur “béton”
+  // Payload enrichi pour le moteur / IA
   const enriched = {
     prenom: profile.prenom,
     age: profile.age,
@@ -486,10 +495,26 @@ export function generateProgrammeFromAnswers(ans: Record<string, any>): { sessio
   if (process.env.NODE_ENV !== "production") {
     console.log("[ai.ts] availabilityText:", availabilityText);
     console.log("[ai.ts] structuredDays:", structuredDays, "inferred:", inferred, "=> maxSessions:", maxSessions);
+    console.log("[ai.ts] enriched profile for IA:", enriched);
   }
 
-  // maxSessions = 1..6 (7 est clampé à 6 par design UI)
-  return planProgrammeFromProfile(enriched, { maxSessions });
+  // 🔹 1) Tentative IA (LLM) si clé dispo
+  if (process.env.OPENAI_API_KEY) {
+    try {
+      const sessionsFromIA = await generateProgrammeWithLLM(enriched, {
+        maxSessions,
+      });
+      return { sessions: sessionsFromIA };
+    } catch (err) {
+      if (process.env.NODE_ENV !== "production") {
+        console.error("[ai.ts] Erreur IA, fallback sur moteur béton:", err);
+      }
+    }
+  }
+
+  // 🔹 2) Fallback: moteur existant “béton”
+  const { sessions } = planProgrammeFromProfile(enriched, { maxSessions });
+  return { sessions };
 }
 
 // 4) Sessions “stockées” (stub) — ici on retourne vide pour laisser la génération locale prendre le relais
