@@ -34,7 +34,6 @@ export const authOptions: NextAuthOptions = {
       authorization: {
         url: "https://accounts.spotify.com/authorize",
         params: {
-          // Ajout des scopes playback:
           scope: [
             "user-read-email",
             "user-read-private",
@@ -42,9 +41,9 @@ export const authOptions: NextAuthOptions = {
             "streaming",
             "user-modify-playback-state",
             "user-read-playback-state",
+            "user-library-read", // ✅ titres likés
           ].join(" "),
-          // Décommente 1x pour forcer l’écran de consentement
-          // show_dialog: true,
+          // show_dialog: true, // à décommenter une fois si tu veux forcer le consentement
         },
       },
     }),
@@ -57,17 +56,20 @@ export const authOptions: NextAuthOptions = {
           typeof (account as any).expires_at === "number"
             ? (account as any).expires_at * 1000
             : Date.now() + Number((account as any).expires_in ?? 3600) * 1000;
+
         (token as any).accessToken = (account as any).access_token;
         (token as any).refreshToken = (account as any).refresh_token ?? (token as any).refreshToken;
         (token as any).expiresAt = expiresAt;
         return token;
       }
+
       const exp =
         typeof (token as any).expiresAt === "number"
           ? (token as any).expiresAt
           : (token as any).expiresAt
           ? Number((token as any).expiresAt)
           : 0;
+
       if (exp && Date.now() > exp - 60_000 && (token as any).refreshToken) {
         try {
           const r = await refreshSpotifyToken((token as any).refreshToken as string);
@@ -80,6 +82,7 @@ export const authOptions: NextAuthOptions = {
           (token as any).expiresAt = undefined;
         }
       }
+
       return token;
     },
     async session({ session, token }) {
@@ -88,3 +91,4 @@ export const authOptions: NextAuthOptions = {
     },
   },
 };
+
