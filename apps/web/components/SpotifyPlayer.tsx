@@ -5,8 +5,8 @@ import { useSession } from "next-auth/react";
 declare global {
   interface Window {
     onSpotifyWebPlaybackSDKReady?: () => void;
-    Spotify?: any;               // optionnel
-    __sp_player?: any | null;    // ⬅️ plus de Spotify.Player ici
+    Spotify?: any;
+    __sp_player?: any | null;
     __sp_deviceId?: string | null;
   }
 }
@@ -72,7 +72,6 @@ export default function SpotifyPlayer() {
   function initPlayer() {
     if (!token || !window.Spotify) return;
 
-    // 🔁 Réutiliser un singleton pour laisser la musique continuer entre pages
     if (window.__sp_player) {
       playerRef.current = window.__sp_player;
       if (window.__sp_deviceId) setDeviceId(window.__sp_deviceId);
@@ -125,7 +124,6 @@ export default function SpotifyPlayer() {
       window.onSpotifyWebPlaybackSDKReady = () => startInit();
     }
 
-    // Pas de disconnect à l'unmount -> la musique continue
     return () => {};
   }, [status, token]);
 
@@ -170,11 +168,11 @@ export default function SpotifyPlayer() {
       {!ready && <p className="text-sm" style={{color:"var(--muted)"}}>Initialisation du player…</p>}
       {err && <p className="text-sm" style={{color:"#dc2626"}}>Erreur: {String(err)}</p>}
 
-      {/* En lecture */}
       <div
         className="flex items-center gap-6 rounded-[14px]"
         style={{ background:"var(--bg)", border:"1px solid rgba(0,0,0,.08)", boxShadow:"var(--shadow)", padding:"22px" }}
       >
+        {/* Jaquette */}
         <div
           style={{
             width: 88, height: 88, borderRadius: "12px",
@@ -183,24 +181,33 @@ export default function SpotifyPlayer() {
           }}
         >
           {now?.image ? (
-            <img src={now.image} alt="" width={88} height={88} style={{width:"100%",height:"100%",objectFit:"cover"}} />
+            <img
+              src={now.image}
+              alt=""
+              width={88}
+              height={88}
+              style={{width:"100%",height:"100%",objectFit:"cover"}}
+            />
           ) : null}
         </div>
 
+        {/* Texte simplifié (plus de titre / appareil) */}
         <div className="min-w-0 flex-1 space-y-2">
           <div className="truncate" style={{fontWeight:700, fontSize:"1.05rem"}}>
-            {now?.name || "Rien en lecture"}
+            {paused ? "En pause" : "Lecture en cours"}
           </div>
           <div className="truncate" style={{color:"var(--muted)", fontSize:".95rem"}}>
-            {now?.artists || (paused ? "En pause" : "Prêt")}
+            Spotify
           </div>
-          {deviceName && (
+          {/* ligne appareil supprimée */}
+          {/* {deviceName && (
             <div className="text-xs" style={{color:"var(--muted)"}}>
               Appareil : {deviceName}
             </div>
-          )}
+          )} */}
         </div>
 
+        {/* Contrôles */}
         <div className="flex items-center gap-3">
           <button onClick={prev} className="icon-btn" aria-label="Piste précédente" title="Piste précédente">
             <svg className="icon" viewBox="0 0 24 24">
@@ -226,13 +233,12 @@ export default function SpotifyPlayer() {
         </div>
       </div>
 
-      {/* Contrôle du device Web */}
       {/* Lancer la musique */}
-<div className="flex flex-wrap gap-4">
-  <button disabled={!ready} onClick={start} className="btn-dash">
-    Lancer la musique
-  </button>
-</div>
+      <div className="flex flex-wrap gap-4">
+        <button disabled={!ready} onClick={start} className="btn-dash">
+          Lancer la musique
+        </button>
+      </div>
     </section>
   );
 }
