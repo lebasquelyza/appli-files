@@ -297,6 +297,7 @@ function TabataTimerCompact() {
     const t = setInterval(() => {
       setRemaining((r) => {
         const next = r - 1;
+
         if (r > 1) return next;
 
         void chimeStrong();
@@ -537,7 +538,11 @@ type Track = {
   uri: string;
 };
 
-async function spFetch<T = any>(token: string, path: string, init: RequestInit = {}): Promise<T | null> {
+async function spFetch<T = any>(
+  token: string,
+  path: string,
+  init: RequestInit = {}
+): Promise<T | null> {
   const res = await fetch(`https://api.spotify.com/v1${path}`, {
     ...init,
     headers: {
@@ -547,7 +552,9 @@ async function spFetch<T = any>(token: string, path: string, init: RequestInit =
     },
   });
   if (res.status === 204) return null;
-  if (!res.ok) throw new Error(`Spotify API ${res.status} ${path}`);
+  if (!res.ok) {
+    throw new Error(`Spotify API ${res.status} ${path}`);
+  }
   return res.json();
 }
 
@@ -592,7 +599,8 @@ function SpotifyLibrary() {
 
   const playTrack = async (uri: string) => {
     if (!token) return;
-    const deviceId = typeof window !== "undefined" ? window.__sp_deviceId : null;
+    const deviceId =
+      typeof window !== "undefined" ? (window as any).__sp_deviceId : null;
     if (!deviceId) {
       setError("Player Spotify non prêt. Lance le lecteur d’abord.");
       return;
@@ -639,6 +647,72 @@ function SpotifyLibrary() {
     );
   }
 
+  const renderTrackRow = (t: Track) => (
+    <li
+      key={t.id}
+      className="flex items-center gap-3 rounded-[10px] border px-2 py-2"
+      style={{
+        borderColor: "rgba(0,0,0,.06)",
+        background: "var(--bg)",
+      }}
+    >
+      {t.image && (
+        <img
+          src={t.image}
+          alt=""
+          width={44}
+          height={44}
+          style={{
+            borderRadius: 8,
+            flexShrink: 0,
+            objectFit: "cover",
+          }}
+        />
+      )}
+
+      <div className="min-w-0 flex-1">
+        <div
+          className="truncate"
+          style={{
+            fontSize: 13,
+            fontWeight: 600,
+            lineHeight: 1.2,
+          }}
+        >
+          {t.name}
+        </div>
+        <div
+          className="truncate"
+          style={{
+            fontSize: 11,
+            color: "var(--muted)",
+            lineHeight: 1.2,
+            marginTop: 2,
+          }}
+        >
+          {t.artists}
+        </div>
+      </div>
+
+      <button
+        className="flex-shrink-0"
+        style={{
+          borderRadius: 999,
+          padding: "4px 10px",
+          fontSize: 11,
+          fontWeight: 600,
+          background: "#16a34a",
+          color: "#fff",
+          border: "none",
+          lineHeight: 1,
+        }}
+        onClick={() => playTrack(t.uri)}
+      >
+        Lire
+      </button>
+    </li>
+  );
+
   return (
     <section className="space-y-6">
       {error && (
@@ -658,38 +732,7 @@ function SpotifyLibrary() {
             Aucun titre liké trouvé.
           </p>
         ) : (
-          <ul className="space-y-2">
-            {liked.map((t) => (
-              <li
-                key={t.id}
-                className="flex items-center gap-3 rounded-[10px] border px-3 py-2"
-                style={{ borderColor: "rgba(0,0,0,.06)", background: "var(--bg)" }}
-              >
-                {t.image && (
-                  <img
-                    src={t.image}
-                    alt=""
-                    width={40}
-                    height={40}
-                    style={{ borderRadius: 6, flexShrink: 0, objectFit: "cover" }}
-                  />
-                )}
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-medium">{t.name}</div>
-                  <div className="truncate text-xs" style={{ color: "var(--muted)" }}>
-                    {t.artists}
-                  </div>
-                </div>
-                <button
-                  className="btn btn-dash"
-                  style={{ fontSize: 11, padding: "4px 8px" }}
-                  onClick={() => playTrack(t.uri)}
-                >
-                  Lire
-                </button>
-              </li>
-            ))}
-          </ul>
+          <ul className="space-y-2">{liked.map(renderTrackRow)}</ul>
         )}
       </div>
 
@@ -713,38 +756,7 @@ function SpotifyLibrary() {
             Recherche en cours…
           </p>
         ) : results.length > 0 ? (
-          <ul className="space-y-2">
-            {results.map((t) => (
-              <li
-                key={t.id}
-                className="flex items-center gap-3 rounded-[10px] border px-3 py-2"
-                style={{ borderColor: "rgba(0,0,0,.06)", background: "var(--bg)" }}
-              >
-                {t.image && (
-                  <img
-                    src={t.image}
-                    alt=""
-                    width={40}
-                    height={40}
-                    style={{ borderRadius: 6, flexShrink: 0, objectFit: "cover" }}
-                  />
-                )}
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-medium">{t.name}</div>
-                  <div className="truncate text-xs" style={{ color: "var(--muted)" }}>
-                    {t.artists}
-                  </div>
-                </div>
-                <button
-                  className="btn btn-dash"
-                  style={{ fontSize: 11, padding: "4px 8px" }}
-                  onClick={() => playTrack(t.uri)}
-                >
-                  Lire
-                </button>
-              </li>
-            ))}
-          </ul>
+          <ul className="space-y-2">{results.map(renderTrackRow)}</ul>
         ) : null}
       </div>
     </section>
