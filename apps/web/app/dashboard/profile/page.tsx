@@ -11,7 +11,6 @@ import {
   type WorkoutType,
 } from "../../../lib/coach/ai";
 
-import { planProgrammeFromEmail } from "../../../lib/coach/beton";
 import GenerateClient from "./GenerateClient";
 
 const QUESTIONNAIRE_BASE =
@@ -265,12 +264,14 @@ async function loadInitialSessions(email: string, equipParam?: string) {
       : "";
 
   try {
+    // Cas où on force "none" ou "full"
     if (equip === "none" || equip === "full") {
       const answers = await getAnswersForEmail(email, { fresh: true });
       if (!answers) return [];
       (answers as any).equipLevel = equip === "none" ? "none" : "full";
-      const prog = generateProgrammeFromAnswers(answers);
-      const sessions: AiSessionT[] = prog.sessions || [];
+
+      const { sessions: rawSessions } = await generateProgrammeFromAnswers(answers);
+      const sessions: AiSessionT[] = rawSessions || [];
 
       // Applique ≥4 exos dans les deux modes
       const finalSessions = sessions.map((s) => {
@@ -290,8 +291,12 @@ async function loadInitialSessions(email: string, equipParam?: string) {
       return finalSessions;
     }
 
-    // Par défaut : logique existante (avec matériel), mais on sécurise ≥4 exos pour l'affichage
-    const { sessions } = await planProgrammeFromEmail(email);
+    // Par défaut : on lit les réponses et on laisse l’IA (generateProgrammeFromAnswers) gérer,
+    // puis on sécurise ≥4 exos pour l'affichage.
+    const answers = await getAnswersForEmail(email, { fresh: true });
+    if (!answers) return [];
+
+    const { sessions } = await generateProgrammeFromAnswers(answers);
     const baseSessions: AiSessionT[] = sessions || [];
     const safe = baseSessions.map((s) => {
       const type = (s.type || "muscu") as WorkoutType;
@@ -299,15 +304,7 @@ async function loadInitialSessions(email: string, equipParam?: string) {
       return { ...s, exercises: ensured };
     });
 
-    // on recharge les réponses pour le log combiné (si dispo)
-    let answersForLog: any = null;
-    try {
-      answersForLog = await getAnswersForEmail(email, { fresh: true });
-    } catch {
-      // silencieux
-    }
-
-    await logProgrammeInsightToSupabase(email, answersForLog, safe);
+    await logProgrammeInsightToSupabase(email, answers, safe);
 
     return safe;
   } catch {
