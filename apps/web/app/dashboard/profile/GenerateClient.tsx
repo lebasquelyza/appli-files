@@ -246,7 +246,8 @@ export default function GenerateClient({
         </div>
       )}
 
-      {!loading && sessions && sessions.length > 0 && (
+      {/* 🔁 On laisse la liste visible même pendant le chargement */}
+      {sessions && sessions.length > 0 && (
         <ul className="space-y-2 list-none pl-0">
           {sessions.map((s, i) => {
             const cleanTitle = stripVariantLetter(s.title);
@@ -269,13 +270,14 @@ export default function GenerateClient({
                   padding: 12,
                   border: "1px solid #e5e7eb",
                   borderRadius: 8,
+                  opacity: loading ? 0.8 : 1,
                 }}
               >
                 <div className="flex items-center justify-between gap-3">
                   {/* Zone cliquable pour ouvrir la séance */}
                   <div
-                    onClick={() => router.push(href)}
-                    className="cursor-pointer"
+                    onClick={() => !loading && router.push(href)}
+                    className={loading ? "cursor-not-allowed" : "cursor-pointer"}
                     style={{ minWidth: 0 }}
                   >
                     <div className="font-medium text-sm truncate">
@@ -314,11 +316,13 @@ export default function GenerateClient({
                       className="inline-flex items-center rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-semibold text-neutral-900 hover:border-neutral-400"
                       onClick={(e) => {
                         e.stopPropagation();
+                        if (loading) return;
                         setOpenIdx(openIdx === i ? null : i);
                       }}
                       aria-haspopup="menu"
                       aria-expanded={openIdx === i}
                       title="Enregistrer cette séance"
+                      disabled={loading}
                     >
                       Enregistrer
                     </button>
@@ -375,6 +379,7 @@ export default function GenerateClient({
         </ul>
       )}
 
+      {/* Si vraiment aucune séance (ex: première fois / erreur / pas de data) */}
       {!loading && (!sessions || sessions.length === 0) && (
         <div className="text-sm text-gray-500">
           Aucune séance disponible pour le moment.
@@ -383,3 +388,4 @@ export default function GenerateClient({
     </section>
   );
 }
+
