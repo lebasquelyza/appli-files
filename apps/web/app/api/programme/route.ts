@@ -1,7 +1,10 @@
 // apps/web/app/api/programme/route.ts
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { planProgrammeFromEmail } from "../../../lib/coach/beton";
+import {
+  getAnswersForEmail,
+  generateProgrammeFromAnswers,
+} from "../../../lib/coach/ai";
 
 export const runtime = "nodejs";
 
@@ -10,19 +13,34 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const email = String(
       searchParams.get("email") || cookies().get("app_email")?.value || ""
-    ).trim().toLowerCase();
+    )
+      .trim()
+      .toLowerCase();
 
     if (!email) {
-      return NextResponse.json({ sessions: [], error: "Aucun email." }, { status: 200 });
+      return NextResponse.json(
+        { sessions: [], error: "Aucun email." },
+        { status: 200 }
+      );
     }
 
-    // 🔹 Génération IA côté serveur à partir du Google Sheet
-    const { sessions: rawSessions } = await planProgrammeFromEmail(email);
+    // 1) Récupération des réponses depuis le Google Sheet
+    const answers = await getAnswersForEmail(email, { fresh: true });
 
-    // 🔹 Sécurité typage — on garantit que date est toujours une string, jamais null
+    if (!answers) {
+      return NextResponse.json(
+        { sessions: [], error: "Aucune réponse trouvée pour cet email." },
+        { status: 200 }
+      );
+    }
+
+    // 2) Génération du programme via IA (LLM) + fallback “béton”
+    const { sessions: rawSessions } = await generateProgrammeFromAnswers(answers);
+
+    // 3) Normalisation de base (sécurité)
     const sessions = (rawSessions || []).map((s, i) => ({
       ...s,
-      date: s.date || "", // ✅ TS: string au lieu de null
+      date: s.date || "",
       id: s.id || `session-${i + 1}`,
       title: s.title || `Séance ${i + 1}`,
     }));
@@ -36,3 +54,4 @@ export async function GET(req: Request) {
     );
   }
 }
+
