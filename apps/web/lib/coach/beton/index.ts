@@ -1,3 +1,4 @@
+//apps/web/lib/coach/beton/index.ts
 import type {
   AiSession as AiSessionT,
   WorkoutType,
@@ -377,14 +378,28 @@ function inferMaxSessions(text?: string | null): number | undefined {
   if (!text) return undefined;
   const s = String(text).toLowerCase();
 
+  // On commence par extraire les jours nommés
+  const days = extractDaysList(s);
+  const hasEvening = /\bsoir[ée]e?s?\b/.test(s); // "soirée", "soirées", "soir"
+
+  // 🧠 RÈGLE SPÉCIALE :
+  // Si 2+ jours nommés ET mention de "soirée(s)" → on considère que la personne est très dispo
+  // Exemple : "Lundi, mardi matin sinon en soirées" → 2 jours + "soirées" → 6 séances
+  if (hasEvening && days.length >= 2) {
+    return 6;
+  }
+
+  // Nombre explicite : "3x / semaine", "4 jours", etc.
   const numMatch = s.match(/\b(\d{1,2})\s*(x|fois|j|jrs|jours?)(\s*(par|\/)\s*(semaine|sem))?\b/);
   if (numMatch) {
     const n = parseInt(numMatch[1], 10);
     if (!Number.isNaN(n)) return clamp(n, 1, 6);
   }
+
+  // "toute la semaine", "tous les jours"
   if (/toute?\s+la\s+semaine|tous?\s+les\s+jours/.test(s)) return 6;
 
-  const days = extractDaysList(s);
+  // Jours nommés → nombre = nb de jours
   if (days.length) return clamp(days.length, 1, 6);
 
   return undefined;
