@@ -227,9 +227,12 @@ async function loadData(
     if (equipParam === "none") (answers as any).equipLevel = "none";
     if (equipParam === "full") (answers as any).equipLevel = "full";
 
-    const regenProg = generateProgrammeFromAnswers(answers);
-    const regen = regenProg.sessions || [];
-
+const regenProg = await generateProgrammeFromAnswers(answers);
+const regen = regenProg.sessions || [];
+// ou équivalent :
+/*
+const { sessions: regen = [] } = await generateProgrammeFromAnswers(answers);
+*/
     // Match par title d'abord, sinon par id
     base = (qpTitle && regen.find((s) => stripVariantLetter(s.title) === stripVariantLetter(qpTitle))) || undefined;
     if (!base) base = regen.find((s) => s.id === id);
