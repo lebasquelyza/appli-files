@@ -1,4 +1,5 @@
 "use client";
+
 import { useEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 
@@ -18,7 +19,7 @@ async function spFetch<T = any>(token: string, path: string, init: RequestInit =
   const res = await fetch(`https://api.spotify.com/v1${path}`, {
     ...init,
     headers: {
-      "Authorization": `Bearer ${token}`,
+      Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
       ...(init.headers || {}),
     },
@@ -40,7 +41,7 @@ export default function SpotifyPlayer() {
   const [err, setErr] = useState<string | null>(null);
   const [paused, setPaused] = useState(true);
   const [now, setNow] = useState<NowPlaying | null>(null);
-  const [deviceName, setDeviceName] = useState<string | null>(null);
+  const [deviceName, setDeviceName] = useState<string | null>(null); // on peut le garder si tu veux le réutiliser plus tard
 
   function readState(state: any) {
     if (!state) return;
@@ -72,6 +73,7 @@ export default function SpotifyPlayer() {
   function initPlayer() {
     if (!token || !window.Spotify) return;
 
+    // Réutiliser le player existant pour ne pas couper la musique
     if (window.__sp_player) {
       playerRef.current = window.__sp_player;
       if (window.__sp_deviceId) setDeviceId(window.__sp_deviceId);
@@ -124,15 +126,20 @@ export default function SpotifyPlayer() {
       window.onSpotifyWebPlaybackSDKReady = () => startInit();
     }
 
+    // Pas de disconnect: on laisse la musique continuer
     return () => {};
   }, [status, token]);
 
-  // Poll léger pour rester sync si lecture change ailleurs
+  // Poll pour rester sync si la lecture change ailleurs
   useEffect(() => {
     if (!token) return;
     void refreshFromRest();
-    pollRef.current = window.setInterval(() => { void refreshFromRest(); }, 6000);
-    const onVis = () => { if (!document.hidden) void refreshFromRest(); };
+    pollRef.current = window.setInterval(() => {
+      void refreshFromRest();
+    }, 6000);
+    const onVis = () => {
+      if (!document.hidden) void refreshFromRest();
+    };
     document.addEventListener("visibilitychange", onVis);
     return () => {
       if (pollRef.current) window.clearInterval(pollRef.current);
@@ -141,43 +148,89 @@ export default function SpotifyPlayer() {
     };
   }, [token]);
 
-  // === Actions ===
+  // Actions
   const controlHere = async () => {
     setErr(null);
-    if (!deviceId || !token) { setErr("Player non prêt (deviceId/token)"); return; }
+    if (!deviceId || !token) {
+      setErr("Player non prêt (deviceId/token)");
+      return;
+    }
     try {
       await spFetch(token, "/me/player", {
         method: "PUT",
         body: JSON.stringify({ device_ids: [deviceId], play: true }),
       });
-      setTimeout(() => { void refreshFromRest(); }, 700);
+      setTimeout(() => {
+        void refreshFromRest();
+      }, 700);
     } catch (e: any) {
       setErr(e?.message ?? "Transfer error");
     }
   };
 
-  const start = async () => { await controlHere(); };
-  const toggle = async () => { try { await playerRef.current?.togglePlay(); } catch {} setTimeout(() => { void refreshFromRest(); }, 500); };
-  const next = async () => { try { await playerRef.current?.nextTrack(); } catch {} setTimeout(() => { void refreshFromRest(); }, 500); };
-  const prev = async () => { try { await playerRef.current?.previousTrack(); } catch {} setTimeout(() => { void refreshFromRest(); }, 500); };
+  const start = async () => {
+    await controlHere();
+  };
+  const toggle = async () => {
+    try {
+      await playerRef.current?.togglePlay();
+    } catch {}
+    setTimeout(() => {
+      void refreshFromRest();
+    }, 500);
+  };
+  const next = async () => {
+    try {
+      await playerRef.current?.nextTrack();
+    } catch {}
+    setTimeout(() => {
+      void refreshFromRest();
+    }, 500);
+  };
+  const prev = async () => {
+    try {
+      await playerRef.current?.previousTrack();
+    } catch {}
+    setTimeout(() => {
+      void refreshFromRest();
+    }, 500);
+  };
 
   if (status !== "authenticated") return null;
 
   return (
     <section className="space-y-6">
-      {!ready && <p className="text-sm" style={{color:"var(--muted)"}}>Initialisation du player…</p>}
-      {err && <p className="text-sm" style={{color:"#dc2626"}}>Erreur: {String(err)}</p>}
+      {!ready && (
+        <p className="text-sm" style={{ color: "var(--muted)" }}>
+          Initialisation du player…
+        </p>
+      )}
+      {err && (
+        <p className="text-sm" style={{ color: "#dc2626" }}>
+          Erreur: {String(err)}
+        </p>
+      )}
 
+      {/* Bloc player */}
       <div
         className="flex items-center gap-6 rounded-[14px]"
-        style={{ background:"var(--bg)", border:"1px solid rgba(0,0,0,.08)", boxShadow:"var(--shadow)", padding:"22px" }}
+        style={{
+          background: "var(--bg)",
+          border: "1px solid rgba(0,0,0,.08)",
+          boxShadow: "var(--shadow)",
+          padding: "22px",
+        }}
       >
         {/* Jaquette */}
         <div
           style={{
-            width: 88, height: 88, borderRadius: "12px",
-            background: "var(--panel)", border: "1px solid rgba(0,0,0,.06)",
-            overflow: "hidden", flex: "0 0 auto"
+            width: 88,
+            height: 88,
+            borderRadius: "12px",
+            background: "var(--panel)",
+            border: "1px solid rgba(0,0,0,.06)",
+            overflow: "hidden",
+            flex: "0 0 auto",
           }}
         >
           {now?.image ? (
@@ -186,54 +239,54 @@ export default function SpotifyPlayer() {
               alt=""
               width={88}
               height={88}
-              style={{width:"100%",height:"100%",objectFit:"cover"}}
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
             />
           ) : null}
         </div>
 
-        {/* Texte simplifié (plus de titre / appareil) */}
+        {/* Infos titre (sans “Appareil : …”) */}
         <div className="min-w-0 flex-1 space-y-2">
-          <div className="truncate" style={{fontWeight:700, fontSize:"1.05rem"}}>
-            {paused ? "En pause" : "Lecture en cours"}
+          <div className="truncate" style={{ fontWeight: 700, fontSize: "1.05rem" }}>
+            {now?.name || (paused ? "En pause" : "Lecture en cours")}
           </div>
-          <div className="truncate" style={{color:"var(--muted)", fontSize:".95rem"}}>
-            Spotify
+          <div className="truncate" style={{ color: "var(--muted)", fontSize: ".95rem" }}>
+            {now?.artists || "Spotify"}
           </div>
-          {/* ligne appareil supprimée */}
-          {/* {deviceName && (
-            <div className="text-xs" style={{color:"var(--muted)"}}>
-              Appareil : {deviceName}
-            </div>
-          )} */}
+          {/* LIGNE APPAREIL SUPPRIMÉE */}
         </div>
 
         {/* Contrôles */}
         <div className="flex items-center gap-3">
           <button onClick={prev} className="icon-btn" aria-label="Piste précédente" title="Piste précédente">
             <svg className="icon" viewBox="0 0 24 24">
-              <path d="M18 6h-2v12h2V6zM14.5 12L6 18V6l8.5 6z"/>
+              <path d="M18 6h-2v12h2V6zM14.5 12L6 18V6l8.5 6z" />
             </svg>
           </button>
-          <button onClick={toggle} className="icon-btn" aria-label={paused ? "Lecture" : "Pause"} title={paused ? "Lecture" : "Pause"}>
+          <button
+            onClick={toggle}
+            className="icon-btn"
+            aria-label={paused ? "Lecture" : "Pause"}
+            title={paused ? "Lecture" : "Pause"}
+          >
             {paused ? (
               <svg className="icon" viewBox="0 0 24 24">
-                <path d="M8 5v14l11-7z"/>
+                <path d="M8 5v14l11-7z" />
               </svg>
             ) : (
               <svg className="icon" viewBox="0 0 24 24">
-                <path d="M6 5h4v14H6zM14 5h4v14h-4z"/>
+                <path d="M6 5h4v14H6zM14 5h4v14h-4z" />
               </svg>
             )}
           </button>
           <button onClick={next} className="icon-btn" aria-label="Piste suivante" title="Piste suivante">
             <svg className="icon" viewBox="0 0 24 24">
-              <path d="M6 6h2v12H6zM9.5 12l8.5 6V6l-8.5 6z"/>
+              <path d="M6 6h2v12H6zM9.5 12l8.5 6V6l-8.5 6z" />
             </svg>
           </button>
         </div>
       </div>
 
-      {/* Lancer la musique */}
+      {/* Lancer la musique sur ce device */}
       <div className="flex flex-wrap gap-4">
         <button disabled={!ready} onClick={start} className="btn-dash">
           Lancer la musique
@@ -242,3 +295,4 @@ export default function SpotifyPlayer() {
     </section>
   );
 }
+
