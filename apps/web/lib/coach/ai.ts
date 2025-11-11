@@ -49,7 +49,9 @@ const SHEET_GID = process.env.SHEET_GID || "";
 const SHEET_RANGE = process.env.SHEET_RANGE || ""; // ex: "A:Z" ou "A1:K999"
 
 function sheetCsvUrl(cacheBust?: boolean): string {
-  const base = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(SHEET_ID)}/export?format=csv`;
+  const base = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(
+    SHEET_ID
+  )}/export?format=csv`;
   const qp = new URLSearchParams();
   if (SHEET_GID) qp.set("gid", SHEET_GID);
   if (SHEET_RANGE) qp.set("range", SHEET_RANGE);
@@ -71,10 +73,20 @@ declare global {
 // --- CSV parsing (sans dépendance) ---
 function parseCSV(text: string): string[][] {
   const rows: string[][] = [];
-  let i = 0, cur: string[] = [], cell = "", inQuotes = false;
+  let i = 0,
+    cur: string[] = [],
+    cell = "",
+    inQuotes = false;
 
-  function pushCell() { cur.push(cell); cell = ""; }
-  function pushRow()  { pushCell(); rows.push(cur); cur = []; }
+  function pushCell() {
+    cur.push(cell);
+    cell = "";
+  }
+  function pushRow() {
+    pushCell();
+    rows.push(cur);
+    cur = [];
+  }
 
   while (i < text.length) {
     const ch = text[i];
@@ -82,17 +94,41 @@ function parseCSV(text: string): string[][] {
     if (inQuotes) {
       if (ch === '"') {
         const next = text[i + 1];
-        if (next === '"') { cell += '"'; i += 2; continue; }
-        inQuotes = false; i++; continue;
+        if (next === '"') {
+          cell += '"';
+          i += 2;
+          continue;
+        }
+        inQuotes = false;
+        i++;
+        continue;
       }
-      cell += ch; i++; continue;
+      cell += ch;
+      i++;
+      continue;
     }
 
-    if (ch === '"') { inQuotes = true; i++; continue; }
-    if (ch === ",") { pushCell(); i++; continue; }
-    if (ch === "\r") { i++; continue; }
-    if (ch === "\n") { pushRow(); i++; continue; }
-    cell += ch; i++;
+    if (ch === '"') {
+      inQuotes = true;
+      i++;
+      continue;
+    }
+    if (ch === ",") {
+      pushCell();
+      i++;
+      continue;
+    }
+    if (ch === "\r") {
+      i++;
+      continue;
+    }
+    if (ch === "\n") {
+      pushRow();
+      i++;
+      continue;
+    }
+    cell += ch;
+    i++;
   }
   if (cell.length > 0 || cur.length > 0) pushRow();
   return rows;
@@ -123,7 +159,13 @@ async function fetchSheetCSV(fresh = false): Promise<string[][]> {
 type ColIdxMap = { [key: string]: number };
 
 // Par défaut si pas d’en-têtes: A=0, B=1, C=2, D=3, E=4, F=5, G=6, H=7, I=8, J=9, K=10
-const DEFAULT_IDX: ColIdxMap = { prenom: 1, age: 2, objectif: 6, email: 9, ts: 0 };
+const DEFAULT_IDX: ColIdxMap = {
+  prenom: 1,
+  age: 2,
+  objectif: 6,
+  email: 9,
+  ts: 0,
+};
 
 function toIndexFromLetter(letter: string): number {
   let idx = 0;
@@ -138,7 +180,13 @@ function detectIndexes(rows: string[][]): ColIdxMap {
   const map: ColIdxMap = { ...DEFAULT_IDX };
   const find = (keys: string[]) => header.findIndex((h) => keys.includes(h));
 
-  const emailIdx = find(["email", "e-mail", "mail", "adresse e-mail", "adresse email"]);
+  const emailIdx = find([
+    "email",
+    "e-mail",
+    "mail",
+    "adresse e-mail",
+    "adresse email",
+  ]);
   if (emailIdx >= 0) map.email = emailIdx;
 
   const prenomIdx = find(["prenom", "prénom", "first name", "firstname"]);
@@ -181,13 +229,15 @@ function detectIndexes(rows: string[][]): ColIdxMap {
 // --- Normalisation “objectif” -> clé interne
 function normalizeGoal(input?: string): string {
   const s = String(input || "")
-    .normalize("NFD").replace(/\p{Diacritic}/gu, "")
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
     .toLowerCase()
     .trim();
 
   if (!s) return "";
 
-  if (/(hypertroph|esthetique|prise de muscle|prise de masse)/.test(s)) return "hypertrophy";
+  if (/(hypertroph|esthetique|prise de muscle|prise de masse)/.test(s))
+    return "hypertrophy";
   if (/(perte|seche|gras|minceur|weight loss|fat)/.test(s)) return "fatloss";
   if (/(force|strength)/.test(s)) return "strength";
   if (/(endurance|cardio|z2|course|velo|vélo|run)/.test(s)) return "endurance";
@@ -205,10 +255,12 @@ function parseTimestampLoose(input: any): number {
   if (!Number.isNaN(t)) return t;
 
   // 2) Formats FR : "DD/MM/YYYY HH:mm[:ss]" ou "DD-MM-YYYY HH:mm"
-  const m = s.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+  const m = s.match(
+    /^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/
+  );
   if (m) {
     const [, d, mo, y, hh = "0", mm = "0", ss = "0"] = m;
-    const Y = Number((y.length === 2 ? "20" + y : y));
+    const Y = Number(y.length === 2 ? "20" + y : y);
     const date = new Date(
       Y,
       Number(mo) - 1,
@@ -274,15 +326,15 @@ export async function getAnswersForEmail(
     }
   } else {
     // ⚙️ Fallback sans en-têtes : on expose B..K pour nos usages
-    obj["col_B"] = latest.row[1] || "";  // Prenom
-    obj["col_C"] = latest.row[2] || "";  // Age
-    obj["col_D"] = latest.row[3] || "";  // Niveau
-    obj["col_E"] = latest.row[4] || "";  // Matériel (none/limited/full)
-    obj["col_F"] = latest.row[5] || "";  // Durée (min)
-    obj["col_G"] = latest.row[6] || "";  // Objectif (libellé)
-    obj["col_H"] = latest.row[7] || "";  // Dispo (jours / semaine)
-    obj["col_I"] = latest.row[8] || "";  // Ancienne: Jours / semaine
-    obj["col_J"] = latest.row[9] || "";  // Équipements détaillés (liste)
+    obj["col_B"] = latest.row[1] || ""; // Prenom
+    obj["col_C"] = latest.row[2] || ""; // Age
+    obj["col_D"] = latest.row[3] || ""; // Niveau
+    obj["col_E"] = latest.row[4] || ""; // Matériel (none/limited/full)
+    obj["col_F"] = latest.row[5] || ""; // Durée (min)
+    obj["col_G"] = latest.row[6] || ""; // Objectif (libellé)
+    obj["col_H"] = latest.row[7] || ""; // Dispo (jours / semaine)
+    obj["col_I"] = latest.row[8] || ""; // Ancienne: Jours / semaine
+    obj["col_J"] = latest.row[9] || ""; // Équipements détaillés (liste)
     obj["col_K"] = latest.row[10] || ""; // Email (si c'est là)
     obj["email"] = latest.row[idx.email] || emailLc;
     obj["ts"] = latest.row[idx.ts] || "";
@@ -298,7 +350,12 @@ export function buildProfileFromAnswers(ans: Record<string, any>): Profile {
   if (!ans) return {};
 
   const prenom =
-    ans["prenom"] ?? ans["prénom"] ?? ans["first name"] ?? ans["firstname"] ?? ans["col_B"] ?? "";
+    ans["prenom"] ??
+    ans["prénom"] ??
+    ans["first name"] ??
+    ans["firstname"] ??
+    ans["col_B"] ??
+    "";
 
   const ageRaw = ans["age"] ?? ans["âge"] ?? ans["col_C"] ?? "";
 
@@ -307,7 +364,9 @@ export function buildProfileFromAnswers(ans: Record<string, any>): Profile {
   const email = ans["email"] ?? ans["mail"] ?? ans["e-mail"] ?? ans["col_K"] ?? "";
 
   const age =
-    typeof ageRaw === "number" ? ageRaw : Number(String(ageRaw).replace(/[^\d.-]/g, ""));
+    typeof ageRaw === "number"
+      ? ageRaw
+      : Number(String(ageRaw).replace(/[^\d.-]/g, ""));
   const goal = normalizeGoal(String(objectifBrut));
 
   const profile: Profile = {
@@ -348,14 +407,19 @@ function toNumber(x: any): number | undefined {
 function splitList(s: any): string[] | undefined {
   const txt = String(s || "").trim();
   if (!txt) return undefined;
-  return txt.split(/[;,/|]/).map((t) => t.trim()).filter(Boolean);
+  return txt
+    .split(/[;,/|]/)
+    .map((t) => t.trim())
+    .filter(Boolean);
 }
 
 /* ------------------------------------------------------------------
  * 🔎 Dispo “loose”: détecte aussi les chiffres seuls 1..7 n’importe où
- *   → Priorité à col_H (ta consigne), puis autres champs, puis scan global
+ *   → Priorité à col_H, puis autres champs, puis scan global
  * ------------------------------------------------------------------*/
-function availabilityTextFromAnswersLoose(answers: Record<string, any>): string | undefined {
+function availabilityTextFromAnswersLoose(
+  answers: Record<string, any>
+): string | undefined {
   if (!answers) return undefined;
 
   // On capte: lundi..dimanche, weekend, “5x / 5 fois / 5 jours”, “5”, “3-4 fois”, “week-end”, etc.
@@ -390,11 +454,42 @@ function availabilityTextFromAnswersLoose(answers: Record<string, any>): string 
 
 /** Infère 1..6 séances depuis un texte libre.
  *  - Prend “N x/fois/jours”, “N” tout seul (1..7), “3-4 fois”, “week-end”, jours nommés…
- *  - Range N dans [1..6] (si 7 → 6).
+ *  - RÈGLE SPÉCIALE : si 2+ jours nommés + mention “soirée(s)” → 6
  */
 function inferMaxSessionsFromText(text?: string | null): number | undefined {
   if (!text) return undefined;
   const s = String(text).toLowerCase();
+
+  // On détecte les jours pour combiner avec "soirée(s)"
+  const days = (() => {
+    const out: string[] = [];
+    const push = (d: string) => {
+      if (!out.includes(d)) out.push(d);
+    };
+    if (/week\s*-?\s*end|weekend/.test(s)) {
+      push("samedi");
+      push("dimanche");
+    }
+    for (const d of [
+      "lundi",
+      "mardi",
+      "mercredi",
+      "jeudi",
+      "vendredi",
+      "samedi",
+      "dimanche",
+    ]) {
+      if (new RegExp(`\\b${d}\\b`, "i").test(s)) push(d);
+    }
+    return out;
+  })();
+
+  const hasEvening = /\bsoir[ée]e?s?\b/.test(s);
+
+  // 🧠 RÈGLE spéciale : au moins 2 jours + “soirée(s)” → max
+  if (hasEvening && days.length >= 2) {
+    return 6;
+  }
 
   // ex: "3-4 fois" → prend le plus grand du range
   const range = s.match(/\b([1-7])\s*-\s*([1-7])\b/);
@@ -420,16 +515,7 @@ function inferMaxSessionsFromText(text?: string | null): number | undefined {
   // “toute la semaine” / “tous les jours”
   if (/toute?\s+la\s+semaine|tous?\s+les\s+jours/.test(s)) return 6;
 
-  // Jours nommés + week-end
-  const days = (() => {
-    const out: string[] = [];
-    const push = (d: string) => { if (!out.includes(d)) out.push(d); };
-    if (/week\s*-?\s*end|weekend/.test(s)) { push("samedi"); push("dimanche"); }
-    for (const d of ["lundi","mardi","mercredi","jeudi","vendredi","samedi","dimanche"]) {
-      if (new RegExp(`\\b${d}\\b`, "i").test(s)) push(d);
-    }
-    return out;
-  })();
+  // Jours nommés seuls → nombre = nb de jours (clampé)
   if (days.length) return Math.max(1, Math.min(6, days.length));
 
   return undefined;
@@ -467,14 +553,14 @@ export function generateProgrammeFromAnswers(
     (profile.age && profile.age > 50 ? 35 : undefined) ??
     45;
 
-  // ✅ Ne lit les blessures que sur les champs dédiés (pas col_H)
+  // ✅ Ne lit les blessures que sur les champs dédiés
   const injuries =
     splitList(ans["injuries"] ?? ans["blessures"]) || undefined;
 
   // 🔎 Dispo globale (y compris 1..7 tout seuls) — priorité col_H
   const availabilityText = availabilityTextFromAnswersLoose(ans);
 
-  // 🧠 Inférence 1..6 depuis le texte
+  // 🧠 Inférence 1..6 depuis le texte (avec règle "soirée")
   const inferred = inferMaxSessionsFromText(availabilityText);
 
   // ✅ Sources structurées pour le nombre: col_H prioritaire, puis divers champs, puis inférence, sinon 3
@@ -489,18 +575,25 @@ export function generateProgrammeFromAnswers(
         ans["col_I"]
     );
 
-  const maxSessions = Math.max(1, Math.min(6, structuredDays ?? inferred ?? 3));
+  const maxSessions = Math.max(
+    1,
+    Math.min(6, structuredDays ?? inferred ?? 3)
+  );
 
   const equipItems =
-    splitList(ans["equipItems"] ?? ans["équipements"] ?? ans["equipements"] ?? ans["col_J"]) ||
-    undefined;
+    splitList(
+      ans["equipItems"] ??
+        ans["équipements"] ??
+        ans["equipements"] ??
+        ans["col_J"]
+    ) || undefined;
 
   // Payload enrichi pour le moteur “béton”
   const enriched = {
     prenom: profile.prenom,
     age: profile.age,
     objectif: profile.objectif, // libellé brut -> affichage
-    goal: profile.goal,         // clé normalisée -> logique
+    goal: profile.goal, // clé normalisée -> logique
     equipLevel,
     timePerSession,
     level,
