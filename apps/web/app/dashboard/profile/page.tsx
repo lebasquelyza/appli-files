@@ -17,7 +17,7 @@ import GenerateClient from "./GenerateClient";
 const QUESTIONNAIRE_BASE =
   process.env.FILES_COACHING_QUESTIONNAIRE_BASE || "https://questionnaire.files-coaching.com";
 
-// 🔒 Route serveur qui générera le token et redirigera (aucune autre logique changée)
+// 🔒 Route serveur qui génère l’URL signée et redirige
 const QUESTIONNAIRE_LINK = "/api/questionnaire-link";
 
 /* Email fallback: session Supabase côté serveur si cookie absent */
@@ -115,9 +115,7 @@ function ensureAtLeast4(list: NormalizedExercise[], type: WorkoutType, equip: "f
 }
 
 /* ===== Helpers Supabase admin → programme_insights ===== */
-
 async function getSupabaseAdmin() {
-  // On accepte SUPABASE_URL ou, à défaut, NEXT_PUBLIC_SUPABASE_URL
   const url =
     process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
@@ -536,11 +534,9 @@ export default async function Page({
                 <b>Âge :</b>{" "}
                 {typeof clientAge === "number"
                   ? `${clientAge} ans`
-                  : showPlaceholders
-                  ? (
+                  : showPlaceholders ? (
                     <i className="text-gray-400">Non renseigné</i>
-                    )
-                  : null}
+                  ) : null}
               </span>
             )}
             {(goalLabel || showPlaceholders) && (
@@ -597,7 +593,7 @@ export default async function Page({
             flexWrap: "wrap",
           }}
         >
-          <h2 style={{ margin: 0 }}>{hasGenerate ? titleList : "Mes séances"}</h2>
+          <h2 style={{ margin: 0 }}>{hasGenerate ? "Mes séances" : "Mes séances"}</h2>
 
           {hasGenerate && (
             <div
@@ -791,7 +787,7 @@ export default async function Page({
                     "generate=1",
                     equipMode === "none" ? "equip=none" : undefined,
                     savedIds.size
-                      ? `saved=${[...savedIds].join(",")}`
+                      ? `saved=${[...savedIds].join(",")}` 
                       : undefined,
                     newLaterKeys.length
                       ? `later=${newLaterKeys.join(",")}`
@@ -840,7 +836,7 @@ export default async function Page({
                           lineHeight: 1,
                           display: "inline-flex",
                           alignItems: "center",
-                          justify-content: "center",
+                          justifyContent: "center",
                         }}
                       >
                         🗑️
