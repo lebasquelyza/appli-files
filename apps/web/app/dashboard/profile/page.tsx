@@ -17,6 +17,9 @@ import GenerateClient from "./GenerateClient";
 const QUESTIONNAIRE_BASE =
   process.env.FILES_COACHING_QUESTIONNAIRE_BASE || "https://questionnaire.files-coaching.com";
 
+// 🔒 Route serveur qui générera le token et redirigera (aucune autre logique changée)
+const QUESTIONNAIRE_LINK = "/api/questionnaire-link";
+
 /* Email fallback: session Supabase côté serveur si cookie absent */
 async function getEmailFromSupabaseSession(): Promise<string> {
   try {
@@ -398,12 +401,14 @@ export default async function Page({
     return map[g] || (p as any)?.objectif || "";
   })();
 
+  // ⚠️ Sans changer la logique: on garde le pré-remplissage email/prenom
+  // mais on passe désormais par la route serveur /api/questionnaire-link qui génère le token
   const questionnaireUrl = (() => {
     const qp = new URLSearchParams();
     if (emailForDisplay) qp.set("email", emailForDisplay);
     if (clientPrenom) qp.set("prenom", clientPrenom);
     const qs = qp.toString();
-    return qs ? `${QUESTIONNAIRE_BASE}?${qs}` : QUESTIONNAIRE_BASE;
+    return qs ? `${QUESTIONNAIRE_LINK}?${qs}` : QUESTIONNAIRE_LINK;
   })();
 
   const displayedError = searchParams?.error || "";
@@ -835,7 +840,7 @@ export default async function Page({
                           lineHeight: 1,
                           display: "inline-flex",
                           alignItems: "center",
-                          justifyContent: "center",
+                          justify-content: "center",
                         }}
                       >
                         🗑️
