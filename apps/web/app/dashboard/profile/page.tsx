@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import {
   getAnswersForEmail,
   buildProfileFromAnswers,
-  generateProgrammeFromAnswers,
+  // generateProgrammeFromAnswers, // ❌ plus utilisé
   type Profile as ProfileT,
   type AiSession as AiSessionT,
   type NormalizedExercise,
@@ -255,62 +255,34 @@ async function loadProfile(
   return { emailForDisplay, profile, debugInfo, forceBlank };
 }
 
-/* Loader — Programme IA côté serveur (liste) */
+/* Loader — Programme IA côté serveur (liste)
+   Nouvelle logique : toujours base “avec matériel”,
+   et on filtre dynamiquement si equip=none (sans dépendre du questionnaire) */
 async function loadInitialSessions(email: string, equipParam?: string) {
   if (!email) return [];
-  const equip =
-    String(equipParam || "") === "none"
-      ? "none"
-      : String(equipParam || "") === "full"
-      ? "full"
-      : "";
+  const equip: "full" | "none" =
+    String(equipParam || "").toLowerCase() === "none" ? "none" : "full";
 
   try {
-    if (equip === "none" || equip === "full") {
-      const answers = await getAnswersForEmail(email, { fresh: true });
-      if (!answers) return [];
-      (answers as any).equipLevel = equip === "none" ? "none" : "full";
-      const prog = generateProgrammeFromAnswers(answers);
-      const sessions: AiSessionT[] = prog.sessions || [];
-
-      // Applique ≥4 exos dans les deux modes
-      const finalSessions = sessions.map((s) => {
-        const type = (s.type || "muscu") as WorkoutType;
-        let exs = (s.exercises || []).slice();
-        if (equip === "none") {
-          // stricte bodyweight
-          exs = exs.filter((ex) => !requiresEquipment(ex));
-        }
-        const ensured = ensureAtLeast4(exs, type, equip);
-        return { ...s, exercises: ensured };
-      });
-
-      // Log unique dans programme_insights
-      await logProgrammeInsightToSupabase(email, answers, finalSessions);
-
-      return finalSessions;
-    }
-
-    // Par défaut : logique existante (avec matériel), mais on sécurise ≥4 exos pour l'affichage
+    // Toujours généré côté “avec matériel”
     const { sessions } = await planProgrammeFromEmail(email);
     const baseSessions: AiSessionT[] = sessions || [];
-    const safe = baseSessions.map((s) => {
+
+    // Applique le filtrage “sans matériel” si demandé + garantit ≥4 exos
+    const finalSessions = baseSessions.map((s) => {
       const type = (s.type || "muscu") as WorkoutType;
-      const ensured = ensureAtLeast4(s.exercises || [], type, "full");
-      return { ...s, exercises: ensured };
+      let exs = (s.exercises || []).slice();
+      if (equip === "none") {
+        exs = exs.filter((ex) => !requiresEquipment(ex));
+      }
+      exs = ensureAtLeast4(exs, type, equip);
+      return { ...s, exercises: exs };
     });
 
-    // on recharge les réponses pour le log combiné (si dispo)
-    let answersForLog: any = null;
-    try {
-      answersForLog = await getAnswersForEmail(email, { fresh: true });
-    } catch {
-      // silencieux
-    }
+    // Log (answers = null : on n’utilise plus la notion de matériel du questionnaire)
+    await logProgrammeInsightToSupabase(email, null, finalSessions);
 
-    await logProgrammeInsightToSupabase(email, answersForLog, safe);
-
-    return safe;
+    return finalSessions;
   } catch {
     return [];
   }
@@ -593,7 +565,7 @@ export default async function Page({
             flexWrap: "wrap",
           }}
         >
-          <h2 style={{ margin: 0 }}>{hasGenerate ? "Mes séances" : "Mes séances"}</h2>
+          <h2 style={{ margin: 0 }}>{titleList}</h2>
 
           {hasGenerate && (
             <div
