@@ -1,5 +1,5 @@
 {
-  "appId": "com.tonnom.aifitness",
-  "appName": "AI Fitness",
-  "webDir": "."
+  "appId": "com.lebasque.filescoaching",
+  "appName": "Files Coaching",
+  "webDir": "out"
 }
