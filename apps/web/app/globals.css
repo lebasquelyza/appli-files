@@ -338,3 +338,18 @@ body:has(main.hide-topbar-menu) .js-topbar-menu {
 }
 /* ex. global.css */
 button[aria-label="Se déconnecter"] { color:#000 !important; }
+ /* ===== Safe area iOS (encoches, bas d'écran, etc.) ===== */
+@supports (padding: max(0px)) {
+  /* Header fixe : on lui ajoute la marge liée à l’encoche */
+  .site-header {
+    padding-top: max(8px, env(safe-area-inset-top));
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+  }
+
+  /* Si jamais tu as du contenu collé en bas, ça le protège du geste "Home" */
+  body {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
