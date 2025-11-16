@@ -27,6 +27,7 @@ export const viewport: Viewport = {
   themeColor: "#ffffff",
   width: "device-width",
   initialScale: 1,
+  viewportFit: "cover", // ✅ important pour iOS (safe-area)
 };
 
 export const dynamic = "force-dynamic";
@@ -37,10 +38,15 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="fr">
       <body className="bg-white text-gray-900 min-h-dvh">
         <Providers>
-          {/* ✅ Topbar incluse dans le provider — elle pourra aussi utiliser useSession */}
+          {/* ✅ Topbar global */}
           <TopbarGate />
 
-          <main style={{ paddingTop: "calc(env(safe-area-inset-top) + 40px)" }}>
+          {/* 
+            ✅ Gestion de la safe-area via CSS (classe .app-shell qu'on va définir dans globals.css)
+            - padding-top prend en compte l’encoche + un peu d’espace
+            - padding-bottom protège du geste "home" sur iPhone
+          */}
+          <main className="app-shell">
             {children}
           </main>
         </Providers>
@@ -49,8 +55,12 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <script
           dangerouslySetInnerHTML={{
             __html: `window.__env = {
-  NEXT_PUBLIC_SUPABASE_URL: ${JSON.stringify(process.env.NEXT_PUBLIC_SUPABASE_URL || null)},
-  NEXT_PUBLIC_SUPABASE_ANON_KEY: ${JSON.stringify(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || null)}
+  NEXT_PUBLIC_SUPABASE_URL: ${JSON.stringify(
+    process.env.NEXT_PUBLIC_SUPABASE_URL || null
+  )},
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: ${JSON.stringify(
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || null
+  )}
 };`,
           }}
         />
