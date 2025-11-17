@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Section } from "@/components/ui/Page";
 import { getSupabase } from "@/lib/supabaseClient";
+import { useLanguage } from "@/components/LanguageProvider"; // ✅ ajout
 
 /* ======================= Police responsive ======================= */
 function useSettingsFontSize() {
@@ -30,7 +31,8 @@ const btnGhost =
 
 /* ======================= Jours (menu) ======================= */
 function DaysDropdown({ value, onChange }: { value: number[]; onChange: (days: number[]) => void }) {
-  const labelsFull = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
+  const { t } = useLanguage(); // ✅
+  const labelsFull = t("settings.pushSchedule.daysDropdown.labelsFull") as string[]; // ✅ on suppose un tableau
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement | null>(null);
 
@@ -57,13 +59,13 @@ function DaysDropdown({ value, onChange }: { value: number[]; onChange: (days: n
         onClick={() => setOpen((o) => !o)}
         style={{ fontSize: "var(--settings-fs)" }}
       >
-        <span className="font-medium">Jours</span>
+        <span className="font-medium">{t("settings.pushSchedule.daysDropdown.buttonLabel")}</span>
       </button>
 
       {open && (
         <div
           role="menu"
-          aria-label="Sélection des jours"
+          aria-label={t("settings.pushSchedule.daysDropdown.ariaLabel")}
           className="absolute z-50 mt-2 w-64 rounded-2xl border bg-white p-3 shadow-lg dark:bg-slate-900 dark:border-slate-700"
           style={{ fontSize: "var(--settings-fs)" }}
         >
@@ -91,10 +93,10 @@ function DaysDropdown({ value, onChange }: { value: number[]; onChange: (days: n
           <div className="mt-3 flex items-center justify-end pt-2 border-t dark:border-slate-700">
             <div className="flex gap-2">
               <button type="button" className={`${btnGhost} px-3 py-1`} onClick={() => setOpen(false)}>
-                OK
+                {t("settings.pushSchedule.daysDropdown.ok")}
               </button>
               <button type="button" className={`${btnGhost} px-3 py-1`} onClick={() => onChange([])}>
-                Tout vider
+                {t("settings.pushSchedule.daysDropdown.clearAll")}
               </button>
             </div>
           </div>
@@ -106,6 +108,7 @@ function DaysDropdown({ value, onChange }: { value: number[]; onChange: (days: n
 
 /* ======================= Heure (menu) ======================= */
 function TimeDropdown({ value, onChange }: { value: string; onChange: (time: string) => void }) {
+  const { t } = useLanguage(); // ✅
   const [open, setOpen] = useState(false);
   const [temp, setTemp] = useState(value);
   const wrap = useRef<HTMLDivElement | null>(null);
@@ -138,13 +141,13 @@ function TimeDropdown({ value, onChange }: { value: string; onChange: (time: str
         onClick={() => setOpen((o) => !o)}
         style={{ fontSize: "var(--settings-fs)" }}
       >
-        <span className="font-medium">Heure</span>
+        <span className="font-medium">{t("settings.pushSchedule.timeDropdown.buttonLabel")}</span>
       </button>
 
       {open && (
         <div
           role="dialog"
-          aria-label="Sélection de l'heure"
+          aria-label={t("settings.pushSchedule.timeDropdown.ariaLabel")}
           className="absolute right-0 z-50 mt-2 w-56 rounded-2xl border bg-white p-3 shadow-lg dark:bg-slate-900 dark:border-slate-700"
           style={{ fontSize: "var(--settings-fs)" }}
         >
@@ -158,7 +161,7 @@ function TimeDropdown({ value, onChange }: { value: string; onChange: (time: str
           />
           <div className="mt-3 flex items-center justify-end pt-2 border-t dark:border-slate-700">
             <button type="button" className={`${btnGhost} px-3 py-1`} onClick={apply}>
-              OK
+              {t("settings.pushSchedule.timeDropdown.ok")}
             </button>
           </div>
         </div>
@@ -169,6 +172,7 @@ function TimeDropdown({ value, onChange }: { value: string; onChange: (time: str
 
 /* ======================= Formulaire de rappel ======================= */
 function PushScheduleForm() {
+  const { t } = useLanguage(); // ✅
   const [time, setTime] = useState("08:00");
   const [days, setDays] = useState<number[]>([1, 2, 3, 4, 5]);
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -183,23 +187,25 @@ function PushScheduleForm() {
         body: JSON.stringify({ deviceId, time, days, tz }),
       });
       if (!res.ok) throw new Error("Erreur");
-      alert("Rappel enregistré ✅");
+      alert(t("settings.pushSchedule.alerts.success"));
     } catch (e) {
-      alert("Erreur d’enregistrement");
+      alert(t("settings.pushSchedule.alerts.error"));
     }
   };
 
   return (
     <div className="card space-y-4" style={{ fontSize: "var(--settings-fs)" }}>
-      <h3 className="font-semibold">Rappel planifié</h3>
-      <p>Fuseau : {tz}</p>
+      <h3 className="font-semibold">{t("settings.pushSchedule.cardTitle")}</h3>
+      <p>
+        {t("settings.pushSchedule.timezoneLabel").replace("{{tz}}", tz)}
+      </p>
       <div className="flex flex-wrap items-center gap-3">
         <DaysDropdown value={days} onChange={setDays} />
         <TimeDropdown value={time} onChange={setTime} />
       </div>
       <div className="flex items-center justify-end">
         <button type="button" className="btn-dash" onClick={save}>
-          Enregistrer
+          {t("settings.pushSchedule.saveButton")}
         </button>
       </div>
     </div>
@@ -208,6 +214,7 @@ function PushScheduleForm() {
 
 /* ======================= Modale Mentions légales ======================= */
 function LegalModal() {
+  const { t } = useLanguage(); // ✅
   const [open, setOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement | null>(null);
 
@@ -220,7 +227,7 @@ function LegalModal() {
   return (
     <div>
       <button type="button" className={btnGhost} onClick={() => setOpen(true)}>
-        Voir les mentions légales
+        {t("settings.legal.openButton")}
       </button>
 
       {open && (
@@ -233,24 +240,22 @@ function LegalModal() {
               style={{ fontSize: "var(--settings-fs)", WebkitOverflowScrolling: "touch", touchAction: "pan-y" }}
               role="dialog"
               aria-modal="true"
-              aria-label="Mentions légales et politique de cookies"
+              aria-label={t("settings.legal.modalAriaLabel")}
             >
               <div className="flex items-start justify-between gap-4">
-                <h3 className="text-base font-semibold">Mentions légales</h3>
-                <button aria-label="Fermer" className={btnGhost} onClick={() => setOpen(false)}>
-                  Fermer
+                <h3 className="text-base font-semibold">{t("settings.legal.title")}</h3>
+                <button aria-label={t("settings.legal.close")} className={btnGhost} onClick={() => setOpen(false)}>
+                  {t("settings.legal.close")}
                 </button>
               </div>
 
               <div className="mt-3 space-y-4 leading-relaxed">
                 <p className="opacity-80">
-                  Les informations relatives aux mentions légales du site seront bientôt disponibles. Nous mettons tout en
-                  œuvre pour publier ces éléments dans les meilleurs délais.
+                  {t("settings.legal.introText")}
                 </p>
-                <h4 className="font-semibold">Cookies</h4>
+                <h4 className="font-semibold">{t("settings.legal.cookiesTitle")}</h4>
                 <p className="opacity-80">
-                  La politique de gestion des cookies est actuellement en cours de rédaction et sera publiée prochainement.
-                  Nous vous remercions pour votre compréhension.
+                  {t("settings.legal.cookiesText")}
                 </p>
               </div>
             </div>
@@ -275,16 +280,17 @@ const SHOW_LANGUAGE = false;
 
 /* ======================= Composant suppression de compte ======================= */
 function DeleteAccountCard() {
+  const { t } = useLanguage(); // ✅
   const [confirm, setConfirm] = useState("");
   const [loading, setLoading] = useState(false);
 
   const REASONS = [
-    { value: "no_longer_needed", label: "Je n’en ai plus besoin" },
-    { value: "missing_features", label: "Il manque des fonctionnalités" },
-    { value: "too_expensive", label: "Trop cher / pas rentable" },
-    { value: "privacy_concerns", label: "Inquiétudes liées aux données" },
-    { value: "bugs_or_quality", label: "Bugs / qualité insatisfaisante" },
-    { value: "other", label: "Autre…" },
+    { value: "no_longer_needed", label: t("settings.deleteAccount.reasons.no_longer_needed") },
+    { value: "missing_features", label: t("settings.deleteAccount.reasons.missing_features") },
+    { value: "too_expensive", label: t("settings.deleteAccount.reasons.too_expensive") },
+    { value: "privacy_concerns", label: t("settings.deleteAccount.reasons.privacy_concerns") },
+    { value: "bugs_or_quality", label: t("settings.deleteAccount.reasons.bugs_or_quality") },
+    { value: "other", label: t("settings.deleteAccount.reasons.other") },
   ] as const;
 
   const [reason, setReason] = useState<string>("");
@@ -296,7 +302,7 @@ function DeleteAccountCard() {
     try {
       const { data: { session } = {} } = await supabase.auth.getSession();
       if (!session) {
-        alert("Veuillez vous reconnecter avant de supprimer votre compte.");
+        alert(t("settings.deleteAccount.alerts.needRelogin"));
         return;
       }
 
@@ -312,13 +318,13 @@ function DeleteAccountCard() {
       });
       if (!res.ok) {
         const msg = await res.text();
-        throw new Error(msg || "Erreur lors de la suppression");
+        throw new Error(msg || t("settings.deleteAccount.alerts.errorDuringDelete"));
       }
-      alert("Votre compte a été supprimé. Au revoir 👋");
+      alert(t("settings.deleteAccount.alerts.success"));
       await supabase.auth.signOut();
       window.location.href = "/";
     } catch (e: any) {
-      alert(e?.message || "Impossible de supprimer le compte");
+      alert(e?.message || t("settings.deleteAccount.alerts.errorGeneric"));
     } finally {
       setLoading(false);
     }
@@ -328,10 +334,14 @@ function DeleteAccountCard() {
 
   return (
     <div className="card space-y-4">
-      <h3 className="font-semibold text-red-600 dark:text-red-400">Supprimer mon compte</h3>
+      <h3 className="font-semibold text-red-600 dark:text-red-400">
+        {t("settings.deleteAccount.title")}
+      </h3>
 
       <div className="space-y-2">
-        <label className="font-medium">Pourquoi partez-vous ? (facultatif)</label>
+        <label className="font-medium">
+          {t("settings.deleteAccount.questionLabel")}
+        </label>
         <div className="grid sm:grid-cols-2 gap-2">
           {REASONS.map((r) => (
             <label
@@ -356,14 +366,14 @@ function DeleteAccountCard() {
             value={reasonText}
             onChange={(e) => setReasonText(e.target.value)}
             rows={3}
-            placeholder="Dites-nous en plus (optionnel)"
+            placeholder={t("settings.deleteAccount.otherPlaceholder")}
             className="mt-2 w-full rounded-[10px] border px-3 py-2 dark:bg-slate-900 dark:border-slate-700"
           />
         )}
       </div>
 
       <p className="opacity-80">
-        Cette action est <strong>irréversible</strong> : vos données et accès seront supprimés. Pour confirmer, tapez{" "}
+        {t("settings.deleteAccount.irreversibleText")}{" "}
         <code className="px-1 py-0.5 rounded bg-red-50 dark:bg-red-900/30">SUPPRIMER</code> :
       </p>
       <input
@@ -372,7 +382,7 @@ function DeleteAccountCard() {
         onChange={(e) => setConfirm(e.target.value)}
         placeholder="SUPPRIMER"
         className="w-full rounded-[10px] border px-3 py-2 dark:bg-slate-900 dark:border-slate-700"
-        aria-label="Champ de confirmation de suppression"
+        aria-label={t("settings.deleteAccount.confirmFieldAria")}
       />
       <div className="flex items-center justify-end">
         <button
@@ -381,7 +391,7 @@ function DeleteAccountCard() {
           onClick={handleDelete}
           className={`btn ${!canDelete ? "opacity-60 cursor-not-allowed" : ""}`}
         >
-          {loading ? "Suppression…" : "Supprimer définitivement"}
+          {loading ? t("settings.deleteAccount.button.loading") : t("settings.deleteAccount.button.idle")}
         </button>
       </div>
     </div>
@@ -390,6 +400,7 @@ function DeleteAccountCard() {
 
 /* ======================= Déconnexion centrée (sous Cookies & Mentions) ======================= */
 function LogoutCentered() {
+  const { t } = useLanguage(); // ✅
   const [loading, setLoading] = useState(false);
 
   const handleLogout = async () => {
@@ -399,7 +410,7 @@ function LogoutCentered() {
       await supabase.auth.signOut();
       window.location.href = "/";
     } catch (e: any) {
-      alert(e?.message || "Déconnexion impossible");
+      alert(e?.message || t("settings.logout.error"));
     } finally {
       setLoading(false);
     }
@@ -413,9 +424,9 @@ function LogoutCentered() {
         disabled={loading}
         className="appearance-none bg-transparent border-0 shadow-none no-underline text-black dark:text-black text-lg md:text-xl font-semibold"
         style={{ color: "#000", WebkitTextFillColor: "#000" }}
-        aria-label="Se déconnecter"
+        aria-label={t("settings.logout.ariaLabel")}
       >
-        {loading ? "Déconnexion…" : "Se déconnecter"}
+        {loading ? t("settings.logout.loading") : t("settings.logout.idle")}
       </button>
     </div>
   );
@@ -424,6 +435,8 @@ function LogoutCentered() {
 /* ======================= Page principale ======================= */
 export default function Page() {
   useSettingsFontSize();
+
+  const { t } = useLanguage(); // ✅
 
   const [prefs, setPrefs] = useState<Prefs>(DEFAULT_PREFS);
   const [loaded, setLoaded] = useState(false);
@@ -474,17 +487,17 @@ export default function Page() {
           className="h1"
           style={{ fontSize: "clamp(20px, 2.2vw, 24px)", lineHeight: 1.15, color: "var(--text)" }}
         >
-          Réglages
+          {t("settings.pageTitle")}
         </h1>
       </div>
 
       <div style={{ fontSize: "var(--settings-fs)" }}>
         {/* ======================= Section Général ======================= */}
-        <Section title="Général">
+        <Section title={t("settings.sections.general")}>
           <div className={`grid gap-6 ${SHOW_LANGUAGE ? "md:grid-cols-2" : ""}`}>
             {SHOW_LANGUAGE && (
               <div className="card space-y-3">
-                <h3 className="font-semibold">Langue</h3>
+                <h3 className="font-semibold">{t("settings.language.title")}</h3>
                 <select
                   className="rounded-[10px] border px-3 py-2 w-full dark:bg-slate-900 dark:border-slate-700"
                   value={prefs.language}
@@ -493,9 +506,9 @@ export default function Page() {
                   }
                   disabled={!loaded}
                 >
-                  <option value="fr">Français (FR)</option>
-                  <option value="en">English (EN)</option>
-                  <option value="de">Deutsch (DE)</option>
+                  <option value="fr">{t("settings.language.options.fr")}</option>
+                  <option value="en">{t("settings.language.options.en")}</option>
+                  <option value="de">{t("settings.language.options.de")}</option>
                 </select>
               </div>
             )}
@@ -506,14 +519,14 @@ export default function Page() {
         </Section>
 
         {/* ======================= Section Notifications ======================= */}
-        <Section title="Rappel Motivation ">
+        <Section title={t("settings.sections.motivationReminder")}>
           <PushScheduleForm />
         </Section>
 
         {/* ======================= Section Cookies & Mentions ======================= */}
-        <Section title="Cookies & Mentions légales">
+        <Section title={t("settings.sections.legal")}>
           <p className="opacity-70 mb-4">
-            Les informations relatives aux cookies et aux mentions légales seront prochainement disponibles.
+            {t("settings.legal.sectionIntro")}
           </p>
           <LegalModal />
         </Section>
