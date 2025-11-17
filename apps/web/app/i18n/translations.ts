@@ -57,6 +57,98 @@ export const translations = {
         hide: "Masquer le mot de passe",
       },
     },
+    settings: {
+      pageTitle: "Réglages",
+      sections: {
+        general: "Général",
+        motivationReminder: "Rappel Motivation ",
+        legal: "Cookies & Mentions légales",
+      },
+      language: {
+        title: "Langue",
+        options: {
+          fr: "Français (FR)",
+          en: "English (EN)",
+          de: "Deutsch (DE)",
+        },
+      },
+      deleteAccount: {
+        title: "Supprimer mon compte",
+        questionLabel: "Pourquoi partez-vous ? (facultatif)",
+        reasons: {
+          no_longer_needed: "Je n’en ai plus besoin",
+          missing_features: "Il manque des fonctionnalités",
+          too_expensive: "Trop cher / pas rentable",
+          privacy_concerns: "Inquiétudes liées aux données",
+          bugs_or_quality: "Bugs / qualité insatisfaisante",
+          other: "Autre…",
+        },
+        otherPlaceholder: "Dites-nous en plus (optionnel)",
+        irreversibleText:
+          "Cette action est irréversible : vos données et accès seront supprimés. Pour confirmer, tapez",
+        confirmPlaceholder: "SUPPRIMER",
+        alerts: {
+          needRelogin:
+            "Veuillez vous reconnecter avant de supprimer votre compte.",
+          success: "Votre compte a été supprimé. Au revoir 👋",
+          errorGeneric: "Impossible de supprimer le compte",
+          errorDuringDelete: "Erreur lors de la suppression",
+        },
+        button: {
+          loading: "Suppression…",
+          idle: "Supprimer définitivement",
+        },
+        confirmFieldAria: "Champ de confirmation de suppression",
+      },
+      pushSchedule: {
+        cardTitle: "Rappel planifié",
+        timezoneLabel: "Fuseau : {{tz}}",
+        saveButton: "Enregistrer",
+        alerts: {
+          success: "Rappel enregistré ✅",
+          error: "Erreur d’enregistrement",
+        },
+        daysDropdown: {
+          buttonLabel: "Jours",
+          ariaLabel: "Sélection des jours",
+          labelsFull: [
+            "Lundi",
+            "Mardi",
+            "Mercredi",
+            "Jeudi",
+            "Vendredi",
+            "Samedi",
+            "Dimanche",
+          ],
+          ok: "OK",
+          clearAll: "Tout vider",
+        },
+        timeDropdown: {
+          buttonLabel: "Heure",
+          ariaLabel: "Sélection de l'heure",
+          ok: "OK",
+        },
+      },
+      legal: {
+        openButton: "Voir les mentions légales",
+        modalAriaLabel: "Mentions légales et politique de cookies",
+        title: "Mentions légales",
+        close: "Fermer",
+        cookiesTitle: "Cookies",
+        introText:
+          "Les informations relatives aux mentions légales du site seront bientôt disponibles. Nous mettons tout en œuvre pour publier ces éléments dans les meilleurs délais.",
+        cookiesText:
+          "La politique de gestion des cookies est actuellement en cours de rédaction et sera publiée prochainement. Nous vous remercions pour votre compréhension.",
+        sectionIntro:
+          "Les informations relatives aux cookies et aux mentions légales seront prochainement disponibles.",
+      },
+      logout: {
+        ariaLabel: "Se déconnecter",
+        loading: "Déconnexion…",
+        idle: "Se déconnecter",
+        error: "Déconnexion impossible",
+      },
+    },
   },
   en: {
     home: {
@@ -113,6 +205,97 @@ export const translations = {
       password: {
         show: "Show password",
         hide: "Hide password",
+      },
+    },
+    settings: {
+      pageTitle: "Settings",
+      sections: {
+        general: "General",
+        motivationReminder: "Motivation reminder",
+        legal: "Cookies & Legal notice",
+      },
+      language: {
+        title: "Language",
+        options: {
+          fr: "French (FR)",
+          en: "English (EN)",
+          de: "German (DE)",
+        },
+      },
+      deleteAccount: {
+        title: "Delete my account",
+        questionLabel: "Why are you leaving? (optional)",
+        reasons: {
+          no_longer_needed: "I don’t need it anymore",
+          missing_features: "Missing features",
+          too_expensive: "Too expensive / not worth it",
+          privacy_concerns: "Data & privacy concerns",
+          bugs_or_quality: "Bugs / unsatisfying quality",
+          other: "Other…",
+        },
+        otherPlaceholder: "Tell us more (optional)",
+        irreversibleText:
+          "This action is irreversible: your data and access will be deleted. To confirm, type",
+        confirmPlaceholder: "DELETE",
+        alerts: {
+          needRelogin: "Please log in again before deleting your account.",
+          success: "Your account has been deleted. Goodbye 👋",
+          errorGeneric: "Unable to delete the account",
+          errorDuringDelete: "Error while deleting the account",
+        },
+        button: {
+          loading: "Deleting…",
+          idle: "Delete permanently",
+        },
+        confirmFieldAria: "Account deletion confirmation field",
+      },
+      pushSchedule: {
+        cardTitle: "Scheduled reminder",
+        timezoneLabel: "Timezone: {{tz}}",
+        saveButton: "Save",
+        alerts: {
+          success: "Reminder saved ✅",
+          error: "Error while saving",
+        },
+        daysDropdown: {
+          buttonLabel: "Days",
+          ariaLabel: "Day selection",
+          labelsFull: [
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
+            "Sunday",
+          ],
+          ok: "OK",
+          clearAll: "Clear all",
+        },
+        timeDropdown: {
+          buttonLabel: "Time",
+          ariaLabel: "Time selection",
+          ok: "OK",
+        },
+      },
+      legal: {
+        openButton: "View legal notice",
+        modalAriaLabel: "Legal notice and cookie policy",
+        title: "Legal notice",
+        close: "Close",
+        cookiesTitle: "Cookies",
+        introText:
+          "The information related to the legal notice of the site will be available soon. We are working to publish these details as soon as possible.",
+        cookiesText:
+          "The cookie policy is currently being drafted and will be published shortly. Thank you for your understanding.",
+        sectionIntro:
+          "Information about cookies and legal notice will be available soon.",
+      },
+      logout: {
+        ariaLabel: "Log out",
+        loading: "Logging out…",
+        idle: "Log out",
+        error: "Unable to log out",
       },
     },
   },
