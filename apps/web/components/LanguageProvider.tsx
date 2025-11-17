@@ -1,19 +1,15 @@
 "use client";
 
-import React, {
+import React,
+{
   createContext,
   useContext,
   useEffect,
   useMemo,
   useState,
-  ReactNode,
+  type ReactNode,
 } from "react";
-import { fr } from "@/app/i18n/fr";
-import { en } from "@/app/i18n/en";
-
-type Lang = "fr" | "en";
-
-type Messages = typeof fr;
+import { translations, type Lang, type Messages } from "@/app/i18n/translations";
 
 type LanguageContextType = {
   lang: Lang;
@@ -33,7 +29,7 @@ function getFromPath(obj: any, path: string): string {
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Lang>("fr");
 
-  // lire la langue du navigateur / localStorage
+  // Détection langue navigateur + localStorage
   useEffect(() => {
     const stored = window.localStorage.getItem("fc-lang") as Lang | null;
     if (stored === "fr" || stored === "en") {
@@ -52,7 +48,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const messages = useMemo(() => (lang === "en" ? en : fr), [lang]);
+  const messages = useMemo(() => translations[lang], [lang]);
 
   const t = (path: string) => getFromPath(messages, path);
 
@@ -72,6 +68,9 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 
 export function useLanguage() {
   const ctx = useContext(LanguageContext);
-  if (!ctx) throw new Error("useLanguage must be used inside LanguageProvider");
+  if (!ctx) {
+    throw new Error("useLanguage must be used inside LanguageProvider");
+  }
   return ctx;
 }
+
