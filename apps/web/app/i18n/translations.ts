@@ -173,6 +173,27 @@ export const translations = {
   },
   backLink: "← Retour au profil",
 },
+      seancePage: {
+  fallbackTitle: "Séance personnalisée",
+  focus: {
+    upper: "Haut du corps",
+    lower: "Bas du corps",
+    full: "Full body",
+    mix: "Mix",
+  },
+  backButton: "← Retour",
+  aiBadge: "Programme IA",
+  plannedMinSuffix: "min",
+  chips: {
+    setsLabel: "Séries",
+    repsLabel: "Rép./Durée",
+    restLabel: "Repos",
+  },
+  errors: {
+    notFound: "Seance introuvable",
+  },
+},
+
   },
   },
   en: {
@@ -347,6 +368,27 @@ export const translations = {
   },
   backLink: "← Back to profile",
 },
+      seancePage: {
+  fallbackTitle: "Personalized session",
+  focus: {
+    upper: "Upper body",
+    lower: "Lower body",
+    full: "Full body",
+    mix: "Mix",
+  },
+  backButton: "← Back",
+  aiBadge: "AI program",
+  plannedMinSuffix: "min",
+  chips: {
+    setsLabel: "Sets",
+    repsLabel: "Reps/Duration",
+    restLabel: "Rest",
+  },
+  errors: {
+    notFound: "Session not found",
+  },
+},
+
 
     },
   },
