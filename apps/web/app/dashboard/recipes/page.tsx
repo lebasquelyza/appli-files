@@ -1,3 +1,4 @@
+//apps/web/app/dashboard/recipes/page.tsx
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { AIExtraSection } from "./AISection";
