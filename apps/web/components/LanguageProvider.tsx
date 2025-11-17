@@ -8,11 +8,12 @@ import React, {
   useState,
   type ReactNode,
 } from "react";
-import {
-  translations,
-  type Lang,
-  type Messages,
-} from "@/app/i18n/translations";
+import { translations } from "@/app/i18n/translations";
+
+// ✅ On définit les types ici, simplement
+type Lang = "fr" | "en";
+// Tu peux mettre plus strict plus tard si tu veux
+type Messages = any;
 
 type LanguageContextType = {
   lang: Lang;
@@ -47,11 +48,14 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   const setLang = (l: Lang) => {
     setLangState(l);
     if (typeof window !== "undefined") {
+      // ✅ l est bien "fr" | "en", donc string
       window.localStorage.setItem("fc-lang", l);
     }
   };
 
-  const messages = useMemo(() => translations[lang], [lang]);
+  const messages = useMemo<Messages>(() => {
+    return translations[lang] as Messages;
+  }, [lang]);
 
   const t = (path: string) => getFromPath(messages, path);
 
