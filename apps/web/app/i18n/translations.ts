@@ -192,7 +192,69 @@ export const translations = {
   errors: {
     notFound: "Seance introuvable",
   },
+},recipes: {
+  pageTitle: "Recettes",
+  pageSubtitle: "Base healthy pour tous + suggestions perso IA selon tes filtres.",
+
+  filters: {
+    activeLabel: "Filtres actifs —",
+    target: "cible",
+    range: "plage",
+    kcalSuffix: "kcal",
+    allergens: "allergènes",
+    dislikes: "non aimés",
+    none: "aucun",
+  },
+
+  quickSwitch: {
+    meals: {
+      title: "Recettes — Healthy",
+      subtitle: "Plats + bowls healthy",
+    },
+    shakes: {
+      title: "Bar à prot’ — Boissons protéinées",
+      subtitle: "Shakes/smoothies en 5 min",
+    },
+    activeBadge: "Actif",
+  },
+
+  constraints: {
+    title: "Contraintes & filtres (pour l'IA)",
+    kcalTargetLabel: "Cible calories (kcal)",
+    kcalMinLabel: "Min kcal",
+    kcalMaxLabel: "Max kcal",
+    allergensLabel: "Allergènes / intolérances (séparés par virgules)",
+    allergensPlaceholder: "arachide, lactose, gluten",
+    dislikesLabel: "Aliments non aimés (re-travailler)",
+    dislikesPlaceholder: "brocoli, saumon, tofu...",
+    dislikesHelp: "L'IA les garde, mais propose une autre façon de les cuisiner.",
+    footerNote: "Les filtres s'appliquent surtout aux suggestions perso IA.",
+    resetButton: "Réinitialiser",
+    regenerateButton: "Régénérer",
+  },
+
+  saved: {
+    title: "Vos recettes enregistrées",
+    removeButton: "Retirer",
+  },
+
+  mealsSection: {
+    title: "Recettes",
+    subtitle: "Recettes fixes, stables et testées.",
+  },
+
+  shakesSection: {
+    title: "Boissons protéinées — base",
+    subtitle: "Shakes & smoothies rapides.",
+  },
+
+  card: {
+    viewRecipe: "Voir la recette",
+    savedRemove: "Enregistrée ✓ (Retirer)",
+    save: "Enregistrer",
+  },
 },
+
 
   },
   },
@@ -387,7 +449,69 @@ export const translations = {
   errors: {
     notFound: "Session not found",
   },
+},recipes: {
+  pageTitle: "Recipes",
+  pageSubtitle: "Healthy base for everyone + personalised AI suggestions based on your filters.",
+
+  filters: {
+    activeLabel: "Active filters —",
+    target: "target",
+    range: "range",
+    kcalSuffix: "kcal",
+    allergens: "allergens",
+    dislikes: "disliked",
+    none: "none",
+  },
+
+  quickSwitch: {
+    meals: {
+      title: "Recipes — Healthy meals",
+      subtitle: "Healthy plates & bowls",
+    },
+    shakes: {
+      title: "Protein bar — Drinks",
+      subtitle: "Shakes/smoothies in 5 minutes",
+    },
+    activeBadge: "Active",
+  },
+
+  constraints: {
+    title: "Constraints & filters (for AI)",
+    kcalTargetLabel: "Calorie target (kcal)",
+    kcalMinLabel: "Min kcal",
+    kcalMaxLabel: "Max kcal",
+    allergensLabel: "Allergies / intolerances (comma-separated)",
+    allergensPlaceholder: "peanut, lactose, gluten",
+    dislikesLabel: "Foods you don’t like (to rework)",
+    dislikesPlaceholder: "broccoli, salmon, tofu...",
+    dislikesHelp: "AI keeps them but suggests another way to cook them.",
+    footerNote: "Filters mainly apply to personalised AI suggestions.",
+    resetButton: "Reset",
+    regenerateButton: "Regenerate",
+  },
+
+  saved: {
+    title: "Your saved recipes",
+    removeButton: "Remove",
+  },
+
+  mealsSection: {
+    title: "Recipes",
+    subtitle: "Fixed, stable and tested recipes.",
+  },
+
+  shakesSection: {
+    title: "Protein drinks — base",
+    subtitle: "Quick shakes & smoothies.",
+  },
+
+  card: {
+    viewRecipe: "View recipe",
+    savedRemove: "Saved ✓ (Remove)",
+    save: "Save",
+  },
 },
+
 
 
     },
