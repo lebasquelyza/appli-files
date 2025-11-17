@@ -148,7 +148,32 @@ export const translations = {
         idle: "Se déconnecter",
         error: "Déconnexion impossible",
       },
+      seance: {
+  fallback: {
+    defaultTitle: "Séance",
+    detailUnavailable: "Détail indisponible — regénère ton programme depuis le profil.",
+    minSuffix: "min",
+  },
+  mode: {
+    equip: {
+      label: "Avec équipement",
+      title: "Version avec équipement",
     },
+    noequip: {
+      label: "Sans équipement",
+      title: "Version sans équipement",
+    },
+  },
+  exercise: {
+    setsUnit: "séries",
+    restPrefix: "Repos",
+    tempoPrefix: "Tempo",
+    rirPrefix: "RIR",
+    bodyweight: "poids du corps",
+  },
+  backLink: "← Retour au profil",
+},
+  },
   },
   en: {
     home: {
@@ -297,6 +322,32 @@ export const translations = {
         idle: "Log out",
         error: "Unable to log out",
       },
+      seance: {
+  fallback: {
+    defaultTitle: "Session",
+    detailUnavailable: "Details unavailable — regenerate your program from the profile page.",
+    minSuffix: "min",
+  },
+  mode: {
+    equip: {
+      label: "With equipment",
+      title: "Version with equipment",
+    },
+    noequip: {
+      label: "Bodyweight only",
+      title: "Version without equipment",
+    },
+  },
+  exercise: {
+    setsUnit: "sets",
+    restPrefix: "Rest",
+    tempoPrefix: "Tempo",
+    rirPrefix: "RIR",
+    bodyweight: "bodyweight",
+  },
+  backLink: "← Back to profile",
+},
+
     },
   },
 } as const;
