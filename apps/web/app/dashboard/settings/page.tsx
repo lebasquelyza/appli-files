@@ -1,9 +1,10 @@
+// apps/web/app/dashboard/settings/page.tsx
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Section } from "@/components/ui/Page";
 import { getSupabase } from "@/lib/supabaseClient";
-import { useLanguage } from "@/components/LanguageProvider"; // ✅ ajout
+import { useLanguage } from "@/components/LanguageProvider";
 
 /* ======================= Police responsive ======================= */
 function useSettingsFontSize() {
@@ -30,15 +31,27 @@ const btnGhost =
   "rounded-full border px-4 py-2 shadow-sm transition active:scale-[0.99] bg-white text-slate-900 border-slate-200 hover:bg-gray-50 dark:bg-slate-900 dark:text-slate-100 dark:border-slate-700 dark:hover:bg-slate-800";
 
 /* ======================= Jours (menu) ======================= */
-function DaysDropdown({ value, onChange }: { value: number[]; onChange: (days: number[]) => void }) {
-  const { t } = useLanguage(); // ✅
-  const labelsFull = t("settings.pushSchedule.daysDropdown.labelsFull") as string[]; // ✅ on suppose un tableau
+function DaysDropdown({
+  value,
+  onChange,
+}: {
+  value: number[];
+  onChange: (days: number[]) => void;
+}) {
+  const { t, messages } = useLanguage();
+  const labelsFull =
+    (messages?.settings?.pushSchedule?.daysDropdown?.labelsFull as
+      | string[]
+      | undefined) ??
+    ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
+
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const onDoc = (e: MouseEvent) => {
-      if (wrap.current && !wrap.current.contains(e.target as Node)) setOpen(false);
+      if (wrap.current && !wrap.current.contains(e.target as Node))
+        setOpen(false);
     };
     const onEsc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
     document.addEventListener("mousedown", onDoc);
@@ -49,7 +62,10 @@ function DaysDropdown({ value, onChange }: { value: number[]; onChange: (days: n
     };
   }, []);
 
-  const toggle = (d: number) => onChange(value.includes(d) ? value.filter((x) => x !== d) : [...value, d]);
+  const toggle = (d: number) =>
+    onChange(
+      value.includes(d) ? value.filter((x) => x !== d) : [...value, d],
+    );
 
   return (
     <div className="relative inline-block" ref={wrap}>
@@ -59,7 +75,9 @@ function DaysDropdown({ value, onChange }: { value: number[]; onChange: (days: n
         onClick={() => setOpen((o) => !o)}
         style={{ fontSize: "var(--settings-fs)" }}
       >
-        <span className="font-medium">{t("settings.pushSchedule.daysDropdown.buttonLabel")}</span>
+        <span className="font-medium">
+          {t("settings.pushSchedule.daysDropdown.buttonLabel")}
+        </span>
       </button>
 
       {open && (
@@ -92,10 +110,18 @@ function DaysDropdown({ value, onChange }: { value: number[]; onChange: (days: n
 
           <div className="mt-3 flex items-center justify-end pt-2 border-t dark:border-slate-700">
             <div className="flex gap-2">
-              <button type="button" className={`${btnGhost} px-3 py-1`} onClick={() => setOpen(false)}>
+              <button
+                type="button"
+                className={`${btnGhost} px-3 py-1`}
+                onClick={() => setOpen(false)}
+              >
                 {t("settings.pushSchedule.daysDropdown.ok")}
               </button>
-              <button type="button" className={`${btnGhost} px-3 py-1`} onClick={() => onChange([])}>
+              <button
+                type="button"
+                className={`${btnGhost} px-3 py-1`}
+                onClick={() => onChange([])}
+              >
                 {t("settings.pushSchedule.daysDropdown.clearAll")}
               </button>
             </div>
@@ -107,8 +133,14 @@ function DaysDropdown({ value, onChange }: { value: number[]; onChange: (days: n
 }
 
 /* ======================= Heure (menu) ======================= */
-function TimeDropdown({ value, onChange }: { value: string; onChange: (time: string) => void }) {
-  const { t } = useLanguage(); // ✅
+function TimeDropdown({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (time: string) => void;
+}) {
+  const { t } = useLanguage();
   const [open, setOpen] = useState(false);
   const [temp, setTemp] = useState(value);
   const wrap = useRef<HTMLDivElement | null>(null);
@@ -117,7 +149,8 @@ function TimeDropdown({ value, onChange }: { value: string; onChange: (time: str
 
   useEffect(() => {
     const onDoc = (e: MouseEvent) => {
-      if (wrap.current && !wrap.current.contains(e.target as Node)) setOpen(false);
+      if (wrap.current && !wrap.current.contains(e.target as Node))
+        setOpen(false);
     };
     const onEsc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
     document.addEventListener("mousedown", onDoc);
@@ -141,7 +174,9 @@ function TimeDropdown({ value, onChange }: { value: string; onChange: (time: str
         onClick={() => setOpen((o) => !o)}
         style={{ fontSize: "var(--settings-fs)" }}
       >
-        <span className="font-medium">{t("settings.pushSchedule.timeDropdown.buttonLabel")}</span>
+        <span className="font-medium">
+          {t("settings.pushSchedule.timeDropdown.buttonLabel")}
+        </span>
       </button>
 
       {open && (
@@ -160,7 +195,11 @@ function TimeDropdown({ value, onChange }: { value: string; onChange: (time: str
             style={{ fontSize: "var(--settings-fs)" }}
           />
           <div className="mt-3 flex items-center justify-end pt-2 border-t dark:border-slate-700">
-            <button type="button" className={`${btnGhost} px-3 py-1`} onClick={apply}>
+            <button
+              type="button"
+              className={`${btnGhost} px-3 py-1`}
+              onClick={apply}
+            >
               {t("settings.pushSchedule.timeDropdown.ok")}
             </button>
           </div>
@@ -172,7 +211,7 @@ function TimeDropdown({ value, onChange }: { value: string; onChange: (time: str
 
 /* ======================= Formulaire de rappel ======================= */
 function PushScheduleForm() {
-  const { t } = useLanguage(); // ✅
+  const { t } = useLanguage();
   const [time, setTime] = useState("08:00");
   const [days, setDays] = useState<number[]>([1, 2, 3, 4, 5]);
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -195,10 +234,10 @@ function PushScheduleForm() {
 
   return (
     <div className="card space-y-4" style={{ fontSize: "var(--settings-fs)" }}>
-      <h3 className="font-semibold">{t("settings.pushSchedule.cardTitle")}</h3>
-      <p>
-        {t("settings.pushSchedule.timezoneLabel").replace("{{tz}}", tz)}
-      </p>
+      <h3 className="font-semibold">
+        {t("settings.pushSchedule.cardTitle")}
+      </h3>
+      <p>{t("settings.pushSchedule.timezoneLabel").replace("{{tz}}", tz)}</p>
       <div className="flex flex-wrap items-center gap-3">
         <DaysDropdown value={days} onChange={setDays} />
         <TimeDropdown value={time} onChange={setTime} />
@@ -214,7 +253,7 @@ function PushScheduleForm() {
 
 /* ======================= Modale Mentions légales ======================= */
 function LegalModal() {
-  const { t } = useLanguage(); // ✅
+  const { t } = useLanguage();
   const [open, setOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement | null>(null);
 
@@ -232,19 +271,33 @@ function LegalModal() {
 
       {open && (
         <>
-          <div className="fixed inset-0 z-[100] bg-black/40" onClick={() => setOpen(false)} aria-hidden />
+          <div
+            className="fixed inset-0 z-[100] bg-black/40"
+            onClick={() => setOpen(false)}
+            aria-hidden
+          />
           <div className="fixed inset-0 z-[101] flex sm:items-center items-end justify-center sm:p-4 p-0">
             <div
               ref={panelRef}
               className="w-full sm:max-w-3xl bg-white shadow-2xl sm:rounded-2xl sm:border sm:p-6 p-4 sm:max-h-[85dvh] sm:h-auto h-[92dvh] max-h-[100svh] overflow-y-auto overscroll-contain dark:bg-slate-900 dark:border-slate-700"
-              style={{ fontSize: "var(--settings-fs)", WebkitOverflowScrolling: "touch", touchAction: "pan-y" }}
+              style={{
+                fontSize: "var(--settings-fs)",
+                WebkitOverflowScrolling: "touch",
+                touchAction: "pan-y",
+              }}
               role="dialog"
               aria-modal="true"
               aria-label={t("settings.legal.modalAriaLabel")}
             >
               <div className="flex items-start justify-between gap-4">
-                <h3 className="text-base font-semibold">{t("settings.legal.title")}</h3>
-                <button aria-label={t("settings.legal.close")} className={btnGhost} onClick={() => setOpen(false)}>
+                <h3 className="text-base font-semibold">
+                  {t("settings.legal.title")}
+                </h3>
+                <button
+                  aria-label={t("settings.legal.close")}
+                  className={btnGhost}
+                  onClick={() => setOpen(false)}
+                >
                   {t("settings.legal.close")}
                 </button>
               </div>
@@ -253,7 +306,9 @@ function LegalModal() {
                 <p className="opacity-80">
                   {t("settings.legal.introText")}
                 </p>
-                <h4 className="font-semibold">{t("settings.legal.cookiesTitle")}</h4>
+                <h4 className="font-semibold">
+                  {t("settings.legal.cookiesTitle")}
+                </h4>
                 <p className="opacity-80">
                   {t("settings.legal.cookiesText")}
                 </p>
@@ -273,23 +328,42 @@ type Prefs = {
   reducedMotion: boolean;
 };
 const LS_KEY = "app.prefs.v1";
-const DEFAULT_PREFS: Prefs = { language: "fr", theme: "system", reducedMotion: false };
+const DEFAULT_PREFS: Prefs = {
+  language: "fr",
+  theme: "system",
+  reducedMotion: false,
+};
 
 // Masque / affiche la section Langue
 const SHOW_LANGUAGE = false;
 
 /* ======================= Composant suppression de compte ======================= */
 function DeleteAccountCard() {
-  const { t } = useLanguage(); // ✅
+  const { t } = useLanguage();
   const [confirm, setConfirm] = useState("");
   const [loading, setLoading] = useState(false);
 
   const REASONS = [
-    { value: "no_longer_needed", label: t("settings.deleteAccount.reasons.no_longer_needed") },
-    { value: "missing_features", label: t("settings.deleteAccount.reasons.missing_features") },
-    { value: "too_expensive", label: t("settings.deleteAccount.reasons.too_expensive") },
-    { value: "privacy_concerns", label: t("settings.deleteAccount.reasons.privacy_concerns") },
-    { value: "bugs_or_quality", label: t("settings.deleteAccount.reasons.bugs_or_quality") },
+    {
+      value: "no_longer_needed",
+      label: t("settings.deleteAccount.reasons.no_longer_needed"),
+    },
+    {
+      value: "missing_features",
+      label: t("settings.deleteAccount.reasons.missing_features"),
+    },
+    {
+      value: "too_expensive",
+      label: t("settings.deleteAccount.reasons.too_expensive"),
+    },
+    {
+      value: "privacy_concerns",
+      label: t("settings.deleteAccount.reasons.privacy_concerns"),
+    },
+    {
+      value: "bugs_or_quality",
+      label: t("settings.deleteAccount.reasons.bugs_or_quality"),
+    },
     { value: "other", label: t("settings.deleteAccount.reasons.other") },
   ] as const;
 
@@ -313,12 +387,17 @@ function DeleteAccountCard() {
 
       const res = await fetch("/api/account/delete", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
         body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const msg = await res.text();
-        throw new Error(msg || t("settings.deleteAccount.alerts.errorDuringDelete"));
+        throw new Error(
+          msg || t("settings.deleteAccount.alerts.errorDuringDelete"),
+        );
       }
       alert(t("settings.deleteAccount.alerts.success"));
       await supabase.auth.signOut();
@@ -374,7 +453,10 @@ function DeleteAccountCard() {
 
       <p className="opacity-80">
         {t("settings.deleteAccount.irreversibleText")}{" "}
-        <code className="px-1 py-0.5 rounded bg-red-50 dark:bg-red-900/30">SUPPRIMER</code> :
+        <code className="px-1 py-0.5 rounded bg-red-50 dark:bg-red-900/30">
+          SUPPRIMER
+        </code>{" "}
+        :
       </p>
       <input
         type="text"
@@ -391,7 +473,9 @@ function DeleteAccountCard() {
           onClick={handleDelete}
           className={`btn ${!canDelete ? "opacity-60 cursor-not-allowed" : ""}`}
         >
-          {loading ? t("settings.deleteAccount.button.loading") : t("settings.deleteAccount.button.idle")}
+          {loading
+            ? t("settings.deleteAccount.button.loading")
+            : t("settings.deleteAccount.button.idle")}
         </button>
       </div>
     </div>
@@ -400,7 +484,7 @@ function DeleteAccountCard() {
 
 /* ======================= Déconnexion centrée (sous Cookies & Mentions) ======================= */
 function LogoutCentered() {
-  const { t } = useLanguage(); // ✅
+  const { t } = useLanguage();
   const [loading, setLoading] = useState(false);
 
   const handleLogout = async () => {
@@ -436,7 +520,7 @@ function LogoutCentered() {
 export default function Page() {
   useSettingsFontSize();
 
-  const { t } = useLanguage(); // ✅
+  const { t } = useLanguage();
 
   const [prefs, setPrefs] = useState<Prefs>(DEFAULT_PREFS);
   const [loaded, setLoaded] = useState(false);
@@ -453,8 +537,10 @@ export default function Page() {
     } catch {}
     setPrefs(initial);
 
-    const isDark =
-      hadStored ? initial.theme === "dark" || (initial.theme === "system" && getSystemPrefersDark()) : false;
+    const isDark = hadStored
+      ? initial.theme === "dark" ||
+        (initial.theme === "system" && getSystemPrefersDark())
+      : false;
     applyThemeToRoot(isDark);
 
     setLoaded(true);
@@ -465,7 +551,9 @@ export default function Page() {
     try {
       localStorage.setItem(LS_KEY, JSON.stringify(prefs));
     } catch {}
-    const isDark = prefs.theme === "dark" || (prefs.theme === "system" && getSystemPrefersDark());
+    const isDark =
+      prefs.theme === "dark" ||
+      (prefs.theme === "system" && getSystemPrefersDark());
     applyThemeToRoot(isDark);
   }, [prefs, loaded]);
 
@@ -485,7 +573,11 @@ export default function Page() {
       <div className="mb-2">
         <h1
           className="h1"
-          style={{ fontSize: "clamp(20px, 2.2vw, 24px)", lineHeight: 1.15, color: "var(--text)" }}
+          style={{
+            fontSize: "clamp(20px, 2.2vw, 24px)",
+            lineHeight: 1.15,
+            color: "var(--text)",
+          }}
         >
           {t("settings.pageTitle")}
         </h1>
@@ -497,18 +589,29 @@ export default function Page() {
           <div className={`grid gap-6 ${SHOW_LANGUAGE ? "md:grid-cols-2" : ""}`}>
             {SHOW_LANGUAGE && (
               <div className="card space-y-3">
-                <h3 className="font-semibold">{t("settings.language.title")}</h3>
+                <h3 className="font-semibold">
+                  {t("settings.language.title")}
+                </h3>
                 <select
                   className="rounded-[10px] border px-3 py-2 w-full dark:bg-slate-900 dark:border-slate-700"
                   value={prefs.language}
                   onChange={(e) =>
-                    setPrefs((p) => ({ ...p, language: e.target.value as Prefs["language"] }))
+                    setPrefs((p) => ({
+                      ...p,
+                      language: e.target.value as Prefs["language"],
+                    }))
                   }
                   disabled={!loaded}
                 >
-                  <option value="fr">{t("settings.language.options.fr")}</option>
-                  <option value="en">{t("settings.language.options.en")}</option>
-                  <option value="de">{t("settings.language.options.de")}</option>
+                  <option value="fr">
+                    {t("settings.language.options.fr")}
+                  </option>
+                  <option value="en">
+                    {t("settings.language.options.en")}
+                  </option>
+                  <option value="de">
+                    {t("settings.language.options.de")}
+                  </option>
                 </select>
               </div>
             )}
