@@ -4,6 +4,7 @@ import type { Metadata, Viewport } from "next";
 import TopbarGate from "./_components/TopbarGate";
 import "./globals.css";
 import Providers from "@/components/Providers"; // ✅ ton SessionProvider
+import { LanguageProvider } from "@/components/LanguageProvider"; // ✅ ajout
 
 export const metadata: Metadata = {
   title: "Files Coaching",
@@ -39,12 +40,14 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="fr">
       <body className="bg-white text-gray-900 min-h-dvh">
         <Providers>
-          {/* ✅ Topbar incluse dans le provider — elle pourra aussi utiliser useSession */}
-          <TopbarGate />
+          <LanguageProvider>
+            {/* ✅ Topbar incluse dans le provider — elle pourra aussi utiliser useLanguage */}
+            <TopbarGate />
 
-          <main style={{ paddingTop: "calc(env(safe-area-inset-top) + 40px)" }}>
-            {children}
-          </main>
+            <main style={{ paddingTop: "calc(env(safe-area-inset-top) + 40px)" }}>
+              {children}
+            </main>
+          </LanguageProvider>
         </Providers>
 
         {/* Fallback runtime: expose env publiques si besoin */}
