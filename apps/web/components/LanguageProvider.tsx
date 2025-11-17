@@ -1,7 +1,6 @@
 "use client";
 
-import React,
-{
+import React, {
   createContext,
   useContext,
   useEffect,
@@ -9,7 +8,11 @@ import React,
   useState,
   type ReactNode,
 } from "react";
-import { translations, type Lang, type Messages } from "@/app/i18n/translations";
+import {
+  translations,
+  type Lang,
+  type Messages,
+} from "@/app/i18n/translations";
 
 type LanguageContextType = {
   lang: Lang;
@@ -73,4 +76,3 @@ export function useLanguage() {
   }
   return ctx;
 }
-
