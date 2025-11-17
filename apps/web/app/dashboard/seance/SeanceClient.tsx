@@ -3,6 +3,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { AiSession as AiSessionT, NormalizedExercise } from "../../../lib/coach/ai";
+import { useLanguage } from "@/components/LanguageProvider"; // ✅ i18n
 
 type Props = {
   id: string;
@@ -12,6 +13,7 @@ type Props = {
 export default function SeanceClient({ id, fallback }: Props) {
   const [session, setSession] = useState<AiSessionT | null>(null);
   const [mode, setMode] = useState<"equip" | "noequip">("equip");
+  const { t } = useLanguage(); // ✅
 
   useEffect(() => {
     try {
@@ -37,11 +39,17 @@ export default function SeanceClient({ id, fallback }: Props) {
     return (
       <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
         <div className="card">
-          <h1 className="text-lg font-semibold mb-2">{fallback?.title || "Séance"}</h1>
+          <h1 className="text-lg font-semibold mb-2">
+            {fallback?.title || t("seance.fallback.defaultTitle")}
+          </h1>
           <p className="text-sm text-gray-600">
-            Détail indisponible — regénère ton programme depuis le profil.
+            {t("seance.fallback.detailUnavailable")}
           </p>
-          {!!fallback?.plannedMin && <p className="text-sm mt-2">{fallback.plannedMin} min</p>}
+          {!!fallback?.plannedMin && (
+            <p className="text-sm mt-2">
+              {fallback.plannedMin} {t("seance.fallback.minSuffix")}
+            </p>
+          )}
         </div>
       </div>
     );
@@ -53,24 +61,31 @@ export default function SeanceClient({ id, fallback }: Props) {
         <div>
           <h1 className="text-xl font-semibold">{current.title}</h1>
           <div className="text-sm text-gray-500">
-            {current.date} · {current.type} · {current.plannedMin ? `${current.plannedMin} min` : "—"}
+            {current.date} · {current.type} ·{" "}
+            {current.plannedMin
+              ? `${current.plannedMin} ${t("seance.fallback.minSuffix")}`
+              : "—"}
           </div>
         </div>
 
         <div className="flex gap-2">
           <button
             onClick={() => setMode("equip")}
-            className={`px-3 py-1 text-sm rounded border ${mode === "equip" ? "bg-black text-white" : "bg-white"}`}
-            title="Version avec équipement"
+            className={`px-3 py-1 text-sm rounded border ${
+              mode === "equip" ? "bg-black text-white" : "bg-white"
+            }`}
+            title={t("seance.mode.equip.title")}
           >
-            Avec équipement
+            {t("seance.mode.equip.label")}
           </button>
           <button
             onClick={() => setMode("noequip")}
-            className={`px-3 py-1 text-sm rounded border ${mode === "noequip" ? "bg-black text-white" : "bg-white"}`}
-            title="Version sans équipement"
+            className={`px-3 py-1 text-sm rounded border ${
+              mode === "noequip" ? "bg-black text-white" : "bg-white"
+            }`}
+            title={t("seance.mode.noequip.title")}
           >
-            Sans équipement
+            {t("seance.mode.noequip.label")}
           </button>
         </div>
       </div>
@@ -84,17 +99,23 @@ export default function SeanceClient({ id, fallback }: Props) {
                   <div className="font-medium">{e.name}</div>
                   <div className="text-xs text-gray-600">
                     {e.block ? `${labelBlock(e.block)} · ` : ""}
-                    {e.sets ? `${e.sets} séries` : ""}
+                    {e.sets ? `${e.sets} ${t("seance.exercise.setsUnit")}` : ""}
                     {e.sets && e.reps ? " · " : ""}
                     {e.reps || ""}
-                    {e.rest ? ` · Repos ${e.rest}` : ""}
-                    {e.tempo ? ` · Tempo ${e.tempo}` : ""}
-                    {typeof e.rir === "number" ? ` · RIR ${e.rir}` : ""}
+                    {e.rest ? ` · ${t("seance.exercise.restPrefix")} ${e.rest}` : ""}
+                    {e.tempo ? ` · ${t("seance.exercise.tempoPrefix")} ${e.tempo}` : ""}
+                    {typeof e.rir === "number"
+                      ? ` · ${t("seance.exercise.rirPrefix")} ${e.rir}`
+                      : ""}
                   </div>
-                  {e.notes && <div className="text-xs text-gray-500 mt-1">{e.notes}</div>}
+                  {e.notes && (
+                    <div className="text-xs text-gray-500 mt-1">{e.notes}</div>
+                  )}
                 </div>
                 <div className="shrink-0 text-xs text-gray-500">
-                  {mode === "equip" ? (e.equipment || "—") : "poids du corps"}
+                  {mode === "equip"
+                    ? e.equipment || "—"
+                    : t("seance.exercise.bodyweight")}
                 </div>
               </div>
             </li>
@@ -103,7 +124,9 @@ export default function SeanceClient({ id, fallback }: Props) {
       </div>
 
       <div className="mt-4">
-        <a href="/dashboard/profile" className="underline text-sm">← Retour au profil</a>
+        <a href="/dashboard/profile" className="underline text-sm">
+          {t("seance.backLink")}
+        </a>
       </div>
     </div>
   );
@@ -111,11 +134,16 @@ export default function SeanceClient({ id, fallback }: Props) {
 
 function labelBlock(b?: NormalizedExercise["block"]) {
   switch (b) {
-    case "echauffement": return "Échauffement";
-    case "principal": return "Principal";
-    case "accessoires": return "Accessoires";
-    case "fin": return "Fin";
-    default: return "";
+    case "echauffement":
+      return "Échauffement";
+    case "principal":
+      return "Principal";
+    case "accessoires":
+      return "Accessoires";
+    case "fin":
+      return "Fin";
+    default:
+      return "";
   }
 }
 
@@ -126,37 +154,124 @@ function toNoEquipmentExercise(ex: NormalizedExercise): NormalizedExercise {
 
   // BAS
   if (/goblet|back squat|front squat|squat|presse/.test(name))
-    return { ...base, name: "Squat au poids du corps", sets: ex.sets ?? 3, reps: ex.reps || "12–20", rest: "45–60s" };
+    return {
+      ...base,
+      name: "Squat au poids du corps",
+      sets: ex.sets ?? 3,
+      reps: ex.reps || "12–20",
+      rest: "45–60s",
+    };
   if (/fente|split squat/.test(name))
-    return { ...base, name: "Fente arrière (PDC)", sets: ex.sets ?? 3, reps: ex.reps || "10–12/ côté", rest: "45–60s" };
+    return {
+      ...base,
+      name: "Fente arrière (PDC)",
+      sets: ex.sets ?? 3,
+      reps: ex.reps || "10–12/ côté",
+      rest: "45–60s",
+    };
   if (/hip thrust/.test(name))
-    return { ...base, name: "Hip Thrust au sol", sets: ex.sets ?? 3, reps: ex.reps || "12–15", rest: "45–60s" };
+    return {
+      ...base,
+      name: "Hip Thrust au sol",
+      sets: ex.sets ?? 3,
+      reps: ex.reps || "12–15",
+      rest: "45–60s",
+    };
   if (/soulev[ée] de terre|deadlift|rdl|good morning/.test(name))
-    return { ...base, name: "Good Morning (bras croisés)", sets: ex.sets ?? 3, reps: "12–15", rest: "45–60s" };
+    return {
+      ...base,
+      name: "Good Morning (bras croisés)",
+      sets: ex.sets ?? 3,
+      reps: "12–15",
+      rest: "45–60s",
+    };
   if (/mollet|calf/.test(name))
-    return { ...base, name: "Mollets debout (PDC)", sets: ex.sets ?? 3, reps: "15–25", rest: "45–60s" };
+    return {
+      ...base,
+      name: "Mollets debout (PDC)",
+      sets: ex.sets ?? 3,
+      reps: "15–25",
+      rest: "45–60s",
+    };
 
   // HAUT PUSH
   if (/bench|d[ée]velopp[ée]/.test(name) && !/tirage|row/.test(name))
-    return { ...base, name: "Pompes", sets: ex.sets ?? 3, reps: "max contrôlé", rest: "60–75s", notes: "Surélever les mains si besoin." };
+    return {
+      ...base,
+      name: "Pompes",
+      sets: ex.sets ?? 3,
+      reps: "max contrôlé",
+      rest: "60–75s",
+      notes: "Surélever les mains si besoin.",
+    };
   if (/ecart[ée]s|fly/.test(name))
-    return { ...base, name: "Pompes mains écartées (amplitude)", sets: ex.sets ?? 2, reps: "10–15", rest: "45–60s" };
+    return {
+      ...base,
+      name: "Pompes mains écartées (amplitude)",
+      sets: ex.sets ?? 2,
+      reps: "10–15",
+      rest: "45–60s",
+    };
   if (/triceps/.test(name))
-    return { ...base, name: "Pompes mains serrées", sets: ex.sets ?? 3, reps: "8–12", rest: "45–60s" };
+    return {
+      ...base,
+      name: "Pompes mains serrées",
+      sets: ex.sets ?? 3,
+      reps: "8–12",
+      rest: "45–60s",
+    };
   if (/elevations? lat[ée]rales?/.test(name))
-    return { ...base, name: "Pike press (léger)", sets: ex.sets ?? 3, reps: "6–10", rest: "60–75s", notes: "Épaules, amplitude confortable." };
+    return {
+      ...base,
+      name: "Pike press (léger)",
+      sets: ex.sets ?? 3,
+      reps: "6–10",
+      rest: "60–75s",
+      notes: "Épaules, amplitude confortable.",
+    };
 
   // HAUT PULL
   if (/row|tirage|tractions?/.test(name))
-    return { ...base, name: "Tirage sous table (serviette)", sets: ex.sets ?? 3, reps: "6–10", rest: "60–75s", notes: "Table robuste / barre basse." };
+    return {
+      ...base,
+      name: "Tirage sous table (serviette)",
+      sets: ex.sets ?? 3,
+      reps: "6–10",
+      rest: "60–75s",
+      notes: "Table robuste / barre basse.",
+    };
   if (/face pull/.test(name))
-    return { ...base, name: "Tirage horizontal (serviette)", sets: ex.sets ?? 3, reps: "10–12", rest: "45–60s" };
+    return {
+      ...base,
+      name: "Tirage horizontal (serviette)",
+      sets: ex.sets ?? 3,
+      reps: "10–12",
+      rest: "45–60s",
+    };
   if (/biceps|curl/.test(name))
-    return { ...base, name: "Curl isométrique paume contre paume", sets: ex.sets ?? 3, reps: "20–30s", rest: "45–60s" };
+    return {
+      ...base,
+      name: "Curl isométrique paume contre paume",
+      sets: ex.sets ?? 3,
+      reps: "20–30s",
+      rest: "45–60s",
+    };
   if (/avant[- ]?bras|forearm/.test(name))
-    return { ...base, name: "Farmer hold sans charge (isométrie)", sets: ex.sets ?? 3, reps: "30–45s", rest: "45–60s" };
+    return {
+      ...base,
+      name: "Farmer hold sans charge (isométrie)",
+      sets: ex.sets ?? 3,
+      reps: "30–45s",
+      rest: "45–60s",
+    };
   if (/rear delt|arriere d[ée]paules?|post[ée]rieur/.test(name))
-    return { ...base, name: "Reverse snow angels (au sol)", sets: ex.sets ?? 3, reps: "10–15", rest: "45–60s" };
+    return {
+      ...base,
+      name: "Reverse snow angels (au sol)",
+      sets: ex.sets ?? 3,
+      reps: "10–15",
+      rest: "45–60s",
+    };
 
   // CORE/HIIT/MOBILITÉ : souvent déjà PDC
   return base;
