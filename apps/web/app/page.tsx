@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { getSupabase } from "../lib/supabaseClient";
+import { useLanguage } from "@/components/LanguageProvider"; // ✅ ajout
 
 // --- helper cookie (lisible serveur + client) ---
 function setAppEmailCookie(val: string) {
@@ -52,14 +53,16 @@ export default function HomePage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const { t } = useLanguage(); // ✅ ajout
+
   useEffect(() => {
-    const t = setTimeout(() => {
+    const tmo = setTimeout(() => {
       setInputsReady(true);
       if (typeof document !== "undefined") {
         document.activeElement instanceof HTMLElement && document.activeElement.blur();
       }
     }, 300);
-    return () => clearTimeout(t);
+    return () => clearTimeout(tmo);
   }, []);
 
   // (facultatif) si déjà connecté, synchronise le cookie au mount
@@ -164,14 +167,14 @@ export default function HomePage() {
         await notifyAuthEvent("login", sessionEmail);
       }
 
-      setMessage("Connexion réussie ✅");
+      setMessage(t("home.login.success"));
       window.location.href = "/dashboard";
     } catch (err: any) {
       const msg = String(err?.message || "");
       setError(
         msg.toLowerCase().includes("invalid login credentials")
-          ? "Identifiants invalides. Vérifie l’e-mail/mot de passe, ou confirme ton e-mail."
-          : msg || "Impossible de se connecter"
+          ? t("home.login.error.invalidCredentials")
+          : msg || t("home.login.error.generic")
       );
     } finally {
       setLoading(false);
@@ -199,13 +202,8 @@ export default function HomePage() {
       });
       if (signUpError) throw signUpError;
 
-      // Option: on peut stocker l'email dans le cookie (utile pour des écrans non protégés)
-      // Si tu préfères ne rien stocker avant confirmation, commente la ligne suivante.
       if (emailTrim) setAppEmailCookie(emailTrim);
 
-      // 2) Ne PAS connecter immédiatement :
-      //    - Si le projet est en "auto-confirm", Supabase peut quand même renvoyer une session.
-      //    - On force donc la déconnexion pour imposer la confirmation par e-mail.
       if (data?.session) {
         await supabase.auth.signOut();
       }
@@ -214,7 +212,7 @@ export default function HomePage() {
       await notifyAuthEvent("signup", emailTrim);
 
       // 3) Message clair et on bascule vers le panneau de connexion
-      setMessage("Compte créé ✅ Vérifie tes e-mails pour confirmer ton inscription.");
+      setMessage(t("home.signup.success"));
       setShowSignup(false);
       setShowLogin(true);
       setEmail(emailTrim);
@@ -222,8 +220,8 @@ export default function HomePage() {
       const msg = String(err?.message || "");
       setError(
         /email|courriel/i.test(msg)
-          ? "E-mail invalide ou déjà utilisé."
-          : msg || "Impossible de créer le compte"
+          ? t("home.signup.error.invalidEmail")
+          : msg || t("home.signup.error.generic")
       );
     } finally {
       setLoading(false);
@@ -233,7 +231,7 @@ export default function HomePage() {
   async function handleForgotPassword() {
     const emailTrim = email.trim().toLowerCase();
     if (!emailTrim) {
-      setError("Entrez votre e-mail pour réinitialiser votre mot de passe.");
+      setError(t("home.forgotPassword.noEmail"));
       return;
     }
     setLoading(true);
@@ -245,9 +243,9 @@ export default function HomePage() {
         redirectTo: `${window.location.origin}/reset-password`,
       });
       if (error) throw error;
-      setMessage("E-mail de réinitialisation envoyé 📩");
+      setMessage(t("home.forgotPassword.success"));
     } catch (err: any) {
-      setError(err.message || "Erreur lors de la réinitialisation");
+      setError(err.message || t("home.forgotPassword.error"));
     } finally {
       setLoading(false);
     }
@@ -277,7 +275,7 @@ export default function HomePage() {
                        [font-size:theme(fontSize.3xl)!important]
                        sm:[font-size:theme(fontSize.5xl)!important]"
           >
-            Files Coaching —<br /> Coach Sportif IA
+            {t("home.hero.titleLine1")}<br />{t("home.hero.titleLine2")}
           </h1>
         </header>
 
@@ -286,12 +284,12 @@ export default function HomePage() {
         {/* Accroche */}
         <section className="mb-8">
           <h3 className="text-xl sm:text-2xl font-semibold mb-4">
-            Séances personnalisées, conseils et suivi
+            {t("home.hero.subtitle")}
           </h3>
           <ul className="space-y-3 text-gray-900 text-lg sm:text-xl leading-relaxed pl-5 list-disc">
-            <li>✅ Programme personnalisé adapté à vos objectifs</li>
-            <li>✅ Minuteur &amp; Musique intégrés pour vos séances</li>
-            <li>✅ Recettes healthy &amp; conseils nutrition</li>
+            <li>{t("home.hero.bullets.program")}</li>
+            <li>{t("home.hero.bullets.timerMusic")}</li>
+            <li>{t("home.hero.bullets.recipes")}</li>
           </ul>
         </section>
 
@@ -312,7 +310,7 @@ export default function HomePage() {
                 padding: "12px 22px",
               }}
             >
-              Connecte-toi
+              {t("home.cta.login")}
             </button>
 
             <button
@@ -328,7 +326,7 @@ export default function HomePage() {
                 padding: "12px 22px",
               }}
             >
-              Créer un compte
+              {t("home.cta.signup")}
             </button>
           </div>
         </section>
@@ -338,7 +336,9 @@ export default function HomePage() {
           <div id="login-panel" className="max-w-md mx-auto">
             <form onSubmit={handleLogin} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-1">Adresse e-mail</label>
+                <label className="block text-sm font-medium mb-1">
+                  {t("home.login.emailLabel")}
+                </label>
                 <input
                   type="email"
                   inputMode="email"
@@ -350,12 +350,14 @@ export default function HomePage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-gray-100"
-                  placeholder="vous@exemple.com"
+                  placeholder={t("home.login.emailPlaceholder")}
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">Mot de passe</label>
+                <label className="block text-sm font-medium mb-1">
+                  {t("home.login.passwordLabel")}
+                </label>
                 <div className="relative">
                   <input
                     type={showPassword ? "text" : "password"}
@@ -368,14 +370,18 @@ export default function HomePage() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="w-full border rounded-lg px-3 py-2 pr-12 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-gray-100"
-                    placeholder="••••••••"
+                    placeholder={t("home.login.passwordPlaceholder")}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-500 hover:text-gray-700"
                     tabIndex={-1}
-                    aria-label={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+                    aria-label={
+                      showPassword
+                        ? t("common.password.hide")
+                        : t("common.password.show")
+                    }
                   >
                     {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                   </button>
@@ -388,7 +394,9 @@ export default function HomePage() {
                 style={{ ...pillStyle, whiteSpace: "normal" }}
                 disabled={loading || !inputsReady}
               >
-                {loading ? "Connexion..." : "Se connecter"}
+                {loading
+                  ? t("home.login.submitLoading")
+                  : t("home.login.submitIdle")}
               </button>
 
               <button
@@ -397,11 +405,19 @@ export default function HomePage() {
                 className="block w-full text-center text-sm text-gray-600 hover:underline"
                 disabled={!inputsReady}
               >
-                Mot de passe oublié ?
+                {t("home.login.forgotPassword")}
               </button>
 
-              {message && <p className="text-sm text-emerald-600 mt-2 text-center">{message}</p>}
-              {error && <p className="text-sm text-red-600 mt-2 text-center">{error}</p>}
+              {message && (
+                <p className="text-sm text-emerald-600 mt-2 text-center">
+                  {message}
+                </p>
+              )}
+              {error && (
+                <p className="text-sm text-red-600 mt-2 text-center">
+                  {error}
+                </p>
+              )}
             </form>
           </div>
         )}
@@ -411,7 +427,9 @@ export default function HomePage() {
           <div id="signup-panel" className="max-w-md mx-auto">
             <form onSubmit={handleSignup} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-1">Adresse e-mail</label>
+                <label className="block text-sm font-medium mb-1">
+                  {t("home.signup.emailLabel")}
+                </label>
                 <input
                   type="email"
                   inputMode="email"
@@ -423,12 +441,14 @@ export default function HomePage() {
                   value={emailSu}
                   onChange={(e) => setEmailSu(e.target.value)}
                   className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-gray-100"
-                  placeholder="vous@exemple.com"
+                  placeholder={t("home.signup.emailPlaceholder")}
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">Mot de passe</label>
+                <label className="block text-sm font-medium mb-1">
+                  {t("home.signup.passwordLabel")}
+                </label>
                 <div className="relative">
                   <input
                     type={showPasswordSignup ? "text" : "password"}
@@ -441,14 +461,18 @@ export default function HomePage() {
                     value={passwordSu}
                     onChange={(e) => setPasswordSu(e.target.value)}
                     className="w-full border rounded-lg px-3 py-2 pr-12 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-gray-100"
-                    placeholder="••••••••"
+                    placeholder={t("home.signup.passwordPlaceholder")}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPasswordSignup(!showPasswordSignup)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-500 hover:text-gray-700"
                     tabIndex={-1}
-                    aria-label={showPasswordSignup ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+                    aria-label={
+                      showPasswordSignup
+                        ? t("common.password.hide")
+                        : t("common.password.show")
+                    }
                   >
                     {showPasswordSignup ? <EyeOff size={20} /> : <Eye size={20} />}
                   </button>
@@ -461,11 +485,21 @@ export default function HomePage() {
                 style={{ ...pillStyle, whiteSpace: "normal" }}
                 disabled={loading || !inputsReady}
               >
-                {loading ? "Création du compte..." : "Créer mon compte"}
+                {loading
+                  ? t("home.signup.submitLoading")
+                  : t("home.signup.submitIdle")}
               </button>
 
-              {message && <p className="text-sm text-emerald-600 mt-2 text-center">{message}</p>}
-              {error && <p className="text-sm text-red-600 mt-2 text-center">{error}</p>}
+              {message && (
+                <p className="text-sm text-emerald-600 mt-2 text-center">
+                  {message}
+                </p>
+              )}
+              {error && (
+                <p className="text-sm text-red-600 mt-2 text-center">
+                  {error}
+                </p>
+              )}
             </form>
           </div>
         )}
