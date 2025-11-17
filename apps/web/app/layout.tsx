@@ -1,3 +1,4 @@
+//apps/web/app/layout.tsx
 import type { ReactNode } from "react";
 import type { Metadata, Viewport } from "next";
 import TopbarGate from "./_components/TopbarGate";
