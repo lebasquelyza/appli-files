@@ -1,12 +1,32 @@
-//apps/web/app/dashboard/recipes/page.tsx
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { AIExtraSection } from "./AISection";
+import { translations } from "@/app/i18n/translations";
 
 /* ===================== Config Next ===================== */
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+/* ===================== i18n helpers (server) ===================== */
+type Lang = "fr" | "en";
+
+function getFromPath(obj: any, path: string): any {
+  return path.split(".").reduce((acc, key) => acc?.[key], obj);
+}
+
+function tServer(lang: Lang, path: string, fallback?: string): string {
+  const dict = translations[lang] as any;
+  const v = getFromPath(dict, path);
+  if (typeof v === "string") return v;
+  return fallback ?? path;
+}
+
+function getLang(): Lang {
+  const cookieLang = cookies().get("fc-lang")?.value;
+  if (cookieLang === "en") return "en";
+  return "fr";
+}
 
 /* ===================== Types ===================== */
 type Plan = "BASIC" | "PLUS" | "PREMIUM";
@@ -28,7 +48,10 @@ type Recipe = {
 /* ===================== Utils ===================== */
 function parseCsv(value?: string | string[]): string[] {
   const raw = Array.isArray(value) ? value.join(",") : value ?? "";
-  return raw.split(/[,|]/).map((s) => s.trim().toLowerCase()).filter(Boolean);
+  return raw
+    .split(/[,|]/)
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
 }
 
 /* --- random déterministe --- */
@@ -46,7 +69,10 @@ function seededShuffle<T>(arr: T[], seed: number): T[] {
   return a;
 }
 function pickRandomSeeded<T>(arr: T[], n: number, seed: number): T[] {
-  return seededShuffle(arr, seed).slice(0, Math.max(0, Math.min(n, arr.length)));
+  return seededShuffle(arr, seed).slice(
+    0,
+    Math.max(0, Math.min(n, arr.length)),
+  );
 }
 
 /* ---- base64url JSON (côté serveur) ---- */
@@ -74,12 +100,28 @@ function encodeB64UrlJson(data: any): string {
 
 /* ---- dictionnaire "re-travailler" pour plus tard ---- */
 const REWORK_TIPS: Record<string, string[]> = {
-  brocoli: ["Rôti au four parmesan-citron", "Wok soja-sésame", "Velouté crème légère"],
-  saumon: ["Mariné miso/soja", "Papillote citron-aneth", "Rillettes au yaourt"],
-  tofu: ["Mariné puis snacké", "Panure maïzena + sauce douce", "Émietté façon brouillade"],
+  brocoli: [
+    "Rôti au four parmesan-citron",
+    "Wok soja-sésame",
+    "Velouté crème légère",
+  ],
+  saumon: [
+    "Mariné miso/soja",
+    "Papillote citron-aneth",
+    "Rillettes au yaourt",
+  ],
+  tofu: [
+    "Mariné puis snacké",
+    "Panure maïzena + sauce douce",
+    "Émietté façon brouillade",
+  ],
   poivron: ["Confit puis pelé", "Coulis doux", "Grillé salade"],
   champignons: ["Poêlés très chauds", "Hachés en bolo", "Rôtis entiers"],
-  courgette: ["Tagliatelles ail-citron", "Gratin ricotta-menthe", "Galettes râpées"],
+  courgette: [
+    "Tagliatelles ail-citron",
+    "Gratin ricotta-menthe",
+    "Galettes râpées",
+  ],
   épinards: ["Sautés minute", "Pesto doux", "Fondue légère"],
   lentilles: ["Dal coco", "Salade tiède", "Soupe carotte-cumin"],
 };
@@ -138,7 +180,15 @@ const HEALTHY_BASE: Recipe[] = [
     tags: ["rapide", "sans-gluten"],
     goals: ["equilibre"],
     minPlan: "BASIC",
-    ingredients: ["œufs", "champignons", "ciboulette", "beurre", "sel", "poivre", "parmesan"],
+    ingredients: [
+      "œufs",
+      "champignons",
+      "ciboulette",
+      "beurre",
+      "sel",
+      "poivre",
+      "parmesan",
+    ],
     steps: ["Battre, cuire, plier"],
   },
   {
@@ -287,7 +337,14 @@ const SHAKES_BASE: Recipe[] = [
 async function applyFiltersAction(formData: FormData): Promise<void> {
   "use server";
   const params = new URLSearchParams();
-  const fields = ["kcal", "kcalMin", "kcalMax", "allergens", "dislikes", "view"] as const;
+  const fields = [
+    "kcal",
+    "kcalMin",
+    "kcalMax",
+    "allergens",
+    "dislikes",
+    "view",
+  ] as const;
   for (const f of fields) {
     const val = (formData.get(f) ?? "").toString().trim();
     if (val) params.set(f, val);
@@ -305,7 +362,10 @@ function readSaved(): SavedItem[] {
     const raw = cookies().get(SAVED_COOKIE)?.value ?? "[]";
     const arr = JSON.parse(raw);
     return Array.isArray(arr)
-      ? arr.filter((x) => x && typeof x.id === "string" && typeof x.title === "string")
+      ? arr.filter(
+          (x) =>
+            x && typeof x.id === "string" && typeof x.title === "string",
+        )
       : [];
   } catch {
     return [];
@@ -361,6 +421,9 @@ export default async function Page({
     view?: string;
   };
 }) {
+  const lang = getLang();
+  const t = (path: string, fallback: string) => tServer(lang, path, fallback);
+
   const kcal = Number(searchParams?.kcal ?? "");
   const kcalMin = Number(searchParams?.kcalMin ?? "");
   const kcalMax = Number(searchParams?.kcalMax ?? "");
@@ -371,7 +434,9 @@ export default async function Page({
   const hasKcalMin = !isNaN(kcalMin) && kcalMin > 0;
   const hasKcalMax = !isNaN(kcalMax) && kcalMax > 0;
 
-  const view = (searchParams?.view === "shakes" ? "shakes" : "meals") as "meals" | "shakes";
+  const view = (searchParams?.view === "shakes" ? "shakes" : "meals") as
+    | "meals"
+    | "shakes";
 
   const seed = Number(searchParams?.rnd ?? "0") || 123456789;
 
@@ -383,8 +448,10 @@ export default async function Page({
   if (hasKcalTarget) qsParts.push(`kcal=${kcal}`);
   if (hasKcalMin) qsParts.push(`kcalMin=${kcalMin}`);
   if (hasKcalMax) qsParts.push(`kcalMax=${kcalMax}`);
-  if (allergens.length) qsParts.push(`allergens=${encodeURIComponent(allergens.join(","))}`);
-  if (dislikes.length) qsParts.push(`dislikes=${encodeURIComponent(dislikes.join(","))}`);
+  if (allergens.length)
+    qsParts.push(`allergens=${encodeURIComponent(allergens.join(","))}`);
+  if (dislikes.length)
+    qsParts.push(`dislikes=${encodeURIComponent(dislikes.join(","))}`);
   const baseQS = qsParts.length ? `${qsParts.join("&")}&` : "";
   const encode = (r: Recipe) => `?${baseQS}data=${encodeB64UrlJson(r)}`;
 
@@ -413,7 +480,7 @@ export default async function Page({
                 lineHeight: 1.15,
               }}
             >
-              Recettes
+              {t("recipes.pageTitle", "Recettes")}
             </h1>
             <p
               className="lead"
@@ -424,33 +491,63 @@ export default async function Page({
                 color: "#4b5563",
               }}
             >
-              Base healthy pour tous + suggestions <strong>perso IA</strong> selon tes filtres.
+              {t(
+                "recipes.pageSubtitle",
+                "Base healthy pour tous + suggestions perso IA selon tes filtres.",
+              )}{" "}
+              <strong>IA</strong>
             </p>
 
             {/* Récap filtres actifs */}
-            <div className="text-xs" style={{ color: "#6b7280", marginTop: 8 }}>
-              Filtres actifs —
-              {hasKcalTarget && <> cible: ~{kcal} kcal</>}
+            <div
+              className="text-xs"
+              style={{ color: "#6b7280", marginTop: 8 }}
+            >
+              {t("recipes.filters.activeLabel", "Filtres actifs —")}
+              {hasKcalTarget && (
+                <>
+                  {" "}
+                  {t("recipes.filters.target", "cible")}: ~{kcal}{" "}
+                  {t("recipes.filters.kcalSuffix", "kcal")}
+                </>
+              )}
               {!hasKcalTarget && (hasKcalMin || hasKcalMax) && (
                 <>
                   {" "}
-                  plage: {hasKcalMin ? kcalMin : "…"}–{hasKcalMax ? kcalMax : "…"} kcal
+                  {t("recipes.filters.range", "plage")}:{" "}
+                  {hasKcalMin ? kcalMin : "…"}–{hasKcalMax ? kcalMax : "…"}{" "}
+                  {t("recipes.filters.kcalSuffix", "kcal")}
                 </>
               )}
-              {allergens.length ? <> · allergènes: {allergens.join(", ")}</> : null}
-              {dislikes.length ? <> · non aimés: {dislikes.join(", ")}</> : null}
+              {allergens.length ? (
+                <>
+                  {" "}
+                  · {t("recipes.filters.allergens", "allergènes")}:{" "}
+                  {allergens.join(", ")}
+                </>
+              ) : null}
+              {dislikes.length ? (
+                <>
+                  {" "}
+                  · {t("recipes.filters.dislikes", "non aimés")}:{" "}
+                  {dislikes.join(", ")}
+                </>
+              ) : null}
               {!hasKcalTarget &&
                 !hasKcalMin &&
                 !hasKcalMax &&
                 !allergens.length &&
                 !dislikes.length &&
-                " aucun"}
+                ` ${t("recipes.filters.none", "aucun")}`}
             </div>
           </div>
         </div>
 
         {/* =================== Choix rapide (blocs cliquables) =================== */}
-        <div className="grid gap-4 sm:grid-cols-2" style={{ marginTop: 12 }}>
+        <div
+          className="grid gap-4 sm:grid-cols-2"
+          style={{ marginTop: 12 }}
+        >
           <a
             href={linkMeals}
             className="card"
@@ -468,12 +565,27 @@ export default async function Page({
               }}
             >
               <div>
-                <strong>Recettes — Healthy</strong>
-                <div className="text-sm" style={{ color: "#6b7280" }}>
-                  Plats + bowls healthy
+                <strong>
+                  {t(
+                    "recipes.quickSwitch.meals.title",
+                    "Recettes — Healthy",
+                  )}
+                </strong>
+                <div
+                  className="text-sm"
+                  style={{ color: "#6b7280" }}
+                >
+                  {t(
+                    "recipes.quickSwitch.meals.subtitle",
+                    "Plats + bowls healthy",
+                  )}
                 </div>
               </div>
-              {view === "meals" && <span className="badge">Actif</span>}
+              {view === "meals" && (
+                <span className="badge">
+                  {t("recipes.quickSwitch.activeBadge", "Actif")}
+                </span>
+              )}
             </div>
           </a>
 
@@ -494,12 +606,27 @@ export default async function Page({
               }}
             >
               <div>
-                <strong>Bar à prot’ — Boissons protéinées</strong>
-                <div className="text-sm" style={{ color: "#6b7280" }}>
-                  Shakes/smoothies en 5 min
+                <strong>
+                  {t(
+                    "recipes.quickSwitch.shakes.title",
+                    "Bar à prot’ — Boissons protéinées",
+                  )}
+                </strong>
+                <div
+                  className="text-sm"
+                  style={{ color: "#6b7280" }}
+                >
+                  {t(
+                    "recipes.quickSwitch.shakes.subtitle",
+                    "Shakes/smoothies en 5 min",
+                  )}
                 </div>
               </div>
-              {view === "shakes" && <span className="badge">Actif</span>}
+              {view === "shakes" && (
+                <span className="badge">
+                  {t("recipes.quickSwitch.activeBadge", "Actif")}
+                </span>
+              )}
             </div>
           </a>
         </div>
@@ -523,84 +650,153 @@ export default async function Page({
                 lineHeight: 1.2,
               }}
             >
-              Contraintes & filtres (pour l&apos;IA)
+              {t(
+                "recipes.constraints.title",
+                "Contraintes & filtres (pour l'IA)",
+              )}
             </h2>
           </div>
 
-          <form action={applyFiltersAction} className="grid gap-6 lg:grid-cols-2">
+          <form
+            action={applyFiltersAction}
+            className="grid gap-6 lg:grid-cols-2"
+          >
             {/* On garde la vue actuelle (meals/shakes) */}
             <input type="hidden" name="view" value={view} />
 
             <fieldset style={{ display: "contents" }}>
               <div>
-                <label className="label">Cible calories (kcal)</label>
+                <label className="label">
+                  {t(
+                    "recipes.constraints.kcalTargetLabel",
+                    "Cible calories (kcal)",
+                  )}
+                </label>
                 <input
                   className="input"
                   type="number"
                   name="kcal"
                   placeholder="ex: 600"
-                  defaultValue={!isNaN(kcal) && kcal > 0 ? String(kcal) : ""}
+                  defaultValue={
+                    !isNaN(kcal) && kcal > 0 ? String(kcal) : ""
+                  }
                 />
               </div>
               <div className="grid gap-6 sm:grid-cols-2">
                 <div>
-                  <label className="label">Min kcal</label>
+                  <label className="label">
+                    {t(
+                      "recipes.constraints.kcalMinLabel",
+                      "Min kcal",
+                    )}
+                  </label>
                   <input
                     className="input"
                     type="number"
                     name="kcalMin"
                     placeholder="ex: 450"
-                    defaultValue={!isNaN(kcalMin) && kcalMin > 0 ? String(kcalMin) : ""}
+                    defaultValue={
+                      !isNaN(kcalMin) && kcalMin > 0
+                        ? String(kcalMin)
+                        : ""
+                    }
                   />
                 </div>
                 <div>
-                  <label className="label">Max kcal</label>
+                  <label className="label">
+                    {t(
+                      "recipes.constraints.kcalMaxLabel",
+                      "Max kcal",
+                    )}
+                  </label>
                   <input
                     className="input"
                     type="number"
                     name="kcalMax"
                     placeholder="ex: 700"
-                    defaultValue={!isNaN(kcalMax) && kcalMax > 0 ? String(kcalMax) : ""}
+                    defaultValue={
+                      !isNaN(kcalMax) && kcalMax > 0
+                        ? String(kcalMax)
+                        : ""
+                    }
                   />
                 </div>
               </div>
 
               <div>
-                <label className="label">Allergènes / intolérances (séparés par virgules)</label>
+                <label className="label">
+                  {t(
+                    "recipes.constraints.allergensLabel",
+                    "Allergènes / intolérances (séparés par virgules)",
+                  )}
+                </label>
                 <input
                   className="input"
                   type="text"
                   name="allergens"
-                  placeholder="arachide, lactose, gluten"
+                  placeholder={t(
+                    "recipes.constraints.allergensPlaceholder",
+                    "arachide, lactose, gluten",
+                  )}
                   defaultValue={allergens.join(", ")}
                 />
               </div>
 
               <div>
-                <label className="label">Aliments non aimés (re-travailler)</label>
+                <label className="label">
+                  {t(
+                    "recipes.constraints.dislikesLabel",
+                    "Aliments non aimés (re-travailler)",
+                  )}
+                </label>
                 <input
                   className="input"
                   type="text"
                   name="dislikes"
-                  placeholder="brocoli, saumon, tofu..."
+                  placeholder={t(
+                    "recipes.constraints.dislikesPlaceholder",
+                    "brocoli, saumon, tofu...",
+                  )}
                   defaultValue={dislikes.join(", ")}
                 />
-                <div className="text-xs" style={{ color: "#6b7280", marginTop: 4 }}>
-                  L&apos;IA les garde, mais propose une autre façon de les cuisiner.
+                <div
+                  className="text-xs"
+                  style={{ color: "#6b7280", marginTop: 4 }}
+                >
+                  {t(
+                    "recipes.constraints.dislikesHelp",
+                    "L'IA les garde, mais propose une autre façon de les cuisiner.",
+                  )}
                 </div>
               </div>
             </fieldset>
 
             <div className="flex items-center justify-between lg:col-span-2">
-              <div className="text-sm" style={{ color: "#6b7280" }}>
-                Les filtres s&apos;appliquent surtout aux suggestions <strong>perso IA</strong>.
+              <div
+                className="text-sm"
+                style={{ color: "#6b7280" }}
+              >
+                {t(
+                  "recipes.constraints.footerNote",
+                  "Les filtres s'appliquent surtout aux suggestions perso IA.",
+                )}
               </div>
               <div style={{ display: "flex", gap: 10 }}>
-                <a href="/dashboard/recipes" className="btn btn-outline" style={{ color: "#111" }}>
-                  Réinitialiser
+                <a
+                  href="/dashboard/recipes"
+                  className="btn btn-outline"
+                  style={{ color: "#111" }}
+                >
+                  {t(
+                    "recipes.constraints.resetButton",
+                    "Réinitialiser",
+                  )}
                 </a>
                 <button className="btn btn-dash" type="submit">
-                  Régénérer
+                  {t(
+                    "recipes.constraints.regenerateButton",
+                    "Régénérer",
+                  )}
                 </button>
               </div>
             </div>
@@ -609,9 +805,20 @@ export default async function Page({
 
         {/* Vos recettes enregistrées */}
         {saved.length > 0 && (
-          <section className="section" style={{ marginTop: 12 }}>
-            <div className="section-head" style={{ marginBottom: 8 }}>
-              <h2>Vos recettes enregistrées</h2>
+          <section
+            className="section"
+            style={{ marginTop: 12 }}
+          >
+            <div
+              className="section-head"
+              style={{ marginBottom: 8 }}
+            >
+              <h2>
+                {t(
+                  "recipes.saved.title",
+                  "Vos recettes enregistrées",
+                )}
+              </h2>
             </div>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-2">
               {saved.map((s) => (
@@ -647,7 +854,10 @@ export default async function Page({
                       className="btn btn-outline"
                       style={{ color: "var(--text, #111)" }}
                     >
-                      Retirer
+                      {t(
+                        "recipes.saved.removeButton",
+                        "Retirer",
+                      )}
                     </button>
                   </form>
                 </article>
@@ -659,12 +869,25 @@ export default async function Page({
         {/* =================== CONTENU selon view =================== */}
         {view === "meals" ? (
           <>
-            <section className="section" style={{ marginTop: 12 }}>
-              <div className="section-head" style={{ marginBottom: 8 }}>
-                {/* 🔹 Titre modifié ici */}
-                <h2>Recettes</h2>
-                <p className="text-xs" style={{ color: "#6b7280", marginTop: 4 }}>
-                  Recettes fixes, stables et testées.
+            <section
+              className="section"
+              style={{ marginTop: 12 }}
+            >
+              <div
+                className="section-head"
+                style={{ marginBottom: 8 }}
+              >
+                <h2>
+                  {t("recipes.mealsSection.title", "Recettes")}
+                </h2>
+                <p
+                  className="text-xs"
+                  style={{ color: "#6b7280", marginTop: 4 }}
+                >
+                  {t(
+                    "recipes.mealsSection.subtitle",
+                    "Recettes fixes, stables et testées.",
+                  )}
                 </p>
               </div>
               <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
@@ -674,7 +897,10 @@ export default async function Page({
                     r={r}
                     detailQS={encode(r)}
                     isSaved={savedSet.has(r.id)}
-                    currentUrl={currentUrl || "/dashboard/recipes"}
+                    currentUrl={
+                      currentUrl || "/dashboard/recipes"
+                    }
+                    t={t}
                   />
                 ))}
               </div>
@@ -693,11 +919,28 @@ export default async function Page({
           </>
         ) : (
           <>
-            <section className="section" style={{ marginTop: 12 }}>
-              <div className="section-head" style={{ marginBottom: 8 }}>
-                <h2>Boissons protéinées — base</h2>
-                <p className="text-xs" style={{ color: "#6b7280", marginTop: 4 }}>
-                  Shakes & smoothies rapides.
+            <section
+              className="section"
+              style={{ marginTop: 12 }}
+            >
+              <div
+                className="section-head"
+                style={{ marginBottom: 8 }}
+              >
+                <h2>
+                  {t(
+                    "recipes.shakesSection.title",
+                    "Boissons protéinées — base",
+                  )}
+                </h2>
+                <p
+                  className="text-xs"
+                  style={{ color: "#6b7280", marginTop: 4 }}
+                >
+                  {t(
+                    "recipes.shakesSection.subtitle",
+                    "Shakes & smoothies rapides.",
+                  )}
                 </p>
               </div>
               <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
@@ -707,7 +950,10 @@ export default async function Page({
                     r={r}
                     detailQS={encode(r)}
                     isSaved={savedSet.has(r.id)}
-                    currentUrl={currentUrl || "/dashboard/recipes"}
+                    currentUrl={
+                      currentUrl || "/dashboard/recipes"
+                    }
+                    t={t}
                   />
                 ))}
               </div>
@@ -736,64 +982,104 @@ function Card({
   detailQS,
   isSaved,
   currentUrl,
+  t,
 }: {
   r: Recipe;
   detailQS: string;
   isSaved: boolean;
   currentUrl: string;
+  t: (path: string, fallback: string) => string;
 }) {
   const href = `/dashboard/recipes/${r.id}${detailQS}`;
 
   return (
     <article className="card" style={{ overflow: "hidden" }}>
       <div className="flex items-center justify-between">
-        <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>{r.title}</h3>
+        <h3
+          style={{
+            margin: 0,
+            fontSize: 18,
+            fontWeight: 800,
+          }}
+        >
+          {r.title}
+        </h3>
       </div>
 
       {r.subtitle && (
-        <p className="text-sm" style={{ marginTop: 4, color: "#6b7280" }}>
+        <p
+          className="text-sm"
+          style={{ marginTop: 4, color: "#6b7280" }}
+        >
           {r.subtitle}
         </p>
       )}
 
       <div
         className="text-sm"
-        style={{ marginTop: 10, display: "flex", gap: 12, flexWrap: "wrap" }}
+        style={{
+          marginTop: 10,
+          display: "flex",
+          gap: 12,
+          flexWrap: "wrap",
+        }}
       >
-        {typeof r.kcal === "number" && <span className="badge">{r.kcal} kcal</span>}
-        {typeof r.timeMin === "number" && <span className="badge">{r.timeMin} min</span>}
+        {typeof r.kcal === "number" && (
+          <span className="badge">{r.kcal} kcal</span>
+        )}
+        {typeof r.timeMin === "number" && (
+          <span className="badge">{r.timeMin} min</span>
+        )}
       </div>
 
-      {/* 🔹 Ingrédients retirés de la carte pour n'être visibles que dans la page détail */}
+      {/* Ingrédients retirés de la carte pour n'être visibles que dans la page détail */}
 
-      <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
+      <div
+        style={{
+          display: "flex",
+          gap: 10,
+          marginTop: 12,
+          flexWrap: "wrap",
+        }}
+      >
         <a className="btn btn-dash" href={href}>
-          Voir la recette
+          {t("recipes.card.viewRecipe", "Voir la recette")}
         </a>
 
         {isSaved ? (
           <form action={removeRecipeAction}>
             <input type="hidden" name="id" value={r.id} />
-            <input type="hidden" name="returnTo" value={currentUrl} />
+            <input
+              type="hidden"
+              name="returnTo"
+              value={currentUrl}
+            />
             <button
               type="submit"
               className="btn btn-outline"
               style={{ color: "var(--text, #111)" }}
             >
-              Enregistrée ✓ (Retirer)
+              {t(
+                "recipes.card.savedRemove",
+                "Enregistrée ✓ (Retirer)",
+              )}
             </button>
           </form>
         ) : (
           <form action={saveRecipeAction}>
             <input type="hidden" name="id" value={r.id} />
             <input type="hidden" name="title" value={r.title} />
-            <input type="hidden" name="returnTo" value={currentUrl} />
+            <input
+              type="hidden"
+              name="returnTo"
+              value={currentUrl}
+            />
             <button
               type="submit"
               className="btn btn-outline"
               style={{ color: "var(--text, #111)" }}
             >
-              Enregistrer
+              {t("recipes.card.save", "Enregistrer")}
             </button>
           </form>
         )}
