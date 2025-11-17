@@ -46,8 +46,7 @@ export const translations = {
       viewAllSessions: "View all workouts",
     },
   },
-} as const;
+} as any;  // 👈 la seule modification nécessaire
 
-// ✅ Types exportés pour LanguageProvider
 export type Lang = keyof typeof translations;
 export type Messages = (typeof translations)["fr"];
