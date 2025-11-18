@@ -4,6 +4,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import type { AiSession } from "../../../lib/coach/ai"; // app/dashboard/profile -> app -> web -> lib
+import { useLanguage } from "@/components/LanguageProvider";
 
 type Props = {
   email: string;
@@ -79,6 +80,7 @@ export default function GenerateClient({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const { t } = useLanguage();
 
   const [sessions, setSessions] = useState<AiSession[]>(initialSessions);
   const [loading, setLoading] = useState(false);
@@ -133,7 +135,7 @@ export default function GenerateClient({
       );
       const data = await res.json();
       if (!res.ok || !data.sessions) {
-        throw new Error(data.error || "Erreur de génération du programme.");
+        throw new Error(data.error || t("profile.generate.error.generic"));
       }
       // applique un focus par position selon l’objectif
       const cycle = cycleForGoal(goal);
@@ -148,7 +150,7 @@ export default function GenerateClient({
       );
       setSessions(focused);
     } catch (e: any) {
-      setError(e?.message || "Erreur inconnue");
+      setError(e?.message || t("profile.generate.error.unknown"));
     } finally {
       setLoading(false);
     }
@@ -196,7 +198,9 @@ export default function GenerateClient({
           gap: 12,
         }}
       >
-        <h2 className="font-semibold text-lg">Mes séances</h2>
+        <h2 className="font-semibold text-lg">
+          {t("profile.generate.title")}
+        </h2>
         <button
           onClick={handleGenerate}
           disabled={loading}
@@ -211,9 +215,11 @@ export default function GenerateClient({
             opacity: loading ? 0.7 : 1,
             whiteSpace: "nowrap",
           }}
-          title="Générer/mettre à jour le programme"
+          title={t("profile.generate.button.title")}
         >
-          {loading ? "⏳..." : "⚙️ Générer"}
+          {loading
+            ? t("profile.generate.button.generating")
+            : t("profile.generate.button.generate")}
         </button>
       </div>
 
@@ -227,7 +233,7 @@ export default function GenerateClient({
             fontSize: 13,
           }}
         >
-          Création de tes séances en cours…
+          {t("profile.generate.loadingMessage")}
         </div>
       )}
 
@@ -282,11 +288,15 @@ export default function GenerateClient({
                     style={{ minWidth: 0 }}
                   >
                     <div className="font-medium text-sm truncate">
-                      {cleanTitle || "Séance"}
+                      {cleanTitle || t("profile.generate.defaultTitle")}
                     </div>
                     <div className="text-xs text-gray-500">
                       {s.type}
-                      {s.plannedMin ? ` · ${s.plannedMin} min` : ""}
+                      {s.plannedMin
+                        ? ` · ${s.plannedMin} ${t(
+                            "seance.fallback.minSuffix"
+                          )}`
+                        : ""}
                     </div>
 
                     {/* Badges d'état */}
@@ -294,17 +304,17 @@ export default function GenerateClient({
                       {isSaved && (
                         <span
                           className="inline-flex items-center text-[11px] px-2 py-0.5 rounded-full border border-emerald-600"
-                          aria-label="Enregistrée"
+                          aria-label={t("profile.generate.badge.saved")}
                         >
-                          ✅ Enregistrée
+                          ✅ {t("profile.generate.badge.saved")}
                         </span>
                       )}
                       {isLater && (
                         <span
                           className="inline-flex items-center text-[11px] px-2 py-0.5 rounded-full border border-amber-600"
-                          aria-label="À faire plus tard"
+                          aria-label={t("profile.generate.badge.later")}
                         >
-                          ⏳ Plus tard
+                          ⏳ {t("profile.generate.badge.later")}
                         </span>
                       )}
                     </div>
@@ -322,10 +332,10 @@ export default function GenerateClient({
                       }}
                       aria-haspopup="menu"
                       aria-expanded={openIdx === i}
-                      title="Enregistrer cette séance"
+                      title={t("profile.generate.menu.buttonTitle")}
                       disabled={loading}
                     >
-                      Enregistrer
+                      {t("profile.generate.menu.buttonLabel")}
                     </button>
 
                     {openIdx === i && (
@@ -350,24 +360,26 @@ export default function GenerateClient({
                           className="text-xs"
                           style={{ color: "#6b7280", marginBottom: 6 }}
                         >
-                          Choisir une action
+                          {t("profile.generate.menu.title")}
                         </div>
                         <div className="space-y-2">
                           <button
                             role="menuitem"
                             className="w-full text-left inline-flex items-center justify-between rounded-md border border-emerald-600/50 bg-emerald-50 px-3 py-1.5 text-sm font-semibold hover:bg-emerald-100"
                             onClick={() => markDone(key)}
-                            title="Ajouter à « Séances enregistrées »"
+                            title={t("profile.generate.menu.doneTitle")}
                           >
-                            Fait <span aria-hidden>✅</span>
+                            {t("profile.generate.menu.done")}{" "}
+                            <span aria-hidden>✅</span>
                           </button>
                           <button
                             role="menuitem"
                             className="w-full text-left inline-flex items-center justify-between rounded-md border border-amber-600/50 bg-amber-50 px-3 py-1.5 text-sm font-semibold hover:bg-amber-100"
                             onClick={() => markLater(key)}
-                            title="Ajouter à « À faire plus tard »"
+                            title={t("profile.generate.menu.laterTitle")}
                           >
-                            À faire plus tard <span aria-hidden>⏳</span>
+                            {t("profile.generate.menu.later")}{" "}
+                            <span aria-hidden>⏳</span>
                           </button>
                         </div>
                       </div>
@@ -383,10 +395,9 @@ export default function GenerateClient({
       {/* Si vraiment aucune séance (ex: première fois / erreur / pas de data) */}
       {!loading && (!sessions || sessions.length === 0) && (
         <div className="text-sm text-gray-500">
-          Aucune séance disponible pour le moment.
+          {t("profile.generate.empty")}
         </div>
       )}
     </section>
   );
 }
-
