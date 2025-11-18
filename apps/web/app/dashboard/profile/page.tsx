@@ -4,7 +4,6 @@ import { cookies } from "next/headers";
 import {
   getAnswersForEmail,
   buildProfileFromAnswers,
-  // generateProgrammeFromAnswers, // ❌ plus utilisé
   type Profile as ProfileT,
   type AiSession as AiSessionT,
   type NormalizedExercise,
@@ -13,12 +12,33 @@ import {
 
 import { planProgrammeFromEmail } from "../../../lib/coach/beton";
 import GenerateClient from "./GenerateClient";
+import { translations } from "@/app/i18n/translations"; // ✅ i18n
 
 const QUESTIONNAIRE_BASE =
   process.env.FILES_COACHING_QUESTIONNAIRE_BASE || "https://questionnaire.files-coaching.com";
 
 // 🔒 Route serveur qui génère l’URL signée et redirige
 const QUESTIONNAIRE_LINK = "/api/questionnaire-link";
+
+/* ========== i18n helpers (server) ========== */
+type Lang = "fr" | "en";
+
+function getFromPath(obj: any, path: string): any {
+  return path.split(".").reduce((acc, key) => acc?.[key], obj);
+}
+
+function tServer(lang: Lang, path: string, fallback?: string): string {
+  const dict = translations[lang] as any;
+  const v = getFromPath(dict, path);
+  if (typeof v === "string") return v;
+  return fallback ?? path;
+}
+
+function getLang(): Lang {
+  const cookieLang = cookies().get("fc-lang")?.value;
+  if (cookieLang === "en") return "en";
+  return "fr";
+}
 
 /* Email fallback: session Supabase côté serveur si cookie absent */
 async function getEmailFromSupabaseSession(): Promise<string> {
@@ -255,9 +275,7 @@ async function loadProfile(
   return { emailForDisplay, profile, debugInfo, forceBlank };
 }
 
-/* Loader — Programme IA côté serveur (liste)
-   Nouvelle logique : toujours base “avec matériel”,
-   et on filtre dynamiquement si equip=none (sans dépendre du questionnaire) */
+/* Loader — Programme IA côté serveur (liste) */
 async function loadInitialSessions(email: string, equipParam?: string) {
   if (!email) return [];
   const equip: "full" | "none" =
@@ -303,6 +321,10 @@ function sessionKey(_s: AiSessionT, idx: number) {
   return `s${idx}`;
 }
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function Page({
   searchParams,
 }: {
@@ -318,6 +340,9 @@ export default async function Page({
     later?: string;
   };
 }) {
+  const lang = getLang();
+  const t = (path: string, fallback?: string) => tServer(lang, path, fallback);
+
   const { emailForDisplay, profile, debugInfo, forceBlank } =
     await loadProfile(searchParams);
 
@@ -359,6 +384,10 @@ export default async function Page({
     const g = String(
       (p as any)?.objectif || (p as any)?.goal || ""
     ).toLowerCase();
+    if (!g) return "";
+    const key = `profile.goal.labels.${g}`;
+    const translated = tServer(lang, key); // pas de fallback → renvoie la clé si manquante
+    if (translated !== key) return translated;
     const map: Record<string, string> = {
       hypertrophy: "Hypertrophie / Esthétique",
       fatloss: "Perte de gras",
@@ -367,12 +396,10 @@ export default async function Page({
       mobility: "Mobilité / Souplesse",
       general: "Forme générale",
     };
-    if (!g) return "";
     return map[g] || (p as any)?.objectif || "";
   })();
 
-  // ⚠️ Sans changer la logique: on garde le pré-remplissage email/prenom
-  // mais on passe désormais par la route serveur /api/questionnaire-link qui génère le token
+  // URL questionnaire (inchangé niveau logique)
   const questionnaireUrl = (() => {
     const qp = new URLSearchParams();
     if (emailForDisplay) qp.set("email", emailForDisplay);
@@ -397,7 +424,10 @@ export default async function Page({
   const hrefNone = `/dashboard/profile?equip=none${qsKeep ? `&${qsKeep}` : ""}`;
 
   const titleList =
-    equipMode === "none" ? "Mes séances (sans matériel)" : "Mes séances";
+    equipMode === "none"
+      ? t("profile.sessions.titleNoEquip", "Mes séances (sans matériel)")
+      : t("profile.sessions.title", "Mes séances");
+
   const hrefGenerate = `/dashboard/profile?generate=1${
     equipMode === "none" ? "&equip=none" : ""
   }${qsKeep ? `&${qsKeep}` : ""}`;
@@ -424,7 +454,7 @@ export default async function Page({
       <div className="page-header">
         <div>
           <h1 className="h1" style={{ fontSize: 22 }}>
-            Mon profil
+            {t("profile.title", "Mon profil")}
           </h1>
           {showDebug && (
             <div
@@ -453,8 +483,14 @@ export default async function Page({
             }}
           >
             {displayedSuccess === "programme"
-              ? "✓ Programme IA mis à jour à partir de vos dernières réponses au questionnaire."
-              : "✓ Opération réussie."}
+              ? t(
+                  "profile.messages.programmeUpdated",
+                  "✓ Programme IA mis à jour à partir de vos dernières réponses au questionnaire."
+                )
+              : t(
+                  "profile.messages.successGeneric",
+                  "✓ Opération réussie."
+                )}
           </div>
         )}
         {!!displayedError && (
@@ -484,7 +520,7 @@ export default async function Page({
             gap: 12,
           }}
         >
-          <h2>Mes infos</h2>
+          <h2>{t("profile.infoSection.title", "Mes infos")}</h2>
         </div>
 
         <div className="card">
@@ -494,29 +530,40 @@ export default async function Page({
           >
             {(clientPrenom || showPlaceholders) && (
               <span>
-                <b>Prénom :</b>{" "}
+                <b>{t("profile.info.firstName.label", "Prénom")} :</b>{" "}
                 {clientPrenom ||
                   (showPlaceholders ? (
-                    <i className="text-gray-400">Non renseigné</i>
+                    <i className="text-gray-400">
+                      {t(
+                        "profile.info.firstName.missing",
+                        "Non renseigné"
+                      )}
+                    </i>
                   ) : null)}
               </span>
             )}
             {(typeof clientAge === "number" || showPlaceholders) && (
               <span>
-                <b>Âge :</b>{" "}
+                <b>{t("profile.info.age.label", "Âge")} :</b>{" "}
                 {typeof clientAge === "number"
                   ? `${clientAge} ans`
                   : showPlaceholders ? (
-                    <i className="text-gray-400">Non renseigné</i>
-                  ) : null}
+                      <i className="text-gray-400">
+                        {t("profile.info.age.missing", "Non renseigné")}
+                      </i>
+                    ) : null}
               </span>
             )}
             {(goalLabel || showPlaceholders) && (
               <span>
-                <b>Objectif actuel :</b>{" "}
+                <b>
+                  {t("profile.info.goal.label", "Objectif actuel")} :
+                </b>{" "}
                 {goalLabel ||
                   (showPlaceholders ? (
-                    <i className="text-gray-400">Non défini</i>
+                    <i className="text-gray-400">
+                      {t("profile.info.goal.missing", "Non défini")}
+                    </i>
                   ) : null)}
               </span>
             )}
@@ -533,20 +580,25 @@ export default async function Page({
               }}
               title={emailForDisplay || (showPlaceholders ? "Non renseigné" : "")}
             >
-              <b>Mail :</b>{" "}
+              <b>{t("profile.info.mail.label", "Mail")} :</b>{" "}
               {emailForDisplay ? (
                 <a href={`mailto:${emailForDisplay}`} className="underline">
                   {emailForDisplay}
                 </a>
               ) : showPlaceholders ? (
-                <span className="text-gray-400">Non renseigné</span>
+                <span className="text-gray-400">
+                  {t("profile.info.mail.missing", "Non renseigné")}
+                </span>
               ) : null}
             </div>
           )}
 
           <div className="text-sm" style={{ marginTop: 10 }}>
             <a href={questionnaireUrl} className="underline">
-              Mettre à jour mes réponses au questionnaire
+              {t(
+                "profile.info.questionnaire.updateLink",
+                "Mettre à jour mes réponses au questionnaire"
+              )}
             </a>
           </div>
         </div>
@@ -579,9 +631,12 @@ export default async function Page({
                     ? "inline-flex items-center rounded-md border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-sm font-semibold text-white"
                     : "inline-flex items-center rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-semibold text-neutral-900"
                 }
-                title="Voir la liste avec matériel"
+                title={t(
+                  "profile.sessions.toggle.withEquipTitle",
+                  "Voir la liste avec matériel"
+                )}
               >
-                Matériel
+                {t("profile.sessions.toggle.withEquip", "Matériel")}
               </a>
               <a
                 href={hrefNone}
@@ -590,9 +645,12 @@ export default async function Page({
                     ? "inline-flex items-center rounded-md border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-sm font-semibold text-white"
                     : "inline-flex items-center rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-semibold text-neutral-900"
                 }
-                title="Voir la liste sans matériel"
+                title={t(
+                  "profile.sessions.toggle.withoutEquipTitle",
+                  "Voir la liste sans matériel"
+                )}
               >
-                Sans matériel
+                {t("profile.sessions.toggle.withoutEquip", "Sans matériel")}
               </a>
             </div>
           )}
@@ -609,14 +667,20 @@ export default async function Page({
             }}
           >
             <div className="text-sm" style={{ color: "#4b5563" }}>
-              Cliquez sur « Générer » pour afficher vos séances personnalisées.
+              {t(
+                "profile.sessions.generateCard.text",
+                "Cliquez sur « Générer » pour afficher vos séances personnalisées."
+              )}
             </div>
             <a
               href={hrefGenerate}
               className="inline-flex items-center rounded-md border border-neutral-900 bg-neutral-900 px-4 py-2 text-sm font-semibold text-white"
-              title="Générer mes séances"
+              title={t(
+                "profile.sessions.generateCard.buttonTitle",
+                "Générer mes séances"
+              )}
             >
-              Générer
+              {t("profile.sessions.generateCard.button", "Générer")}
             </a>
           </div>
         )}
@@ -641,7 +705,9 @@ export default async function Page({
       {/* ===== Bloc bas de page : Séance faite ✅ / À faire plus tard ⏳ ===== */}
       <section className="section" style={{ marginTop: 20 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
-          <h2 style={{ margin: 0 }}>Mes listes</h2>
+          <h2 style={{ margin: 0 }}>
+            {t("profile.lists.title", "Mes listes")}
+          </h2>
         </div>
 
         {/* deux colonnes sur la même ligne */}
@@ -655,7 +721,8 @@ export default async function Page({
               className="text-sm"
               style={{ fontWeight: 600, marginBottom: 6 }}
             >
-              Séance faite <span aria-hidden>✅</span>
+              {t("profile.lists.done.title", "Séance faite")}{" "}
+              <span aria-hidden>✅</span>
             </div>
             {savedList.length > 0 && (
               <ul
@@ -711,7 +778,10 @@ export default async function Page({
                       </a>
                       <a
                         href={removeHref}
-                        aria-label="Supprimer cette séance"
+                        aria-label={t(
+                          "profile.lists.removeLabel",
+                          "Supprimer cette séance"
+                        )}
                         className="text-xs"
                         style={{
                           fontSize: 12,
@@ -741,7 +811,8 @@ export default async function Page({
               className="text-sm"
               style={{ fontWeight: 600, marginBottom: 6 }}
             >
-              À faire plus tard <span aria-hidden>⏳</span>
+              {t("profile.lists.later.title", "À faire plus tard")}{" "}
+              <span aria-hidden>⏳</span>
             </div>
             {laterList.length > 0 && (
               <ul
@@ -759,7 +830,7 @@ export default async function Page({
                     "generate=1",
                     equipMode === "none" ? "equip=none" : undefined,
                     savedIds.size
-                      ? `saved=${[...savedIds].join(",")}` 
+                      ? `saved=${[...savedIds].join(",")}`
                       : undefined,
                     newLaterKeys.length
                       ? `later=${newLaterKeys.join(",")}`
@@ -797,7 +868,10 @@ export default async function Page({
                       </a>
                       <a
                         href={removeHref}
-                        aria-label="Supprimer cette séance"
+                        aria-label={t(
+                          "profile.lists.removeLabel",
+                          "Supprimer cette séance"
+                        )}
                         className="text-xs"
                         style={{
                           fontSize: 12,
@@ -825,3 +899,4 @@ export default async function Page({
     </div>
   );
 }
+
