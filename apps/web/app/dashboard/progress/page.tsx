@@ -1,10 +1,32 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { translations } from "@/app/i18n/translations";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+/* =============== i18n (server) =============== */
+type Lang = "fr" | "en";
+
+function getFromPath(obj: any, path: string): any {
+  return path.split(".").reduce((acc, key) => acc?.[key], obj);
+}
+
+function tServer(lang: Lang, path: string, fallback?: string): string {
+  const dict = translations[lang] as any;
+  const v = getFromPath(dict, path);
+  if (typeof v === "string") return v;
+  return fallback ?? path;
+}
+
+function getLang(): Lang {
+  const cookieLang = cookies().get("fc-lang")?.value;
+  if (cookieLang === "en") return "en";
+  return "fr";
+}
+
+/* =============== Types & store =============== */
 type EntryType = "steps" | "load" | "weight";
 
 type ProgressEntry = {
@@ -143,6 +165,9 @@ async function deleteEntryAction(formData: FormData) {
 export default async function Page({
   searchParams,
 }: { searchParams?: { success?: string; error?: string; deleted?: string } }) {
+  const lang = getLang();
+  const t = (path: string, fallback?: string) => tServer(lang, path, fallback);
+
   const jar = cookies();
   const store = parseStore(jar.get("app_progress")?.value);
 
@@ -198,33 +223,56 @@ export default async function Page({
             className="h1"
             style={{ marginBottom: 2, fontSize: "clamp(20px, 2.2vw, 24px)", lineHeight: 1.15 }}
           >
-            Mes progrès
+            {t("progress.pageTitle", "Mes progrès")}
           </h1>
           <p
             className="lead"
             style={{ marginTop: 4, fontSize: "clamp(12px, 1.6vw, 14px)", lineHeight: 1.35, color: "#4b5563" }}
           >
-            Ajoutez vos pas, vos charges et votre poids. Vos données restent en local (cookie).
+            {t(
+              "progress.pageSubtitle",
+              "Ajoutez vos pas, vos charges et votre poids. Vos données restent en local (cookie)."
+            )}
           </p>
         </div>
-        {/* ← Bouton Retour supprimé */}
       </div>
 
       {/* Messages */}
       <div className="space-y-3">
         {!!searchParams?.success && (
-          <div className="card" style={{ border: "1px solid rgba(16,185,129,.35)", background: "rgba(16,185,129,.08)", fontWeight: 600 }}>
-            ✓ Entrée enregistrée.
+          <div
+            className="card"
+            style={{
+              border: "1px solid rgba(16,185,129,.35)",
+              background: "rgba(16,185,129,.08)",
+              fontWeight: 600,
+            }}
+          >
+            {t("progress.messages.saved", "✓ Entrée enregistrée.")}
           </div>
         )}
         {!!searchParams?.deleted && (
-          <div className="card" style={{ border: "1px solid rgba(59,130,246,.35)", background: "rgba(59,130,246,.08)", fontWeight: 600 }}>
-            Entrée supprimée.
+          <div
+            className="card"
+            style={{
+              border: "1px solid rgba(59,130,246,.35)",
+              background: "rgba(59,130,246,.08)",
+              fontWeight: 600,
+            }}
+          >
+            {t("progress.messages.deleted", "Entrée supprimée.")}
           </div>
         )}
         {!!searchParams?.error && (
-          <div className="card" style={{ border: "1px solid rgba(239,68,68,.35)", background: "rgba(239,68,68,.08)", fontWeight: 600 }}>
-            ⚠️ Erreur : {searchParams.error}
+          <div
+            className="card"
+            style={{
+              border: "1px solid rgba(239,68,68,.35)",
+              background: "rgba(239,68,68,.08)",
+              fontWeight: 600,
+            }}
+          >
+            {t("progress.messages.errorPrefix", "⚠️ Erreur :")} {searchParams.error}
           </div>
         )}
       </div>
@@ -232,45 +280,104 @@ export default async function Page({
       {/* === 1) Section Formulaire === */}
       <div className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
-          <h2 style={{ margin: 0, fontSize: "clamp(16px, 1.9vw, 18px)", lineHeight: 1.2 }}>Ajouter une entrée</h2>
+          <h2 style={{ margin: 0, fontSize: "clamp(16px, 1.9vw, 18px)", lineHeight: 1.2 }}>
+            {t("progress.form.title", "Ajouter une entrée")}
+          </h2>
         </div>
 
         <div className="card">
           <form action={addProgressAction} className="grid gap-6 lg:grid-cols-3">
             <div>
-              <label className="label">Type</label>
+              <label className="label">
+                {t("progress.form.type.label", "Type")}
+              </label>
               <select name="type" className="input" defaultValue="steps" required>
-                <option value="steps">Pas (steps)</option>
-                <option value="load">Charges portées (kg)</option>
-                <option value="weight">Poids (kg)</option>
+                <option value="steps">
+                  {t("progress.form.type.steps", "Pas (steps)")}
+                </option>
+                <option value="load">
+                  {t("progress.form.type.load", "Charges portées (kg)")}
+                </option>
+                <option value="weight">
+                  {t("progress.form.type.weight", "Poids (kg)")}
+                </option>
               </select>
               <div className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>
-                Pour <b>charges</b>, vous pouvez renseigner les <b>répétitions</b> ci-dessous.
+                {t(
+                  "progress.form.type.help",
+                  "Pour charges, vous pouvez renseigner les répétitions ci-dessous."
+                )}
               </div>
             </div>
 
             <div>
-              <label className="label">Date</label>
-              <input className="input" type="date" name="date" required defaultValue={defaultDate} />
+              <label className="label">
+                {t("progress.form.date.label", "Date")}
+              </label>
+              <input
+                className="input"
+                type="date"
+                name="date"
+                required
+                defaultValue={defaultDate}
+              />
             </div>
 
             <div>
-              <label className="label">Valeur</label>
-              <input className="input" type="number" name="value" step="any" placeholder="ex: 8000 (pas) / 60 (kg)" required />
+              <label className="label">
+                {t("progress.form.value.label", "Valeur")}
+              </label>
+              <input
+                className="input"
+                type="number"
+                name="value"
+                step="any"
+                placeholder={t(
+                  "progress.form.value.placeholder",
+                  "ex: 8000 (pas) / 60 (kg)"
+                )}
+                required
+              />
             </div>
 
             <div>
-              <label className="label">Répétitions (optionnel, charges)</label>
-              <input className="input" type="number" name="reps" step="1" placeholder="ex: 8" />
+              <label className="label">
+                {t(
+                  "progress.form.reps.label",
+                  "Répétitions (optionnel, charges)"
+                )}
+              </label>
+              <input
+                className="input"
+                type="number"
+                name="reps"
+                step="1"
+                placeholder={t("progress.form.reps.placeholder", "ex: 8")}
+              />
             </div>
 
             <div className="lg:col-span-2">
-              <label className="label">Note (optionnel)</label>
-              <input className="input" type="text" name="note" placeholder="ex: Marche rapide, Squat barre, etc." />
+              <label className="label">
+                {t("progress.form.note.label", "Note (optionnel)")}
+              </label>
+              <input
+                className="input"
+                type="text"
+                name="note"
+                placeholder={t(
+                  "progress.form.note.placeholder",
+                  "ex: Marche rapide, Squat barre, etc."
+                )}
+              />
             </div>
 
-            <div className="lg:col-span-3" style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
-              <button className="btn btn-dash" type="submit">Enregistrer</button>
+            <div
+              className="lg:col-span-3"
+              style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}
+            >
+              <button className="btn btn-dash" type="submit">
+                {t("progress.form.submit", "Enregistrer")}
+              </button>
             </div>
           </form>
         </div>
@@ -278,15 +385,32 @@ export default async function Page({
 
       {/* === 2) Semaine en cours (card) === */}
       <section className="section" style={{ marginTop: 12 }}>
-        <div className="section-head" style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h2 style={{ margin: 0, fontSize: "clamp(16px, 1.9vw, 18px)", lineHeight: 1.2 }}>Pas — semaine en cours</h2>
-          {/* texte à droite supprimé */}
+        <div
+          className="section-head"
+          style={{
+            marginBottom: 8,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <h2
+            style={{
+              margin: 0,
+              fontSize: "clamp(16px, 1.9vw, 18px)",
+              lineHeight: 1.2,
+            }}
+          >
+            {t("progress.week.title", "Pas — semaine en cours")}
+          </h2>
         </div>
 
         <article className="card" style={{ display: "block", gap: 12 }}>
           <div>
             <div className="text-sm" style={{ color: "#6b7280" }}>
-              Du <b>{fmtDate(mondayYMD)}</b> au <b>{fmtDate(sundayYMD)}</b>
+              {t("progress.week.rangePrefix", "Du")}{" "}
+              <b>{fmtDate(mondayYMD)}</b> {t("progress.week.rangeTo", "au")}{" "}
+              <b>{fmtDate(sundayYMD)}</b>
             </div>
 
             {hasWeekData ? (
@@ -300,25 +424,54 @@ export default async function Page({
               >
                 {/* Bloc Total */}
                 <div className="card" style={{ padding: 12 }}>
-                  <div className="text-sm" style={{ color: "#6b7280" }}>Total</div>
+                  <div className="text-sm" style={{ color: "#6b7280" }}>
+                    {t("progress.week.totalLabel", "Total")}
+                  </div>
                   <div style={{ fontSize: 22, fontWeight: 900 }}>
                     {stepsThisWeek.toLocaleString("fr-FR")}{" "}
-                    <span className="text-xs" style={{ color: "#6b7280", fontWeight: 400 }}>pas</span>
+                    <span
+                      className="text-xs"
+                      style={{
+                        color: "#6b7280",
+                        fontWeight: 400,
+                      }}
+                    >
+                      {t("progress.week.stepsUnit", "pas")}
+                    </span>
                   </div>
                 </div>
 
                 {/* Bloc Moyenne / jour */}
                 <div className="card" style={{ padding: 12 }}>
-                  <div className="text-sm" style={{ color: "#6b7280" }}>Moyenne / jour</div>
+                  <div className="text-sm" style={{ color: "#6b7280" }}>
+                    {t(
+                      "progress.week.avgPerDayLabel",
+                      "Moyenne / jour"
+                    )}
+                  </div>
                   <div style={{ fontSize: 22, fontWeight: 900 }}>
                     {avgPerDay.toLocaleString("fr-FR")}{" "}
-                    <span className="text-xs" style={{ color: "#6b7280", fontWeight: 400 }}>pas/jour</span>
+                    <span
+                      className="text-xs"
+                      style={{
+                        color: "#6b7280",
+                        fontWeight: 400,
+                      }}
+                    >
+                      {t("progress.week.stepsPerDayUnit", "pas/jour")}
+                    </span>
                   </div>
                 </div>
               </div>
             ) : (
-              <div className="text-sm" style={{ color: "#6b7280", marginTop: 10 }}>
-                Aucune donnée saisie pour cette semaine. Ajoutez une entrée ci-dessus pour voir vos stats.
+              <div
+                className="text-sm"
+                style={{ color: "#6b7280", marginTop: 10 }}
+              >
+                {t(
+                  "progress.week.noData",
+                  "Aucune donnée saisie pour cette semaine. Ajoutez une entrée ci-dessus pour voir vos stats."
+                )}
               </div>
             )}
           </div>
@@ -328,57 +481,124 @@ export default async function Page({
       {/* === 3) Dernières valeurs (cards en grille) === */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
-          <h2 style={{ margin: 0, fontSize: "clamp(16px, 1.9vw, 18px)", lineHeight: 1.2 }}>Dernières valeurs</h2>
+          <h2
+            style={{
+              margin: 0,
+              fontSize: "clamp(16px, 1.9vw, 18px)",
+              lineHeight: 1.2,
+            }}
+          >
+            {t("progress.latest.title", "Dernières valeurs")}
+          </h2>
         </div>
 
         <div className="grid gap-6 lg:grid-cols-3">
           {/* Pas */}
           <article className="card">
             <div className="flex items-center justify-between">
-              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>Pas</h3>
-              {/* badge supprimé */}
+              <h3
+                style={{
+                  margin: 0,
+                  fontSize: 18,
+                  fontWeight: 800,
+                }}
+              >
+                {t("progress.latest.steps.title", "Pas")}
+              </h3>
             </div>
             {lastByType.steps ? (
               <div style={{ marginTop: 8 }}>
-                <div style={{ fontSize: 22, fontWeight: 900 }}>{lastByType.steps.value.toLocaleString("fr-FR")} pas</div>
-                <div className="text-sm" style={{ color: "#6b7280" }}>{fmtDate(lastByType.steps.date)}</div>
+                <div style={{ fontSize: 22, fontWeight: 900 }}>
+                  {lastByType.steps.value.toLocaleString("fr-FR")}{" "}
+                  {t("progress.latest.steps.unit", "pas")}
+                </div>
+                <div
+                  className="text-sm"
+                  style={{ color: "#6b7280" }}
+                >
+                  {fmtDate(lastByType.steps.date)}
+                </div>
               </div>
             ) : (
-              <div className="text-sm" style={{ color: "#6b7280", marginTop: 6 }}>Aucune donnée.</div>
+              <div
+                className="text-sm"
+                style={{ color: "#6b7280", marginTop: 6 }}
+              >
+                {t("progress.latest.noData", "Aucune donnée.")}
+              </div>
             )}
           </article>
 
           {/* Charges */}
           <article className="card">
             <div className="flex items-center justify-between">
-              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>Charges</h3>
-              {/* badge supprimé */}
+              <h3
+                style={{
+                  margin: 0,
+                  fontSize: 18,
+                  fontWeight: 800,
+                }}
+              >
+                {t("progress.latest.load.title", "Charges")}
+              </h3>
             </div>
             {lastByType.load ? (
               <div style={{ marginTop: 8 }}>
                 <div style={{ fontSize: 22, fontWeight: 900 }}>
-                  {lastByType.load.value} kg{lastByType.load.reps ? ` × ${lastByType.load.reps}` : ""}
+                  {lastByType.load.value} kg
+                  {lastByType.load.reps
+                    ? ` × ${lastByType.load.reps}`
+                    : ""}
                 </div>
-                <div className="text-sm" style={{ color: "#6b7280" }}>{fmtDate(lastByType.load.date)}</div>
+                <div
+                  className="text-sm"
+                  style={{ color: "#6b7280" }}
+                >
+                  {fmtDate(lastByType.load.date)}
+                </div>
               </div>
             ) : (
-              <div className="text-sm" style={{ color: "#6b7280", marginTop: 6 }}>Aucune donnée.</div>
+              <div
+                className="text-sm"
+                style={{ color: "#6b7280", marginTop: 6 }}
+              >
+                {t("progress.latest.noData", "Aucune donnée.")}
+              </div>
             )}
           </article>
 
           {/* Poids */}
           <article className="card">
             <div className="flex items-center justify-between">
-              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>Poids</h3>
-              {/* badge supprimé */}
+              <h3
+                style={{
+                  margin: 0,
+                  fontSize: 18,
+                  fontWeight: 800,
+                }}
+              >
+                {t("progress.latest.weight.title", "Poids")}
+              </h3>
             </div>
             {lastByType.weight ? (
               <div style={{ marginTop: 8 }}>
-                <div style={{ fontSize: 22, fontWeight: 900 }}>{lastByType.weight.value} kg</div>
-                <div className="text-sm" style={{ color: "#6b7280" }}>{fmtDate(lastByType.weight.date)}</div>
+                <div style={{ fontSize: 22, fontWeight: 900 }}>
+                  {lastByType.weight.value} kg
+                </div>
+                <div
+                  className="text-sm"
+                  style={{ color: "#6b7280" }}
+                >
+                  {fmtDate(lastByType.weight.date)}
+                </div>
               </div>
             ) : (
-              <div className="text-sm" style={{ color: "#6b7280", marginTop: 6 }}>Aucune donnée.</div>
+              <div
+                className="text-sm"
+                style={{ color: "#6b7280", marginTop: 6 }}
+              >
+                {t("progress.latest.noData", "Aucune donnée.")}
+              </div>
             )}
           </article>
         </div>
@@ -387,38 +607,88 @@ export default async function Page({
       {/* === 4) Entrées récentes (liste en cartes) === */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
-          <h2 style={{ margin: 0, fontSize: "clamp(16px, 1.9vw, 18px)", lineHeight: 1.2 }}>Entrées récentes</h2>
+          <h2
+            style={{
+              margin: 0,
+              fontSize: "clamp(16px, 1.9vw, 18px)",
+              lineHeight: 1.2,
+            }}
+          >
+            {t("progress.recent.title", "Entrées récentes")}
+          </h2>
         </div>
 
         {recent.length === 0 ? (
-          <div className="card text-sm" style={{ color: "#6b7280" }}>
-            Pas encore de données — commencez en ajoutant une entrée ci-dessus.
+          <div
+            className="card text-sm"
+            style={{ color: "#6b7280" }}
+          >
+            {t(
+              "progress.recent.empty",
+              "Pas encore de données — commencez en ajoutant une entrée ci-dessus."
+            )}
           </div>
         ) : (
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {recent.map((e) => (
-              <article key={e.id} className="card" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <article
+                key={e.id}
+                className="card"
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 8,
+                }}
+              >
                 <div className="flex items-center justify-between">
                   <strong style={{ fontSize: 18 }}>
-                    {e.type === "steps" && "Pas"}
-                    {e.type === "load" && "Charges"}
-                    {e.type === "weight" && "Poids"}
+                    {e.type === "steps" &&
+                      t("progress.recent.type.steps", "Pas")}
+                    {e.type === "load" &&
+                      t("progress.recent.type.load", "Charges")}
+                    {e.type === "weight" &&
+                      t("progress.recent.type.weight", "Poids")}
                   </strong>
-                  <span className="badge">{fmtDate(e.date)}</span>
+                  <span className="badge">
+                    {fmtDate(e.date)}
+                  </span>
                 </div>
 
-                <div style={{ fontSize: 18, fontWeight: 800 }}>
-                  {e.type === "steps" && `${e.value.toLocaleString("fr-FR")} pas`}
-                  {e.type === "load" && `${e.value} kg${e.reps ? ` × ${e.reps}` : ""}`}
+                <div
+                  style={{ fontSize: 18, fontWeight: 800 }}
+                >
+                  {e.type === "steps" &&
+                    `${e.value.toLocaleString("fr-FR")} ${t(
+                      "progress.latest.steps.unit",
+                      "pas"
+                    )}`}
+                  {e.type === "load" &&
+                    `${e.value} kg${
+                      e.reps ? ` × ${e.reps}` : ""
+                    }`}
                   {e.type === "weight" && `${e.value} kg`}
                 </div>
 
-                {e.note && <div className="text-sm" style={{ color: "#6b7280" }}>{e.note}</div>}
+                {e.note && (
+                  <div
+                    className="text-sm"
+                    style={{ color: "#6b7280" }}
+                  >
+                    {e.note}
+                  </div>
+                )}
 
-                <form action={deleteEntryAction} style={{ marginTop: 4 }}>
+                <form
+                  action={deleteEntryAction}
+                  style={{ marginTop: 4 }}
+                >
                   <input type="hidden" name="id" value={e.id} />
-                  <button className="btn btn-outline" type="submit" style={{ color: "#111" }}>
-                    Supprimer
+                  <button
+                    className="btn btn-outline"
+                    type="submit"
+                    style={{ color: "#111" }}
+                  >
+                    {t("progress.recent.delete", "Supprimer")}
                   </button>
                 </form>
               </article>
@@ -429,4 +699,5 @@ export default async function Page({
     </div>
   );
 }
+
 
