@@ -88,12 +88,7 @@ export function AIExtraSection({
             text
           );
           if (!cancelled) {
-            setError(
-              `${t(
-                "recipes.aiSection.unavailable",
-                "IA indisponible pour le moment."
-              )} (HTTP ${res.status})`
-            );
+            setError(`${t("recipes.aiSection.unavailable")} (HTTP ${res.status})`);
             setLoading(false);
           }
           return;
@@ -108,12 +103,7 @@ export function AIExtraSection({
             data.error,
             data.detail
           );
-          setError(
-            `${t(
-              "recipes.aiSection.unavailable",
-              "IA indisponible pour le moment."
-            )} (${data.error})`
-          );
+          setError(`${t("recipes.aiSection.unavailable")} (${data.error})`);
           setLoading(false);
           return;
         }
@@ -128,12 +118,7 @@ export function AIExtraSection({
       } catch (e) {
         console.error("[AIExtraSection] fetch error /api/recipes/ai:", e);
         if (!cancelled) {
-          setError(
-            `${t(
-              "recipes.aiSection.unavailable",
-              "IA indisponible pour le moment."
-            )} (FETCH_ERROR)`
-          );
+          setError(`${t("recipes.aiSection.unavailable")} (FETCH_ERROR)`);
           setLoading(false);
         }
       }
@@ -143,56 +128,28 @@ export function AIExtraSection({
     return () => {
       cancelled = true;
     };
-  }, [
-    kind,
-    kcal,
-    kcalMin,
-    kcalMax,
-    allergensKey,
-    dislikesKey,
-    t, // ✅ dépendance
-  ]);
+  }, [kind, kcal, kcalMin, kcalMax, allergensKey, dislikesKey, t]);
 
   return (
     <section className="section" style={{ marginTop: 12 }}>
       <div className="section-head" style={{ marginBottom: 8 }}>
-        <h2>
-          {t(
-            "recipes.aiSection.title",
-            "Suggestions perso IA"
-          )}
-        </h2>
-        <p
-          className="text-xs"
-          style={{ color: "#6b7280", marginTop: 4 }}
-        >
-          {t(
-            "recipes.aiSection.subtitle",
-            "Générées en direct avec l'IA selon tes filtres."
-          )}
+        <h2>{t("recipes.aiSection.title")}</h2>
+        <p className="text-xs" style={{ color: "#6b7280", marginTop: 4 }}>
+          {t("recipes.aiSection.subtitle")}
         </p>
       </div>
 
       {/* État erreur */}
       {error && (
-        <div
-          className="card text-xs"
-          style={{ color: "#6b7280" }}
-        >
+        <div className="card text-xs" style={{ color: "#6b7280" }}>
           {error}
         </div>
       )}
 
       {/* État chargement (si pas d'erreur) */}
       {!error && loading && recipes.length === 0 && (
-        <div
-          className="card text-xs"
-          style={{ color: "#6b7280" }}
-        >
-          {t(
-            "recipes.aiSection.loading",
-            "Génération en cours…"
-          )}
+        <div className="card text-xs" style={{ color: "#6b7280" }}>
+          {t("recipes.aiSection.loading")}
         </div>
       )}
 
@@ -205,34 +162,16 @@ export function AIExtraSection({
             )}`;
 
             return (
-              <article
-                key={r.id}
-                className="card"
-                style={{ overflow: "hidden" }}
-              >
+              <article key={r.id} className="card" style={{ overflow: "hidden" }}>
                 <div className="flex items-center justify-between">
-                  <h3
-                    style={{
-                      margin: 0,
-                      fontSize: 18,
-                      fontWeight: 800,
-                    }}
-                  >
+                  <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>
                     {r.title}
                   </h3>
-                  <span className="badge">
-                    {t(
-                      "recipes.aiSection.badge",
-                      "perso IA"
-                    )}
-                  </span>
+                  <span className="badge">{t("recipes.aiSection.badge")}</span>
                 </div>
 
                 {r.subtitle && (
-                  <p
-                    className="text-sm"
-                    style={{ marginTop: 4, color: "#6b7280" }}
-                  >
+                  <p className="text-sm" style={{ marginTop: 4, color: "#6b7280" }}>
                     {r.subtitle}
                   </p>
                 )}
@@ -247,14 +186,10 @@ export function AIExtraSection({
                   }}
                 >
                   {typeof r.kcal === "number" && (
-                    <span className="badge">
-                      {r.kcal} kcal
-                    </span>
+                    <span className="badge">{r.kcal} kcal</span>
                   )}
                   {typeof r.timeMin === "number" && (
-                    <span className="badge">
-                      {r.timeMin} min
-                    </span>
+                    <span className="badge">{r.timeMin} min</span>
                   )}
                 </div>
 
@@ -269,10 +204,7 @@ export function AIExtraSection({
                   }}
                 >
                   <a className="btn btn-dash" href={href}>
-                    {t(
-                      "recipes.card.viewRecipe",
-                      "Voir la recette"
-                    )}
+                    {t("recipes.card.viewRecipe")}
                   </a>
                 </div>
               </article>
