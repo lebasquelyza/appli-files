@@ -423,7 +423,7 @@ export const translations = {
     removeLabel: "Supprimer cette séance",
   },
 },
-      {
+    
   "profile": {
     "generate": {
       "title": "Mes séances",
