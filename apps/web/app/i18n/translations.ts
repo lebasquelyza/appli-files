@@ -423,6 +423,39 @@ export const translations = {
     removeLabel: "Supprimer cette séance",
   },
 },
+      {
+  "profile": {
+    "generate": {
+      "title": "Mes séances",
+      "button": {
+        "title": "Générer ou mettre à jour le programme",
+        "generate": "⚙️ Générer",
+        "generating": "⏳ Génération…"
+      },
+      "loadingMessage": "Création de tes séances en cours…",
+      "error": {
+        "generic": "Erreur de génération du programme.",
+        "unknown": "Erreur inconnue"
+      },
+      "defaultTitle": "Séance",
+      "badge": {
+        "saved": "Enregistrée",
+        "later": "Plus tard"
+      },
+      "menu": {
+        "buttonLabel": "Enregistrer",
+        "buttonTitle": "Enregistrer cette séance",
+        "title": "Choisir une action",
+        "done": "Fait",
+        "doneTitle": "Ajouter à « Séances enregistrées »",
+        "later": "À faire plus tard",
+        "laterTitle": "Ajouter à « À faire plus tard »"
+      },
+      "empty": "Aucune séance disponible pour le moment."
+    }
+  }
+}
+
 
 
 
@@ -854,6 +887,39 @@ detail: {
     removeLabel: "Remove this session",
   },
 },
+      {
+  "profile": {
+    "generate": {
+      "title": "My Sessions",
+      "button": {
+        "title": "Generate or update the program",
+        "generate": "⚙️ Generate",
+        "generating": "⏳ Generating…"
+      },
+      "loadingMessage": "Creating your sessions…",
+      "error": {
+        "generic": "Program generation error.",
+        "unknown": "Unknown error"
+      },
+      "defaultTitle": "Session",
+      "badge": {
+        "saved": "Saved",
+        "later": "Later"
+      },
+      "menu": {
+        "buttonLabel": "Save",
+        "buttonTitle": "Save this session",
+        "title": "Choose an action",
+        "done": "Done",
+        "doneTitle": "Add to “Completed Sessions”",
+        "later": "Do later",
+        "laterTitle": "Add to “Do later”"
+      },
+      "empty": "No sessions available for now."
+    }
+  }
+}
+
 
 
 
