@@ -1,3 +1,4 @@
+//apps/web/app/dashboard/recipes/AISection.tsx
 "use client";
 
 import { useEffect, useState } from "react";
