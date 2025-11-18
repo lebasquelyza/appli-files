@@ -253,7 +253,14 @@ export const translations = {
     savedRemove: "Enregistrée ✓ (Retirer)",
     save: "Enregistrer",
   },
+},aiSection: {
+  title: "Suggestions perso IA",
+  subtitle: "Générées en direct avec l'IA selon tes filtres.",
+  unavailable: "IA indisponible pour le moment.",
+  loading: "Génération en cours…",
+  badge: "perso IA",
 },
+
 
 
   },
@@ -510,7 +517,14 @@ export const translations = {
     savedRemove: "Saved ✓ (Remove)",
     save: "Save",
   },
+},aiSection: {
+  title: "Personalised AI suggestions",
+  subtitle: "Generated live with AI based on your filters.",
+  unavailable: "AI unavailable at the moment.",
+  loading: "Generating…",
+  badge: "AI personalised",
 },
+
 
 
 
