@@ -351,7 +351,79 @@ export const translations = {
     description: "On garde le produit et on propose d’autres façons de le cuisiner :",
   },
   back: "← Retour",
+},profile: {
+  title: "Mon profil",
+
+  messages: {
+    programmeUpdated: "✓ Programme IA mis à jour à partir de vos dernières réponses au questionnaire.",
+    successGeneric: "✓ Opération réussie.",
+  },
+
+  infoSection: {
+    title: "Mes infos",
+  },
+
+  info: {
+    firstName: {
+      label: "Prénom",
+      missing: "Non renseigné",
+    },
+    age: {
+      label: "Âge",
+      missing: "Non renseigné",
+    },
+    goal: {
+      label: "Objectif actuel",
+      missing: "Non défini",
+    },
+    mail: {
+      label: "Mail",
+      missing: "Non renseigné",
+    },
+    questionnaire: {
+      updateLink: "Mettre à jour mes réponses au questionnaire",
+    },
+  },
+
+  goal: {
+    labels: {
+      hypertrophy: "Hypertrophie / Esthétique",
+      fatloss: "Perte de gras",
+      strength: "Force",
+      endurance: "Endurance / Cardio",
+      mobility: "Mobilité / Souplesse",
+      general: "Forme générale",
+    },
+  },
+
+  sessions: {
+    title: "Mes séances",
+    titleNoEquip: "Mes séances (sans matériel)",
+    toggle: {
+      withEquip: "Matériel",
+      withoutEquip: "Sans matériel",
+      withEquipTitle: "Voir la liste avec matériel",
+      withoutEquipTitle: "Voir la liste sans matériel",
+    },
+    generateCard: {
+      text: "Cliquez sur « Générer » pour afficher vos séances personnalisées.",
+      button: "Générer",
+      buttonTitle: "Générer mes séances",
+    },
+  },
+
+  lists: {
+    title: "Mes listes",
+    done: {
+      title: "Séance faite",
+    },
+    later: {
+      title: "À faire plus tard",
+    },
+    removeLabel: "Supprimer cette séance",
+  },
 },
+
 
 
 
@@ -710,7 +782,79 @@ detail: {
     description: "We keep the ingredient and suggest other ways to cook it:",
   },
   back: "← Back",
+},profile: {
+  title: "My profile",
+
+  messages: {
+    programmeUpdated: "✓ AI program updated from your latest questionnaire answers.",
+    successGeneric: "✓ Operation completed.",
+  },
+
+  infoSection: {
+    title: "My info",
+  },
+
+  info: {
+    firstName: {
+      label: "First name",
+      missing: "Not provided",
+    },
+    age: {
+      label: "Age",
+      missing: "Not provided",
+    },
+    goal: {
+      label: "Current goal",
+      missing: "Not set",
+    },
+    mail: {
+      label: "Email",
+      missing: "Not provided",
+    },
+    questionnaire: {
+      updateLink: "Update my questionnaire answers",
+    },
+  },
+
+  goal: {
+    labels: {
+      hypertrophy: "Hypertrophy / Aesthetics",
+      fatloss: "Fat loss",
+      strength: "Strength",
+      endurance: "Endurance / Cardio",
+      mobility: "Mobility / Flexibility",
+      general: "General fitness",
+    },
+  },
+
+  sessions: {
+    title: "My sessions",
+    titleNoEquip: "My sessions (no equipment)",
+    toggle: {
+      withEquip: "Equipment",
+      withoutEquip: "No equipment",
+      withEquipTitle: "Show list with equipment",
+      withoutEquipTitle: "Show list without equipment",
+    },
+    generateCard: {
+      text: "Click on “Generate” to display your personalised sessions.",
+      button: "Generate",
+      buttonTitle: "Generate my sessions",
+    },
+  },
+
+  lists: {
+    title: "My lists",
+    done: {
+      title: "Session done",
+    },
+    later: {
+      title: "To do later",
+    },
+    removeLabel: "Remove this session",
+  },
 },
+
 
 
 
