@@ -259,7 +259,81 @@ export const translations = {
   unavailable: "IA indisponible pour le moment.",
   loading: "Génération en cours…",
   badge: "perso IA",
+},progress: {
+  pageTitle: "Mes progrès",
+  pageSubtitle: "Ajoutez vos pas, vos charges et votre poids. Vos données restent en local (cookie).",
+
+  messages: {
+    saved: "✓ Entrée enregistrée.",
+    deleted: "Entrée supprimée.",
+    errorPrefix: "⚠️ Erreur :",
+  },
+
+  form: {
+    title: "Ajouter une entrée",
+    type: {
+      label: "Type",
+      steps: "Pas (steps)",
+      load: "Charges portées (kg)",
+      weight: "Poids (kg)",
+      help: "Pour charges, vous pouvez renseigner les répétitions ci-dessous.",
+    },
+    date: {
+      label: "Date",
+    },
+    value: {
+      label: "Valeur",
+      placeholder: "ex: 8000 (pas) / 60 (kg)",
+    },
+    reps: {
+      label: "Répétitions (optionnel, charges)",
+      placeholder: "ex: 8",
+    },
+    note: {
+      label: "Note (optionnel)",
+      placeholder: "ex: Marche rapide, Squat barre, etc.",
+    },
+    submit: "Enregistrer",
+  },
+
+  week: {
+    title: "Pas — semaine en cours",
+    rangePrefix: "Du",
+    rangeTo: "au",
+    totalLabel: "Total",
+    stepsUnit: "pas",
+    avgPerDayLabel: "Moyenne / jour",
+    stepsPerDayUnit: "pas/jour",
+    noData: "Aucune donnée saisie pour cette semaine. Ajoutez une entrée ci-dessus pour voir vos stats.",
+  },
+
+  latest: {
+    title: "Dernières valeurs",
+    steps: {
+      title: "Pas",
+      unit: "pas",
+    },
+    load: {
+      title: "Charges",
+    },
+    weight: {
+      title: "Poids",
+    },
+    noData: "Aucune donnée.",
+  },
+
+  recent: {
+    title: "Entrées récentes",
+    empty: "Pas encore de données — commencez en ajoutant une entrée ci-dessus.",
+    type: {
+      steps: "Pas",
+      load: "Charges",
+      weight: "Poids",
+    },
+    delete: "Supprimer",
+  },
 },
+
 
 
 
@@ -523,7 +597,81 @@ export const translations = {
   unavailable: "AI unavailable at the moment.",
   loading: "Generating…",
   badge: "AI personalised",
+},progress: {
+  pageTitle: "My progress",
+  pageSubtitle: "Add your steps, loads and bodyweight. Your data stays local (cookie).",
+
+  messages: {
+    saved: "✓ Entry saved.",
+    deleted: "Entry deleted.",
+    errorPrefix: "⚠️ Error:",
+  },
+
+  form: {
+    title: "Add an entry",
+    type: {
+      label: "Type",
+      steps: "Steps",
+      load: "Lifts (kg)",
+      weight: "Bodyweight (kg)",
+      help: "For lifts, you can also fill the reps field below.",
+    },
+    date: {
+      label: "Date",
+    },
+    value: {
+      label: "Value",
+      placeholder: "e.g. 8000 (steps) / 60 (kg)",
+    },
+    reps: {
+      label: "Reps (optional, lifts)",
+      placeholder: "e.g. 8",
+    },
+    note: {
+      label: "Note (optional)",
+      placeholder: "e.g. Fast walk, barbell squat, etc.",
+    },
+    submit: "Save",
+  },
+
+  week: {
+    title: "Steps — current week",
+    rangePrefix: "From",
+    rangeTo: "to",
+    totalLabel: "Total",
+    stepsUnit: "steps",
+    avgPerDayLabel: "Average / day",
+    stepsPerDayUnit: "steps/day",
+    noData: "No data for this week yet. Add an entry above to see your stats.",
+  },
+
+  latest: {
+    title: "Latest values",
+    steps: {
+      title: "Steps",
+      unit: "steps",
+    },
+    load: {
+      title: "Lifts",
+    },
+    weight: {
+      title: "Weight",
+    },
+    noData: "No data.",
+  },
+
+  recent: {
+    title: "Recent entries",
+    empty: "No data yet — start by adding an entry above.",
+    type: {
+      steps: "Steps",
+      load: "Lifts",
+      weight: "Weight",
+    },
+    delete: "Delete",
+  },
 },
+
 
 
 
