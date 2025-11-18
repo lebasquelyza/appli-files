@@ -125,7 +125,7 @@ export default function SeanceClient({ id, fallback }: Props) {
 
       <div className="mt-4">
         <a href="/dashboard/profile" className="underline text-sm">
-          {t("seance.backLink")}
+          ← Retour
         </a>
       </div>
     </div>
@@ -276,3 +276,4 @@ function toNoEquipmentExercise(ex: NormalizedExercise): NormalizedExercise {
   // CORE/HIIT/MOBILITÉ : souvent déjà PDC
   return base;
 }
+
