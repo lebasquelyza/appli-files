@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useLanguage } from "@/components/LanguageProvider";
 
 type Recipe = {
   id: string;
@@ -45,6 +46,7 @@ export function AIExtraSection({
   allergens,
   dislikes,
 }: Props) {
+  const { t } = useLanguage(); // ✅ i18n
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -86,7 +88,12 @@ export function AIExtraSection({
             text
           );
           if (!cancelled) {
-            setError(`IA indisponible pour le moment. (HTTP ${res.status})`);
+            setError(
+              `${t(
+                "recipes.aiSection.unavailable",
+                "IA indisponible pour le moment."
+              )} (HTTP ${res.status})`
+            );
             setLoading(false);
           }
           return;
@@ -96,13 +103,24 @@ export function AIExtraSection({
         console.log("[AIExtraSection] data:", data);
 
         if (!cancelled && data && data.error) {
-          console.error("[AIExtraSection] API logical error:", data.error, data.detail);
-          setError(`IA indisponible pour le moment. (${data.error})`);
+          console.error(
+            "[AIExtraSection] API logical error:",
+            data.error,
+            data.detail
+          );
+          setError(
+            `${t(
+              "recipes.aiSection.unavailable",
+              "IA indisponible pour le moment."
+            )} (${data.error})`
+          );
           setLoading(false);
           return;
         }
 
-        const arr: Recipe[] = Array.isArray(data?.recipes) ? data.recipes : [];
+        const arr: Recipe[] = Array.isArray(data?.recipes)
+          ? data.recipes
+          : [];
         if (!cancelled) {
           setRecipes(arr);
           setLoading(false);
@@ -110,7 +128,12 @@ export function AIExtraSection({
       } catch (e) {
         console.error("[AIExtraSection] fetch error /api/recipes/ai:", e);
         if (!cancelled) {
-          setError("IA indisponible pour le moment. (FETCH_ERROR)");
+          setError(
+            `${t(
+              "recipes.aiSection.unavailable",
+              "IA indisponible pour le moment."
+            )} (FETCH_ERROR)`
+          );
           setLoading(false);
         }
       }
@@ -120,28 +143,56 @@ export function AIExtraSection({
     return () => {
       cancelled = true;
     };
-  }, [kind, kcal, kcalMin, kcalMax, allergensKey, dislikesKey]);
+  }, [
+    kind,
+    kcal,
+    kcalMin,
+    kcalMax,
+    allergensKey,
+    dislikesKey,
+    t, // ✅ dépendance
+  ]);
 
   return (
     <section className="section" style={{ marginTop: 12 }}>
       <div className="section-head" style={{ marginBottom: 8 }}>
-        <h2>Suggestions perso IA</h2>
-        <p className="text-xs" style={{ color: "#6b7280", marginTop: 4 }}>
-          Générées en direct avec l&apos;IA selon tes filtres.
+        <h2>
+          {t(
+            "recipes.aiSection.title",
+            "Suggestions perso IA"
+          )}
+        </h2>
+        <p
+          className="text-xs"
+          style={{ color: "#6b7280", marginTop: 4 }}
+        >
+          {t(
+            "recipes.aiSection.subtitle",
+            "Générées en direct avec l'IA selon tes filtres."
+          )}
         </p>
       </div>
 
       {/* État erreur */}
       {error && (
-        <div className="card text-xs" style={{ color: "#6b7280" }}>
+        <div
+          className="card text-xs"
+          style={{ color: "#6b7280" }}
+        >
           {error}
         </div>
       )}
 
       {/* État chargement (si pas d'erreur) */}
       {!error && loading && recipes.length === 0 && (
-        <div className="card text-xs" style={{ color: "#6b7280" }}>
-          Génération en cours…
+        <div
+          className="card text-xs"
+          style={{ color: "#6b7280" }}
+        >
+          {t(
+            "recipes.aiSection.loading",
+            "Génération en cours…"
+          )}
         </div>
       )}
 
@@ -149,17 +200,39 @@ export function AIExtraSection({
       {!error && recipes.length > 0 && (
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
           {recipes.map((r) => {
-            const href = `/dashboard/recipes/${r.id}?${baseQS}data=${encodeB64UrlJsonBrowser(r)}`;
+            const href = `/dashboard/recipes/${r.id}?${baseQS}data=${encodeB64UrlJsonBrowser(
+              r
+            )}`;
 
             return (
-              <article key={r.id} className="card" style={{ overflow: "hidden" }}>
+              <article
+                key={r.id}
+                className="card"
+                style={{ overflow: "hidden" }}
+              >
                 <div className="flex items-center justify-between">
-                  <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>{r.title}</h3>
-                  <span className="badge">perso IA</span>
+                  <h3
+                    style={{
+                      margin: 0,
+                      fontSize: 18,
+                      fontWeight: 800,
+                    }}
+                  >
+                    {r.title}
+                  </h3>
+                  <span className="badge">
+                    {t(
+                      "recipes.aiSection.badge",
+                      "perso IA"
+                    )}
+                  </span>
                 </div>
 
                 {r.subtitle && (
-                  <p className="text-sm" style={{ marginTop: 4, color: "#6b7280" }}>
+                  <p
+                    className="text-sm"
+                    style={{ marginTop: 4, color: "#6b7280" }}
+                  >
                     {r.subtitle}
                   </p>
                 )}
@@ -173,9 +246,15 @@ export function AIExtraSection({
                     flexWrap: "wrap",
                   }}
                 >
-                  {typeof r.kcal === "number" && <span className="badge">{r.kcal} kcal</span>}
+                  {typeof r.kcal === "number" && (
+                    <span className="badge">
+                      {r.kcal} kcal
+                    </span>
+                  )}
                   {typeof r.timeMin === "number" && (
-                    <span className="badge">{r.timeMin} min</span>
+                    <span className="badge">
+                      {r.timeMin} min
+                    </span>
                   )}
                 </div>
 
@@ -190,7 +269,10 @@ export function AIExtraSection({
                   }}
                 >
                   <a className="btn btn-dash" href={href}>
-                    Voir la recette
+                    {t(
+                      "recipes.card.viewRecipe",
+                      "Voir la recette"
+                    )}
                   </a>
                 </div>
               </article>
