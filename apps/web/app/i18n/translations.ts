@@ -332,7 +332,27 @@ export const translations = {
     },
     delete: "Supprimer",
   },
+},detail: {
+  notFound: {
+    title: "Recette introuvable",
+    description: "Ouvrez la fiche depuis la liste des recettes.",
+    back: "← Retour aux recettes",
+  },
+  ingredients: {
+    title: "Ingrédients",
+    empty: "Pas d’ingrédients détaillés.",
+  },
+  steps: {
+    title: "Préparation",
+    empty: "Pas d’étapes détaillées.",
+  },
+  rework: {
+    title: "Re-travailler les aliments non aimés",
+    description: "On garde le produit et on propose d’autres façons de le cuisiner :",
+  },
+  back: "← Retour",
 },
+
 
 
 
@@ -670,6 +690,26 @@ export const translations = {
     },
     delete: "Delete",
   },
+},
+detail: {
+  notFound: {
+    title: "Recipe not found",
+    description: "Open this recipe from the recipes list.",
+    back: "← Back to recipes",
+  },
+  ingredients: {
+    title: "Ingredients",
+    empty: "No detailed ingredients.",
+  },
+  steps: {
+    title: "Preparation",
+    empty: "No detailed steps.",
+  },
+  rework: {
+    title: "Reworking disliked foods",
+    description: "We keep the ingredient and suggest other ways to cook it:",
+  },
+  back: "← Back",
 },
 
 
