@@ -878,7 +878,73 @@ connect: {
     unknown: "Erreur inconnue",
     reload: "Recharger",
   },
+},foodSnap: {
+  errors: {
+    analyzeGeneric: "Analyse impossible",
+    unknown: "Erreur inconnue",
+    offNoProduct:
+      "OpenFoodFacts indisponible ou aucun produit. Saisis manuellement ou utilise la photo.",
+    offUnavailable:
+      "OFF non joignable. Essaie plus tard ou saisis manuellement.",
+  },
+  header: {
+    title:
+      'Ajouter depuis une <u>photo</u>, un <u>code-barres</u> ou une <u>recherche</u>',
+    subtitle:
+      "OFF/USDA prioritaire (valeurs réelles), sinon IA/manuel.",
+  },
+  buttons: {
+    photo: "📸 Photo",
+    scan: "🧾 Scanner",
+  },
+  search: {
+    title: "Recherche manuelle (OFF + USDA)",
+    placeholder:
+      'ex: "riz basmati", "banane", "blanc de poulet", "yaourt grec 0%"',
+    loading: "Recherche…",
+    submit: "Rechercher",
+    noResult:
+      "Aucun résultat. Saisis manuellement kcal/100g ou essaie un autre terme.",
+    error:
+      "Recherche indisponible. Essaie plus tard ou saisis manuellement.",
+    proteinsShort: "prot",
+    sourceLabel: "Source",
+    choose: "Choisir",
+  },
+  preview: {
+    alt: "prévisualisation",
+    analyzeLoading: "Analyse…",
+    analyze: "Analyser la photo",
+    reset: "Réinitialiser",
+  },
+  plate: {
+    title: "Décomposition de l’assiette (éditable)",
+    grams: "Grammes",
+    kcalPer100: "kcal/100g",
+    protPer100: "Prot/100g",
+    proteinsShort: "g prot",
+    total: "Total",
+    totalProteinsShort: "g protéines",
+  },
+  product: {
+    title: "Produit",
+    sourceLabel: "Source",
+    portion: "Portion (g)",
+    kcalPer100: "kcal / 100 g",
+    protPer100: "Prot / 100 g",
+    total: "Total",
+    totalProteinsShort: "g protéines",
+  },
+  help: {
+    manual:
+      "⚡ Si aucune base ne répond, tu peux saisir les valeurs manuellement (kcal/prot pour 100 g), puis indiquer la portion.",
+  },
+  actions: {
+    fillForm: "Remplir le formulaire en haut",
+    addToCalories: "Ajouter à mes calories",
+  },
 },
+
 
 
 
@@ -1796,7 +1862,73 @@ common: {
     unknown: "Unknown error",
     reload: "Reload",
   },
+},foodSnap: {
+  errors: {
+    analyzeGeneric: "Analysis failed",
+    unknown: "Unknown error",
+    offNoProduct:
+      "OpenFoodFacts unavailable or no product found. Enter values manually or use a photo.",
+    offUnavailable:
+      "OFF unreachable. Try again later or enter values manually.",
+  },
+  header: {
+    title:
+      'Add from a <u>photo</u>, a <u>barcode</u> or a <u>search</u>',
+    subtitle:
+      "OFF/USDA is used first (real values), otherwise AI/manual.",
+  },
+  buttons: {
+    photo: "📸 Photo",
+    scan: "🧾 Scan",
+  },
+  search: {
+    title: "Manual search (OFF + USDA)",
+    placeholder:
+      'e.g. "basmati rice", "banana", "chicken breast", "greek yogurt 0%"',
+    loading: "Searching…",
+    submit: "Search",
+    noResult:
+      "No result. Enter kcal/100g manually or try another term.",
+    error:
+      "Search unavailable. Try again later or enter values manually.",
+    proteinsShort: "prot",
+    sourceLabel: "Source",
+    choose: "Select",
+  },
+  preview: {
+    alt: "preview",
+    analyzeLoading: "Analyzing…",
+    analyze: "Analyze photo",
+    reset: "Reset",
+  },
+  plate: {
+    title: "Plate breakdown (editable)",
+    grams: "Grams",
+    kcalPer100: "kcal/100g",
+    protPer100: "Protein/100g",
+    proteinsShort: "g protein",
+    total: "Total",
+    totalProteinsShort: "g protein",
+  },
+  product: {
+    title: "Product",
+    sourceLabel: "Source",
+    portion: "Portion (g)",
+    kcalPer100: "kcal / 100 g",
+    protPer100: "Protein / 100 g",
+    total: "Total",
+    totalProteinsShort: "g protein",
+  },
+  help: {
+    manual:
+      "⚡ If no database returns a match, you can enter values manually (kcal/protein per 100 g), then set the portion.",
+  },
+  actions: {
+    fillForm: "Fill the form above",
+    addToCalories: "Add to my calories",
+  },
 },
+
 
 
 
