@@ -30,7 +30,7 @@ type Props = {
 };
 
 export default function BarcodeScanner({ onDetected, onClose }: Props) {
-  const { t } = useTranslation("foodSnap");
+  const { t } = useTranslation(); // ✅ plus d’argument ici
 
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const streamRef = React.useRef<MediaStream | null>(null);
@@ -40,7 +40,8 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
   const [manual, setManual] = React.useState("");
 
   React.useEffect(() => {
-    const has = typeof window !== "undefined" && !!window.BarcodeDetector;
+    const has =
+      typeof window !== "undefined" && !!window.BarcodeDetector;
     setSupported(has);
     if (!has) return;
 
@@ -61,10 +62,11 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
 
     async function start() {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" } },
-          audio: false,
-        });
+        const stream =
+          await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: "environment" } },
+            audio: false,
+          });
         streamRef.current = stream;
         if (!videoRef.current) return;
         videoRef.current.srcObject = stream;
@@ -92,14 +94,21 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
         };
         rafRef.current = requestAnimationFrame(tick);
       } catch (e: any) {
-        setError(t("barcodeScanner.cameraError"));
+        // Message déjà traduit côté i18n (fallback si besoin)
+        setError(
+          t(
+            "foodSnap.barcodeScanner.errorCamera",
+            "Caméra indisponible ou permissions refusées."
+          )
+        );
       }
     }
 
     start();
 
     function cleanup() {
-      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+      if (rafRef.current != null)
+        cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
       const tracks = streamRef.current?.getTracks?.() || [];
       tracks.forEach((t) => t.stop());
@@ -120,9 +129,14 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
           marginBottom: 8,
         }}
       >
-        <strong>{t("barcodeScanner.title")}</strong>
+        <strong>
+          {t(
+            "foodSnap.barcodeScanner.title",
+            "Scanner un code-barres"
+          )}
+        </strong>
         <button className="btn" onClick={onClose}>
-          {t("barcodeScanner.close")}
+          {t("foodSnap.barcodeScanner.close", "Fermer")}
         </button>
       </div>
 
@@ -138,21 +152,36 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
             marginBottom: 8,
           }}
         >
-          {t("barcodeScanner.notSupported")}
+          {t(
+            "foodSnap.barcodeScanner.unsupported",
+            "Le scanner natif n’est pas supporté sur cet appareil/navigateur."
+          )}
+          <br />
+          {t(
+            "foodSnap.barcodeScanner.unsupportedHint",
+            "Saisis le code-barres manuellement ou prends une photo de l’étiquette."
+          )}
         </div>
       )}
 
       {supported !== false && (
         <video
           ref={videoRef}
-          style={{ width: "100%", borderRadius: 8, background: "#000" }}
+          style={{
+            width: "100%",
+            borderRadius: 8,
+            background: "#000",
+          }}
           muted
           playsInline
         />
       )}
 
       {error && (
-        <div className="text-xs" style={{ color: "#dc2626", marginTop: 6 }}>
+        <div
+          className="text-xs"
+          style={{ color: "#dc2626", marginTop: 6 }}
+        >
           {error}
         </div>
       )}
@@ -170,7 +199,10 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
           className="input"
           type="text"
           inputMode="numeric"
-          placeholder={t("barcodeScanner.manualPlaceholder")}
+          placeholder={t(
+            "foodSnap.barcodeScanner.manualPlaceholder",
+            "Saisir le code-barres (ex: 3228857000856)"
+          )}
           value={manual}
           onChange={(e) =>
             setManual(e.target.value.replace(/\s+/g, ""))
@@ -181,10 +213,16 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
           onClick={() => {
             const s = manual.trim();
             if (/^\d{8,14}$/.test(s)) onDetected(s);
-            else setError(t("barcodeScanner.invalid"));
+            else
+              setError(
+                t(
+                  "foodSnap.barcodeScanner.manualInvalid",
+                  "Code-barres invalide (8 à 14 chiffres)."
+                )
+              );
           }}
         >
-          {t("barcodeScanner.useButton")}
+          {t("foodSnap.barcodeScanner.manualUse", "Utiliser")}
         </button>
       </div>
 
@@ -192,7 +230,10 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
         className="text-xs"
         style={{ color: "#6b7280", marginTop: 6 }}
       >
-        {t("barcodeScanner.tip")}
+        {t(
+          "foodSnap.barcodeScanner.tip",
+          "Astuce : approche bien le code et évite les reflets."
+        )}
       </div>
     </div>
   );
