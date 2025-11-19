@@ -539,7 +539,116 @@ export const translations = {
 
         playButton: "Lire",
       },
+    },    motivation: {
+      pageTitle: "Motivation",
+      pageSubtitle:
+        "Messages d’encouragement issus de tes fichiers de coaching (mock pour l’instant) + paramètres de réception.",
+      loading: {
+        subtitle: "Chargement…",
+      },
+      header: {
+        connectedAs: "Connecté en tant que",
+        clientFallback: "client",
+      },
+      preferences: {
+        title: "Préférences de notification",
+        subtitle:
+          "Choisis les jours et l’heure à laquelle tu souhaites recevoir tes messages de motivation.",
+        timeLabel: "Heure préférée :",
+        timeNote:
+          "(Ces réglages sont pour l’instant stockés uniquement ici, côté client.)",
+      },
+      dayLabels: {
+        mon: "Lundi",
+        tue: "Mardi",
+        wed: "Mercredi",
+        thu: "Jeudi",
+        fri: "Vendredi",
+        sat: "Samedi",
+        sun: "Dimanche",
+      },
+      bar: {
+        unreadSuffix: "notification(s) non lue(s).",
+        youChose: "Tu as choisi :",
+        noDays: "aucun jour",
+        at: "à",
+        filterAll: "Tout",
+        filterUnread: "Non lues",
+        markAllRead: "Tout marquer comme lu",
+        sending: "Envoi...",
+        sendTest: "Envoyer une notif de test",
+      },
+      empty: {
+        title: "Aucune notification à afficher pour le moment.",
+        hint:
+          "Utilise le bouton “Envoyer une notif de test” pour tester l’affichage.",
+      },
+      card: {
+        badgeNew: "Nouveau",
+        sourcePrefix: "Source :",
+        ratingLabel: "Ta note :",
+        markRead: "Marquer comme lu",
+      },
+      mock: {
+        source: "Files Coaching",
+        sourceTest: "Files Coaching (test)",
+        first: {
+          title: "Tu progresses 💪",
+          message:
+            "Super séance hier ! Continue sur cette lancée, la régularité fait toute la différence.",
+        },
+        second: {
+          title: "Rappel douceur",
+          message:
+            "Même une petite séance vaut mieux que rien. 10 minutes aujourd’hui, c’est déjà gagné.",
+        },
+      },
+      samples: {
+        onLacheRien: {
+          title: "On lâche rien 🔥",
+          message:
+            "Tu es plus proche de ton objectif aujourd’hui qu’hier. Une action de plus, même petite.",
+        },
+        respireEtAvance: {
+          title: "Respire & avance",
+          message:
+            "Ne cherche pas la perfection. Cherche la progression. Un pas après l’autre.",
+        },
+        tuPeuxLeFaire: {
+          title: "Tu peux le faire ✨",
+          message:
+            "Rappelle-toi pourquoi tu as commencé. Tu as déjà traversé plus dur que ça.",
+        },
+        tonFuturToi: {
+          title: "Ton futur toi te remercie",
+          message:
+            "Chaque décision d’aujourd’hui construit la personne que tu seras dans 3 mois.",
+        },
+        miniSeance: {
+          title: "Mini séance, maxi impact",
+          message:
+            "Si tu n’as pas le temps pour 30 minutes, fais-en 5. Ce qui compte, c’est le mouvement.",
+        },
+        recommence: {
+          title: "Recommence autant que nécessaire",
+          message:
+            "Tomber fait partie du jeu. Ce qui compte, c’est à quelle vitesse tu te relèves.",
+        },
+        tuNESPasSeul: {
+          title: "Tu n’es pas seul·e",
+          message:
+            "Demander de l’aide, c’est aussi une forme de force. Tu fais ça pour TOI.",
+        },
+        cestTonMoment: {
+          title: "C’est ton moment",
+          message:
+            "Bloque 10 minutes rien que pour toi maintenant. Ton corps et ta tête te diront merci.",
+        },
+      },
     },
+
+
+      
 
     },
   },
@@ -1110,7 +1219,114 @@ export const translations = {
 
         playButton: "Play",
       },
+    },    motivation: {
+      pageTitle: "Motivation",
+      pageSubtitle:
+        "Encouraging messages from your coaching files (mock for now) + delivery settings.",
+      loading: {
+        subtitle: "Loading...",
+      },
+      header: {
+        connectedAs: "Signed in as",
+        clientFallback: "client",
+      },
+      preferences: {
+        title: "Notification preferences",
+        subtitle:
+          "Choose the days and time when you want to receive your motivation messages.",
+        timeLabel: "Preferred time:",
+        timeNote:
+          "(These settings are currently stored here only, on the client side.)",
+      },
+      dayLabels: {
+        mon: "Monday",
+        tue: "Tuesday",
+        wed: "Wednesday",
+        thu: "Thursday",
+        fri: "Friday",
+        sat: "Saturday",
+        sun: "Sunday",
+      },
+      bar: {
+        unreadSuffix: "unread notification(s).",
+        youChose: "You chose:",
+        noDays: "no day",
+        at: "at",
+        filterAll: "All",
+        filterUnread: "Unread",
+        markAllRead: "Mark all as read",
+        sending: "Sending...",
+        sendTest: "Send test notification",
+      },
+      empty: {
+        title: "No notifications to display for now.",
+        hint:
+          'Use the “Send test notification” button to test the display.',
+      },
+      card: {
+        badgeNew: "New",
+        sourcePrefix: "Source:",
+        ratingLabel: "Your rating:",
+        markRead: "Mark as read",
+      },
+      mock: {
+        source: "Files Coaching",
+        sourceTest: "Files Coaching (test)",
+        first: {
+          title: "You’re progressing 💪",
+          message:
+            "Great session yesterday! Keep going, consistency makes all the difference.",
+        },
+        second: {
+          title: "Gentle reminder",
+          message:
+            "Even a short session is better than nothing. 10 minutes today is already a win.",
+        },
+      },
+      samples: {
+        onLacheRien: {
+          title: "Don’t give up 🔥",
+          message:
+            "You’re closer to your goal today than yesterday. One more action, even a small one.",
+        },
+        respireEtAvance: {
+          title: "Breathe & move forward",
+          message:
+            "Don’t aim for perfection. Aim for progress. One step at a time.",
+        },
+        tuPeuxLeFaire: {
+          title: "You can do it ✨",
+          message:
+            "Remember why you started. You’ve already been through tougher things.",
+        },
+        tonFuturToi: {
+          title: "Your future self thanks you",
+          message:
+            "Every decision you make today shapes who you’ll be in 3 months.",
+        },
+        miniSeance: {
+          title: "Mini session, maxi impact",
+          message:
+            "If you don’t have 30 minutes, do 5. What matters is moving.",
+        },
+        recommence: {
+          title: "Start again as many times as needed",
+          message:
+            "Falling is part of the game. What matters is how fast you get back up.",
+        },
+        tuNESPasSeul: {
+          title: "You’re not alone",
+          message:
+            "Asking for help is also a form of strength. You’re doing this for YOU.",
+        },
+        cestTonMoment: {
+          title: "This is your moment",
+          message:
+            "Block 10 minutes just for yourself now. Your body and mind will thank you.",
+        },
+      },
     },
+
 
 
       
