@@ -1,3 +1,4 @@
+//apps/web/app/dashboard/corrector/page.tsx
 "use client";
 
 import { useEffect, useRef, useState } from "react";
