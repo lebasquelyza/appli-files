@@ -867,6 +867,19 @@ connect: {
   },
   loading: "Chargement…",
 },
+      common: {
+  password: {
+    show: "Afficher le mot de passe",
+    hide: "Masquer le mot de passe",
+  },
+  loading: "Chargement…",
+  error: {
+    title: "Oups",
+    unknown: "Erreur inconnue",
+    reload: "Recharger",
+  },
+},
+
 
 
 
@@ -1772,7 +1785,19 @@ common: {
     hide: "Hide password",
   },
   loading: "Loading…",
+},common: {
+  password: {
+    show: "Show password",
+    hide: "Hide password",
+  },
+  loading: "Loading…",
+  error: {
+    title: "Oops",
+    unknown: "Unknown error",
+    reload: "Reload",
+  },
 },
+
 
 
 
