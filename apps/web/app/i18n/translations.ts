@@ -815,7 +815,53 @@ connect: {
     title: "Préviens-moi quand les intégrations arrivent",
     subtitle: "Notification dans l’app (préférence stockée en local).",
   },
+},calories: {
+  page: {
+    title: "Calories",
+    subtitle: "Enregistre tes calories consommées aujourd’hui. Historique sur 14 jours.",
+  },
+  alert: {
+    saved: {
+      title: "Enregistré !",
+      text: "Tes calories ont été mises à jour.",
+    },
+    error: {
+      title: "Erreur",
+      badDate: "date invalide.",
+      badKcal: "valeur de calories invalide.",
+    },
+  },
+  today: {
+    title: "Aujourd’hui",
+    unit: "kcal",
+  },
+  form: {
+    kcal: {
+      label: "Calories à ajouter",
+      placeholder: "ex: 650",
+      helper: "La valeur s’ajoute au total du jour (elle n’écrase pas).",
+    },
+    note: {
+      label: "Note (optionnel)",
+      placeholder: "ex: Déj: poke bowl",
+    },
+    buttons: {
+      save: "Enregistrer",
+      refresh: "Actualiser",
+    },
+  },
+  history: {
+    title: "Historique (14 jours)",
+    toggle: "(cliquer pour afficher/masquer)",
+    helper: "Les jours sans saisie sont à 0 kcal.",
+    headers: {
+      date: "Date",
+      kcal: "kcal",
+      note: "Note",
+    },
+  },
 },
+
 
 
 
@@ -1667,7 +1713,53 @@ connect: {
     title: "Notify me when integrations are available",
     subtitle: "In-app notification (preference stored locally).",
   },
+},calories: {
+  page: {
+    title: "Calories",
+    subtitle: "Log the calories you ate today. 14-day history.",
+  },
+  alert: {
+    saved: {
+      title: "Saved!",
+      text: "Your calories have been updated.",
+    },
+    error: {
+      title: "Error",
+      badDate: "invalid date.",
+      badKcal: "invalid calories value.",
+    },
+  },
+  today: {
+    title: "Today",
+    unit: "kcal",
+  },
+  form: {
+    kcal: {
+      label: "Calories to add",
+      placeholder: "e.g. 650",
+      helper: "This value is added to today’s total (it doesn’t overwrite it).",
+    },
+    note: {
+      label: "Note (optional)",
+      placeholder: "e.g. Lunch: poke bowl",
+    },
+    buttons: {
+      save: "Save",
+      refresh: "Refresh",
+    },
+  },
+  history: {
+    title: "History (14 days)",
+    toggle: "(click to show/hide)",
+    helper: "Days without entries are at 0 kcal.",
+    headers: {
+      date: "Date",
+      kcal: "kcal",
+      note: "Note",
+    },
+  },
 },
+
 
 
 
