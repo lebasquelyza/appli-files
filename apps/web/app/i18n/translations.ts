@@ -661,7 +661,18 @@ export const translations = {
           message:
             "Bloque 10 minutes rien que pour toi maintenant. Ton corps et ta tête te diront merci.",
         },
-      },
+      },    barcodeScanner: {
+      cameraError: "Caméra indisponible ou permissions refusées.",
+      title: "Scanner un code-barres",
+      close: "Fermer",
+      notSupported:
+        "Le scanner natif n’est pas supporté sur cet appareil/navigateur. Saisis le code-barres manuellement ou prends une photo de l’étiquette.",
+      manualPlaceholder: "Saisir le code-barres (ex: 3228857000856)",
+      invalid: "Code-barres invalide (8 à 14 chiffres).",
+      useButton: "Utiliser",
+      tip: "Astuce : approche bien le code et évite les reflets.",
+    },
+
     },
 
     // Coach vidéo
@@ -1944,6 +1955,17 @@ export const translations = {
         fillForm: "Fill the form above",
         addToCalories: "Add to my calories",
       },
+    },    barcodeScanner: {
+      cameraError: "Camera unavailable or permissions denied.",
+      title: "Scan a barcode",
+      close: "Close",
+      notSupported:
+        "The native scanner is not supported on this device/browser. Enter the barcode manually or take a photo of the label.",
+      manualPlaceholder: "Enter the barcode (e.g. 3228857000856)",
+      invalid: "Invalid barcode (8 to 14 digits).",
+      useButton: "Use",
+      tip: "Tip: hold the barcode close and avoid glare.",
     },
+
   },
 } as const;
