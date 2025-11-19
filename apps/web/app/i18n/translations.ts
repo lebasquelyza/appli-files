@@ -51,12 +51,21 @@ export const translations = {
         error: "Erreur lors de la réinitialisation",
       },
     },
+
+    // 🔹 Commun FR (fusion de tous les blocs common)
     common: {
       password: {
         show: "Afficher le mot de passe",
         hide: "Masquer le mot de passe",
       },
+      loading: "Chargement…",
+      error: {
+        title: "Oups",
+        unknown: "Erreur inconnue",
+        reload: "Recharger",
+      },
     },
+
     settings: {
       pageTitle: "Réglages",
       sections: {
@@ -255,8 +264,7 @@ export const translations = {
       },
       aiSection: {
         title: "Suggestions perso IA",
-        subtitle:
-          "Générées en direct avec l'IA selon tes filtres.",
+        subtitle: "Générées en direct avec l'IA selon tes filtres.",
         unavailable: "IA indisponible pour le moment.",
         loading: "Génération en cours…",
         badge: "perso IA",
@@ -337,8 +345,7 @@ export const translations = {
       detail: {
         notFound: {
           title: "Recette introuvable",
-          description:
-            "Ouvrez la fiche depuis la liste des recettes.",
+          description: "Ouvrez la fiche depuis la liste des recettes.",
           back: "← Retour aux recettes",
         },
         ingredients: {
@@ -458,9 +465,13 @@ export const translations = {
           },
           empty: "Aucune séance disponible pour le moment.",
         },
-      },    music: {
+      },
+    },
+
+    music: {
       pageTitle: "Musique",
-      pageSubtitle: "Minuteur simple + Tabata + lecteur Spotify + titres likés.",
+      pageSubtitle:
+        "Minuteur simple + Tabata + lecteur Spotify + titres likés.",
 
       loading: {
         subtitle: "Chargement…",
@@ -508,8 +519,10 @@ export const translations = {
 
       spotifyPlayer: {
         title: "Lecteur Spotify",
-        connectedDescription: "Contrôle du lecteur connecté à ton compte.",
-        disconnectedDescription: "Connecte-toi pour utiliser le lecteur Spotify.",
+        connectedDescription:
+          "Contrôle du lecteur connecté à ton compte.",
+        disconnectedDescription:
+          "Connecte-toi pour utiliser le lecteur Spotify.",
         connectButton: "Se connecter",
       },
 
@@ -518,8 +531,10 @@ export const translations = {
           "Connecte-toi à Spotify pour voir tes titres likés et rechercher une musique.",
 
         errors: {
-          likedFetch: "Impossible de récupérer les titres likés",
-          playerNotReady: "Player Spotify non prêt. Lance le lecteur d’abord.",
+          likedFetch:
+            "Impossible de récupérer les titres likés",
+          playerNotReady:
+            "Player Spotify non prêt. Lance le lecteur d’abord.",
           playFailed: "Impossible de lancer la lecture",
           searchFailed: "Erreur de recherche",
         },
@@ -539,7 +554,9 @@ export const translations = {
 
         playButton: "Lire",
       },
-    },    motivation: {
+    },
+
+    motivation: {
       pageTitle: "Motivation",
       pageSubtitle:
         "Messages d’encouragement issus de tes fichiers de coaching (mock pour l’instant) + paramètres de réception.",
@@ -581,7 +598,7 @@ export const translations = {
       empty: {
         title: "Aucune notification à afficher pour le moment.",
         hint:
-          "Utilise le bouton “Envoyer une notif de test” pour tester l’affichage.",
+          'Utilise le bouton “Envoyer une notif de test” pour tester l’affichage.',
       },
       card: {
         badgeNew: "Nouveau",
@@ -645,317 +662,303 @@ export const translations = {
             "Bloque 10 minutes rien que pour toi maintenant. Ton corps et ta tête te diront merci.",
         },
       },
-    },// Dans translations.fr
-videoCoach: {
-  page: {
-    title: "Import / Enregistrement",
-    subtitle: "Filme ou importe ta vidéo, ajoute ton ressenti puis lance l’analyse IA.",
-  },
-
-  status: {
-    done: "Analyse terminée — confirme l’exercice",
-  },
-
-  error: {
-    prefix: "Erreur pendant l'analyse",
-    label: "Erreur",
-  },
-
-  common: {
-    reset: "Réinitialiser",
-    unknown: "inconnu",
-  },
-
-  card: {
-    import: {
-      title: "🎥 Import / Enregistrement",
-      tabRecord: "Filmer",
-      tabUpload: "Importer",
-      fileLabel: "Fichier téléchargé",
-      fileName: "🎞️ Vidéo importée",
     },
 
-    feeling: {
-      title: "🎙️ Ton ressenti",
-      label: "Comment tu te sens ?",
-      placeholder: "Explique douleurs, fatigue, où tu as senti l'effort, RPE, etc.",
-      btnAnalyzing: "Analyse en cours",
-      btnCooldown: "Patiente ",
-      btnLaunch: "Lancer l'analyse IA",
-    },
-
-    summary: {
-      title: "🧠 Résumé IA",
-      empty: "Importe une vidéo puis lance l’analyse pour obtenir le résumé ici.",
-      gate: {
-        propose: "L’IA propose",
-        confirm: "Confirmer",
-        other: "Autre",
+    // Coach vidéo
+    videoCoach: {
+      page: {
+        title: "Import / Enregistrement",
+        subtitle:
+          "Filme ou importe ta vidéo, ajoute ton ressenti puis lance l’analyse IA.",
       },
-      override: {
-        label: "Quel exercice fais-tu ?",
-        placeholder: "ex. Tractions, Fentes bulgares, Soulevé de terre…",
-        reanalyze: "Ré-analyser",
-        help: "L’IA tiendra compte de ce nom pour corriger plus précisément.",
+      status: {
+        done: "Analyse terminée — confirme l’exercice",
       },
-      exerciseLabel: "Exercice",
-      musclesTitle: "Muscles principalement sollicités",
-      muscleBtnTitle: "Voir l’emplacement",
-      musclesEmpty: "— non détecté —",
-      issuesLabel: "Erreur détectée",
-      correctionsLabel: "Corrections",
-      extrasSummary: "Points complémentaires",
-    },
-  },
-
-  upload: {
-    import: "📥 Importer",
-    gallery: "📸 Galerie",
-    files: "🗂️ Fichiers",
-  },
-
-  videoRecorder: {
-    error: {
-      camera: "Impossible d'accéder à la caméra/micro. Vérifie les permissions.",
-    },
-    overlay: "Prépare ta caméra puis clique « Démarrer »",
-    start: "▶️ Démarrer",
-    stop: "⏸️ Arrêter",
-  },
-
-  muscleViewer: {
-    close: "Fermer",
-    subtitle: "Silhouette simplifiée — aucune zone cliquable, seules les zones sélectionnées sont mises en surbrillance.",
-  },
-},// Dans translations.fr
-connect: {
-  page: {
-    title: "Connecte tes données",
-    subtitle: "Santé, capteurs, etc. — synchronise automatiquement tes activités et mesures.",
-  },
-
-  sections: {
-    integrations: "Intégrations",
-    stravaTitle: "Dernières performances (Strava)",
-    appleTitle: "Dernières performances (Apple Santé)",
-    alertTitle: "Recevoir une alerte",
-  },
-
-  alerts: {
-    connected: "✓ {{name}} connecté.",
-    disconnected: "{{name}} déconnecté.",
-    subscribed: "✓ Nous te préviendrons dès qu’une intégration sera disponible.",
-    unsubscribed: "Prévenez-moi désactivé.",
-    errorPrefix: "⚠️ Erreur :",
-  },
-
-  statusBadge: {
-    connected: "Connecté",
-    available: "Disponible",
-    comingSoon: "À venir",
-  },
-
-  integrations: {
-    strava: {
-      name: "Strava",
-      subtitle: "Course, vélo, activités",
-      descConnected: "Compte relié{{suffix}}. Les activités récentes pourront être importées.",
-      descDisconnected: "Connexion sécurisée via OAuth pour lire tes activités.",
-    },
-    appleHealth: {
-      name: "Apple Santé",
-      subtitle: "iPhone / Apple Watch",
-      desc: "Importe ton export.zip pour afficher tes activités (pas d’OAuth Apple sur le Web).",
-      smallNote: "(Import depuis Profil)",
-    },
-    googleFit: {
-      name: "Google Fit",
-      subtitle: "Android / WearOS",
-      descConnected: "Compte Google Fit relié. Les sessions récentes peuvent être lues (lecture seule).",
-      descDisconnected: "Connexion sécurisée via OAuth pour lire tes sessions Google Fit.",
-    },
-    generic: {
-      garmin: {
-        name: "Garmin",
-        subtitle: "Montres GPS",
+      error: {
+        prefix: "Erreur pendant l'analyse",
+        label: "Erreur",
       },
-      fitbit: {
-        name: "Fitbit",
-        subtitle: "Capteurs & sommeil",
-      },
-      withings: {
-        name: "Withings",
-        subtitle: "Balances & santé",
-      },
-      descComingSoon: "Bientôt : connexion sécurisée via OAuth. Tes données restent sous ton contrôle.",
-    },
-  },
-
-  buttons: {
-    connect: "Connecter",
-    disconnect: "Déconnecter",
-    learnMore: "En savoir plus",
-    comingSoonTitle: "Bientôt disponible",
-    disable: "Désactiver",
-    notifyMe: "Me prévenir",
-  },
-
-  strava: {
-    empty: "Aucune activité récente trouvée (ou accès non autorisé).",
-    elevationSuffix: "m D+",
-  },
-
-  apple: {
-    empty: "Aucune activité trouvée dans l’export.",
-    badgeSource: "Apple",
-    kcalSuffix: "kcal",
-  },
-
-  alert: {
-    title: "Préviens-moi quand les intégrations arrivent",
-    subtitle: "Notification dans l’app (préférence stockée en local).",
-  },
-},calories: {
-  page: {
-    title: "Calories",
-    subtitle: "Enregistre tes calories consommées aujourd’hui. Historique sur 14 jours.",
-  },
-  alert: {
-    saved: {
-      title: "Enregistré !",
-      text: "Tes calories ont été mises à jour.",
-    },
-    error: {
-      title: "Erreur",
-      badDate: "date invalide.",
-      badKcal: "valeur de calories invalide.",
-    },
-  },
-  today: {
-    title: "Aujourd’hui",
-    unit: "kcal",
-  },
-  form: {
-    kcal: {
-      label: "Calories à ajouter",
-      placeholder: "ex: 650",
-      helper: "La valeur s’ajoute au total du jour (elle n’écrase pas).",
-    },
-    note: {
-      label: "Note (optionnel)",
-      placeholder: "ex: Déj: poke bowl",
-    },
-    buttons: {
-      save: "Enregistrer",
-      refresh: "Actualiser",
-    },
-  },
-  history: {
-    title: "Historique (14 jours)",
-    toggle: "(cliquer pour afficher/masquer)",
-    helper: "Les jours sans saisie sont à 0 kcal.",
-    headers: {
-      date: "Date",
-      kcal: "kcal",
-      note: "Note",
-    },
-  },
-},common: {
-  password: {
-    show: "Afficher le mot de passe",
-    hide: "Masquer le mot de passe",
-  },
-  loading: "Chargement…",
-},
       common: {
-  password: {
-    show: "Afficher le mot de passe",
-    hide: "Masquer le mot de passe",
-  },
-  loading: "Chargement…",
-  error: {
-    title: "Oups",
-    unknown: "Erreur inconnue",
-    reload: "Recharger",
-  },
-},foodSnap: {
-  errors: {
-    analyzeGeneric: "Analyse impossible",
-    unknown: "Erreur inconnue",
-    offNoProduct:
-      "OpenFoodFacts indisponible ou aucun produit. Saisis manuellement ou utilise la photo.",
-    offUnavailable:
-      "OFF non joignable. Essaie plus tard ou saisis manuellement.",
-  },
-  header: {
-    title:
-      'Ajouter depuis une <u>photo</u>, un <u>code-barres</u> ou une <u>recherche</u>',
-    subtitle:
-      "OFF/USDA prioritaire (valeurs réelles), sinon IA/manuel.",
-  },
-  buttons: {
-    photo: "📸 Photo",
-    scan: "🧾 Scanner",
-  },
-  search: {
-    title: "Recherche manuelle (OFF + USDA)",
-    placeholder:
-      'ex: "riz basmati", "banane", "blanc de poulet", "yaourt grec 0%"',
-    loading: "Recherche…",
-    submit: "Rechercher",
-    noResult:
-      "Aucun résultat. Saisis manuellement kcal/100g ou essaie un autre terme.",
-    error:
-      "Recherche indisponible. Essaie plus tard ou saisis manuellement.",
-    proteinsShort: "prot",
-    sourceLabel: "Source",
-    choose: "Choisir",
-  },
-  preview: {
-    alt: "prévisualisation",
-    analyzeLoading: "Analyse…",
-    analyze: "Analyser la photo",
-    reset: "Réinitialiser",
-  },
-  plate: {
-    title: "Décomposition de l’assiette (éditable)",
-    grams: "Grammes",
-    kcalPer100: "kcal/100g",
-    protPer100: "Prot/100g",
-    proteinsShort: "g prot",
-    total: "Total",
-    totalProteinsShort: "g protéines",
-  },
-  product: {
-    title: "Produit",
-    sourceLabel: "Source",
-    portion: "Portion (g)",
-    kcalPer100: "kcal / 100 g",
-    protPer100: "Prot / 100 g",
-    total: "Total",
-    totalProteinsShort: "g protéines",
-  },
-  help: {
-    manual:
-      "⚡ Si aucune base ne répond, tu peux saisir les valeurs manuellement (kcal/prot pour 100 g), puis indiquer la portion.",
-  },
-  actions: {
-    fillForm: "Remplir le formulaire en haut",
-    addToCalories: "Ajouter à mes calories",
-  },
-},
+        reset: "Réinitialiser",
+        unknown: "inconnu",
+      },
+      card: {
+        import: {
+          title: "🎥 Import / Enregistrement",
+          tabRecord: "Filmer",
+          tabUpload: "Importer",
+          fileLabel: "Fichier téléchargé",
+          fileName: "🎞️ Vidéo importée",
+        },
+        feeling: {
+          title: "🎙️ Ton ressenti",
+          label: "Comment tu te sens ?",
+          placeholder:
+            "Explique douleurs, fatigue, où tu as senti l'effort, RPE, etc.",
+          btnAnalyzing: "Analyse en cours",
+          btnCooldown: "Patiente ",
+          btnLaunch: "Lancer l'analyse IA",
+        },
+        summary: {
+          title: "🧠 Résumé IA",
+          empty:
+            "Importe une vidéo puis lance l’analyse pour obtenir le résumé ici.",
+          gate: {
+            propose: "L’IA propose",
+            confirm: "Confirmer",
+            other: "Autre",
+          },
+          override: {
+            label: "Quel exercice fais-tu ?",
+            placeholder:
+              "ex. Tractions, Fentes bulgares, Soulevé de terre…",
+            reanalyze: "Ré-analyser",
+            help:
+              "L’IA tiendra compte de ce nom pour corriger plus précisément.",
+          },
+          exerciseLabel: "Exercice",
+          musclesTitle: "Muscles principalement sollicités",
+          muscleBtnTitle: "Voir l’emplacement",
+          musclesEmpty: "— non détecté —",
+          issuesLabel: "Erreur détectée",
+          correctionsLabel: "Corrections",
+          extrasSummary: "Points complémentaires",
+        },
+      },
+      upload: {
+        import: "📥 Importer",
+        gallery: "📸 Galerie",
+        files: "🗂️ Fichiers",
+      },
+      videoRecorder: {
+        error: {
+          camera:
+            "Impossible d'accéder à la caméra/micro. Vérifie les permissions.",
+        },
+        overlay:
+          "Prépare ta caméra puis clique « Démarrer »",
+        start: "▶️ Démarrer",
+        stop: "⏸️ Arrêter",
+      },
+      muscleViewer: {
+        close: "Fermer",
+        subtitle:
+          "Silhouette simplifiée — aucune zone cliquable, seules les zones sélectionnées sont mises en surbrillance.",
+      },
+    },
 
+    // Connect
+    connect: {
+      page: {
+        title: "Connecte tes données",
+        subtitle:
+          "Santé, capteurs, etc. — synchronise automatiquement tes activités et mesures.",
+      },
+      sections: {
+        integrations: "Intégrations",
+        stravaTitle: "Dernières performances (Strava)",
+        appleTitle: "Dernières performances (Apple Santé)",
+        alertTitle: "Recevoir une alerte",
+      },
+      alerts: {
+        connected: "✓ {{name}} connecté.",
+        disconnected: "{{name}} déconnecté.",
+        subscribed:
+          "✓ Nous te préviendrons dès qu’une intégration sera disponible.",
+        unsubscribed: "Prévenez-moi désactivé.",
+        errorPrefix: "⚠️ Erreur :",
+      },
+      statusBadge: {
+        connected: "Connecté",
+        available: "Disponible",
+        comingSoon: "À venir",
+      },
+      integrations: {
+        strava: {
+          name: "Strava",
+          subtitle: "Course, vélo, activités",
+          descConnected:
+            "Compte relié{{suffix}}. Les activités récentes pourront être importées.",
+          descDisconnected:
+            "Connexion sécurisée via OAuth pour lire tes activités.",
+        },
+        appleHealth: {
+          name: "Apple Santé",
+          subtitle: "iPhone / Apple Watch",
+          desc: "Importe ton export.zip pour afficher tes activités (pas d’OAuth Apple sur le Web).",
+          smallNote: "(Import depuis Profil)",
+        },
+        googleFit: {
+          name: "Google Fit",
+          subtitle: "Android / WearOS",
+          descConnected:
+            "Compte Google Fit relié. Les sessions récentes peuvent être lues (lecture seule).",
+          descDisconnected:
+            "Connexion sécurisée via OAuth pour lire tes sessions Google Fit.",
+        },
+        generic: {
+          garmin: {
+            name: "Garmin",
+            subtitle: "Montres GPS",
+          },
+          fitbit: {
+            name: "Fitbit",
+            subtitle: "Capteurs & sommeil",
+          },
+          withings: {
+            name: "Withings",
+            subtitle: "Balances & santé",
+          },
+          descComingSoon:
+            "Bientôt : connexion sécurisée via OAuth. Tes données restent sous ton contrôle.",
+        },
+      },
+      buttons: {
+        connect: "Connecter",
+        disconnect: "Déconnecter",
+        learnMore: "En savoir plus",
+        comingSoonTitle: "Bientôt disponible",
+        disable: "Désactiver",
+        notifyMe: "Me prévenir",
+      },
+      strava: {
+        empty:
+          "Aucune activité récente trouvée (ou accès non autorisé).",
+        elevationSuffix: "m D+",
+      },
+      apple: {
+        empty: "Aucune activité trouvée dans l’export.",
+        badgeSource: "Apple",
+        kcalSuffix: "kcal",
+      },
+      alert: {
+        title:
+          "Préviens-moi quand les intégrations arrivent",
+        subtitle:
+          "Notification dans l’app (préférence stockée en local).",
+      },
+    },
 
+    // Calories
+    calories: {
+      page: {
+        title: "Calories",
+        subtitle:
+          "Enregistre tes calories consommées aujourd’hui. Historique sur 14 jours.",
+      },
+      alert: {
+        saved: {
+          title: "Enregistré !",
+          text: "Tes calories ont été mises à jour.",
+        },
+        error: {
+          title: "Erreur",
+          badDate: "date invalide.",
+          badKcal: "valeur de calories invalide.",
+        },
+      },
+      today: {
+        title: "Aujourd’hui",
+        unit: "kcal",
+      },
+      form: {
+        kcal: {
+          label: "Calories à ajouter",
+          placeholder: "ex: 650",
+          helper:
+            "La valeur s’ajoute au total du jour (elle n’écrase pas).",
+        },
+        note: {
+          label: "Note (optionnel)",
+          placeholder: "ex: Déj: poke bowl",
+        },
+        buttons: {
+          save: "Enregistrer",
+          refresh: "Actualiser",
+        },
+      },
+      history: {
+        title: "Historique (14 jours)",
+        toggle: "(cliquer pour afficher/masquer)",
+        helper:
+          "Les jours sans saisie sont à 0 kcal.",
+        headers: {
+          date: "Date",
+          kcal: "kcal",
+          note: "Note",
+        },
+      },
+    },
 
-
-
-
-
-
-      
-
+    // FoodSnap
+    foodSnap: {
+      errors: {
+        analyzeGeneric: "Analyse impossible",
+        unknown: "Erreur inconnue",
+        offNoProduct:
+          "OpenFoodFacts indisponible ou aucun produit. Saisis manuellement ou utilise la photo.",
+        offUnavailable:
+          "OFF non joignable. Essaie plus tard ou saisis manuellement.",
+      },
+      header: {
+        title:
+          'Ajouter depuis une <u>photo</u>, un <u>code-barres</u> ou une <u>recherche</u>',
+        subtitle:
+          "OFF/USDA prioritaire (valeurs réelles), sinon IA/manuel.",
+      },
+      buttons: {
+        photo: "📸 Photo",
+        scan: "🧾 Scanner",
+      },
+      search: {
+        title: "Recherche manuelle (OFF + USDA)",
+        placeholder:
+          'ex: "riz basmati", "banane", "blanc de poulet", "yaourt grec 0%"',
+        loading: "Recherche…",
+        submit: "Rechercher",
+        noResult:
+          "Aucun résultat. Saisis manuellement kcal/100g ou essaie un autre terme.",
+        error:
+          "Recherche indisponible. Essaie plus tard ou saisis manuellement.",
+        proteinsShort: "prot",
+        sourceLabel: "Source",
+        choose: "Choisir",
+      },
+      preview: {
+        alt: "prévisualisation",
+        analyzeLoading: "Analyse…",
+        analyze: "Analyser la photo",
+        reset: "Réinitialiser",
+      },
+      plate: {
+        title: "Décomposition de l’assiette (éditable)",
+        grams: "Grammes",
+        kcalPer100: "kcal/100g",
+        protPer100: "Prot/100g",
+        proteinsShort: "g prot",
+        total: "Total",
+        totalProteinsShort: "g protéines",
+      },
+      product: {
+        title: "Produit",
+        sourceLabel: "Source",
+        portion: "Portion (g)",
+        kcalPer100: "kcal / 100 g",
+        protPer100: "Prot / 100 g",
+        total: "Total",
+        totalProteinsShort: "g protéines",
+      },
+      help: {
+        manual:
+          "⚡ Si aucune base ne répond, tu peux saisir les valeurs manuellement (kcal/prot pour 100 g), puis indiquer la portion.",
+      },
+      actions: {
+        fillForm: "Remplir le formulaire en haut",
+        addToCalories: "Ajouter à mes calories",
+      },
     },
   },
+
   en: {
     home: {
       hero: {
@@ -1012,12 +1015,21 @@ connect: {
         error: "Error while resetting password",
       },
     },
+
+    // 🔹 Commun EN (fusion de tous les blocs common)
     common: {
       password: {
         show: "Show password",
         hide: "Hide password",
       },
+      loading: "Loading…",
+      error: {
+        title: "Oops",
+        unknown: "Unknown error",
+        reload: "Reload",
+      },
     },
+
     settings: {
       pageTitle: "Settings",
       sections: {
@@ -1442,9 +1454,13 @@ connect: {
           },
           empty: "No sessions available for now.",
         },
-      },    music: {
+      },
+    },
+
+    music: {
       pageTitle: "Music",
-      pageSubtitle: "Simple timer + Tabata + Spotify player + liked tracks.",
+      pageSubtitle:
+        "Simple timer + Tabata + Spotify player + liked tracks.",
 
       loading: {
         subtitle: "Loading...",
@@ -1492,8 +1508,10 @@ connect: {
 
       spotifyPlayer: {
         title: "Spotify player",
-        connectedDescription: "Control the player connected to your account.",
-        disconnectedDescription: "Sign in to use the Spotify player.",
+        connectedDescription:
+          "Control the player connected to your account.",
+        disconnectedDescription:
+          "Sign in to use the Spotify player.",
         connectButton: "Sign in",
       },
 
@@ -1503,7 +1521,8 @@ connect: {
 
         errors: {
           likedFetch: "Unable to fetch liked tracks",
-          playerNotReady: "Spotify player not ready. Start the player first.",
+          playerNotReady:
+            "Spotify player not ready. Start the player first.",
           playFailed: "Unable to start playback",
           searchFailed: "Search error",
         },
@@ -1523,7 +1542,9 @@ connect: {
 
         playButton: "Play",
       },
-    },    motivation: {
+    },
+
+    motivation: {
       pageTitle: "Motivation",
       pageSubtitle:
         "Encouraging messages from your coaching files (mock for now) + delivery settings.",
@@ -1629,314 +1650,300 @@ connect: {
             "Block 10 minutes just for yourself now. Your body and mind will thank you.",
         },
       },
-    },// Dans translations.en
-videoCoach: {
-  page: {
-    title: "Import / Recording",
-    subtitle: "Record or import your video, add your feedback, then launch the AI analysis.",
-  },
-
-  status: {
-    done: "Analysis done — confirm the exercise",
-  },
-
-  error: {
-    prefix: "Error during analysis",
-    label: "Error",
-  },
-
-  common: {
-    reset: "Reset",
-    unknown: "unknown",
-  },
-
-  card: {
-    import: {
-      title: "🎥 Import / Recording",
-      tabRecord: "Record",
-      tabUpload: "Import",
-      fileLabel: "Uploaded file",
-      fileName: "🎞️ Video imported",
     },
 
-    feeling: {
-      title: "🎙️ Your feedback",
-      label: "How do you feel?",
-      placeholder: "Explain pain, fatigue, where you felt the effort, RPE, etc.",
-      btnAnalyzing: "Analyzing…",
-      btnCooldown: "Please wait ",
-      btnLaunch: "Start AI analysis",
-    },
-
-    summary: {
-      title: "🧠 AI Summary",
-      empty: "Import a video and run the analysis to see the summary here.",
-      gate: {
-        propose: "AI suggests",
-        confirm: "Confirm",
-        other: "Other",
+    // Video coach
+    videoCoach: {
+      page: {
+        title: "Import / Recording",
+        subtitle:
+          "Record or import your video, add your feedback, then launch the AI analysis.",
       },
-      override: {
-        label: "Which exercise are you doing?",
-        placeholder: "e.g. Pull-ups, Bulgarian split squats, Deadlift…",
-        reanalyze: "Re-analyze",
-        help: "The AI will use this name to give more precise corrections.",
+      status: {
+        done: "Analysis done — confirm the exercise",
       },
-      exerciseLabel: "Exercise",
-      musclesTitle: "Main muscles targeted",
-      muscleBtnTitle: "Show location",
-      musclesEmpty: "— not detected —",
-      issuesLabel: "Detected issue",
-      correctionsLabel: "Corrections",
-      extrasSummary: "Additional points",
-    },
-  },
-
-  upload: {
-    import: "📥 Import",
-    gallery: "📸 Gallery",
-    files: "🗂️ Files",
-  },
-
-  videoRecorder: {
-    error: {
-      camera: "Unable to access camera/mic. Check your permissions.",
-    },
-    overlay: "Get your camera ready then click “Start”",
-    start: "▶️ Start",
-    stop: "⏸️ Stop",
-  },
-
-  muscleViewer: {
-    close: "Close",
-    subtitle: "Simplified silhouette — no clickable zones, only highlighted areas are shown.",
-  },
-},// Dans translations.en
-connect: {
-  page: {
-    title: "Connect your data",
-    subtitle: "Health, trackers, etc. — automatically sync your activities and metrics.",
-  },
-
-  sections: {
-    integrations: "Integrations",
-    stravaTitle: "Latest performances (Strava)",
-    appleTitle: "Latest performances (Apple Health)",
-    alertTitle: "Get an alert",
-  },
-
-  alerts: {
-    connected: "✓ {{name}} connected.",
-    disconnected: "{{name}} disconnected.",
-    subscribed: "✓ We’ll notify you as soon as a new integration is available.",
-    unsubscribed: "Notifications disabled.",
-    errorPrefix: "⚠️ Error:",
-  },
-
-  statusBadge: {
-    connected: "Connected",
-    available: "Available",
-    comingSoon: "Coming soon",
-  },
-
-  integrations: {
-    strava: {
-      name: "Strava",
-      subtitle: "Running, cycling, activities",
-      descConnected: "Account linked{{suffix}}. Recent activities can be imported.",
-      descDisconnected: "Secure OAuth connection to read your activities.",
-    },
-    appleHealth: {
-      name: "Apple Health",
-      subtitle: "iPhone / Apple Watch",
-      desc: "Import your export.zip to display your activities (no Apple OAuth on the Web).",
-      smallNote: "(Import from Profile)",
-    },
-    googleFit: {
-      name: "Google Fit",
-      subtitle: "Android / WearOS",
-      descConnected: "Google Fit account linked. Recent sessions can be read (read-only).",
-      descDisconnected: "Secure OAuth connection to read your Google Fit sessions.",
-    },
-    generic: {
-      garmin: {
-        name: "Garmin",
-        subtitle: "GPS watches",
+      error: {
+        prefix: "Error during analysis",
+        label: "Error",
       },
-      fitbit: {
-        name: "Fitbit",
-        subtitle: "Trackers & sleep",
+      common: {
+        reset: "Reset",
+        unknown: "unknown",
       },
-      withings: {
-        name: "Withings",
-        subtitle: "Scales & health",
+      card: {
+        import: {
+          title: "🎥 Import / Recording",
+          tabRecord: "Record",
+          tabUpload: "Import",
+          fileLabel: "Uploaded file",
+          fileName: "🎞️ Video imported",
+        },
+        feeling: {
+          title: "🎙️ Your feedback",
+          label: "How do you feel?",
+          placeholder:
+            "Explain pain, fatigue, where you felt the effort, RPE, etc.",
+          btnAnalyzing: "Analyzing…",
+          btnCooldown: "Please wait ",
+          btnLaunch: "Start AI analysis",
+        },
+        summary: {
+          title: "🧠 AI Summary",
+          empty:
+            "Import a video and run the analysis to see the summary here.",
+          gate: {
+            propose: "AI suggests",
+            confirm: "Confirm",
+            other: "Other",
+          },
+          override: {
+            label: "Which exercise are you doing?",
+            placeholder:
+              "e.g. Pull-ups, Bulgarian split squats, Deadlift…",
+            reanalyze: "Re-analyze",
+            help:
+              "The AI will use this name to give more precise corrections.",
+          },
+          exerciseLabel: "Exercise",
+          musclesTitle: "Main muscles targeted",
+          muscleBtnTitle: "Show location",
+          musclesEmpty: "— not detected —",
+          issuesLabel: "Detected issue",
+          correctionsLabel: "Corrections",
+          extrasSummary: "Additional points",
+        },
       },
-      descComingSoon: "Coming soon: secure OAuth connection. Your data stays under your control.",
+      upload: {
+        import: "📥 Import",
+        gallery: "📸 Gallery",
+        files: "🗂️ Files",
+      },
+      videoRecorder: {
+        error: {
+          camera:
+            "Unable to access camera/mic. Check your permissions.",
+        },
+        overlay:
+          "Get your camera ready then click “Start”",
+        start: "▶️ Start",
+        stop: "⏸️ Stop",
+      },
+      muscleViewer: {
+        close: "Close",
+        subtitle:
+          "Simplified silhouette — no clickable zones, only highlighted areas are shown.",
+      },
     },
-  },
 
-  buttons: {
-    connect: "Connect",
-    disconnect: "Disconnect",
-    learnMore: "Learn more",
-    comingSoonTitle: "Coming soon",
-    disable: "Disable",
-    notifyMe: "Notify me",
-  },
-
-  strava: {
-    empty: "No recent activity found (or access not authorized).",
-    elevationSuffix: "m elevation gain",
-  },
-
-  apple: {
-    empty: "No activity found in the export.",
-    badgeSource: "Apple",
-    kcalSuffix: "kcal",
-  },
-
-  alert: {
-    title: "Notify me when integrations are available",
-    subtitle: "In-app notification (preference stored locally).",
-  },
-},calories: {
-  page: {
-    title: "Calories",
-    subtitle: "Log the calories you ate today. 14-day history.",
-  },
-  alert: {
-    saved: {
-      title: "Saved!",
-      text: "Your calories have been updated.",
+    // Connect
+    connect: {
+      page: {
+        title: "Connect your data",
+        subtitle:
+          "Health, trackers, etc. — automatically sync your activities and metrics.",
+      },
+      sections: {
+        integrations: "Integrations",
+        stravaTitle: "Latest performances (Strava)",
+        appleTitle: "Latest performances (Apple Health)",
+        alertTitle: "Get an alert",
+      },
+      alerts: {
+        connected: "✓ {{name}} connected.",
+        disconnected: "{{name}} disconnected.",
+        subscribed:
+          "✓ We’ll notify you as soon as a new integration is available.",
+        unsubscribed: "Notifications disabled.",
+        errorPrefix: "⚠️ Error:",
+      },
+      statusBadge: {
+        connected: "Connected",
+        available: "Available",
+        comingSoon: "Coming soon",
+      },
+      integrations: {
+        strava: {
+          name: "Strava",
+          subtitle: "Running, cycling, activities",
+          descConnected:
+            "Account linked{{suffix}}. Recent activities can be imported.",
+          descDisconnected:
+            "Secure OAuth connection to read your activities.",
+        },
+        appleHealth: {
+          name: "Apple Health",
+          subtitle: "iPhone / Apple Watch",
+          desc: "Import your export.zip to display your activities (no Apple OAuth on the Web).",
+          smallNote: "(Import from Profile)",
+        },
+        googleFit: {
+          name: "Google Fit",
+          subtitle: "Android / WearOS",
+          descConnected:
+            "Google Fit account linked. Recent sessions can be read (read-only).",
+          descDisconnected:
+            "Secure OAuth connection to read your Google Fit sessions.",
+        },
+        generic: {
+          garmin: {
+            name: "Garmin",
+            subtitle: "GPS watches",
+          },
+          fitbit: {
+            name: "Fitbit",
+            subtitle: "Trackers & sleep",
+          },
+          withings: {
+            name: "Withings",
+            subtitle: "Scales & health",
+          },
+          descComingSoon:
+            "Coming soon: secure OAuth connection. Your data stays under your control.",
+        },
+      },
+      buttons: {
+        connect: "Connect",
+        disconnect: "Disconnect",
+        learnMore: "Learn more",
+        comingSoonTitle: "Coming soon",
+        disable: "Disable",
+        notifyMe: "Notify me",
+      },
+      strava: {
+        empty:
+          "No recent activity found (or access not authorized).",
+        elevationSuffix: "m elevation gain",
+      },
+      apple: {
+        empty: "No activity found in the export.",
+        badgeSource: "Apple",
+        kcalSuffix: "kcal",
+      },
+      alert: {
+        title:
+          "Notify me when integrations are available",
+        subtitle:
+          "In-app notification (preference stored locally).",
+      },
     },
-    error: {
-      title: "Error",
-      badDate: "invalid date.",
-      badKcal: "invalid calories value.",
+
+    // Calories
+    calories: {
+      page: {
+        title: "Calories",
+        subtitle:
+          "Log the calories you ate today. 14-day history.",
+      },
+      alert: {
+        saved: {
+          title: "Saved!",
+          text: "Your calories have been updated.",
+        },
+        error: {
+          title: "Error",
+          badDate: "invalid date.",
+          badKcal: "invalid calories value.",
+        },
+      },
+      today: {
+        title: "Today",
+        unit: "kcal",
+      },
+      form: {
+        kcal: {
+          label: "Calories to add",
+          placeholder: "e.g. 650",
+          helper:
+            "This value is added to today’s total (it doesn’t overwrite it).",
+        },
+        note: {
+          label: "Note (optional)",
+          placeholder: "e.g. Lunch: poke bowl",
+        },
+        buttons: {
+          save: "Save",
+          refresh: "Refresh",
+        },
+      },
+      history: {
+        title: "History (14 days)",
+        toggle: "(click to show/hide)",
+        helper:
+          "Days without entries are at 0 kcal.",
+        headers: {
+          date: "Date",
+          kcal: "kcal",
+          note: "Note",
+        },
+      },
     },
-  },
-  today: {
-    title: "Today",
-    unit: "kcal",
-  },
-  form: {
-    kcal: {
-      label: "Calories to add",
-      placeholder: "e.g. 650",
-      helper: "This value is added to today’s total (it doesn’t overwrite it).",
-    },
-    note: {
-      label: "Note (optional)",
-      placeholder: "e.g. Lunch: poke bowl",
-    },
-    buttons: {
-      save: "Save",
-      refresh: "Refresh",
-    },
-  },
-  history: {
-    title: "History (14 days)",
-    toggle: "(click to show/hide)",
-    helper: "Days without entries are at 0 kcal.",
-    headers: {
-      date: "Date",
-      kcal: "kcal",
-      note: "Note",
-    },
-  },
-},
-common: {
-  password: {
-    show: "Show password",
-    hide: "Hide password",
-  },
-  loading: "Loading…",
-},common: {
-  password: {
-    show: "Show password",
-    hide: "Hide password",
-  },
-  loading: "Loading…",
-  error: {
-    title: "Oops",
-    unknown: "Unknown error",
-    reload: "Reload",
-  },
-},foodSnap: {
-  errors: {
-    analyzeGeneric: "Analysis failed",
-    unknown: "Unknown error",
-    offNoProduct:
-      "OpenFoodFacts unavailable or no product found. Enter values manually or use a photo.",
-    offUnavailable:
-      "OFF unreachable. Try again later or enter values manually.",
-  },
-  header: {
-    title:
-      'Add from a <u>photo</u>, a <u>barcode</u> or a <u>search</u>',
-    subtitle:
-      "OFF/USDA is used first (real values), otherwise AI/manual.",
-  },
-  buttons: {
-    photo: "📸 Photo",
-    scan: "🧾 Scan",
-  },
-  search: {
-    title: "Manual search (OFF + USDA)",
-    placeholder:
-      'e.g. "basmati rice", "banana", "chicken breast", "greek yogurt 0%"',
-    loading: "Searching…",
-    submit: "Search",
-    noResult:
-      "No result. Enter kcal/100g manually or try another term.",
-    error:
-      "Search unavailable. Try again later or enter values manually.",
-    proteinsShort: "prot",
-    sourceLabel: "Source",
-    choose: "Select",
-  },
-  preview: {
-    alt: "preview",
-    analyzeLoading: "Analyzing…",
-    analyze: "Analyze photo",
-    reset: "Reset",
-  },
-  plate: {
-    title: "Plate breakdown (editable)",
-    grams: "Grams",
-    kcalPer100: "kcal/100g",
-    protPer100: "Protein/100g",
-    proteinsShort: "g protein",
-    total: "Total",
-    totalProteinsShort: "g protein",
-  },
-  product: {
-    title: "Product",
-    sourceLabel: "Source",
-    portion: "Portion (g)",
-    kcalPer100: "kcal / 100 g",
-    protPer100: "Protein / 100 g",
-    total: "Total",
-    totalProteinsShort: "g protein",
-  },
-  help: {
-    manual:
-      "⚡ If no database returns a match, you can enter values manually (kcal/protein per 100 g), then set the portion.",
-  },
-  actions: {
-    fillForm: "Fill the form above",
-    addToCalories: "Add to my calories",
-  },
-},
 
-
-
-
-
-
-
-
-      
+    // FoodSnap
+    foodSnap: {
+      errors: {
+        analyzeGeneric: "Analysis failed",
+        unknown: "Unknown error",
+        offNoProduct:
+          "OpenFoodFacts unavailable or no product found. Enter values manually or use a photo.",
+        offUnavailable:
+          "OFF unreachable. Try again later or enter values manually.",
+      },
+      header: {
+        title:
+          'Add from a <u>photo</u>, a <u>barcode</u> or a <u>search</u>',
+        subtitle:
+          "OFF/USDA is used first (real values), otherwise AI/manual.",
+      },
+      buttons: {
+        photo: "📸 Photo",
+        scan: "🧾 Scan",
+      },
+      search: {
+        title: "Manual search (OFF + USDA)",
+        placeholder:
+          'e.g. "basmati rice", "banana", "chicken breast", "greek yogurt 0%"',
+        loading: "Searching…",
+        submit: "Search",
+        noResult:
+          "No result. Enter kcal/100g manually or try another term.",
+        error:
+          "Search unavailable. Try again later or enter values manually.",
+        proteinsShort: "prot",
+        sourceLabel: "Source",
+        choose: "Select",
+      },
+      preview: {
+        alt: "preview",
+        analyzeLoading: "Analyzing…",
+        analyze: "Analyze photo",
+        reset: "Reset",
+      },
+      plate: {
+        title: "Plate breakdown (editable)",
+        grams: "Grams",
+        kcalPer100: "kcal/100g",
+        protPer100: "Protein/100g",
+        proteinsShort: "g protein",
+        total: "Total",
+        totalProteinsShort: "g protein",
+      },
+      product: {
+        title: "Product",
+        sourceLabel: "Source",
+        portion: "Portion (g)",
+        kcalPer100: "kcal / 100 g",
+        protPer100: "Protein / 100 g",
+        total: "Total",
+        totalProteinsShort: "g protein",
+      },
+      help: {
+        manual:
+          "⚡ If no database returns a match, you can enter values manually (kcal/protein per 100 g), then set the portion.",
+      },
+      actions: {
+        fillForm: "Fill the form above",
+        addToCalories: "Add to my calories",
+      },
     },
   },
 } as const;
