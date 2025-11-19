@@ -727,7 +727,96 @@ videoCoach: {
     close: "Fermer",
     subtitle: "Silhouette simplifiée — aucune zone cliquable, seules les zones sélectionnées sont mises en surbrillance.",
   },
+},// Dans translations.fr
+connect: {
+  page: {
+    title: "Connecte tes données",
+    subtitle: "Santé, capteurs, etc. — synchronise automatiquement tes activités et mesures.",
+  },
+
+  sections: {
+    integrations: "Intégrations",
+    stravaTitle: "Dernières performances (Strava)",
+    appleTitle: "Dernières performances (Apple Santé)",
+    alertTitle: "Recevoir une alerte",
+  },
+
+  alerts: {
+    connected: "✓ {{name}} connecté.",
+    disconnected: "{{name}} déconnecté.",
+    subscribed: "✓ Nous te préviendrons dès qu’une intégration sera disponible.",
+    unsubscribed: "Prévenez-moi désactivé.",
+    errorPrefix: "⚠️ Erreur :",
+  },
+
+  statusBadge: {
+    connected: "Connecté",
+    available: "Disponible",
+    comingSoon: "À venir",
+  },
+
+  integrations: {
+    strava: {
+      name: "Strava",
+      subtitle: "Course, vélo, activités",
+      descConnected: "Compte relié{{suffix}}. Les activités récentes pourront être importées.",
+      descDisconnected: "Connexion sécurisée via OAuth pour lire tes activités.",
+    },
+    appleHealth: {
+      name: "Apple Santé",
+      subtitle: "iPhone / Apple Watch",
+      desc: "Importe ton export.zip pour afficher tes activités (pas d’OAuth Apple sur le Web).",
+      smallNote: "(Import depuis Profil)",
+    },
+    googleFit: {
+      name: "Google Fit",
+      subtitle: "Android / WearOS",
+      descConnected: "Compte Google Fit relié. Les sessions récentes peuvent être lues (lecture seule).",
+      descDisconnected: "Connexion sécurisée via OAuth pour lire tes sessions Google Fit.",
+    },
+    generic: {
+      garmin: {
+        name: "Garmin",
+        subtitle: "Montres GPS",
+      },
+      fitbit: {
+        name: "Fitbit",
+        subtitle: "Capteurs & sommeil",
+      },
+      withings: {
+        name: "Withings",
+        subtitle: "Balances & santé",
+      },
+      descComingSoon: "Bientôt : connexion sécurisée via OAuth. Tes données restent sous ton contrôle.",
+    },
+  },
+
+  buttons: {
+    connect: "Connecter",
+    disconnect: "Déconnecter",
+    learnMore: "En savoir plus",
+    comingSoonTitle: "Bientôt disponible",
+    disable: "Désactiver",
+    notifyMe: "Me prévenir",
+  },
+
+  strava: {
+    empty: "Aucune activité récente trouvée (ou accès non autorisé).",
+    elevationSuffix: "m D+",
+  },
+
+  apple: {
+    empty: "Aucune activité trouvée dans l’export.",
+    badgeSource: "Apple",
+    kcalSuffix: "kcal",
+  },
+
+  alert: {
+    title: "Préviens-moi quand les intégrations arrivent",
+    subtitle: "Notification dans l’app (préférence stockée en local).",
+  },
 },
+
 
 
 
@@ -1490,7 +1579,96 @@ videoCoach: {
     close: "Close",
     subtitle: "Simplified silhouette — no clickable zones, only highlighted areas are shown.",
   },
+},// Dans translations.en
+connect: {
+  page: {
+    title: "Connect your data",
+    subtitle: "Health, trackers, etc. — automatically sync your activities and metrics.",
+  },
+
+  sections: {
+    integrations: "Integrations",
+    stravaTitle: "Latest performances (Strava)",
+    appleTitle: "Latest performances (Apple Health)",
+    alertTitle: "Get an alert",
+  },
+
+  alerts: {
+    connected: "✓ {{name}} connected.",
+    disconnected: "{{name}} disconnected.",
+    subscribed: "✓ We’ll notify you as soon as a new integration is available.",
+    unsubscribed: "Notifications disabled.",
+    errorPrefix: "⚠️ Error:",
+  },
+
+  statusBadge: {
+    connected: "Connected",
+    available: "Available",
+    comingSoon: "Coming soon",
+  },
+
+  integrations: {
+    strava: {
+      name: "Strava",
+      subtitle: "Running, cycling, activities",
+      descConnected: "Account linked{{suffix}}. Recent activities can be imported.",
+      descDisconnected: "Secure OAuth connection to read your activities.",
+    },
+    appleHealth: {
+      name: "Apple Health",
+      subtitle: "iPhone / Apple Watch",
+      desc: "Import your export.zip to display your activities (no Apple OAuth on the Web).",
+      smallNote: "(Import from Profile)",
+    },
+    googleFit: {
+      name: "Google Fit",
+      subtitle: "Android / WearOS",
+      descConnected: "Google Fit account linked. Recent sessions can be read (read-only).",
+      descDisconnected: "Secure OAuth connection to read your Google Fit sessions.",
+    },
+    generic: {
+      garmin: {
+        name: "Garmin",
+        subtitle: "GPS watches",
+      },
+      fitbit: {
+        name: "Fitbit",
+        subtitle: "Trackers & sleep",
+      },
+      withings: {
+        name: "Withings",
+        subtitle: "Scales & health",
+      },
+      descComingSoon: "Coming soon: secure OAuth connection. Your data stays under your control.",
+    },
+  },
+
+  buttons: {
+    connect: "Connect",
+    disconnect: "Disconnect",
+    learnMore: "Learn more",
+    comingSoonTitle: "Coming soon",
+    disable: "Disable",
+    notifyMe: "Notify me",
+  },
+
+  strava: {
+    empty: "No recent activity found (or access not authorized).",
+    elevationSuffix: "m elevation gain",
+  },
+
+  apple: {
+    empty: "No activity found in the export.",
+    badgeSource: "Apple",
+    kcalSuffix: "kcal",
+  },
+
+  alert: {
+    title: "Notify me when integrations are available",
+    subtitle: "In-app notification (preference stored locally).",
+  },
 },
+
 
 
 
