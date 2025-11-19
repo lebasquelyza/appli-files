@@ -860,7 +860,14 @@ connect: {
       note: "Note",
     },
   },
+},common: {
+  password: {
+    show: "Afficher le mot de passe",
+    hide: "Masquer le mot de passe",
+  },
+  loading: "Chargement…",
 },
+
 
 
 
@@ -1758,6 +1765,13 @@ connect: {
       note: "Note",
     },
   },
+},
+common: {
+  password: {
+    show: "Show password",
+    hide: "Hide password",
+  },
+  loading: "Loading…",
 },
 
 
