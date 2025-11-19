@@ -1,8 +1,46 @@
-//apps/web/app/dashboard/motivation/page.tsx
+// apps/web/app/dashboard/motivation/page.tsx
 "use client";
 
 import { useSession } from "next-auth/react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
+import { translations } from "@/app/i18n/translations";
+
+/* ---------------- i18n helpers (client) ---------------- */
+type Lang = "fr" | "en";
+
+function getFromPath(obj: any, path: string): any {
+  return path.split(".").reduce((acc, key) => acc?.[key], obj);
+}
+
+function getLangClient(): Lang {
+  if (typeof document === "undefined") return "fr";
+  const match = document.cookie.match(/(?:^|; )fc-lang=([^;]+)/);
+  const val = match?.[1];
+  if (val === "en") return "en";
+  return "fr";
+}
+
+function useT() {
+  const [lang, setLang] = useState<Lang>("fr");
+
+  useEffect(() => {
+    setLang(getLangClient());
+  }, []);
+
+  const t = useCallback(
+    (path: string, fallback?: string) => {
+      const dict = translations[lang] as any;
+      const v = getFromPath(dict, path);
+      if (typeof v === "string") return v;
+      return fallback ?? path;
+    },
+    [lang]
+  );
+
+  return t;
+}
+
+/* ---------------- Types & const ---------------- */
 
 type CoachingNotification = {
   id: string;
@@ -10,8 +48,8 @@ type CoachingNotification = {
   message: string;
   createdAt: string; // ISO
   read: boolean;
-  source?: string;   // ex: "Files Coaching"
-  rating?: number;   // 0–5
+  source?: string; // ex: "Files Coaching"
+  rating?: number; // 0–5
 };
 
 type DayKey = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
@@ -19,15 +57,7 @@ type DayKey = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 const SIDE_PADDING = 16;
 const PAGE_MAX_WIDTH = 740;
 
-const DAY_LABELS: Record<DayKey, string> = {
-  mon: "Lundi",
-  tue: "Mardi",
-  wed: "Mercredi",
-  thu: "Jeudi",
-  fri: "Vendredi",
-  sat: "Samedi",
-  sun: "Dimanche",
-};
+const ALL_DAYS: DayKey[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 
 function formatTime(dateStr: string) {
   const d = new Date(dateStr);
@@ -41,6 +71,7 @@ function formatTime(dateStr: string) {
 
 export default function MotivationPage() {
   const { data: session, status } = useSession();
+  const t = useT();
 
   const [notifications, setNotifications] = useState<CoachingNotification[]>([]);
   const [filter, setFilter] = useState<"all" | "unread">("all");
@@ -61,24 +92,38 @@ export default function MotivationPage() {
     setNotifications([
       {
         id: "1",
-        title: "Tu progresses 💪",
-        message:
-          "Super séance hier ! Continue sur cette lancée, la régularité fait toute la différence.",
+        title: t(
+          "motivation.mock.first.title",
+          "Tu progresses 💪"
+        ),
+        message: t(
+          "motivation.mock.first.message",
+          "Super séance hier ! Continue sur cette lancée, la régularité fait toute la différence."
+        ),
         createdAt: new Date(Date.now() - 1000 * 60 * 60).toISOString(),
         read: false,
-        source: "Files Coaching",
+        source: t("motivation.mock.source", "Files Coaching"),
       },
       {
         id: "2",
-        title: "Rappel douceur",
-        message:
-          "Même une petite séance vaut mieux que rien. 10 minutes aujourd’hui, c’est déjà gagné.",
-        createdAt: new Date(Date.now() - 1000 * 60 * 60 * 6).toISOString(),
+        title: t(
+          "motivation.mock.second.title",
+          "Rappel douceur"
+        ),
+        message: t(
+          "motivation.mock.second.message",
+          "Même une petite séance vaut mieux que rien. 10 minutes aujourd’hui, c’est déjà gagné."
+        ),
+        createdAt: new Date(
+          Date.now() - 1000 * 60 * 60 * 6
+        ).toISOString(),
         read: true,
-        source: "Files Coaching",
+        source: t("motivation.mock.source", "Files Coaching"),
         rating: 4,
       },
     ]);
+    // on veut seulement init, pas réagir aux changements de t
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const visibleNotifications = useMemo(
@@ -118,51 +163,105 @@ export default function MotivationPage() {
     );
   };
 
+  const getDayLabel = (day: DayKey) =>
+    t(
+      `motivation.dayLabels.${day}`,
+      {
+        mon: "Lundi",
+        tue: "Mardi",
+        wed: "Mercredi",
+        thu: "Jeudi",
+        fri: "Vendredi",
+        sat: "Samedi",
+        sun: "Dimanche",
+      }[day]
+    );
+
   // Simuler une “notification de motivation” reçue
   const sendTestNotification = async () => {
     if (sending) return;
     setSending(true);
 
-    const samples: Array<Pick<CoachingNotification, "title" | "message">> = [
+    const samples: Array<{ title: string; message: string }> = [
       {
-        title: "On lâche rien 🔥",
-        message:
-          "Tu es plus proche de ton objectif aujourd’hui qu’hier. Une action de plus, même petite.",
+        title: t(
+          "motivation.samples.onLacheRien.title",
+          "On lâche rien 🔥"
+        ),
+        message: t(
+          "motivation.samples.onLacheRien.message",
+          "Tu es plus proche de ton objectif aujourd’hui qu’hier. Une action de plus, même petite."
+        ),
       },
       {
-        title: "Respire & avance",
-        message:
-          "Ne cherche pas la perfection. Cherche la progression. Un pas après l’autre.",
+        title: t(
+          "motivation.samples.respireEtAvance.title",
+          "Respire & avance"
+        ),
+        message: t(
+          "motivation.samples.respireEtAvance.message",
+          "Ne cherche pas la perfection. Cherche la progression. Un pas après l’autre."
+        ),
       },
       {
-        title: "Tu peux le faire ✨",
-        message:
-          "Rappelle-toi pourquoi tu as commencé. Tu as déjà traversé plus dur que ça.",
+        title: t(
+          "motivation.samples.tuPeuxLeFaire.title",
+          "Tu peux le faire ✨"
+        ),
+        message: t(
+          "motivation.samples.tuPeuxLeFaire.message",
+          "Rappelle-toi pourquoi tu as commencé. Tu as déjà traversé plus dur que ça."
+        ),
       },
       {
-        title: "Ton futur toi te remercie",
-        message:
-          "Chaque décision d’aujourd’hui construit la personne que tu seras dans 3 mois.",
+        title: t(
+          "motivation.samples.tonFuturToi.title",
+          "Ton futur toi te remercie"
+        ),
+        message: t(
+          "motivation.samples.tonFuturToi.message",
+          "Chaque décision d’aujourd’hui construit la personne que tu seras dans 3 mois."
+        ),
       },
       {
-        title: "Mini séance, maxi impact",
-        message:
-          "Si tu n’as pas le temps pour 30 minutes, fais-en 5. Ce qui compte, c’est le mouvement.",
+        title: t(
+          "motivation.samples.miniSeance.title",
+          "Mini séance, maxi impact"
+        ),
+        message: t(
+          "motivation.samples.miniSeance.message",
+          "Si tu n’as pas le temps pour 30 minutes, fais-en 5. Ce qui compte, c’est le mouvement."
+        ),
       },
       {
-        title: "Recommence autant que nécessaire",
-        message:
-          "Tomber fait partie du jeu. Ce qui compte, c’est à quelle vitesse tu te relèves.",
+        title: t(
+          "motivation.samples.recommence.title",
+          "Recommence autant que nécessaire"
+        ),
+        message: t(
+          "motivation.samples.recommence.message",
+          "Tomber fait partie du jeu. Ce qui compte, c’est à quelle vitesse tu te relèves."
+        ),
       },
       {
-        title: "Tu n’es pas seul·e",
-        message:
-          "Demander de l’aide, c’est aussi une forme de force. Tu fais ça pour TOI.",
+        title: t(
+          "motivation.samples.tuNESPasSeul.title",
+          "Tu n’es pas seul·e"
+        ),
+        message: t(
+          "motivation.samples.tuNESPasSeul.message",
+          "Demander de l’aide, c’est aussi une forme de force. Tu fais ça pour TOI."
+        ),
       },
       {
-        title: "C’est ton moment",
-        message:
-          "Bloque 10 minutes rien que pour toi maintenant. Ton corps et ta tête te diront merci.",
+        title: t(
+          "motivation.samples.cestTonMoment.title",
+          "C’est ton moment"
+        ),
+        message: t(
+          "motivation.samples.cestTonMoment.message",
+          "Bloque 10 minutes rien que pour toi maintenant. Ton corps et ta tête te diront merci."
+        ),
       },
     ];
 
@@ -178,7 +277,10 @@ export default function MotivationPage() {
         message: sample.message,
         createdAt: nowIso,
         read: false,
-        source: "Files Coaching (test)",
+        source: t(
+          "motivation.mock.sourceTest",
+          "Files Coaching (test)"
+        ),
       },
       ...prev,
     ]);
@@ -200,10 +302,10 @@ export default function MotivationPage() {
         }}
       >
         <h1 className="h1" style={{ fontSize: 20, color: "#111827" }}>
-          Motivation
+          {t("motivation.pageTitle", "Motivation")}
         </h1>
         <p className="lead" style={{ fontSize: 12, marginTop: 2 }}>
-          Chargement…
+          {t("motivation.loading.subtitle", "Chargement…")}
         </p>
       </div>
     );
@@ -233,7 +335,7 @@ export default function MotivationPage() {
       >
         <div>
           <h1 className="h1" style={{ fontSize: 20, color: "#111827" }}>
-            Motivation
+            {t("motivation.pageTitle", "Motivation")}
           </h1>
           <p
             className="lead"
@@ -243,8 +345,10 @@ export default function MotivationPage() {
               color: "#6b7280",
             }}
           >
-            Messages d’encouragement issus de tes fichiers de coaching
-            (mock pour l’instant) + paramètres de réception.
+            {t(
+              "motivation.pageSubtitle",
+              "Messages d’encouragement issus de tes fichiers de coaching (mock pour l’instant) + paramètres de réception."
+            )}
           </p>
         </div>
         {session && (
@@ -258,7 +362,12 @@ export default function MotivationPage() {
               alignSelf: "flex-start",
             }}
           >
-            Connecté en tant que {session.user?.email ?? "client"}
+            {t(
+              "motivation.header.connectedAs",
+              "Connecté en tant que"
+            )}{" "}
+            {session.user?.email ??
+              t("motivation.header.clientFallback", "client")}
           </div>
         )}
       </div>
@@ -292,7 +401,10 @@ export default function MotivationPage() {
                 color: "#111827",
               }}
             >
-              Préférences de notification
+              {t(
+                "motivation.preferences.title",
+                "Préférences de notification"
+              )}
             </div>
             <div
               style={{
@@ -301,8 +413,10 @@ export default function MotivationPage() {
                 marginTop: 2,
               }}
             >
-              Choisis les jours et l’heure à laquelle tu souhaites
-              recevoir tes messages de motivation.
+              {t(
+                "motivation.preferences.subtitle",
+                "Choisis les jours et l’heure à laquelle tu souhaites recevoir tes messages de motivation."
+              )}
             </div>
           </div>
         </div>
@@ -316,7 +430,7 @@ export default function MotivationPage() {
             marginTop: 4,
           }}
         >
-          {(Object.keys(DAY_LABELS) as DayKey[]).map((day) => {
+          {ALL_DAYS.map((day) => {
             const active = activeDays.includes(day);
             return (
               <button
@@ -333,7 +447,7 @@ export default function MotivationPage() {
                   color: active ? "#ffffff" : "#374151",
                 }}
               >
-                {DAY_LABELS[day]}
+                {getDayLabel(day)}
               </button>
             );
           })}
@@ -355,7 +469,10 @@ export default function MotivationPage() {
               color: "#374151",
             }}
           >
-            Heure préférée :
+            {t(
+              "motivation.preferences.timeLabel",
+              "Heure préférée :"
+            )}
           </label>
           <input
             type="time"
@@ -374,8 +491,10 @@ export default function MotivationPage() {
               color: "#6b7280",
             }}
           >
-            (Ces réglages sont pour l’instant stockés uniquement ici,
-            côté client.)
+            {t(
+              "motivation.preferences.timeNote",
+              "(Ces réglages sont pour l’instant stockés uniquement ici, côté client.)"
+            )}
           </span>
         </div>
       </div>
@@ -398,17 +517,17 @@ export default function MotivationPage() {
       >
         <div style={{ fontSize: 13, color: "#374151" }}>
           <strong>{unreadCount}</strong>{" "}
-          notification{unreadCount > 1 ? "s" : ""} non lue
-          {unreadCount > 1 ? "s" : ""}.
+          {t(
+            "motivation.bar.unreadSuffix",
+            "notification(s) non lue(s)."
+          )}
           <br />
           <span style={{ fontSize: 11, color: "#6b7280" }}>
-            Tu as choisi :{" "}
+            {t("motivation.bar.youChose", "Tu as choisi :")}{" "}
             {activeDays.length === 0
-              ? "aucun jour"
-              : activeDays
-                  .map((d) => DAY_LABELS[d])
-                  .join(", ")}{" "}
-            à {prefTime}.
+              ? t("motivation.bar.noDays", "aucun jour")
+              : activeDays.map((d) => getDayLabel(d)).join(", ")}{" "}
+            {t("motivation.bar.at", "à")} {prefTime}.
           </span>
         </div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -433,7 +552,7 @@ export default function MotivationPage() {
                 cursor: "pointer",
               }}
             >
-              Tout
+              {t("motivation.bar.filterAll", "Tout")}
             </button>
             <button
               type="button"
@@ -448,7 +567,7 @@ export default function MotivationPage() {
                 cursor: "pointer",
               }}
             >
-              Non lues
+              {t("motivation.bar.filterUnread", "Non lues")}
             </button>
           </div>
 
@@ -459,7 +578,10 @@ export default function MotivationPage() {
             onClick={markAllAsRead}
             disabled={unreadCount === 0}
           >
-            Tout marquer comme lu
+            {t(
+              "motivation.bar.markAllRead",
+              "Tout marquer comme lu"
+            )}
           </button>
 
           <button
@@ -475,7 +597,12 @@ export default function MotivationPage() {
             onClick={sendTestNotification}
             disabled={sending}
           >
-            {sending ? "Envoi..." : "Envoyer une notif de test"}
+            {sending
+              ? t("motivation.bar.sending", "Envoi...")
+              : t(
+                  "motivation.bar.sendTest",
+                  "Envoyer une notif de test"
+                )}
           </button>
         </div>
       </div>
@@ -494,11 +621,15 @@ export default function MotivationPage() {
               color: "#6b7280",
             }}
           >
-            Aucune notification à afficher pour le moment.
+            {t(
+              "motivation.empty.title",
+              "Aucune notification à afficher pour le moment."
+            )}
             <br />
-            Utilise le bouton{" "}
-            <strong>“Envoyer une notif de test”</strong> pour tester
-            l’affichage.
+            {t(
+              "motivation.empty.hint",
+              'Utilise le bouton “Envoyer une notif de test” pour tester l’affichage.'
+            )}
           </div>
         ) : (
           visibleNotifications.map((n) => (
@@ -542,7 +673,7 @@ export default function MotivationPage() {
                         color: "#f9fafb",
                       }}
                     >
-                      Nouveau
+                      {t("motivation.card.badgeNew", "Nouveau")}
                     </span>
                   )}
                 </div>
@@ -563,7 +694,8 @@ export default function MotivationPage() {
                     color: "#6b7280",
                   }}
                 >
-                  Source : {n.source}
+                  {t("motivation.card.sourcePrefix", "Source :")}{" "}
+                  {n.source}
                 </div>
               )}
               <p
@@ -593,7 +725,7 @@ export default function MotivationPage() {
                     marginRight: 2,
                   }}
                 >
-                  Ta note :
+                  {t("motivation.card.ratingLabel", "Ta note :")}
                 </span>
                 <div>
                   {[1, 2, 3, 4, 5].map((star) => (
@@ -643,7 +775,10 @@ export default function MotivationPage() {
                     style={{ fontSize: 12, padding: "4px 8px" }}
                     onClick={() => markAsRead(n.id)}
                   >
-                    Marquer comme lu
+                    {t(
+                      "motivation.card.markRead",
+                      "Marquer comme lu"
+                    )}
                   </button>
                 </div>
               )}
