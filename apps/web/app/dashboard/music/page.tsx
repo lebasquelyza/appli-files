@@ -1,9 +1,44 @@
-//apps/web/app/dashboard/music/page.tsx
 "use client";
 
 import { useSession, signIn, signOut } from "next-auth/react";
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { translations } from "@/app/i18n/translations";
+
+/* ---------------- i18n helpers (client) ---------------- */
+type Lang = "fr" | "en";
+
+function getFromPath(obj: any, path: string): any {
+  return path.split(".").reduce((acc, key) => acc?.[key], obj);
+}
+
+function getLangClient(): Lang {
+  if (typeof document === "undefined") return "fr";
+  const match = document.cookie.match(/(?:^|; )fc-lang=([^;]+)/);
+  const val = match?.[1];
+  if (val === "en") return "en";
+  return "fr";
+}
+
+function useT() {
+  const [lang, setLang] = useState<Lang>("fr");
+
+  useEffect(() => {
+    setLang(getLangClient());
+  }, []);
+
+  const t = useCallback(
+    (path: string, fallback?: string) => {
+      const dict = translations[lang] as any;
+      const v = getFromPath(dict, path);
+      if (typeof v === "string") return v;
+      return fallback ?? path;
+    },
+    [lang]
+  );
+
+  return t;
+}
 
 const SpotifyPlayer = dynamic(() => import("@/components/SpotifyPlayer"), { ssr: false });
 
@@ -56,6 +91,7 @@ function useAudioChime() {
 /* ---------------- Minuteur simple réglable ---------------- */
 function SimpleTimer() {
   const { unlock, chimeStrong } = useAudioChime();
+  const t = useT();
 
   const [minutes, setMinutes] = useState(0);
   const [seconds, setSeconds] = useState(30);
@@ -120,7 +156,7 @@ function SimpleTimer() {
     >
       <div style={{ display: "flex", gap: 8 }}>
         <label className="label" style={{ fontSize: 12, flex: 1 }}>
-          Minutes
+          {t("music.simpleTimer.minutesLabel", "Minutes")}
           <input
             className="input"
             type="number"
@@ -134,7 +170,7 @@ function SimpleTimer() {
           />
         </label>
         <label className="label" style={{ fontSize: 12, flex: 1 }}>
-          Secondes
+          {t("music.simpleTimer.secondsLabel", "Secondes")}
           <input
             className="input"
             type="number"
@@ -166,7 +202,7 @@ function SimpleTimer() {
           }}
         >
           <div style={{ fontWeight: 700, fontSize: 14, color: "#111827" }}>
-            Minuteur simple
+            {t("music.simpleTimer.title", "Minuteur simple")}
           </div>
           <div
             style={{
@@ -211,7 +247,7 @@ function SimpleTimer() {
               style={{ fontSize: 13 }}
               onClick={start}
             >
-              Démarrer
+              {t("music.simpleTimer.start", "Démarrer")}
             </button>
           ) : running ? (
             <button
@@ -219,7 +255,7 @@ function SimpleTimer() {
               style={{ fontSize: 13 }}
               onClick={pause}
             >
-              Pause
+              {t("music.simpleTimer.pause", "Pause")}
             </button>
           ) : (
             <button
@@ -227,7 +263,7 @@ function SimpleTimer() {
               style={{ fontSize: 13 }}
               onClick={resume}
             >
-              Reprendre
+              {t("music.simpleTimer.resume", "Reprendre")}
             </button>
           )}
           <button
@@ -240,7 +276,7 @@ function SimpleTimer() {
             }}
             onClick={reset}
           >
-            Réinitialiser
+            {t("music.simpleTimer.reset", "Réinitialiser")}
           </button>
         </div>
       </div>
@@ -251,6 +287,7 @@ function SimpleTimer() {
 /* ---------------- Tabata Timer (compact) ---------------- */
 function TabataTimerCompact() {
   const { unlock, chimeStrong } = useAudioChime();
+  const t = useT();
 
   const [rounds, setRounds] = useState(8);
   const [workSec, setWorkSec] = useState(20);
@@ -295,7 +332,7 @@ function TabataTimerCompact() {
 
   useEffect(() => {
     if (!running) return;
-    const t = setInterval(() => {
+    const tmr = setInterval(() => {
       setRemaining((r) => {
         const next = r - 1;
 
@@ -320,7 +357,7 @@ function TabataTimerCompact() {
         return 0;
       });
     }, 1000);
-    return () => clearInterval(t);
+    return () => clearInterval(tmr);
   }, [running, phase, currRound, rounds, workSec, restSec, chimeStrong]);
 
   useEffect(() => {
@@ -328,6 +365,15 @@ function TabataTimerCompact() {
   }, [workSec, running, phase]);
 
   const pct = totalSec ? Math.round((elapsedSec / totalSec) * 100) : 0;
+
+  const phaseLabel =
+    phase === "work"
+      ? t("music.tabata.stateWork", "Travail")
+      : phase === "rest"
+      ? t("music.tabata.stateRest", "Repos")
+      : phase === "done"
+      ? t("music.tabata.stateDone", "Terminé")
+      : t("music.tabata.stateIdle", "Prêt");
 
   return (
     <div
@@ -343,7 +389,7 @@ function TabataTimerCompact() {
         }}
       >
         <label className="label" style={{ fontSize: 12 }}>
-          Rounds
+          {t("music.tabata.roundsLabel", "Rounds")}
           <input
             className="input"
             type="number"
@@ -357,7 +403,7 @@ function TabataTimerCompact() {
           />
         </label>
         <label className="label" style={{ fontSize: 12 }}>
-          Travail (s)
+          {t("music.tabata.workSecondsLabel", "Travail (s)")}
           <input
             className="input"
             type="number"
@@ -371,7 +417,7 @@ function TabataTimerCompact() {
           />
         </label>
         <label className="label" style={{ fontSize: 12 }}>
-          Repos (s)
+          {t("music.tabata.restSecondsLabel", "Repos (s)")}
           <input
             className="input"
             type="number"
@@ -396,7 +442,7 @@ function TabataTimerCompact() {
             setRestSec(10);
           }}
         >
-          Tabata 8× 20/10
+          {t("music.tabata.presetTabata", "Tabata 8× 20/10")}
         </button>
         <button
           className="btn"
@@ -407,7 +453,7 @@ function TabataTimerCompact() {
             setRestSec(15);
           }}
         >
-          10× 45/15
+          {t("music.tabata.preset4515", "10× 45/15")}
         </button>
         <button
           className="btn"
@@ -418,7 +464,7 @@ function TabataTimerCompact() {
             setRestSec(30);
           }}
         >
-          6× 30/30
+          {t("music.tabata.preset3030", "6× 30/30")}
         </button>
       </div>
 
@@ -439,14 +485,10 @@ function TabataTimerCompact() {
           }}
         >
           <div style={{ fontWeight: 700, fontSize: 14, color: "#111827" }}>
-            {phase === "work"
-              ? "Travail"
-              : phase === "rest"
-              ? "Repos"
-              : phase === "done"
-              ? "Terminé"
-              : "Prêt"}
-            {phase !== "idle" && phase !== "done" ? ` — Round ${currRound}/${rounds}` : ""}
+            {phaseLabel}
+            {phase !== "idle" && phase !== "done"
+              ? ` — Round ${currRound}/${rounds}`
+              : ""}
           </div>
           <div
             style={{
@@ -492,7 +534,7 @@ function TabataTimerCompact() {
               style={{ fontSize: 13 }}
               onClick={start}
             >
-              Démarrer
+              {t("music.tabata.start", "Démarrer")}
             </button>
           ) : running ? (
             <button
@@ -500,7 +542,7 @@ function TabataTimerCompact() {
               style={{ fontSize: 13 }}
               onClick={pause}
             >
-              Pause
+              {t("music.tabata.pause", "Pause")}
             </button>
           ) : (
             <button
@@ -508,7 +550,7 @@ function TabataTimerCompact() {
               style={{ fontSize: 13 }}
               onClick={resume}
             >
-              Reprendre
+              {t("music.tabata.resume", "Reprendre")}
             </button>
           )}
           <button
@@ -521,7 +563,7 @@ function TabataTimerCompact() {
             }}
             onClick={reset}
           >
-            Réinitialiser
+            {t("music.tabata.reset", "Réinitialiser")}
           </button>
         </div>
       </div>
@@ -562,6 +604,7 @@ async function spFetch<T = any>(
 function SpotifyLibrary() {
   const { data: session, status } = useSession();
   const token = (session as any)?.accessToken as string | undefined;
+  const t = useT();
 
   const [liked, setLiked] = useState<Track[]>([]);
   const [search, setSearch] = useState("");
@@ -580,30 +623,41 @@ function SpotifyLibrary() {
         const data = await spFetch<any>(token, "/me/tracks?limit=20");
         const items = (data?.items || []) as any[];
         const mapped: Track[] = items.map((it) => {
-          const t = it.track;
+          const tr = it.track;
           return {
-            id: t.id,
-            name: t.name,
-            artists: (t.artists || []).map((a: any) => a.name).join(", "),
-            image: t.album?.images?.[0]?.url || null,
-            uri: t.uri,
+            id: tr.id,
+            name: tr.name,
+            artists: (tr.artists || []).map((a: any) => a.name).join(", "),
+            image: tr.album?.images?.[0]?.url || null,
+            uri: tr.uri,
           };
         });
         setLiked(mapped);
       } catch (e: any) {
-        setError(e?.message || "Impossible de récupérer les titres likés");
+        setError(
+          e?.message ||
+            t(
+              "music.spotifyLibrary.errors.likedFetch",
+              "Impossible de récupérer les titres likés"
+            )
+        );
       } finally {
         setLoadingLikes(false);
       }
     })();
-  }, [status, token]);
+  }, [status, token, t]);
 
   const playTrack = async (uri: string) => {
     if (!token) return;
     const deviceId =
       typeof window !== "undefined" ? (window as any).__sp_deviceId : null;
     if (!deviceId) {
-      setError("Player Spotify non prêt. Lance le lecteur d’abord.");
+      setError(
+        t(
+          "music.spotifyLibrary.errors.playerNotReady",
+          "Player Spotify non prêt. Lance le lecteur d’abord."
+        )
+      );
       return;
     }
     try {
@@ -612,7 +666,13 @@ function SpotifyLibrary() {
         body: JSON.stringify({ uris: [uri] }),
       });
     } catch (e: any) {
-      setError(e?.message || "Impossible de lancer la lecture");
+      setError(
+        e?.message ||
+          t(
+            "music.spotifyLibrary.errors.playFailed",
+            "Impossible de lancer la lecture"
+          )
+      );
     }
   };
 
@@ -625,16 +685,19 @@ function SpotifyLibrary() {
       const q = encodeURIComponent(search.trim());
       const data = await spFetch<any>(token, `/search?type=track&limit=15&q=${q}`);
       const items = data?.tracks?.items || [];
-      const mapped: Track[] = items.map((t: any) => ({
-        id: t.id,
-        name: t.name,
-        artists: (t.artists || []).map((a: any) => a.name).join(", "),
-        image: t.album?.images?.[0]?.url || null,
-        uri: t.uri,
+      const mapped: Track[] = items.map((tr: any) => ({
+        id: tr.id,
+        name: tr.name,
+        artists: (tr.artists || []).map((a: any) => a.name).join(", "),
+        image: tr.album?.images?.[0]?.url || null,
+        uri: tr.uri,
       }));
       setResults(mapped);
     } catch (e: any) {
-      setError(e?.message || "Erreur de recherche");
+      setError(
+        e?.message ||
+          t("music.spotifyLibrary.errors.searchFailed", "Erreur de recherche")
+      );
     } finally {
       setLoadingSearch(false);
     }
@@ -643,23 +706,26 @@ function SpotifyLibrary() {
   if (status !== "authenticated" || !token) {
     return (
       <p className="text-sm" style={{ color: "var(--muted)" }}>
-        Connecte-toi à Spotify pour voir tes titres likés et rechercher une musique.
+        {t(
+          "music.spotifyLibrary.connectHint",
+          "Connecte-toi à Spotify pour voir tes titres likés et rechercher une musique."
+        )}
       </p>
     );
   }
 
-  const renderTrackRow = (t: Track) => (
+  const renderTrackRow = (tr: Track) => (
     <li
-      key={t.id}
+      key={tr.id}
       className="flex items-center gap-3 rounded-[10px] border px-2 py-2"
       style={{
         borderColor: "rgba(0,0,0,.06)",
         background: "var(--bg)",
       }}
     >
-      {t.image && (
+      {tr.image && (
         <img
-          src={t.image}
+          src={tr.image}
           alt=""
           width={44}
           height={44}
@@ -680,7 +746,7 @@ function SpotifyLibrary() {
             lineHeight: 1.2,
           }}
         >
-          {t.name}
+          {tr.name}
         </div>
         <div
           className="truncate"
@@ -691,7 +757,7 @@ function SpotifyLibrary() {
             marginTop: 2,
           }}
         >
-          {t.artists}
+          {tr.artists}
         </div>
       </div>
 
@@ -707,9 +773,9 @@ function SpotifyLibrary() {
           border: "none",
           lineHeight: 1,
         }}
-        onClick={() => playTrack(t.uri)}
+        onClick={() => playTrack(tr.uri)}
       >
-        Lire
+        {t("music.spotifyLibrary.playButton", "Lire")}
       </button>
     </li>
   );
@@ -723,14 +789,19 @@ function SpotifyLibrary() {
       )}
 
       <div>
-        <h3 className="font-semibold text-sm mb-2">Titres likés</h3>
+        <h3 className="font-semibold text-sm mb-2">
+          {t("music.spotifyLibrary.liked.title", "Titres likés")}
+        </h3>
         {loadingLikes ? (
           <p className="text-sm" style={{ color: "var(--muted)" }}>
-            Chargement…
+            {t("music.spotifyLibrary.liked.loading", "Chargement…")}
           </p>
         ) : liked.length === 0 ? (
           <p className="text-sm" style={{ color: "var(--muted)" }}>
-            Aucun titre liké trouvé.
+            {t(
+              "music.spotifyLibrary.liked.empty",
+              "Aucun titre liké trouvé."
+            )}
           </p>
         ) : (
           <ul className="space-y-2">{liked.map(renderTrackRow)}</ul>
@@ -738,23 +809,31 @@ function SpotifyLibrary() {
       </div>
 
       <div>
-        <h3 className="font-semibold text-sm mb-2">Rechercher une musique</h3>
+        <h3 className="font-semibold text-sm mb-2">
+          {t("music.spotifyLibrary.search.title", "Rechercher une musique")}
+        </h3>
         <form onSubmit={onSearchSubmit} className="flex gap-2 mb-3">
           <input
             className="input flex-1"
-            placeholder="Nom du titre, artiste…"
+            placeholder={t(
+              "music.spotifyLibrary.search.placeholder",
+              "Nom du titre, artiste…"
+            )}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             style={{ fontSize: 13, padding: "6px 10px" }}
           />
           <button type="submit" className="btn btn-dash" style={{ fontSize: 13 }}>
-            Rechercher
+            {t("music.spotifyLibrary.search.submit", "Rechercher")}
           </button>
         </form>
 
         {loadingSearch ? (
           <p className="text-sm" style={{ color: "var(--muted)" }}>
-            Recherche en cours…
+            {t(
+              "music.spotifyLibrary.search.loading",
+              "Recherche en cours…"
+            )}
           </p>
         ) : results.length > 0 ? (
           <ul className="space-y-2">{results.map(renderTrackRow)}</ul>
@@ -768,6 +847,7 @@ function SpotifyLibrary() {
 
 export default function MusicPage() {
   const { data: session, status } = useSession();
+  const t = useT();
 
   const PAGE_MAX_WIDTH = 740;
   const SIDE_PADDING = 16;
@@ -790,10 +870,10 @@ export default function MusicPage() {
         <div className="page-header" style={{ marginBottom: 6 }}>
           <div>
             <h1 className="h1" style={{ fontSize: 20, color: "#111827" }}>
-              Musique
+              {t("music.pageTitle", "Musique")}
             </h1>
             <p className="lead" style={{ fontSize: 12, marginTop: 2 }}>
-              Chargement…
+              {t("music.loading.subtitle", "Chargement…")}
             </p>
           </div>
         </div>
@@ -824,21 +904,32 @@ export default function MusicPage() {
       <div className="page-header" style={{ marginBottom: 6 }}>
         <div>
           <h1 className="h1" style={{ fontSize: 20, color: "#111827" }}>
-            Musique
+            {t("music.pageTitle", "Musique")}
           </h1>
           <p className="lead" style={{ fontSize: 12, marginTop: 2 }}>
-            Minuteur simple + Tabata + lecteur Spotify + titres likés.
+            {t(
+              "music.pageSubtitle",
+              "Minuteur simple + Tabata + lecteur Spotify + titres likés."
+            )}
           </p>
         </div>
         <div>
           {session ? (
             <button
-              onClick={() => signOut({ callbackUrl: "/dashboard/music" })}
+              onClick={() =>
+                signOut({ callbackUrl: "/dashboard/music" })
+              }
               className="btn btn-dash"
-              title="Se déconnecter"
+              title={t(
+                "music.spotifyAuth.disconnectTitle",
+                "Se déconnecter"
+              )}
               style={{ fontSize: 13 }}
             >
-              ⏻ Se déconnecter
+              {t(
+                "music.spotifyAuth.disconnectButton",
+                "⏻ Se déconnecter"
+              )}
             </button>
           ) : (
             <button
@@ -848,7 +939,10 @@ export default function MusicPage() {
               className="btn btn-dash"
               style={{ fontSize: 13 }}
             >
-              Se connecter à Spotify
+              {t(
+                "music.spotifyAuth.connectButton",
+                "Se connecter à Spotify"
+              )}
             </button>
           )}
         </div>
@@ -872,7 +966,7 @@ export default function MusicPage() {
                 fontWeight: 800,
               }}
             >
-              Timer
+              {t("music.tabata.cardTitle", "Timer")}
             </h3>
 
             <button
@@ -896,7 +990,7 @@ export default function MusicPage() {
                   });
               }}
             >
-              Tabata
+              {t("music.tabata.jumpToTabata", "Tabata")}
             </button>
           </div>
 
@@ -926,7 +1020,7 @@ export default function MusicPage() {
               color: "#111827",
             }}
           >
-            Lecteur Spotify
+            {t("music.spotifyPlayer.title", "Lecteur Spotify")}
           </h3>
           <div
             className="text-sm"
@@ -937,8 +1031,14 @@ export default function MusicPage() {
             }}
           >
             {session
-              ? "Contrôle du lecteur connecté à ton compte."
-              : "Connecte-toi pour utiliser le lecteur Spotify."}
+              ? t(
+                  "music.spotifyPlayer.connectedDescription",
+                  "Contrôle du lecteur connecté à ton compte."
+                )
+              : t(
+                  "music.spotifyPlayer.disconnectedDescription",
+                  "Connecte-toi pour utiliser le lecteur Spotify."
+                )}
           </div>
           {session ? (
             <div
@@ -963,7 +1063,7 @@ export default function MusicPage() {
                 }
                 style={{ fontSize: 13 }}
               >
-                Se connecter
+                {t("music.spotifyPlayer.connectButton", "Se connecter")}
               </button>
             </div>
           )}
