@@ -1,7 +1,8 @@
-//apps/web/app/dashboard/corrector/page.tsx
+// apps/web/app/dashboard/coach/page.tsx (ou ton chemin réel)
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
+import { translations } from "@/app/i18n/translations";
 
 /* ===================== Types ===================== */
 interface AnalysisPoint { time: number; label: string; detail?: string; }
@@ -70,6 +71,41 @@ function displayStatus(s: string) {
   ];
   if (toMask.some(p => s.startsWith(p))) return "( Files examine... )";
   return s;
+}
+
+/* ========== i18n (client) ========== */
+type Lang = "fr" | "en";
+
+function getFromPath(obj: any, path: string): any {
+  return path.split(".").reduce((acc, key) => acc?.[key], obj);
+}
+
+function getLangClient(): Lang {
+  if (typeof document === "undefined") return "fr";
+  const match = document.cookie.match(/(?:^|; )fc-lang=([^;]+)/);
+  const val = match?.[1];
+  if (val === "en") return "en";
+  return "fr";
+}
+
+function useT() {
+  const [lang, setLang] = useState<Lang>("fr");
+
+  useEffect(() => {
+    setLang(getLangClient());
+  }, []);
+
+  const t = useCallback(
+    (path: string, fallback?: string) => {
+      const dict = translations[lang] as any;
+      const v = getFromPath(dict, path);
+      if (typeof v === "string") return v;
+      return fallback ?? path;
+    },
+    [lang]
+  );
+
+  return t;
 }
 
 /* ===================== Vocabulaire & Variations ===================== */
@@ -207,6 +243,8 @@ function makeCorrections(exo: string) {
 
 /* ===================== Page ===================== */
 export default function Page() {
+  const t = useT();
+
   return (
     <div
       className="container"
@@ -221,10 +259,13 @@ export default function Page() {
       <div className="page-header">
         <div>
           <h1 className="h1" style={{ fontSize: "clamp(20px, 2.2vw, 24px)", lineHeight: 1.15 }}>
-            Import / Enregistrement
+            {t("videoCoach.page.title", "Import / Enregistrement")}
           </h1>
           <p className="lead" style={{ fontSize: "clamp(12px, 1.6vw, 14px)", lineHeight: 1.35 }}>
-            Filme ou importe ta vidéo, ajoute ton ressenti puis lance l’analyse IA.
+            {t(
+              "videoCoach.page.subtitle",
+              "Filme ou importe ta vidéo, ajoute ton ressenti puis lance l’analyse IA."
+            )}
           </p>
         </div>
       </div>
@@ -237,6 +278,8 @@ export default function Page() {
 
 /* ===================== Composant principal ===================== */
 function CoachAnalyzer() {
+  const t = useT();
+
   const [tab, setTab] = useState<"record" | "upload">("record");
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -448,13 +491,13 @@ function CoachAnalyzer() {
       }
       setOverrideOpen(false);
       setProgress(100);
-      setStatus("Analyse terminée — confirme l’exercice");
+      setStatus(t("videoCoach.status.done", "Analyse terminée — confirme l’exercice"));
     } catch (e: any) {
       console.error(e);
       const msg = e?.message || String(e);
       setErrorMsg(msg);
       setStatus("");
-      alert(`Erreur pendant l'analyse: ${msg}`);
+      alert(`${t("videoCoach.error.prefix", "Erreur pendant l'analyse")}: ${msg}`);
     } finally {
       setIsAnalyzing(false);
     }
@@ -503,7 +546,9 @@ function CoachAnalyzer() {
       <div style={gridStyle}>
         {/* 1. Import / Enregistrement */}
         <article className="card" style={cardStyle}>
-          <h3 style={{ marginTop: 0 }}>🎥 Import / Enregistrement</h3>
+          <h3 style={{ marginTop: 0 }}>
+            {t("videoCoach.card.import.title", "🎥 Import / Enregistrement")}
+          </h3>
 
           {/* Onglets Filmer / Importer */}
           <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
@@ -518,7 +563,7 @@ function CoachAnalyzer() {
                 fontWeight: 500
               }}
             >
-              Filmer
+              {t("videoCoach.card.import.tabRecord", "Filmer")}
             </button>
 
             <button
@@ -532,7 +577,7 @@ function CoachAnalyzer() {
                 fontWeight: 500
               }}
             >
-              Importer
+              {t("videoCoach.card.import.tabUpload", "Importer")}
             </button>
           </div>
 
@@ -546,9 +591,10 @@ function CoachAnalyzer() {
 
           {blobUrl && (
             <div className="text-sm" style={{ marginTop: 12 }}>
-              <label className="label" style={{ marginBottom: 6 }}>fichier téléchargée</label>
+              <label className="label" style={{ marginBottom: 6 }}>
+                {t("videoCoach.card.import.fileLabel", "Fichier téléchargé")}
+              </label>
 
-              {/* On n'affiche pas le nom du fichier */}
               <div
                 className="card"
                 style={{
@@ -560,7 +606,7 @@ function CoachAnalyzer() {
               >
                 <div style={{ minWidth: 0, flex: 1, display: "flex", alignItems: "center" }}>
                   <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    🎞️ Vidéo importée
+                    {t("videoCoach.card.import.fileName", "🎞️ Vidéo importée")}
                   </span>
                 </div>
 
@@ -576,7 +622,7 @@ function CoachAnalyzer() {
                     fontWeight: 500
                   }}
                 >
-                  ↺ Réinitialiser
+                  {t("videoCoach.common.reset", "↺ Réinitialiser")}
                 </button>
               </div>
             </div>
@@ -585,11 +631,18 @@ function CoachAnalyzer() {
 
         {/* 2. Ressenti */}
         <article className="card" style={cardStyle}>
-          <h3 style={{ marginTop: 0 }}>🎙️ Ton ressenti</h3>
-          <label className="label">Comment tu te sens ?</label>
+          <h3 style={{ marginTop: 0 }}>
+            {t("videoCoach.card.feeling.title", "🎙️ Ton ressenti")}
+          </h3>
+          <label className="label">
+            {t("videoCoach.card.feeling.label", "Comment tu te sens ?")}
+          </label>
           <textarea
             className="input"
-            placeholder="Explique douleurs, fatigue, où tu as senti l'effort, RPE, etc."
+            placeholder={t(
+              "videoCoach.card.feeling.placeholder",
+              "Explique douleurs, fatigue, où tu as senti l'effort, RPE, etc."
+            )}
             value={feeling}
             onChange={(e) => setFeeling(e.target.value)}
             style={{ minHeight: 140, flexGrow: 1 }}
@@ -602,7 +655,11 @@ function CoachAnalyzer() {
               type="button"
             >
               {isAnalyzing ? <Spinner className="mr-2" /> : "✨"}{" "}
-              {isAnalyzing ? "Analyse en cours" : cooldown > 0 ? `Patiente ${cooldown}s` : "Lancer l'analyse IA"}
+              {isAnalyzing
+                ? t("videoCoach.card.feeling.btnAnalyzing", "Analyse en cours")
+                : cooldown > 0
+                ? t("videoCoach.card.feeling.btnCooldown", "Patiente ") + `${cooldown}s`
+                : t("videoCoach.card.feeling.btnLaunch", "Lancer l'analyse IA")}
             </button>
 
             <button
@@ -617,26 +674,39 @@ function CoachAnalyzer() {
               }}
               disabled={isAnalyzing}
             >
-              Réinitialiser
+              {t("videoCoach.common.reset", "Réinitialiser")}
             </button>
           </div>
 
           {(isAnalyzing || progress > 0 || errorMsg || status) && (
             <div style={{ marginTop: 12 }}>
               <ProgressBar value={progress} />
-              {status && <p className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>{displayStatus(status)}</p>}
-              {errorMsg && <p className="text-xs" style={{ color: "#dc2626", marginTop: 6 }}>Erreur : {errorMsg}</p>}
+              {status && (
+                <p className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>
+                  {displayStatus(status)}
+                </p>
+              )}
+              {errorMsg && (
+                <p className="text-xs" style={{ color: "#dc2626", marginTop: 6 }}>
+                  {t("videoCoach.error.label", "Erreur")} : {errorMsg}
+                </p>
+              )}
             </div>
           )}
         </article>
 
         {/* 3. Résumé IA */}
         <article className="card" style={cardStyle}>
-          <h3 style={{ marginTop: 0 }}>🧠 Résumé IA</h3>
+          <h3 style={{ marginTop: 0 }}>
+            {t("videoCoach.card.summary.title", "🧠 Résumé IA")}
+          </h3>
 
           {!analysis && (
             <p className="text-sm" style={{ color: "#6b7280" }}>
-              Importe une vidéo puis lance l’analyse pour obtenir le résumé ici.
+              {t(
+                "videoCoach.card.summary.empty",
+                "Importe une vidéo puis lance l’analyse pour obtenir le résumé ici."
+              )}
             </p>
           )}
 
@@ -644,11 +714,21 @@ function CoachAnalyzer() {
           {analysis && showChoiceGate && (
             <div style={{ display: "grid", gap: 8 }}>
               <div className="text-sm">
-                L’IA propose : <strong>{predictedExercise || "exercice_inconnu"}</strong>
+                {t("videoCoach.card.summary.gate.propose", "L’IA propose")} :{" "}
+                <strong>{predictedExercise || "exercice_inconnu"}</strong>
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <button className="btn btn-dash" onClick={confirmPredicted} disabled={isAnalyzing} type="button">
-                  Confirmer « {predictedExercise || "exercice_inconnu"} »
+                <button
+                  className="btn btn-dash"
+                  onClick={confirmPredicted}
+                  disabled={isAnalyzing}
+                  type="button"
+                >
+                  {t(
+                    "videoCoach.card.summary.gate.confirm",
+                    "Confirmer"
+                  )}{" "}
+                  « {predictedExercise || "exercice_inconnu"} »
                 </button>
                 <button
                   className="btn"
@@ -657,17 +737,22 @@ function CoachAnalyzer() {
                   type="button"
                   style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
                 >
-                  Autre
+                  {t("videoCoach.card.summary.gate.other", "Autre")}
                 </button>
               </div>
 
               {overrideOpen && (
                 <div className="card" style={{ padding: 12 }}>
-                  <label className="label">Quel exercice fais-tu ?</label>
+                  <label className="label">
+                    {t("videoCoach.card.summary.override.label", "Quel exercice fais-tu ?")}
+                  </label>
                   <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                     <input
                       className="input"
-                      placeholder="ex. Tractions, Fentes bulgares, Soulevé de terre…"
+                      placeholder={t(
+                        "videoCoach.card.summary.override.placeholder",
+                        "ex. Tractions, Fentes bulgares, Soulevé de terre…"
+                      )}
                       value={overrideName}
                       onChange={(e) => setOverrideName(e.target.value)}
                     />
@@ -678,11 +763,14 @@ function CoachAnalyzer() {
                       type="button"
                       style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
                     >
-                      Ré-analyser
+                      {t("videoCoach.card.summary.override.reanalyze", "Ré-analyser")}
                     </button>
                   </div>
                   <p className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>
-                    L’IA tiendra compte de ce nom pour corriger plus précisément.
+                    {t(
+                      "videoCoach.card.summary.override.help",
+                      "L’IA tiendra compte de ce nom pour corriger plus précisément."
+                    )}
                   </p>
                 </div>
               )}
@@ -693,8 +781,10 @@ function CoachAnalyzer() {
           {analysis && !showChoiceGate && (
             <div style={{ display: "grid", gap: 12 }}>
               <div className="text-sm">
-                <span style={{ color: "#6b7280" }}>Exercice :</span>{" "}
-                <strong>{confirmedExercise || analysis.exercise || "inconnu"}</strong>
+                <span style={{ color: "#6b7280" }}>
+                  {t("videoCoach.card.summary.exerciseLabel", "Exercice")} :
+                </span>{" "}
+                <strong>{confirmedExercise || analysis.exercise || t("videoCoach.common.unknown", "inconnu")}</strong>
               </div>
 
               {analysis.overall?.trim() && (
@@ -702,7 +792,12 @@ function CoachAnalyzer() {
               )}
 
               <div>
-                <h4 className="h4" style={{ fontSize: 14, margin: "8px 0 4px" }}>Muscles principalement sollicités</h4>
+                <h4 className="h4" style={{ fontSize: 14, margin: "8px 0 4px" }}>
+                  {t(
+                    "videoCoach.card.summary.musclesTitle",
+                    "Muscles principalement sollicités"
+                  )}
+                </h4>
 
                 {analysis.muscles?.length ? (
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -711,7 +806,10 @@ function CoachAnalyzer() {
                         key={i}
                         type="button"
                         onClick={() => setMuscleOpen(m)}
-                        title="Voir l’emplacement"
+                        title={t(
+                          "videoCoach.card.summary.muscleBtnTitle",
+                          "Voir l’emplacement"
+                        )}
                         className="text-sm"
                         style={{
                           padding: "6px 10px",
@@ -727,22 +825,43 @@ function CoachAnalyzer() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-xs" style={{ color: "#6b7280" }}>— non détecté —</p>
+                  <p className="text-xs" style={{ color: "#6b7280" }}>
+                    {t("videoCoach.card.summary.musclesEmpty", "— non détecté —")}
+                  </p>
                 )}
               </div>
 
               {(issuesLine || correctionsLine) && (
                 <div style={{ display: "grid", gap: 4 }}>
-                  {issuesLine && <p className="text-sm"><strong>Erreur détectée :</strong> {issuesLine}</p>}
-                  {correctionsLine && <p className="text-sm"><strong>Corrections :</strong> {correctionsLine}</p>}
+                  {issuesLine && (
+                    <p className="text-sm">
+                      <strong>{t("videoCoach.card.summary.issuesLabel", "Erreur détectée")} :</strong>{" "}
+                      {issuesLine}
+                    </p>
+                  )}
+                  {correctionsLine && (
+                    <p className="text-sm">
+                      <strong>{t("videoCoach.card.summary.correctionsLabel", "Corrections")} :</strong>{" "}
+                      {correctionsLine}
+                    </p>
+                  )}
                 </div>
               )}
 
               {analysis.extras && analysis.extras.length > 0 && (
                 <details>
-                  <summary style={{ cursor: "pointer" }}>Points complémentaires</summary>
+                  <summary style={{ cursor: "pointer" }}>
+                    {t(
+                      "videoCoach.card.summary.extrasSummary",
+                      "Points complémentaires"
+                    )}
+                  </summary>
                   <ul style={{ paddingLeft: 18, marginTop: 6 }} className="text-sm">
-                    {analysis.extras.map((x, i) => <li key={i} style={{ listStyle: "disc" }}>{x}</li>)}
+                    {analysis.extras.map((x, i) => (
+                      <li key={i} style={{ listStyle: "disc" }}>
+                        {x}
+                      </li>
+                    ))}
                   </ul>
                 </details>
               )}
@@ -761,6 +880,7 @@ function CoachAnalyzer() {
 
 /* ===================== Upload/Record ===================== */
 function UploadDrop({ onFile }: { onFile: (file: File) => void }) {
+  const t = useT();
   const galleryRef = useRef<HTMLInputElement | null>(null);
   const filesRef   = useRef<HTMLInputElement | null>(null);
 
@@ -806,7 +926,7 @@ function UploadDrop({ onFile }: { onFile: (file: File) => void }) {
             onClick={openGalerie}
             style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
           >
-            📥 Importer
+            {t("videoCoach.upload.import", "📥 Importer")}
           </button>
         </div>
       ) : (
@@ -817,7 +937,7 @@ function UploadDrop({ onFile }: { onFile: (file: File) => void }) {
             onClick={openGalerie}
             style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
           >
-            📸 Galerie
+            {t("videoCoach.upload.gallery", "📸 Galerie")}
           </button>
           <button
             type="button"
@@ -825,7 +945,7 @@ function UploadDrop({ onFile }: { onFile: (file: File) => void }) {
             onClick={openFichiers}
             style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
           >
-            🗂️ Fichiers
+            {t("videoCoach.upload.files", "🗂️ Fichiers")}
           </button>
         </div>
       )}
@@ -852,6 +972,7 @@ function UploadDrop({ onFile }: { onFile: (file: File) => void }) {
 }
 
 function VideoRecorder({ onRecorded }: { onRecorded: (file: File) => void }) {
+  const t = useT();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -885,7 +1006,10 @@ function VideoRecorder({ onRecorded }: { onRecorded: (file: File) => void }) {
       mr.start();
       setIsRecording(true);
     } catch (err) {
-      alert("Impossible d'accéder à la caméra/micro. Vérifie les permissions.");
+      alert(t(
+        "videoCoach.videoRecorder.error.camera",
+        "Impossible d'accéder à la caméra/micro. Vérifie les permissions."
+      ));
       console.error(err);
     }
   };
@@ -903,13 +1027,29 @@ function VideoRecorder({ onRecorded }: { onRecorded: (file: File) => void }) {
     <div className="space-y-3">
       <div className="relative">
         <video ref={videoRef} className="w-full rounded-2xl border" muted playsInline />
-        {!hasStream && (<div className="absolute inset-0 grid place-items-center text-xs text-muted-foreground">Prépare ta caméra puis clique « Démarrer »</div>)}
+        {!hasStream && (
+          <div className="absolute inset-0 grid place-items-center text-xs text-muted-foreground">
+            {t(
+              "videoCoach.videoRecorder.overlay",
+              'Prépare ta caméra puis clique « Démarrer »'
+            )}
+          </div>
+        )}
       </div>
       <div className="flex items-center gap-2">
         {!isRecording ? (
-          <button className="btn btn-dash" onClick={start} type="button">▶️ Démarrer</button>
+          <button className="btn btn-dash" onClick={start} type="button">
+            {t("videoCoach.videoRecorder.start", "▶️ Démarrer")}
+          </button>
         ) : (
-          <button className="btn" onClick={stop} type="button" style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}>⏸️ Arrêter</button>
+          <button
+            className="btn"
+            onClick={stop}
+            type="button"
+            style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
+          >
+            {t("videoCoach.videoRecorder.stop", "⏸️ Arrêter")}
+          </button>
         )}
       </div>
     </div>
@@ -1063,7 +1203,6 @@ function faultsToLines(a: AIAnalysis | null) {
 }
 
 /* ===================== Muscle Viewer ===================== */
-/** Silhouette humaine grise décorative (aucune interaction). */
 function normMuscle(s: string) {
   return (s || "")
     .toLowerCase()
@@ -1118,6 +1257,7 @@ const MUSCLE_MAP: Record<string, string[]> = {
 };
 
 function MuscleViewer({ muscleName, onClose }: { muscleName: string; onClose: () => void }) {
+  const t = useT();
   const keys = MUSCLE_MAP[normMuscle(muscleName)] || [];
   return (
     <div
@@ -1134,14 +1274,20 @@ function MuscleViewer({ muscleName, onClose }: { muscleName: string; onClose: ()
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
           <h3 style={{ margin: 0 }}>📍 {muscleName}</h3>
-          <button className="btn" onClick={onClose}
-            style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}>
-            Fermer
+          <button
+            className="btn"
+            onClick={onClose}
+            style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
+          >
+            {t("videoCoach.muscleViewer.close", "Fermer")}
           </button>
         </div>
 
         <p className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>
-          Silhouette simplifiée — aucune zone cliquable, seules les zones sélectionnées sont mises en surbrillance.
+          {t(
+            "videoCoach.muscleViewer.subtitle",
+            "Silhouette simplifiée — aucune zone cliquable, seules les zones sélectionnées sont mises en surbrillance."
+          )}
         </p>
 
         <BodyMapHuman highlightKeys={keys} />
@@ -1160,17 +1306,17 @@ function BodyMapHuman({ highlightKeys }: { highlightKeys: string[] }) {
     fill: "#22c55e",
     opacity: 0.9,
     transition: "opacity .15s ease",
-    pointerEvents: "none" as const, // pas cliquable
+    pointerEvents: "none" as const,
   });
 
-  const baseFill = "#d1d5db"; // gris neutre
+  const baseFill = "#d1d5db";
   const panelStyle: React.CSSProperties = {
     width: "100%",
     height: "auto",
     background: "#f9fafb",
     borderRadius: 12,
     padding: 8,
-    pointerEvents: "none", // désactive tout clic dans le SVG
+    pointerEvents: "none",
     userSelect: "none",
     cursor: "default",
   };
@@ -1225,3 +1371,4 @@ function BodyMapHuman({ highlightKeys }: { highlightKeys: string[] }) {
     </div>
   );
 }
+
