@@ -2,11 +2,33 @@
 import { cookies } from "next/headers";
 import FoodSnap from "./FoodSnap";
 import { saveCalories } from "./actions";
+import { translations } from "@/app/i18n/translations"; // ✅ i18n
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+/* ========== i18n helpers (server) ========== */
+type Lang = "fr" | "en";
+
+function getFromPath(obj: any, path: string): any {
+  return path.split(".").reduce((acc, key) => acc?.[key], obj);
+}
+
+function tServer(lang: Lang, path: string, fallback?: string): string {
+  const dict = translations[lang] as any;
+  const v = getFromPath(dict, path);
+  if (typeof v === "string") return v;
+  return fallback ?? path;
+}
+
+function getLang(): Lang {
+  const cookieLang = cookies().get("fc-lang")?.value;
+  if (cookieLang === "en") return "en";
+  return "fr";
+}
+
+/* ========== Types & helpers ========== */
 type KcalStore = Record<string, number>;
 type NotesStore = Record<string, string>;
 
@@ -45,6 +67,9 @@ export default async function Page({
 }: {
   searchParams?: { saved?: string; err?: string };
 }) {
+  const lang = getLang();
+  const t = (path: string, fallback?: string) => tServer(lang, path, fallback);
+
   const jar = cookies();
   const store = parseKcalStore(jar.get("app.kcals")?.value);
   const notes = parseNotesStore(jar.get("app.kcals.notes")?.value);
@@ -61,13 +86,42 @@ export default async function Page({
     days.push({ date, kcal: store[date] || 0, note: notes[date] });
   }
 
+  const savedTitle = t("calories.alert.saved.title", "Enregistré !");
+  const savedText = t(
+    "calories.alert.saved.text",
+    "Tes calories ont été mises à jour."
+  );
+  const errorTitle = t("calories.alert.error.title", "Erreur");
+  const errorBadDate = t(
+    "calories.alert.error.badDate",
+    "date invalide."
+  );
+  const errorBadKcal = t(
+    "calories.alert.error.badKcal",
+    "valeur de calories invalide."
+  );
+
   return (
-    <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
+    <div
+      className="container"
+      style={{ paddingTop: 24, paddingBottom: 32 }}
+    >
       <div className="page-header" style={{ marginBottom: 8 }}>
         <div>
-          <h1 className="h1" style={{ fontSize: 22, color: "#111827" }}>Calories</h1>
-          <p className="lead" style={{ fontSize: 13, marginTop: 4 }}>
-            Enregistre tes calories consommées aujourd’hui. Historique sur 14 jours.
+          <h1
+            className="h1"
+            style={{ fontSize: 22, color: "#111827" }}
+          >
+            {t("calories.page.title", "Calories")}
+          </h1>
+          <p
+            className="lead"
+            style={{ fontSize: 13, marginTop: 4 }}
+          >
+            {t(
+              "calories.page.subtitle",
+              "Enregistre tes calories consommées aujourd’hui. Historique sur 14 jours."
+            )}
           </p>
         </div>
       </div>
@@ -76,26 +130,46 @@ export default async function Page({
         <div
           id="saved"
           className="card"
-          style={{ border: "1px solid #16a34a33", background: "#16a34a0d", marginBottom: 12 }}
+          style={{
+            border: "1px solid #16a34a33",
+            background: "#16a34a0d",
+            marginBottom: 12,
+          }}
         >
-          <strong>Enregistré !</strong> Tes calories ont été mises à jour.
+          <strong>{savedTitle}</strong>{" "}
+          {savedText}
         </div>
       )}
       {searchParams?.err && (
         <div
           className="card"
-          style={{ border: "1px solid #dc262633", background: "#dc26260d", marginBottom: 12 }}
+          style={{
+            border: "1px solid #dc262633",
+            background: "#dc26260d",
+            marginBottom: 12,
+          }}
         >
-          <strong>Erreur</strong> :{" "}
-          {searchParams.err === "bad_date" ? "date invalide." : "valeur de calories invalide."}
+          <strong>{errorTitle}</strong> :{" "}
+          {searchParams.err === "bad_date"
+            ? errorBadDate
+            : errorBadKcal}
         </div>
       )}
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Colonne 1 : Aujourd’hui + formulaire principal */}
         <article className="card">
-          <h3 style={{ marginTop: 0, fontSize: 16, color: "#111827" }}>Aujourd’hui</h3>
-          <div className="text-sm" style={{ color: "#6b7280", fontSize: 14 }}>{today}</div>
+          <h3
+            style={{ marginTop: 0, fontSize: 16, color: "#111827" }}
+          >
+            {t("calories.today.title", "Aujourd’hui")}
+          </h3>
+          <div
+            className="text-sm"
+            style={{ color: "#6b7280", fontSize: 14 }}
+          >
+            {today}
+          </div>
           <div
             style={{
               fontSize: 20,
@@ -105,20 +179,32 @@ export default async function Page({
               lineHeight: 1,
             }}
           >
-            {todayKcal.toLocaleString("fr-FR")} kcal
+            {todayKcal.toLocaleString("fr-FR")}{" "}
+            {t("calories.today.unit", "kcal")}
           </div>
 
-          <form action={saveCalories} style={{ display: "grid", gap: 10, marginTop: 12 }}>
+          <form
+            action={saveCalories}
+            style={{ display: "grid", gap: 10, marginTop: 12 }}
+          >
             <input type="hidden" name="date" value={today} />
             <div>
-              <label className="label">Calories à ajouter</label>
+              <label className="label">
+                {t(
+                  "calories.form.kcal.label",
+                  "Calories à ajouter"
+                )}
+              </label>
               <input
                 className="input"
                 type="number"
                 name="kcal"
                 min={0}
                 step={1}
-                placeholder="ex: 650"
+                placeholder={t(
+                  "calories.form.kcal.placeholder",
+                  "ex: 650"
+                )}
                 required
                 style={{
                   background: "#ffffff",
@@ -128,17 +214,35 @@ export default async function Page({
                   WebkitTextFillColor: "#111827" as any,
                 }}
               />
-              <div className="text-xs" style={{ color: "#6b7280", marginTop: 4, fontSize: 12 }}>
-                La valeur s’ajoute au total du jour (elle n’écrase pas).
+              <div
+                className="text-xs"
+                style={{
+                  color: "#6b7280",
+                  marginTop: 4,
+                  fontSize: 12,
+                }}
+              >
+                {t(
+                  "calories.form.kcal.helper",
+                  "La valeur s’ajoute au total du jour (elle n’écrase pas)."
+                )}
               </div>
             </div>
             <div>
-              <label className="label">Note (optionnel)</label>
+              <label className="label">
+                {t(
+                  "calories.form.note.label",
+                  "Note (optionnel)"
+                )}
+              </label>
               <input
                 className="input"
                 type="text"
                 name="note"
-                placeholder="ex: Déj: poke bowl"
+                placeholder={t(
+                  "calories.form.note.placeholder",
+                  "ex: Déj: poke bowl"
+                )}
                 style={{
                   background: "#ffffff",
                   color: "#111827",
@@ -149,8 +253,15 @@ export default async function Page({
               />
             </div>
             <div style={{ display: "flex", gap: 8 }}>
-              <button className="btn btn-dash" type="submit" style={{ fontSize: 14 }}>
-                Enregistrer
+              <button
+                className="btn btn-dash"
+                type="submit"
+                style={{ fontSize: 14 }}
+              >
+                {t(
+                  "calories.form.buttons.save",
+                  "Enregistrer"
+                )}
               </button>
               <a
                 href="/dashboard/calories"
@@ -163,7 +274,10 @@ export default async function Page({
                   fontSize: 14,
                 }}
               >
-                Actualiser
+                {t(
+                  "calories.form.buttons.refresh",
+                  "Actualiser"
+                )}
               </a>
             </div>
           </form>
@@ -187,23 +301,86 @@ export default async function Page({
               gap: 8,
             }}
           >
-            <h3 style={{ margin: 0, fontSize: 16, color: "#111827" }}>Historique (14 jours)</h3>
-            <span className="text-sm" style={{ color: "#6b7280", fontSize: 14 }}>
-              (cliquer pour afficher/masquer)
+            <h3
+              style={{ margin: 0, fontSize: 16, color: "#111827" }}
+            >
+              {t(
+                "calories.history.title",
+                "Historique (14 jours)"
+              )}
+            </h3>
+            <span
+              className="text-sm"
+              style={{ color: "#6b7280", fontSize: 14 }}
+            >
+              {t(
+                "calories.history.toggle",
+                "(cliquer pour afficher/masquer)"
+              )}
             </span>
           </summary>
 
-          <div className="text-sm" style={{ color: "#6b7280", margin: "6px 0 6px", fontSize: 14 }}>
-            Les jours sans saisie sont à 0 kcal.
+          <div
+            className="text-sm"
+            style={{
+              color: "#6b7280",
+              margin: "6px 0 6px",
+              fontSize: 14,
+            }}
+          >
+            {t(
+              "calories.history.helper",
+              "Les jours sans saisie sont à 0 kcal."
+            )}
           </div>
 
-          <div className="table-wrapper" style={{ overflowX: "auto" }}>
-            <table className="table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+          <div
+            className="table-wrapper"
+            style={{ overflowX: "auto" }}
+          >
+            <table
+              className="table"
+              style={{
+                width: "100%",
+                borderCollapse: "collapse",
+                fontSize: 14,
+              }}
+            >
               <thead>
                 <tr>
-                  <th style={{ textAlign: "left", padding: "6px 8px" }}>Date</th>
-                  <th style={{ textAlign: "right", padding: "6px 8px" }}>kcal</th>
-                  <th style={{ textAlign: "left", padding: "6px 8px" }}>Note</th>
+                  <th
+                    style={{
+                      textAlign: "left",
+                      padding: "6px 8px",
+                    }}
+                  >
+                    {t(
+                      "calories.history.headers.date",
+                      "Date"
+                    )}
+                  </th>
+                  <th
+                    style={{
+                      textAlign: "right",
+                      padding: "6px 8px",
+                    }}
+                  >
+                    {t(
+                      "calories.history.headers.kcal",
+                      "kcal"
+                    )}
+                  </th>
+                  <th
+                    style={{
+                      textAlign: "left",
+                      padding: "6px 8px",
+                    }}
+                  >
+                    {t(
+                      "calories.history.headers.note",
+                      "Note"
+                    )}
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -216,7 +393,13 @@ export default async function Page({
                         day: "2-digit",
                         month: "2-digit",
                       }).format(new Date(d.date))}
-                      <span style={{ color: "#6b7280", marginLeft: 6, fontSize: 12 }}>
+                      <span
+                        style={{
+                          color: "#6b7280",
+                          marginLeft: 6,
+                          fontSize: 12,
+                        }}
+                      >
                         ({d.date})
                       </span>
                     </td>
@@ -229,8 +412,15 @@ export default async function Page({
                     >
                       {d.kcal.toLocaleString("fr-FR")}
                     </td>
-                    <td style={{ padding: "6px 8px", color: "#374151" }}>
-                      {d.note || <span style={{ color: "#9ca3af" }}>—</span>}
+                    <td
+                      style={{
+                        padding: "6px 8px",
+                        color: "#374151",
+                      }}
+                    >
+                      {d.note || (
+                        <span style={{ color: "#9ca3af" }}>—</span>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -242,4 +432,3 @@ export default async function Page({
     </div>
   );
 }
-
