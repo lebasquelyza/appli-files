@@ -1,3 +1,4 @@
+//apps/web/app/dashboard/motivation/page.tsx
 "use client";
 
 import { useSession } from "next-auth/react";
