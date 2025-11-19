@@ -458,7 +458,89 @@ export const translations = {
           },
           empty: "Aucune séance disponible pour le moment.",
         },
+      },    music: {
+      pageTitle: "Musique",
+      pageSubtitle: "Minuteur simple + Tabata + lecteur Spotify + titres likés.",
+
+      loading: {
+        subtitle: "Chargement…",
       },
+
+      simpleTimer: {
+        title: "Minuteur simple",
+        minutesLabel: "Minutes",
+        secondsLabel: "Secondes",
+        start: "Démarrer",
+        pause: "Pause",
+        resume: "Reprendre",
+        reset: "Réinitialiser",
+      },
+
+      tabata: {
+        cardTitle: "Timer",
+        jumpToTabata: "Tabata",
+
+        roundsLabel: "Rounds",
+        workSecondsLabel: "Travail (s)",
+        restSecondsLabel: "Repos (s)",
+
+        presetTabata: "Tabata 8× 20/10",
+        preset4515: "10× 45/15",
+        preset3030: "6× 30/30",
+
+        stateWork: "Travail",
+        stateRest: "Repos",
+        stateDone: "Terminé",
+        stateIdle: "Prêt",
+
+        start: "Démarrer",
+        pause: "Pause",
+        resume: "Reprendre",
+        reset: "Réinitialiser",
+      },
+
+      spotifyAuth: {
+        connectButton: "Se connecter à Spotify",
+        disconnectButton: "⏻ Se déconnecter",
+        disconnectTitle: "Se déconnecter",
+        connectGeneric: "Se connecter",
+      },
+
+      spotifyPlayer: {
+        title: "Lecteur Spotify",
+        connectedDescription: "Contrôle du lecteur connecté à ton compte.",
+        disconnectedDescription: "Connecte-toi pour utiliser le lecteur Spotify.",
+        connectButton: "Se connecter",
+      },
+
+      spotifyLibrary: {
+        connectHint:
+          "Connecte-toi à Spotify pour voir tes titres likés et rechercher une musique.",
+
+        errors: {
+          likedFetch: "Impossible de récupérer les titres likés",
+          playerNotReady: "Player Spotify non prêt. Lance le lecteur d’abord.",
+          playFailed: "Impossible de lancer la lecture",
+          searchFailed: "Erreur de recherche",
+        },
+
+        liked: {
+          title: "Titres likés",
+          loading: "Chargement…",
+          empty: "Aucun titre liké trouvé.",
+        },
+
+        search: {
+          title: "Rechercher une musique",
+          placeholder: "Nom du titre, artiste…",
+          submit: "Rechercher",
+          loading: "Recherche en cours…",
+        },
+
+        playButton: "Lire",
+      },
+    },
+
     },
   },
   en: {
@@ -947,7 +1029,91 @@ export const translations = {
           },
           empty: "No sessions available for now.",
         },
+      },    music: {
+      pageTitle: "Music",
+      pageSubtitle: "Simple timer + Tabata + Spotify player + liked tracks.",
+
+      loading: {
+        subtitle: "Loading...",
       },
+
+      simpleTimer: {
+        title: "Simple timer",
+        minutesLabel: "Minutes",
+        secondsLabel: "Seconds",
+        start: "Start",
+        pause: "Pause",
+        resume: "Resume",
+        reset: "Reset",
+      },
+
+      tabata: {
+        cardTitle: "Timer",
+        jumpToTabata: "Tabata",
+
+        roundsLabel: "Rounds",
+        workSecondsLabel: "Work (s)",
+        restSecondsLabel: "Rest (s)",
+
+        presetTabata: "Tabata 8× 20/10",
+        preset4515: "10× 45/15",
+        preset3030: "6× 30/30",
+
+        stateWork: "Work",
+        stateRest: "Rest",
+        stateDone: "Done",
+        stateIdle: "Ready",
+
+        start: "Start",
+        pause: "Pause",
+        resume: "Resume",
+        reset: "Reset",
+      },
+
+      spotifyAuth: {
+        connectButton: "Sign in with Spotify",
+        disconnectButton: "⏻ Log out",
+        disconnectTitle: "Log out",
+        connectGeneric: "Sign in",
+      },
+
+      spotifyPlayer: {
+        title: "Spotify player",
+        connectedDescription: "Control the player connected to your account.",
+        disconnectedDescription: "Sign in to use the Spotify player.",
+        connectButton: "Sign in",
+      },
+
+      spotifyLibrary: {
+        connectHint:
+          "Sign in to Spotify to see your liked tracks and search for music.",
+
+        errors: {
+          likedFetch: "Unable to fetch liked tracks",
+          playerNotReady: "Spotify player not ready. Start the player first.",
+          playFailed: "Unable to start playback",
+          searchFailed: "Search error",
+        },
+
+        liked: {
+          title: "Liked tracks",
+          loading: "Loading...",
+          empty: "No liked tracks found.",
+        },
+
+        search: {
+          title: "Search a track",
+          placeholder: "Track name, artist…",
+          submit: "Search",
+          loading: "Searching…",
+        },
+
+        playButton: "Play",
+      },
+    },
+
+
+      
     },
   },
 } as const;
