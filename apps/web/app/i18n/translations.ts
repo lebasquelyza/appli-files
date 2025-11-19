@@ -645,7 +645,90 @@ export const translations = {
             "Bloque 10 minutes rien que pour toi maintenant. Ton corps et ta tête te diront merci.",
         },
       },
+    },// Dans translations.fr
+videoCoach: {
+  page: {
+    title: "Import / Enregistrement",
+    subtitle: "Filme ou importe ta vidéo, ajoute ton ressenti puis lance l’analyse IA.",
+  },
+
+  status: {
+    done: "Analyse terminée — confirme l’exercice",
+  },
+
+  error: {
+    prefix: "Erreur pendant l'analyse",
+    label: "Erreur",
+  },
+
+  common: {
+    reset: "Réinitialiser",
+    unknown: "inconnu",
+  },
+
+  card: {
+    import: {
+      title: "🎥 Import / Enregistrement",
+      tabRecord: "Filmer",
+      tabUpload: "Importer",
+      fileLabel: "Fichier téléchargé",
+      fileName: "🎞️ Vidéo importée",
     },
+
+    feeling: {
+      title: "🎙️ Ton ressenti",
+      label: "Comment tu te sens ?",
+      placeholder: "Explique douleurs, fatigue, où tu as senti l'effort, RPE, etc.",
+      btnAnalyzing: "Analyse en cours",
+      btnCooldown: "Patiente ",
+      btnLaunch: "Lancer l'analyse IA",
+    },
+
+    summary: {
+      title: "🧠 Résumé IA",
+      empty: "Importe une vidéo puis lance l’analyse pour obtenir le résumé ici.",
+      gate: {
+        propose: "L’IA propose",
+        confirm: "Confirmer",
+        other: "Autre",
+      },
+      override: {
+        label: "Quel exercice fais-tu ?",
+        placeholder: "ex. Tractions, Fentes bulgares, Soulevé de terre…",
+        reanalyze: "Ré-analyser",
+        help: "L’IA tiendra compte de ce nom pour corriger plus précisément.",
+      },
+      exerciseLabel: "Exercice",
+      musclesTitle: "Muscles principalement sollicités",
+      muscleBtnTitle: "Voir l’emplacement",
+      musclesEmpty: "— non détecté —",
+      issuesLabel: "Erreur détectée",
+      correctionsLabel: "Corrections",
+      extrasSummary: "Points complémentaires",
+    },
+  },
+
+  upload: {
+    import: "📥 Importer",
+    gallery: "📸 Galerie",
+    files: "🗂️ Fichiers",
+  },
+
+  videoRecorder: {
+    error: {
+      camera: "Impossible d'accéder à la caméra/micro. Vérifie les permissions.",
+    },
+    overlay: "Prépare ta caméra puis clique « Démarrer »",
+    start: "▶️ Démarrer",
+    stop: "⏸️ Arrêter",
+  },
+
+  muscleViewer: {
+    close: "Fermer",
+    subtitle: "Silhouette simplifiée — aucune zone cliquable, seules les zones sélectionnées sont mises en surbrillance.",
+  },
+},
+
 
 
       
@@ -1325,7 +1408,90 @@ export const translations = {
             "Block 10 minutes just for yourself now. Your body and mind will thank you.",
         },
       },
+    },// Dans translations.en
+videoCoach: {
+  page: {
+    title: "Import / Recording",
+    subtitle: "Record or import your video, add your feedback, then launch the AI analysis.",
+  },
+
+  status: {
+    done: "Analysis done — confirm the exercise",
+  },
+
+  error: {
+    prefix: "Error during analysis",
+    label: "Error",
+  },
+
+  common: {
+    reset: "Reset",
+    unknown: "unknown",
+  },
+
+  card: {
+    import: {
+      title: "🎥 Import / Recording",
+      tabRecord: "Record",
+      tabUpload: "Import",
+      fileLabel: "Uploaded file",
+      fileName: "🎞️ Video imported",
     },
+
+    feeling: {
+      title: "🎙️ Your feedback",
+      label: "How do you feel?",
+      placeholder: "Explain pain, fatigue, where you felt the effort, RPE, etc.",
+      btnAnalyzing: "Analyzing…",
+      btnCooldown: "Please wait ",
+      btnLaunch: "Start AI analysis",
+    },
+
+    summary: {
+      title: "🧠 AI Summary",
+      empty: "Import a video and run the analysis to see the summary here.",
+      gate: {
+        propose: "AI suggests",
+        confirm: "Confirm",
+        other: "Other",
+      },
+      override: {
+        label: "Which exercise are you doing?",
+        placeholder: "e.g. Pull-ups, Bulgarian split squats, Deadlift…",
+        reanalyze: "Re-analyze",
+        help: "The AI will use this name to give more precise corrections.",
+      },
+      exerciseLabel: "Exercise",
+      musclesTitle: "Main muscles targeted",
+      muscleBtnTitle: "Show location",
+      musclesEmpty: "— not detected —",
+      issuesLabel: "Detected issue",
+      correctionsLabel: "Corrections",
+      extrasSummary: "Additional points",
+    },
+  },
+
+  upload: {
+    import: "📥 Import",
+    gallery: "📸 Gallery",
+    files: "🗂️ Files",
+  },
+
+  videoRecorder: {
+    error: {
+      camera: "Unable to access camera/mic. Check your permissions.",
+    },
+    overlay: "Get your camera ready then click “Start”",
+    start: "▶️ Start",
+    stop: "⏸️ Stop",
+  },
+
+  muscleViewer: {
+    close: "Close",
+    subtitle: "Simplified silhouette — no clickable zones, only highlighted areas are shown.",
+  },
+},
+
 
 
 
