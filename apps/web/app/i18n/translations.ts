@@ -967,7 +967,24 @@ export const translations = {
         fillForm: "Remplir le formulaire en haut",
         addToCalories: "Ajouter à mes calories",
       },
-    },
+    },bmi: {
+  page: {
+    title: "IMC",
+    subtitle: "Calcule ton indice de masse corporelle",
+  },
+  section: {
+    title: "Calculatrice",
+  },
+  fields: {
+    heightLabel: "Taille (cm)",
+    weightLabel: "Poids (kg)",
+  },
+  result: {
+    normalRange: "18.5–24.9 = normal",
+  },
+  note: "N’oublie pas : l’IMC et le poids ne sont que des chiffres ;)",
+},
+
   },
 
   en: {
@@ -1965,7 +1982,24 @@ export const translations = {
       invalid: "Invalid barcode (8 to 14 digits).",
       useButton: "Use",
       tip: "Tip: hold the barcode close and avoid glare.",
-    },
+    },bmi: {
+  page: {
+    title: "BMI",
+    subtitle: "Calculate your Body Mass Index",
+  },
+  section: {
+    title: "Calculator",
+  },
+  fields: {
+    heightLabel: "Height (cm)",
+    weightLabel: "Weight (kg)",
+  },
+  result: {
+    normalRange: "18.5–24.9 = normal",
+  },
+  note: "Remember: BMI and weight are just numbers ;)",
+},
+
 
   },
 } as const;
