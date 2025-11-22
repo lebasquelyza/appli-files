@@ -1,4 +1,4 @@
-//apps/web/components/LanguageProvider.tsx
+// apps/web/components/LanguageProvider.tsx
 "use client";
 
 import React, {
@@ -29,24 +29,52 @@ function getFromPath(obj: any, path: string): string {
   return path.split(".").reduce((acc, key) => acc?.[key], obj) ?? path;
 }
 
+// 🔎 lit le cookie fc-lang côté client
+function readCookieLang(): Lang | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(/(?:^|;)\s*fc-lang=(fr|en)/);
+  const val = match?.[1];
+  return val === "en" || val === "fr" ? val : null;
+}
+
+// ✍️ écrit le cookie fc-lang côté client
+function writeCookieLang(lang: Lang) {
+  if (typeof document === "undefined") return;
+  document.cookie = [
+    `fc-lang=${lang}`,
+    "Path=/",
+    "SameSite=Lax",
+    "Max-Age=31536000", // 1 an
+  ].join("; ");
+}
+
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Lang>("fr");
 
-  // ✅ Détection AUTOMATIQUE de la langue du téléphone / navigateur
+  // ✅ Détection avec priorité au cookie, puis au téléphone/navigateur
   useEffect(() => {
     try {
+      // 1) cookie en priorité
+      const fromCookie = readCookieLang();
+      if (fromCookie) {
+        setLangState(fromCookie);
+        return;
+      }
+
+      // 2) sinon langue du navigateur
       const nav = navigator.language.toLowerCase();
-      if (nav.startsWith("en")) setLangState("en");
-      else setLangState("fr");
+      const autoLang: Lang = nav.startsWith("en") ? "en" : "fr";
+      setLangState(autoLang);
+      // on écrit aussi le cookie pour que le serveur soit aligné
+      writeCookieLang(autoLang);
     } catch {
       setLangState("fr");
     }
   }, []);
 
   const setLang = (l: Lang) => {
-    // Optionnel : si un jour tu ajoutes un bouton FR/EN
     setLangState(l);
-    // 👉 Pas de localStorage : la langue principale vient du téléphone
+    writeCookieLang(l); // 🔁 garde le serveur et le client synchronisés
   };
 
   const messages = useMemo<Messages>(() => {
@@ -76,4 +104,3 @@ export function useLanguage() {
   }
   return ctx;
 }
-
