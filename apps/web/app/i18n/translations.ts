@@ -1089,7 +1089,26 @@ export const translations = {
     real4: "Pack 4 séances réelles/mois (+140 €)",
     real8: "Pack 8 séances réelles/mois (+240 €)",
   },
+},// Dans translations.fr
+abonnementSuccess: {
+  noSession: {
+    title: "Paiement",
+    text: "Session Stripe introuvable.",
+    back: "Retour",
+  },
+  pending: {
+    title: "Paiement en cours",
+    text: "Le paiement n’est pas encore confirmé. Réessayez dans quelques instants.",
+    back: "Retour",
+  },
+  done: {
+    title: "Abonnement activé",
+    text: "Merci ! Votre accès premium est maintenant actif.",
+    totalLabel: "Total mensuel : {{amount}} €",
+    back: "Retour à l’abonnement",
+  },
 },
+
 
 
 
@@ -2212,7 +2231,26 @@ export const translations = {
     real4: "Pack of 4 in-person sessions/month (+€140)",
     real8: "Pack of 8 in-person sessions/month (+€240)",
   },
+},// Dans translations.en
+abonnementSuccess: {
+  noSession: {
+    title: "Payment",
+    text: "Stripe session not found.",
+    back: "Back",
+  },
+  pending: {
+    title: "Payment in progress",
+    text: "The payment has not been confirmed yet. Please try again in a few moments.",
+    back: "Back",
+  },
+  done: {
+    title: "Subscription activated",
+    text: "Thank you! Your premium access is now active.",
+    totalLabel: "Monthly total: {{amount}} €",
+    back: "Back to subscription",
+  },
 },
+
 
 
 
