@@ -12,8 +12,7 @@ import {
   type Profile,
 } from "../../../../lib/coach/ai";
 import SeancePageViewClient from "./SeancePageViewClient";
-import { useLanguage } from "@/components/LanguageProvider";
-const { t } = useLanguage();
+
 
 
 /* ======================== Utils ======================== */
