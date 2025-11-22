@@ -983,7 +983,28 @@ export const translations = {
     normalRange: "18.5–24.9 = normal",
   },
   note: "N’oublie pas : l’IMC et le poids ne sont que des chiffres ;)",
+},avis: {
+  page: {
+    title: "Votre avis",
+    subtitle: "Dis-nous ce que tu penses de l’app pour qu’on puisse l’améliorer 🙌",
+  },
+  status: {
+    sent: "Merci pour ton avis 🙏 On lit tous les messages avec attention.",
+    errors: {
+      empty: "Oups 😅 Merci d'écrire un petit message avant d'envoyer.",
+      server: "Une erreur est survenue côté serveur (configuration e-mail). Réessaie plus tard.",
+      send: "Impossible d'envoyer ton avis pour le moment 😕 Réessaie un peu plus tard.",
+    },
+  },
+  form: {
+    emailLabel: "Ton e-mail (si tu veux qu'on te réponde)",
+    emailPlaceholder: "ton.email@exemple.com",
+    messageLabel: "Ton message",
+    messagePlaceholder: "Dis-nous ce qui te plaît, ce qu’on peut améliorer, des idées de fonctionnalités...",
+    submit: "Envoyer mon avis",
+  },
 },
+
 
   },
 
@@ -1998,7 +2019,28 @@ export const translations = {
     normalRange: "18.5–24.9 = normal",
   },
   note: "Remember: BMI and weight are just numbers ;)",
+},avis: {
+  page: {
+    title: "Your feedback",
+    subtitle: "Tell us what you think about the app so we can improve it 🙌",
+  },
+  status: {
+    sent: "Thank you for your feedback 🙏 We read every message carefully.",
+    errors: {
+      empty: "Oops 😅 Please write a short message before sending.",
+      server: "A server error occurred (email configuration). Please try again later.",
+      send: "We couldn’t send your feedback right now 😕 Please try again later.",
+    },
+  },
+  form: {
+    emailLabel: "Your email (if you want a reply)",
+    emailPlaceholder: "your.email@example.com",
+    messageLabel: "Your message",
+    messagePlaceholder: "Tell us what you like, what we can improve, ideas for features...",
+    submit: "Send my feedback",
+  },
 },
+
 
 
   },
