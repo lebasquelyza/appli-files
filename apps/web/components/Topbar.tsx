@@ -38,46 +38,40 @@ export default function Topbar({ hideMenu = false }: { hideMenu?: boolean }) {
   return (
     <>
       <header className="site-header fixed inset-x-0 top-0 z-[1000] border-b bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 shadow-sm">
-        <div className="mx-auto max-w-screen-xl h-10 px-3 flex items-center justify-between">
-          {/* Bloc gauche : FILES-Menu + switch langue juste à côté */}
-          <div className="flex items-center gap-2">
-            {!hideMenu && (
-              <button
-                aria-label="Ouvrir/Fermer le menu"
-                onClick={() => setOpen((v) => !v)}
-                className="js-topbar-menu inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-[.99] transition"
-              >
-                <span className="relative -ml-1 inline-block h-3 w-4">
-                  <span className="absolute inset-x-0 top-0 h-[2px] bg-white" />
-                  <span className="absolute inset-x-0 top-1.5 h-[2px] bg-white" />
-                  <span className="absolute inset-x-0 bottom-0 h-[2px] bg-white" />
-                </span>
-                Menu
-              </button>
-            )}
+        <div className="mx-auto max-w-screen-xl h-10 px-3 flex items-center gap-3">
+          {/* FILES-Menu */}
+          {!hideMenu && (
+            <button
+              aria-label="Ouvrir/Fermer le menu"
+              onClick={() => setOpen((v) => !v)}
+              className="js-topbar-menu inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-[.99] transition"
+            >
+              <span className="relative -ml-1 inline-block h-3 w-4">
+                <span className="absolute inset-x-0 top-0 h-[2px] bg-white" />
+                <span className="absolute inset-x-0 top-1.5 h-[2px] bg-white" />
+                <span className="absolute inset-x-0 bottom-0 h-[2px] bg-white" />
+              </span>
+              FILES-Menu
+            </button>
+          )}
 
-            {/* Boutons FR / EN juste à côté du bouton Menu */}
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => changeLang("fr")}
-                className="px-2 py-0.5 rounded-full text-[11px] border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
-              >
-                FR
-              </button>
-              <button
-                type="button"
-                onClick={() => changeLang("en")}
-                className="px-2 py-0.5 rounded-full text-[11px] border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
-              >
-                EN
-              </button>
-            </div>
+          {/* 🔤 Boutons FR / EN juste à côté */}
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => changeLang("fr")}
+              className="px-3 py-1 rounded-full text-xs border border-emerald-600 bg-emerald-600 text-white"
+            >
+              🇫🇷 FR
+            </button>
+            <button
+              type="button"
+              onClick={() => changeLang("en")}
+              className="px-3 py-1 rounded-full text-xs border border-gray-300 bg-white text-gray-900"
+            >
+              🇬🇧 EN
+            </button>
           </div>
-
-          {/* centre et droite inchangés (vide) */}
-          <div />
-          <div className="w-[42px]" />
         </div>
       </header>
 
