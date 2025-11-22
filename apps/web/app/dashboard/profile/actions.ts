@@ -3,7 +3,7 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { useLanguage } from "@/components/LanguageProvider";
+
 
 type WorkoutType = "muscu" | "cardio" | "hiit" | "mobilité";
 
