@@ -2,13 +2,11 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { useLanguage } from "@/components/LanguageProvider";
 
 export default function Topbar({ hideMenu = false }: { hideMenu?: boolean }) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
   const firstBtnRef = useRef<HTMLButtonElement | null>(null);
-  const { lang, setLang } = useLanguage();
 
   const go = (href: string) => {
     setOpen(false);
@@ -22,54 +20,64 @@ export default function Topbar({ hideMenu = false }: { hideMenu?: boolean }) {
     }
   }, [open]);
 
+  // change la langue via cookie + reload
+  const changeLang = (lang: "fr" | "en") => {
+    try {
+      document.cookie = [
+        `fc-lang=${lang}`,
+        "Path=/",
+        "SameSite=Lax",
+        "Max-Age=31536000", // 1 an
+      ].join("; ");
+      window.location.reload();
+    } catch {
+      // au pire, rien
+    }
+  };
+
   return (
     <>
       <header className="site-header fixed inset-x-0 top-0 z-[1000] border-b bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 shadow-sm">
         <div className="mx-auto max-w-screen-xl h-10 px-3 flex items-center justify-between">
-          {/* Bouton menu à gauche */}
-          {!hideMenu && (
-            <button
-              aria-label="Ouvrir/Fermer le menu"
-              onClick={() => setOpen((v) => !v)}
-              className="js-topbar-menu inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-[.99] transition"
-            >
-              <span className="relative -ml-1 inline-block h-3 w-4">
-                <span className="absolute inset-x-0 top-0 h-[2px] bg-white" />
-                <span className="absolute inset-x-0 top-1.5 h-[2px] bg-white" />
-                <span className="absolute inset-x-0 bottom-0 h-[2px] bg-white" />
-              </span>
-              Menu
-            </button>
-          )}
+          {/* Bloc gauche : FILES-Menu + switch langue juste à côté */}
+          <div className="flex items-center gap-2">
+            {!hideMenu && (
+              <button
+                aria-label="Ouvrir/Fermer le menu"
+                onClick={() => setOpen((v) => !v)}
+                className="js-topbar-menu inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-[.99] transition"
+              >
+                <span className="relative -ml-1 inline-block h-3 w-4">
+                  <span className="absolute inset-x-0 top-0 h-[2px] bg-white" />
+                  <span className="absolute inset-x-0 top-1.5 h-[2px] bg-white" />
+                  <span className="absolute inset-x-0 bottom-0 h-[2px] bg-white" />
+                </span>
+                Menu
+              </button>
+            )}
 
-          {/* centre (vide pour l’instant, tu peux mettre ton logo ici plus tard) */}
-          <div />
-
-          {/* Switch langue à droite */}
-          <div className="flex items-center justify-end gap-1 min-w-[72px]">
-            <button
-              type="button"
-              onClick={() => setLang("fr")}
-              className={`rounded-full px-2 py-0.5 text-xs border transition ${
-                lang === "fr"
-                  ? "bg-emerald-600 text-white border-emerald-600"
-                  : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
-              }`}
-            >
-              FR
-            </button>
-            <button
-              type="button"
-              onClick={() => setLang("en")}
-              className={`rounded-full px-2 py-0.5 text-xs border transition ${
-                lang === "en"
-                  ? "bg-emerald-600 text-white border-emerald-600"
-                  : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
-              }`}
-            >
-              EN
-            </button>
+            {/* Boutons FR / EN juste à côté du bouton Menu */}
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => changeLang("fr")}
+                className="px-2 py-0.5 rounded-full text-[11px] border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+              >
+                FR
+              </button>
+              <button
+                type="button"
+                onClick={() => changeLang("en")}
+                className="px-2 py-0.5 rounded-full text-[11px] border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+              >
+                EN
+              </button>
+            </div>
           </div>
+
+          {/* centre et droite inchangés (vide) */}
+          <div />
+          <div className="w-[42px]" />
         </div>
       </header>
 
