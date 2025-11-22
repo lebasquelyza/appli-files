@@ -1,3 +1,4 @@
+//apps/web/app/dashboard/progress/page.tsx
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { useLanguage } from "@/components/LanguageProvider";
