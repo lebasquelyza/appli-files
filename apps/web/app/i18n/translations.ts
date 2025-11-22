@@ -1003,7 +1003,94 @@ export const translations = {
     messagePlaceholder: "Dis-nous ce qui te plaît, ce qu’on peut améliorer, des idées de fonctionnalités...",
     submit: "Envoyer mon avis",
   },
+},abonnement: {
+  page: {
+    title: "Abonnements",
+    headerTitle: "Abonnement & Tarifs",
+    headerDescription:
+      "Choisissez la formule qui vous convient et activez Coaching+ si besoin.\nLes changements s’appliquent immédiatement dans l’app (démo : sans paiement réel).",
+    currentPlanLabel: "Plan actuel",
+  },
+
+  alerts: {
+    success: "✅ Mise à jour enregistrée.",
+    errorPrefix: "⚠️ Erreur :",
+  },
+
+  current: {
+    sectionTitle: "Votre abonnement",
+    activeBadge: "Plan actif",
+    nextPayment: "Prochain prélèvement :",
+    expiresAt: "Expiration :",
+    coachingOption: "Option Coaching+ :",
+    monthlyTotal: "Total mensuel :",
+  },
+
+  explainer: {
+    title: "Ce que vous obtenez",
+    items: {
+      basic: "Basic : Recettes healthy + minuteur d’exercices.",
+      plus: "Plus : IA recettes personnalisées (calories, allergènes), historique & favoris.",
+      premium: "Premium : Plans hebdo IA + correction vidéo + support prioritaire.",
+      coaching: "Coaching+ : Visio/séances réelles en supplément au mois.",
+    },
+  },
+
+  plans: {
+    sectionTitle: "Formules",
+    badges: {
+      recommended: "Recommandé",
+      active: "Actif",
+    },
+    coachingOptionLabel: "Option Coaching+",
+    totalIndicative: "Total indicatif :",
+    buttons: {
+      update: "Mettre à jour",
+      chooseBasic: "Choisir Basic",
+      choosePlus: "Choisir Plus",
+      choosePremium: "Choisir Premium",
+    },
+  },
+
+  cards: {
+    BASIC: {
+      title: "Basic",
+      tagline: "Recettes + Minuteur",
+      features: [
+        "Recettes générales",
+        "Minuteur d’exercices",
+        "Support par email",
+      ],
+    },
+    PLUS: {
+      title: "Plus",
+      tagline: "Basic + Personnalisation",
+      features: [
+        "Recettes personnalisées (IA)",
+        "Filtres avancés (allergènes, régimes)",
+        "Historique & favoris",
+      ],
+    },
+    PREMIUM: {
+      title: "Premium",
+      tagline: "Plus + IA correction",
+      features: [
+        "Plans repas hebdo IA",
+        "Correction vidéo des exercices",
+        "Priorité support",
+      ],
+    },
+  },
+
+  coachingPlusOptions: {
+    none: "Sans option Coaching+",
+    visio1: "1 visio/mois avec coach (+20 €)",
+    real1: "1 séance réelle/mois (+40 €)",
+    real4: "Pack 4 séances réelles/mois (+140 €)",
+    real8: "Pack 8 séances réelles/mois (+240 €)",
+  },
 },
+
 
 
   },
@@ -2039,7 +2126,94 @@ export const translations = {
     messagePlaceholder: "Tell us what you like, what we can improve, ideas for features...",
     submit: "Send my feedback",
   },
+},abonnement: {
+  page: {
+    title: "Subscriptions",
+    headerTitle: "Subscription & Pricing",
+    headerDescription:
+      "Choose the plan that fits you and enable Coaching+ if needed.\nChanges apply immediately in the app (demo: no real payment).",
+    currentPlanLabel: "Current plan",
+  },
+
+  alerts: {
+    success: "✅ Update saved.",
+    errorPrefix: "⚠️ Error:",
+  },
+
+  current: {
+    sectionTitle: "Your subscription",
+    activeBadge: "Active plan",
+    nextPayment: "Next payment:",
+    expiresAt: "Expiration:",
+    coachingOption: "Coaching+ option:",
+    monthlyTotal: "Monthly total:",
+  },
+
+  explainer: {
+    title: "What you get",
+    items: {
+      basic: "Basic: Healthy recipes + exercise timer.",
+      plus: "Plus: AI-personalised recipes (calories, allergens), history & favourites.",
+      premium: "Premium: Weekly AI meal plans + video form check + priority support.",
+      coaching: "Coaching+: Video calls / real-life sessions as a monthly add-on.",
+    },
+  },
+
+  plans: {
+    sectionTitle: "Plans",
+    badges: {
+      recommended: "Recommended",
+      active: "Active",
+    },
+    coachingOptionLabel: "Coaching+ option",
+    totalIndicative: "Indicative total:",
+    buttons: {
+      update: "Update",
+      chooseBasic: "Choose Basic",
+      choosePlus: "Choose Plus",
+      choosePremium: "Choose Premium",
+    },
+  },
+
+  cards: {
+    BASIC: {
+      title: "Basic",
+      tagline: "Recipes + Timer",
+      features: [
+        "General recipes",
+        "Exercise timer",
+        "Email support",
+      ],
+    },
+    PLUS: {
+      title: "Plus",
+      tagline: "Basic + Personalisation",
+      features: [
+        "AI-personalised recipes",
+        "Advanced filters (allergens, diets)",
+        "History & favourites",
+      ],
+    },
+    PREMIUM: {
+      title: "Premium",
+      tagline: "Plus + AI form check",
+      features: [
+        "Weekly AI meal plans",
+        "Video exercise form correction",
+        "Priority support",
+      ],
+    },
+  },
+
+  coachingPlusOptions: {
+    none: "Without Coaching+ add-on",
+    visio1: "1 video call/month with coach (+€20)",
+    real1: "1 in-person session/month (+€40)",
+    real4: "Pack of 4 in-person sessions/month (+€140)",
+    real8: "Pack of 8 in-person sessions/month (+€240)",
+  },
 },
+
 
 
 
