@@ -1,7 +1,8 @@
+// apps/web/app/dashboard/recipes/page.tsx
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { AIExtraSection } from "./AISection";
-import { useLanguage } from "@/components/LanguageProvider";
+import { translations } from "@/app/i18n/translations";
 
 /* ===================== Config Next ===================== */
 export const runtime = "nodejs";
@@ -422,7 +423,7 @@ export default async function Page({
   };
 }) {
   const lang = getLang();
-  const t = (path: string, fallback: string) => tServer(lang, path, fallback);
+  const t = (path: string, fallback?: string) => tServer(lang, path, fallback);
 
   const kcal = Number(searchParams?.kcal ?? "");
   const kcalMin = Number(searchParams?.kcalMin ?? "");
@@ -988,7 +989,7 @@ function Card({
   detailQS: string;
   isSaved: boolean;
   currentUrl: string;
-  t: (path: string, fallback: string) => string;
+  t: (path: string, fallback?: string) => string;
 }) {
   const href = `/dashboard/recipes/${r.id}${detailQS}`;
 
