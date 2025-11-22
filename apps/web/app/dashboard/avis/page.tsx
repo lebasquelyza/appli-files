@@ -1,6 +1,5 @@
 // apps/web/app/dashboard/avis/page.tsx
 import { redirect } from "next/navigation";
-import { useTranslation } from "@/app/i18n/client";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,39 +40,44 @@ async function sendFeedback(formData: FormData) {
       </p>
     `;
 
-  const resp = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from: "Files Coaching <no-reply@appli.files-coaching.com>",
-      to: "sportifandpro@gmail.com",
-      subject: "Nouvel avis utilisateur",
-      html: `
-        <div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto">
-          <h2 style="color:#111">Nouvel avis utilisateur</h2>
-          <p>Un utilisateur a envoyé un avis depuis l'app Files Coaching :</p>
+  try {
+    const resp = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: "Files Coaching <no-reply@appli.files-coaching.com>",
+        to: "sportifandpro@gmail.com",
+        subject: "Nouvel avis utilisateur",
+        html: `
+          <div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto">
+            <h2 style="color:#111">Nouvel avis utilisateur</h2>
+            <p>Un utilisateur a envoyé un avis depuis l'app Files Coaching :</p>
 
-          ${emailBlock}
+            ${emailBlock}
 
-          <div style="margin:16px 0;padding:12px 14px;border-radius:8px;background:#f3f4f6;white-space:pre-wrap;">
-            ${safeMessage}
+            <div style="margin:16px 0;padding:12px 14px;border-radius:8px;background:#f3f4f6;white-space:pre-wrap;">
+              ${safeMessage}
+            </div>
+
+            <hr style="border:none;border-top:1px solid #eee;margin:18px 0"/>
+            <p style="font-size:12px;color:#888">
+              Cet e-mail a été généré automatiquement par la page &laquo; Votre avis &raquo;.
+            </p>
           </div>
+        `.trim(),
+      }),
+    });
 
-          <hr style="border:none;border-top:1px solid #eee;margin:18px 0"/>
-          <p style="font-size:12px;color:#888">
-            Cet e-mail a été généré automatiquement par la page &laquo; Votre avis &raquo;.
-          </p>
-        </div>
-      `.trim(),
-    }),
-  });
-
-  if (!resp.ok) {
-    const txt = await resp.text().catch(() => "");
-    console.error("[avis] Resend API error:", resp.status, txt);
+    if (!resp.ok) {
+      const txt = await resp.text().catch(() => "");
+      console.error("[avis] Resend API error:", resp.status, txt);
+      redirect("/dashboard/avis?error=send");
+    }
+  } catch (e) {
+    console.error("[avis] fetch vers Resend a échoué:", e);
     redirect("/dashboard/avis?error=send");
   }
 
@@ -85,8 +89,6 @@ export default function Page({
 }: {
   searchParams?: { sent?: string; error?: string };
 }) {
-  const { t } = useTranslation();
-
   const sent = searchParams?.sent === "1";
   const error = searchParams?.error;
 
@@ -95,11 +97,9 @@ export default function Page({
       {/* En-tête */}
       <div className="page-header">
         <div>
-          <h1 className="h1" style={{ fontSize: 22 }}>
-            {t("avis.page.title")}
-          </h1>
+          <h1 className="h1" style={{ fontSize: 22 }}>Votre avis</h1>
           <p className="lead" style={{ fontSize: 13, marginTop: 4 }}>
-            {t("avis.page.subtitle")}
+            Dis-nous ce que tu penses de l’app pour qu’on puisse l’améliorer 🙌
           </p>
         </div>
       </div>
@@ -115,7 +115,7 @@ export default function Page({
             fontWeight: 600,
           }}
         >
-          {t("avis.status.sent")}
+          Merci pour ton avis 🙏 On lit tous les messages avec attention.
         </div>
       )}
 
@@ -129,7 +129,7 @@ export default function Page({
             fontWeight: 600,
           }}
         >
-          {t("avis.status.errors.empty")}
+          Oups 😅 Merci d&apos;écrire un petit message avant d&apos;envoyer.
         </div>
       )}
 
@@ -143,7 +143,7 @@ export default function Page({
             fontWeight: 600,
           }}
         >
-          {t("avis.status.errors.server")}
+          Une erreur est survenue côté serveur (configuration e-mail). Réessaie plus tard.
         </div>
       )}
 
@@ -157,7 +157,7 @@ export default function Page({
             fontWeight: 600,
           }}
         >
-          {t("avis.status.errors.send")}
+          Impossible d&apos;envoyer ton avis pour le moment 😕 Réessaie un peu plus tard.
         </div>
       )}
 
@@ -169,13 +169,9 @@ export default function Page({
             <label
               htmlFor="email"
               className="label"
-              style={{
-                display: "block",
-                fontWeight: 700,
-                marginBottom: 6,
-              }}
+              style={{ display: "block", fontWeight: 700, marginBottom: 6 }}
             >
-              {t("avis.form.emailLabel")}
+              Ton e-mail (si tu veux qu&apos;on te réponde)
             </label>
             <input
               id="email"
@@ -183,20 +179,16 @@ export default function Page({
               type="email"
               className="input"
               style={{ width: "100%", marginBottom: 12 }}
-              placeholder={t("avis.form.emailPlaceholder")}
+              placeholder="ton.email@exemple.com"
             />
 
             {/* Champ message */}
             <label
               htmlFor="feedback"
               className="label"
-              style={{
-                display: "block",
-                fontWeight: 700,
-                marginBottom: 6,
-              }}
+              style={{ display: "block", fontWeight: 700, marginBottom: 6 }}
             >
-              {t("avis.form.messageLabel")}
+              Ton message
             </label>
 
             <textarea
@@ -205,7 +197,7 @@ export default function Page({
               rows={6}
               className="input"
               style={{ width: "100%", resize: "vertical" }}
-              placeholder={t("avis.form.messagePlaceholder")}
+              placeholder="Dis-nous ce qui te plaît, ce qu’on peut améliorer, des idées de fonctionnalités..."
             />
 
             <button
@@ -213,7 +205,7 @@ export default function Page({
               className="btn btn-dash"
               style={{ marginTop: 12, fontWeight: 700 }}
             >
-              {t("avis.form.submit")}
+              Envoyer mon avis
             </button>
           </form>
         </div>
