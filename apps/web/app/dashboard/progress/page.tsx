@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { translations } from "@/app/i18n/translations";
+import { useLanguage } from "@/components/LanguageProvider";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
