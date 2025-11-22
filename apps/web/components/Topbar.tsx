@@ -2,11 +2,13 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { useLanguage } from "@/components/LanguageProvider";
 
 export default function Topbar({ hideMenu = false }: { hideMenu?: boolean }) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
   const firstBtnRef = useRef<HTMLButtonElement | null>(null);
+  const { lang, setLang } = useLanguage();
 
   const go = (href: string) => {
     setOpen(false);
@@ -24,6 +26,7 @@ export default function Topbar({ hideMenu = false }: { hideMenu?: boolean }) {
     <>
       <header className="site-header fixed inset-x-0 top-0 z-[1000] border-b bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 shadow-sm">
         <div className="mx-auto max-w-screen-xl h-10 px-3 flex items-center justify-between">
+          {/* Bouton menu à gauche */}
           {!hideMenu && (
             <button
               aria-label="Ouvrir/Fermer le menu"
@@ -38,14 +41,45 @@ export default function Topbar({ hideMenu = false }: { hideMenu?: boolean }) {
               Menu
             </button>
           )}
+
+          {/* centre (vide pour l’instant, tu peux mettre ton logo ici plus tard) */}
           <div />
-          <div className="w-[42px]" />
+
+          {/* Switch langue à droite */}
+          <div className="flex items-center justify-end gap-1 min-w-[72px]">
+            <button
+              type="button"
+              onClick={() => setLang("fr")}
+              className={`rounded-full px-2 py-0.5 text-xs border transition ${
+                lang === "fr"
+                  ? "bg-emerald-600 text-white border-emerald-600"
+                  : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+              }`}
+            >
+              FR
+            </button>
+            <button
+              type="button"
+              onClick={() => setLang("en")}
+              className={`rounded-full px-2 py-0.5 text-xs border transition ${
+                lang === "en"
+                  ? "bg-emerald-600 text-white border-emerald-600"
+                  : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+              }`}
+            >
+              EN
+            </button>
+          </div>
         </div>
       </header>
 
       {!hideMenu && open && (
         <div className="fixed inset-0 z-[1100]" role="dialog" aria-modal="true">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setOpen(false)} aria-hidden="true" />
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setOpen(false)}
+            aria-hidden="true"
+          />
           <div className="absolute inset-0 bg-white flex flex-col">
             <div className="h-10" />
             <nav className="max-w-screen-md mx-auto w-full p-2 pt-[calc(env(safe-area-inset-top)+2px)]">
@@ -79,5 +113,3 @@ export default function Topbar({ hideMenu = false }: { hideMenu?: boolean }) {
     </>
   );
 }
-
-
