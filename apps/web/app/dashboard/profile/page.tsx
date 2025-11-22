@@ -12,7 +12,7 @@ import {
 
 import { planProgrammeFromEmail } from "../../../lib/coach/beton";
 import GenerateClient from "./GenerateClient";
-import { translations } from "@/components/LanguageProvider";
+import { translations } from "@/lib/i18n";
 
 const QUESTIONNAIRE_BASE =
   process.env.FILES_COACHING_QUESTIONNAIRE_BASE || "https://questionnaire.files-coaching.com";
