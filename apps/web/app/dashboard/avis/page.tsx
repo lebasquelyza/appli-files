@@ -1,5 +1,6 @@
 // apps/web/app/dashboard/avis/page.tsx
 import { redirect } from "next/navigation";
+import { useTranslation } from "@/app/i18n/client";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -84,6 +85,8 @@ export default function Page({
 }: {
   searchParams?: { sent?: string; error?: string };
 }) {
+  const { t } = useTranslation();
+
   const sent = searchParams?.sent === "1";
   const error = searchParams?.error;
 
@@ -92,9 +95,11 @@ export default function Page({
       {/* En-tête */}
       <div className="page-header">
         <div>
-          <h1 className="h1" style={{ fontSize: 22 }}>Votre avis</h1>
+          <h1 className="h1" style={{ fontSize: 22 }}>
+            {t("avis.page.title")}
+          </h1>
           <p className="lead" style={{ fontSize: 13, marginTop: 4 }}>
-            Dis-nous ce que tu penses de l’app pour qu’on puisse l’améliorer 🙌
+            {t("avis.page.subtitle")}
           </p>
         </div>
       </div>
@@ -110,7 +115,7 @@ export default function Page({
             fontWeight: 600,
           }}
         >
-          Merci pour ton avis 🙏 On lit tous les messages avec attention.
+          {t("avis.status.sent")}
         </div>
       )}
 
@@ -124,7 +129,7 @@ export default function Page({
             fontWeight: 600,
           }}
         >
-          Oups 😅 Merci d&apos;écrire un petit message avant d&apos;envoyer.
+          {t("avis.status.errors.empty")}
         </div>
       )}
 
@@ -138,7 +143,7 @@ export default function Page({
             fontWeight: 600,
           }}
         >
-          Une erreur est survenue côté serveur (configuration e-mail). Réessaie plus tard.
+          {t("avis.status.errors.server")}
         </div>
       )}
 
@@ -152,7 +157,7 @@ export default function Page({
             fontWeight: 600,
           }}
         >
-          Impossible d&apos;envoyer ton avis pour le moment 😕 Réessaie un peu plus tard.
+          {t("avis.status.errors.send")}
         </div>
       )}
 
@@ -164,9 +169,13 @@ export default function Page({
             <label
               htmlFor="email"
               className="label"
-              style={{ display: "block", fontWeight: 700, marginBottom: 6 }}
+              style={{
+                display: "block",
+                fontWeight: 700,
+                marginBottom: 6,
+              }}
             >
-              Ton e-mail (si tu veux qu&apos;on te réponde)
+              {t("avis.form.emailLabel")}
             </label>
             <input
               id="email"
@@ -174,16 +183,20 @@ export default function Page({
               type="email"
               className="input"
               style={{ width: "100%", marginBottom: 12 }}
-              placeholder="ton.email@exemple.com"
+              placeholder={t("avis.form.emailPlaceholder")}
             />
 
             {/* Champ message */}
             <label
               htmlFor="feedback"
               className="label"
-              style={{ display: "block", fontWeight: 700, marginBottom: 6 }}
+              style={{
+                display: "block",
+                fontWeight: 700,
+                marginBottom: 6,
+              }}
             >
-              Ton message
+              {t("avis.form.messageLabel")}
             </label>
 
             <textarea
@@ -192,7 +205,7 @@ export default function Page({
               rows={6}
               className="input"
               style={{ width: "100%", resize: "vertical" }}
-              placeholder="Dis-nous ce qui te plaît, ce qu’on peut améliorer, des idées de fonctionnalités..."
+              placeholder={t("avis.form.messagePlaceholder")}
             />
 
             <button
@@ -200,7 +213,7 @@ export default function Page({
               className="btn btn-dash"
               style={{ marginTop: 12, fontWeight: 700 }}
             >
-              Envoyer mon avis
+              {t("avis.form.submit")}
             </button>
           </form>
         </div>
