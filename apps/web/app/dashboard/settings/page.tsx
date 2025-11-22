@@ -5,7 +5,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Section } from "@/components/ui/Page";
 import { getSupabase } from "@/lib/supabaseClient";
 import { useLanguage } from "@/components/LanguageProvider";
-const { t } = useLanguage();
+
 
 
 /* ======================= Police responsive ======================= */
