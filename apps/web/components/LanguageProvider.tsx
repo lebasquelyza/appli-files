@@ -1,4 +1,3 @@
-//apps/web/components/LanguageProvider.tsx
 "use client";
 
 import React, {
@@ -11,9 +10,7 @@ import React, {
 } from "react";
 import { translations } from "@/app/i18n/translations";
 
-// ✅ On définit les types ici, simplement
 type Lang = "fr" | "en";
-// Tu peux mettre plus strict plus tard si tu veux
 type Messages = any;
 
 type LanguageContextType = {
@@ -34,24 +31,21 @@ function getFromPath(obj: any, path: string): string {
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Lang>("fr");
 
-  // Détection langue navigateur + localStorage
+  // ✅ Détection AUTOMATIQUE de la langue du téléphone / navigateur
   useEffect(() => {
-    const stored = window.localStorage.getItem("fc-lang") as Lang | null;
-    if (stored === "fr" || stored === "en") {
-      setLangState(stored);
-    } else {
+    try {
       const nav = navigator.language.toLowerCase();
       if (nav.startsWith("en")) setLangState("en");
       else setLangState("fr");
+    } catch {
+      setLangState("fr");
     }
   }, []);
 
   const setLang = (l: Lang) => {
+    // Optionnel : si un jour tu ajoutes un bouton FR/EN
     setLangState(l);
-    if (typeof window !== "undefined") {
-      // ✅ l est bien "fr" | "en", donc string
-      window.localStorage.setItem("fc-lang", l);
-    }
+    // 👉 Pas de localStorage : la langue principale vient du téléphone
   };
 
   const messages = useMemo<Messages>(() => {
@@ -81,3 +75,4 @@ export function useLanguage() {
   }
   return ctx;
 }
+
