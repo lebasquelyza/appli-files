@@ -31,6 +31,9 @@ function getLang(): Lang {
 async function sendFeedback(formData: FormData) {
   "use server";
 
+  const lang = getLang();
+  const t = (path: string, fallback?: string) => tServer(lang, path, fallback);
+
   const messageRaw = formData.get("feedback");
   const emailRaw = formData.get("email");
 
@@ -53,12 +56,18 @@ async function sendFeedback(formData: FormData) {
   const emailBlock = email
     ? `
       <p style="margin:0 0 12px 0;font-size:14px;">
-        <strong>Email du client :</strong> ${safeEmail}
+        <strong>${t(
+          "feedback.email.clientEmailLabel",
+          "Email du client"
+        )} :</strong> ${safeEmail}
       </p>
     `
     : `
       <p style="margin:0 0 12px 0;font-size:12px;color:#6b7280;font-style:italic;">
-        Email non renseigné
+        ${t(
+          "feedback.email.emailNotProvided",
+          "Email non renseigné"
+        )}
       </p>
     `;
 
@@ -72,11 +81,17 @@ async function sendFeedback(formData: FormData) {
       body: JSON.stringify({
         from: "Files Coaching <no-reply@appli.files-coaching.com>",
         to: "sportifandpro@gmail.com",
-        subject: "Nouvel avis utilisateur",
+        subject: t("feedback.email.subject", "Nouvel avis utilisateur"),
         html: `
           <div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto">
-            <h2 style="color:#111">Nouvel avis utilisateur</h2>
-            <p>Un utilisateur a envoyé un avis depuis l'app Files Coaching :</p>
+            <h2 style="color:#111">${t(
+              "feedback.email.title",
+              "Nouvel avis utilisateur"
+            )}</h2>
+            <p>${t(
+              "feedback.email.intro",
+              "Un utilisateur a envoyé un avis depuis l'app Files Coaching :"
+            )}</p>
 
             ${emailBlock}
 
@@ -86,7 +101,10 @@ async function sendFeedback(formData: FormData) {
 
             <hr style="border:none;border-top:1px solid #eee;margin:18px 0"/>
             <p style="font-size:12px;color:#888">
-              Cet e-mail a été généré automatiquement par la page &laquo; Votre avis &raquo;.
+              ${t(
+                "feedback.email.footer",
+                "Cet e-mail a été généré automatiquement par la page « Votre avis »."
+              )}
             </p>
           </div>
         `.trim(),
@@ -264,3 +282,4 @@ export default function Page({
     </div>
   );
 }
+
