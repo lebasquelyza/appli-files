@@ -3,7 +3,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { AiSession as AiSessionT, NormalizedExercise } from "../../../lib/coach/ai";
-import { useLanguage } from "@/components/LanguageProvider"; // ✅ i18n
+import { useLanguage } from "@/components/LanguageProvider";
+const { t } = useLanguage();
+
 
 type Props = {
   id: string;
