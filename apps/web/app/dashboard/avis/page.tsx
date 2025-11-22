@@ -1,9 +1,31 @@
 // apps/web/app/dashboard/avis/page.tsx
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
+import { translations } from "@/app/i18n/translations";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+/* ========== i18n helpers (server) ========== */
+type Lang = "fr" | "en";
+
+function getFromPath(obj: any, path: string): any {
+  return path.split(".").reduce((acc, key) => acc?.[key], obj);
+}
+
+function tServer(lang: Lang, path: string, fallback?: string): string {
+  const dict = translations[lang] as any;
+  const v = getFromPath(dict, path);
+  if (typeof v === "string") return v;
+  return fallback ?? path;
+}
+
+function getLang(): Lang {
+  const cookieLang = cookies().get("fc-lang")?.value;
+  if (cookieLang === "en") return "en";
+  return "fr";
+}
 
 /** Server Action : envoie l'avis via l'API Resend (comme /api/auth/send-reset) */
 async function sendFeedback(formData: FormData) {
@@ -89,6 +111,9 @@ export default function Page({
 }: {
   searchParams?: { sent?: string; error?: string };
 }) {
+  const lang = getLang();
+  const t = (path: string, fallback?: string) => tServer(lang, path, fallback);
+
   const sent = searchParams?.sent === "1";
   const error = searchParams?.error;
 
@@ -97,9 +122,14 @@ export default function Page({
       {/* En-tête */}
       <div className="page-header">
         <div>
-          <h1 className="h1" style={{ fontSize: 22 }}>Votre avis</h1>
+          <h1 className="h1" style={{ fontSize: 22 }}>
+            {t("avis.title", "Votre avis")}
+          </h1>
           <p className="lead" style={{ fontSize: 13, marginTop: 4 }}>
-            Dis-nous ce que tu penses de l’app pour qu’on puisse l’améliorer 🙌
+            {t(
+              "avis.lead",
+              "Dis-nous ce que tu penses de l’app pour qu’on puisse l’améliorer 🙌"
+            )}
           </p>
         </div>
       </div>
@@ -115,7 +145,10 @@ export default function Page({
             fontWeight: 600,
           }}
         >
-          Merci pour ton avis 🙏 On lit tous les messages avec attention.
+          {t(
+            "avis.messages.sent",
+            "Merci pour ton avis 🙏 On lit tous les messages avec attention."
+          )}
         </div>
       )}
 
@@ -129,7 +162,10 @@ export default function Page({
             fontWeight: 600,
           }}
         >
-          Oups 😅 Merci d&apos;écrire un petit message avant d&apos;envoyer.
+          {t(
+            "avis.messages.empty",
+            "Oups 😅 Merci d'écrire un petit message avant d'envoyer."
+          )}
         </div>
       )}
 
@@ -143,7 +179,10 @@ export default function Page({
             fontWeight: 600,
           }}
         >
-          Une erreur est survenue côté serveur (configuration e-mail). Réessaie plus tard.
+          {t(
+            "avis.messages.server",
+            "Une erreur est survenue côté serveur (configuration e-mail). Réessaie plus tard."
+          )}
         </div>
       )}
 
@@ -157,7 +196,10 @@ export default function Page({
             fontWeight: 600,
           }}
         >
-          Impossible d&apos;envoyer ton avis pour le moment 😕 Réessaie un peu plus tard.
+          {t(
+            "avis.messages.send",
+            "Impossible d'envoyer ton avis pour le moment 😕 Réessaie un peu plus tard."
+          )}
         </div>
       )}
 
@@ -171,7 +213,10 @@ export default function Page({
               className="label"
               style={{ display: "block", fontWeight: 700, marginBottom: 6 }}
             >
-              Ton e-mail (si tu veux qu&apos;on te réponde)
+              {t(
+                "avis.form.email.label",
+                "Ton e-mail (si tu veux qu'on te réponde)"
+              )}
             </label>
             <input
               id="email"
@@ -179,7 +224,10 @@ export default function Page({
               type="email"
               className="input"
               style={{ width: "100%", marginBottom: 12 }}
-              placeholder="ton.email@exemple.com"
+              placeholder={t(
+                "avis.form.email.placeholder",
+                "ton.email@exemple.com"
+              )}
             />
 
             {/* Champ message */}
@@ -188,7 +236,7 @@ export default function Page({
               className="label"
               style={{ display: "block", fontWeight: 700, marginBottom: 6 }}
             >
-              Ton message
+              {t("avis.form.message.label", "Ton message")}
             </label>
 
             <textarea
@@ -197,7 +245,10 @@ export default function Page({
               rows={6}
               className="input"
               style={{ width: "100%", resize: "vertical" }}
-              placeholder="Dis-nous ce qui te plaît, ce qu’on peut améliorer, des idées de fonctionnalités..."
+              placeholder={t(
+                "avis.form.message.placeholder",
+                "Dis-nous ce qui te plaît, ce qu’on peut améliorer, des idées de fonctionnalités..."
+              )}
             />
 
             <button
@@ -205,7 +256,7 @@ export default function Page({
               className="btn btn-dash"
               style={{ marginTop: 12, fontWeight: 700 }}
             >
-              Envoyer mon avis
+              {t("avis.form.submit", "Envoyer mon avis")}
             </button>
           </form>
         </div>
