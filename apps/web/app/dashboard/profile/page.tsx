@@ -12,8 +12,7 @@ import {
 
 import { planProgrammeFromEmail } from "../../../lib/coach/beton";
 import GenerateClient from "./GenerateClient";
-import { useLanguage } from "@/components/LanguageProvider";
-
+import { translations } from "@/app/i18n/translations";
 
 const QUESTIONNAIRE_BASE =
   process.env.FILES_COACHING_QUESTIONNAIRE_BASE || "https://questionnaire.files-coaching.com";
@@ -290,7 +289,8 @@ async function loadInitialSessions(email: string, equipParam?: string) {
     // Applique le filtrage “sans matériel” si demandé + garantit ≥4 exos
     const finalSessions = baseSessions.map((s) => {
       const type = (s.type || "muscu") as WorkoutType;
-      let exs = (s.exercises || []).slice();
+      let exs =
+        (s.exercises || []).slice();
       if (equip === "none") {
         exs = exs.filter((ex) => !requiresEquipment(ex));
       }
