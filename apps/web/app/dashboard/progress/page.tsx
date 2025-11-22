@@ -1,7 +1,8 @@
-//apps/web/app/dashboard/progress/page.tsx
+// apps/web/app/dashboard/progress/page.tsx
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { useLanguage } from "@/components/LanguageProvider";
+import type { CSSProperties } from "react";
+import { translations } from "@/app/i18n/translations";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -91,7 +92,7 @@ function parseYMDLocal(s: string) {
   return new Date(y, (m || 1) - 1, d || 1);
 }
 
-function entryBadgeStyles(t: EntryType): React.CSSProperties {
+function entryBadgeStyles(t: EntryType): CSSProperties {
   switch (t) {
     case "steps":
       return { border: "1px solid rgba(14,165,233,.25)", background: "rgba(14,165,233,.08)", color: "#0369a1" };
