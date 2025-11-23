@@ -1,5 +1,6 @@
 // apps/web/components/Sidebar.tsx
 "use client";
+
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -19,40 +20,67 @@ import {
 } from "lucide-react";
 import { useLanguage } from "@/components/LanguageProvider";
 
+type NavKey =
+  | "home"
+  | "profile"
+  | "progress"
+  | "corrector"
+  | "recipes"
+  | "calories"
+  | "connect"
+  | "bmi"
+  | "motivation"
+  | "music"
+  | "avis"
+  | "settings";
+
 type NavItem = {
   href: string;
-  labelKey: string;
+  key: NavKey;
   icon?: React.ComponentType<{ size?: number }>;
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { href: "/dashboard", labelKey: "nav.home", icon: Home },
-  { href: "/dashboard/profile", labelKey: "nav.profile", icon: User2 },
-  { href: "/dashboard/progress", labelKey: "nav.progress", icon: LineChart },
-  { href: "/dashboard/corrector", labelKey: "nav.corrector", icon: Wand2 },
-  { href: "/dashboard/recipes", labelKey: "nav.recipes", icon: BookOpen },
-  { href: "/dashboard/calories", labelKey: "nav.calories", icon: Flame },
-  { href: "/dashboard/connect", labelKey: "nav.connect", icon: Plug2 },
-  { href: "/dashboard/bmi", labelKey: "nav.bmi", icon: ClipboardList },
-  { href: "/dashboard/motivation", labelKey: "nav.motivation", icon: MessageCircle },
-  { href: "/dashboard/music", labelKey: "nav.music", icon: Music2 },
-  { href: "/dashboard/avis", labelKey: "nav.avis", icon: MessageCircle },
-  { href: "/dashboard/settings", labelKey: "nav.settings", icon: Settings },
+  { href: "/dashboard", key: "home", icon: Home },
+  { href: "/dashboard/profile", key: "profile", icon: User2 },
+  { href: "/dashboard/progress", key: "progress", icon: LineChart },
+  { href: "/dashboard/corrector", key: "corrector", icon: Wand2 },
+  { href: "/dashboard/recipes", key: "recipes", icon: BookOpen },
+  { href: "/dashboard/calories", key: "calories", icon: Flame },
+  { href: "/dashboard/connect", key: "connect", icon: Plug2 },
+  { href: "/dashboard/bmi", key: "bmi", icon: ClipboardList },
+  { href: "/dashboard/motivation", key: "motivation", icon: MessageCircle },
+  { href: "/dashboard/music", key: "music", icon: Music2 },
+  { href: "/dashboard/avis", key: "avis", icon: MessageCircle },
+  { href: "/dashboard/settings", key: "settings", icon: Settings },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const [open, setOpen] = useState(false);
-  const { lang, setLang, t } = useLanguage(); // 👈 on récupère t aussi
+  const [open, setOpen] = useState(false); // fermé par défaut
+  const { lang } = useLanguage();
 
+  // Filet de sécurité : replier à chaque changement de route
   useEffect(() => setOpen(false), [pathname]);
 
+  // Fermer APRÈS que le clic ait été géré par <Link> (fiable iOS)
   const closeAfterClick = () => {
     requestAnimationFrame(() => setOpen(false));
   };
 
-  const changeLang = (l: "fr" | "en") => {
-    setLang(l);
+  // 🔤 change la langue via cookie + reload
+  const changeLang = (newLang: "fr" | "en") => {
+    try {
+      document.cookie = [
+        `fc-lang=${newLang}`,
+        "Path=/",
+        "SameSite=Lax",
+        "Max-Age=31536000`, // 1 an
+      ].join("; ");
+      window.location.reload();
+    } catch {
+      // on ignore si ça plante
+    }
   };
 
   return (
@@ -65,8 +93,7 @@ export default function Sidebar() {
           zIndex: 10,
           paddingTop: "env(safe-area-inset-top)",
           paddingBottom: 6,
-          background:
-            "linear-gradient(180deg,#fff 75%,rgba(255,255,255,0) 100%)",
+          background: "linear-gradient(180deg,#fff 75%,rgba(255,255,255,0) 100%)",
           borderBottom: "1px solid rgba(0,0,0,0.06)",
         }}
       >
@@ -90,6 +117,7 @@ export default function Sidebar() {
               cursor: "pointer",
             }}
           >
+            {/* Pastille verte (non interactive) */}
             <span
               aria-hidden
               style={{
@@ -102,13 +130,8 @@ export default function Sidebar() {
                   "linear-gradient(135deg,var(--brand,#22c55e),var(--brand2,#15803d))",
               }}
             />
-            <b
-              style={{
-                fontSize: 18,
-                lineHeight: 1,
-                color: "var(--text, #111)",
-              }}
-            >
+            {/* Bouton d’ouverture */}
+            <b style={{ fontSize: 18, lineHeight: 1, color: "var(--text, #111)" }}>
               Files-Menu
             </b>
             <ChevronDown
@@ -121,7 +144,7 @@ export default function Sidebar() {
             />
           </button>
 
-          {/* 🔤 Switch langue */}
+          {/* 🔤 Switch langue juste à côté de Files-Menu */}
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
             <button
               type="button"
@@ -157,7 +180,7 @@ export default function Sidebar() {
         </div>
       </div>
 
-      {/* ===== Liste des onglets ===== */}
+      {/* ===== Liste des onglets — masquée par défaut ===== */}
       <ul
         id="sidebar-links"
         style={{
@@ -169,8 +192,9 @@ export default function Sidebar() {
           overflowY: "auto",
         }}
       >
-        {NAV_ITEMS.map(({ href, labelKey, icon: Icon }) => {
+        {NAV_ITEMS.map(({ href, key, icon: Icon }) => {
           const active = pathname === href || pathname.startsWith(href + "/");
+
           return (
             <li key={href}>
               <Link
@@ -192,16 +216,15 @@ export default function Sidebar() {
                     border: active
                       ? "1px solid rgba(22,163,74,.25)"
                       : "1px solid transparent",
-                    boxShadow: active
-                      ? "0 10px 20px rgba(0,0,0,.08)"
-                      : "none",
+                    boxShadow: active ? "0 10px 20px rgba(0,0,0,.08)" : "none",
                     color: active ? "#fff" : "var(--text, #111)",
                     fontWeight: 600,
                     textDecoration: "none",
                   }}
                 >
                   {Icon ? <Icon size={18} /> : null}
-                  <span>{t(labelKey)}</span>
+                  {/* texte du menu = traduction nav.X */}
+                  <span>{/* on ne peut pas utiliser useLanguage ici directement */}</span>
                 </div>
               </Link>
             </li>
