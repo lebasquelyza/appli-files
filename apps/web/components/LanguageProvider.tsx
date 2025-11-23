@@ -50,20 +50,14 @@ function writeCookieLang(lang: Lang) {
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Lang>("fr");
 
-  // init : cookie > langue du téléphone > FR
+  // ⚡ init : cookie > FR par défaut (on NE regarde PAS le téléphone)
   useEffect(() => {
-    try {
-      const fromCookie = readCookieLang();
-      if (fromCookie) {
-        setLangState(fromCookie);
-        return;
-      }
-
-      const nav = navigator.language.toLowerCase();
-      const auto: Lang = nav.startsWith("en") ? "en" : "fr";
-      setLangState(auto);
-    } catch {
+    const fromCookie = readCookieLang();
+    if (fromCookie) {
+      setLangState(fromCookie);
+    } else {
       setLangState("fr");
+      writeCookieLang("fr");
     }
   }, []);
 
