@@ -1,4 +1,3 @@
-// apps/web/components/LanguageProvider.tsx
 "use client";
 
 import React, {
@@ -29,15 +28,15 @@ function getFromPath(obj: any, path: string): string {
   return path.split(".").reduce((acc, key) => acc?.[key], obj) ?? path;
 }
 
-// 🔎 lit le cookie fc-lang côté client
+// lit fc-lang côté client
 function readCookieLang(): Lang | null {
   if (typeof document === "undefined") return null;
-  const match = document.cookie.match(/(?:^|;)\s*fc-lang=(fr|en)/);
+  const match = document.cookie.match(/(?:^|;\s*)fc-lang=(fr|en)/);
   const val = match?.[1];
-  return val === "en" || val === "fr" ? val : null;
+  return val === "fr" || val === "en" ? val : null;
 }
 
-// ✍️ écrit le cookie fc-lang côté client
+// écrit fc-lang côté client
 function writeCookieLang(lang: Lang) {
   if (typeof document === "undefined") return;
   document.cookie = [
@@ -51,22 +50,18 @@ function writeCookieLang(lang: Lang) {
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Lang>("fr");
 
-  // ✅ Détection avec priorité au cookie, puis au téléphone/navigateur
+  // init : cookie > langue du téléphone > FR
   useEffect(() => {
     try {
-      // 1) cookie en priorité
       const fromCookie = readCookieLang();
       if (fromCookie) {
         setLangState(fromCookie);
         return;
       }
 
-      // 2) sinon langue du navigateur
       const nav = navigator.language.toLowerCase();
-      const autoLang: Lang = nav.startsWith("en") ? "en" : "fr";
-      setLangState(autoLang);
-      // on écrit aussi le cookie pour que le serveur soit aligné
-      writeCookieLang(autoLang);
+      const auto: Lang = nav.startsWith("en") ? "en" : "fr";
+      setLangState(auto);
     } catch {
       setLangState("fr");
     }
@@ -74,7 +69,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 
   const setLang = (l: Lang) => {
     setLangState(l);
-    writeCookieLang(l); // 🔁 garde le serveur et le client synchronisés
+    writeCookieLang(l);
   };
 
   const messages = useMemo<Messages>(() => {
