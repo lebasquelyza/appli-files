@@ -12,7 +12,7 @@ import {
   BookOpen,
   Flame,
   Plug2,
- MessageCircle,
+  MessageCircle,
   ClipboardList,
   Music2,
   Settings,
@@ -29,9 +29,9 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard/calories", label: "Calories", icon: Flame },
   { href: "/dashboard/connect", label: "Connecte tes données", icon: Plug2 },
   { href: "/dashboard/bmi", label: "IMC", icon: ClipboardList },
- { href: "/dashboard/motivation", label: "Motivation", icon: MessageCircle },
+  { href: "/dashboard/motivation", label: "Motivation", icon: MessageCircle },
   { href: "/dashboard/music", label: "Musique", icon: Music2 },
-   { href: "/dashboard/avis", label: "Votre avis", icon: MessageCircle },
+  { href: "/dashboard/avis", label: "Votre avis", icon: MessageCircle },
   { href: "/dashboard/settings", label: "Réglages", icon: Settings },
 ];
 
@@ -48,6 +48,21 @@ export default function Sidebar() {
     requestAnimationFrame(() => setOpen(false));
   };
 
+  // 🔤 change la langue via cookie + reload
+  const changeLang = (lang: "fr" | "en") => {
+    try {
+      document.cookie = [
+        `fc-lang=${lang}`,
+        "Path=/",
+        "SameSite=Lax",
+        "Max-Age=31536000", // 1 an
+      ].join("; ");
+      window.location.reload();
+    } catch {
+      // on ignore si ça plante
+    }
+  };
+
   return (
     <nav aria-label="Dashboard" style={{ paddingLeft: 10, paddingRight: 10 }}>
       {/* ===== Entête sticky collée en haut avec safe-area ===== */}
@@ -62,50 +77,87 @@ export default function Sidebar() {
           borderBottom: "1px solid rgba(0,0,0,0.06)",
         }}
       >
-        <button
-          type="button"
-          onClick={() => setOpen((o) => !o)}
-          aria-expanded={open}
-          aria-controls="sidebar-links"
-          style={{
-            width: "100%",
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            padding: "8px 8px 4px 8px",
-            borderRadius: 8,
-            textAlign: "left",
-            background: "transparent",
-            border: "none",
-            cursor: "pointer",
-          }}
-        >
-          {/* Pastille verte (non interactive) */}
-          <span
-            aria-hidden
+        {/* Ligne : Files-Menu + FR/EN */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <button
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            aria-expanded={open}
+            aria-controls="sidebar-links"
             style={{
-              display: "inline-block",
-              height: 32,
-              width: 32,
-              borderRadius: 12,
-              boxShadow: "0 6px 16px rgba(0,0,0,.08)",
-              background:
-                "linear-gradient(135deg,var(--brand,#22c55e),var(--brand2,#15803d))",
+              flex: 1,
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              padding: "8px 8px 4px 8px",
+              borderRadius: 8,
+              textAlign: "left",
+              background: "transparent",
+              border: "none",
+              cursor: "pointer",
             }}
-          />
-          {/* Bouton d’ouverture */}
-          <b style={{ fontSize: 18, lineHeight: 1, color: "var(--text, #111)" }}>
-            Files-Menu
-          </b>
-          <ChevronDown
-            size={16}
-            style={{
-              marginLeft: "auto",
-              transition: "transform .2s",
-              transform: open ? "rotate(180deg)" : "rotate(0deg)",
-            }}
-          />
-        </button>
+          >
+            {/* Pastille verte (non interactive) */}
+            <span
+              aria-hidden
+              style={{
+                display: "inline-block",
+                height: 32,
+                width: 32,
+                borderRadius: 12,
+                boxShadow: "0 6px 16px rgba(0,0,0,.08)",
+                background:
+                  "linear-gradient(135deg,var(--brand,#22c55e),var(--brand2,#15803d))",
+              }}
+            />
+            {/* Bouton d’ouverture */}
+            <b style={{ fontSize: 18, lineHeight: 1, color: "var(--text, #111)" }}>
+              Files-Menu
+            </b>
+            <ChevronDown
+              size={16}
+              style={{
+                marginLeft: "auto",
+                transition: "transform .2s",
+                transform: open ? "rotate(180deg)" : "rotate(0deg)",
+              }}
+            />
+          </button>
+
+          {/* 🔤 Switch langue juste à côté de Files-Menu */}
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <button
+              type="button"
+              onClick={() => changeLang("fr")}
+              style={{
+                padding: "3px 8px",
+                borderRadius: 999,
+                border: "1px solid #d1d5db",
+                fontSize: 11,
+                background: "#fff",
+                color: "#374151",
+                cursor: "pointer",
+              }}
+            >
+              FR
+            </button>
+            <button
+              type="button"
+              onClick={() => changeLang("en")}
+              style={{
+                padding: "3px 8px",
+                borderRadius: 999,
+                border: "1px solid #d1d5db",
+                fontSize: 11,
+                background: "#fff",
+                color: "#374151",
+                cursor: "pointer",
+              }}
+            >
+              EN
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* ===== Liste des onglets — masquée par défaut ===== */}
@@ -156,4 +208,3 @@ export default function Sidebar() {
     </nav>
   );
 }
-
