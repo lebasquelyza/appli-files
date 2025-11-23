@@ -17,8 +17,13 @@ import {
   Music2,
   Settings,
 } from "lucide-react";
+import { useLanguage } from "@/components/LanguageProvider"; // ⬅️ on récupère lang + setLang
 
-type NavItem = { href: string; label: string; icon?: React.ComponentType<{ size?: number }> };
+type NavItem = {
+  href: string;
+  label: string;
+  icon?: React.ComponentType<{ size?: number }>;
+};
 
 const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Accueil", icon: Home },
@@ -38,29 +43,19 @@ const NAV_ITEMS: NavItem[] = [
 export default function Sidebar() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false); // fermé par défaut
+  const { lang, setLang } = useLanguage(); // 🔹 langue actuelle + setter
 
   // Filet de sécurité : replier à chaque changement de route
   useEffect(() => setOpen(false), [pathname]);
 
   // Fermer APRÈS que le clic ait été géré par <Link> (fiable iOS)
   const closeAfterClick = () => {
-    // laisse passer le click, puis ferme dès la prochaine frame
     requestAnimationFrame(() => setOpen(false));
   };
 
-  // 🔤 change la langue via cookie + reload
-  const changeLang = (lang: "fr" | "en") => {
-    try {
-      document.cookie = [
-        `fc-lang=${lang}`,
-        "Path=/",
-        "SameSite=Lax",
-        "Max-Age=31536000", // 1 an
-      ].join("; ");
-      window.location.reload();
-    } catch {
-      // on ignore si ça plante
-    }
+  // 🔤 change la langue via le LanguageProvider (qui gère déjà le cookie)
+  const changeLang = (l: "fr" | "en") => {
+    setLang(l); // met à jour lang + fc-lang
   };
 
   return (
@@ -73,7 +68,8 @@ export default function Sidebar() {
           zIndex: 10,
           paddingTop: "env(safe-area-inset-top)",
           paddingBottom: 6,
-          background: "linear-gradient(180deg,#fff 75%,rgba(255,255,255,0) 100%)",
+          background:
+            "linear-gradient(180deg,#fff 75%,rgba(255,255,255,0) 100%)",
           borderBottom: "1px solid rgba(0,0,0,0.06)",
         }}
       >
@@ -111,7 +107,13 @@ export default function Sidebar() {
               }}
             />
             {/* Bouton d’ouverture */}
-            <b style={{ fontSize: 18, lineHeight: 1, color: "var(--text, #111)" }}>
+            <b
+              style={{
+                fontSize: 18,
+                lineHeight: 1,
+                color: "var(--text, #111)",
+              }}
+            >
               Files-Menu
             </b>
             <ChevronDown
@@ -134,8 +136,8 @@ export default function Sidebar() {
                 borderRadius: 999,
                 border: "1px solid #d1d5db",
                 fontSize: 11,
-                background: "#fff",
-                color: "#374151",
+                background: lang === "fr" ? "#16a34a" : "#fff",
+                color: lang === "fr" ? "#fff" : "#374151",
                 cursor: "pointer",
               }}
             >
@@ -149,8 +151,8 @@ export default function Sidebar() {
                 borderRadius: 999,
                 border: "1px solid #d1d5db",
                 fontSize: 11,
-                background: "#fff",
-                color: "#374151",
+                background: lang === "en" ? "#16a34a" : "#fff",
+                color: lang === "en" ? "#fff" : "#374151",
                 cursor: "pointer",
               }}
             >
@@ -163,7 +165,6 @@ export default function Sidebar() {
       {/* ===== Liste des onglets — masquée par défaut ===== */}
       <ul
         id="sidebar-links"
-        // Force le display via style (pas de conflit avec Tailwind)
         style={{
           display: open ? "block" : "none",
           listStyle: "none",
@@ -177,8 +178,11 @@ export default function Sidebar() {
           const active = pathname === href || pathname.startsWith(href + "/");
           return (
             <li key={href}>
-              {/* onClick -> ferme APRÈS le click pour ne pas casser la nav */}
-              <Link href={href} className="block no-underline" onClick={closeAfterClick}>
+              <Link
+                href={href}
+                className="block no-underline"
+                onClick={closeAfterClick}
+              >
                 <div
                   style={{
                     padding: "10px 12px",
@@ -190,8 +194,12 @@ export default function Sidebar() {
                     background: active
                       ? "linear-gradient(135deg,var(--brand,#22c55e),var(--brand2,#15803d))"
                       : "transparent",
-                    border: active ? "1px solid rgba(22,163,74,.25)" : "1px solid transparent",
-                    boxShadow: active ? "0 10px 20px rgba(0,0,0,.08)" : "none",
+                    border: active
+                      ? "1px solid rgba(22,163,74,.25)"
+                      : "1px solid transparent",
+                    boxShadow: active
+                      ? "0 10px 20px rgba(0,0,0,.08)"
+                      : "none",
                     color: active ? "#fff" : "var(--text, #111)",
                     fontWeight: 600,
                     textDecoration: "none",
