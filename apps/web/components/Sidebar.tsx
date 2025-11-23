@@ -1,6 +1,5 @@
 // apps/web/components/Sidebar.tsx
 "use client";
-
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -20,39 +19,25 @@ import {
 } from "lucide-react";
 import { useLanguage } from "@/components/LanguageProvider";
 
-type NavKey =
-  | "home"
-  | "profile"
-  | "progress"
-  | "corrector"
-  | "recipes"
-  | "calories"
-  | "connect"
-  | "bmi"
-  | "motivation"
-  | "music"
-  | "avis"
-  | "settings";
-
 type NavItem = {
   href: string;
-  key: NavKey;
+  label: string;
   icon?: React.ComponentType<{ size?: number }>;
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { href: "/dashboard", key: "home", icon: Home },
-  { href: "/dashboard/profile", key: "profile", icon: User2 },
-  { href: "/dashboard/progress", key: "progress", icon: LineChart },
-  { href: "/dashboard/corrector", key: "corrector", icon: Wand2 },
-  { href: "/dashboard/recipes", key: "recipes", icon: BookOpen },
-  { href: "/dashboard/calories", key: "calories", icon: Flame },
-  { href: "/dashboard/connect", key: "connect", icon: Plug2 },
-  { href: "/dashboard/bmi", key: "bmi", icon: ClipboardList },
-  { href: "/dashboard/motivation", key: "motivation", icon: MessageCircle },
-  { href: "/dashboard/music", key: "music", icon: Music2 },
-  { href: "/dashboard/avis", key: "avis", icon: MessageCircle },
-  { href: "/dashboard/settings", key: "settings", icon: Settings },
+  { href: "/dashboard", label: "Accueil", icon: Home },
+  { href: "/dashboard/profile", label: "Mon profil", icon: User2 },
+  { href: "/dashboard/progress", label: "Mes progrès", icon: LineChart },
+  { href: "/dashboard/corrector", label: "Files te corrige", icon: Wand2 },
+  { href: "/dashboard/recipes", label: "Recettes", icon: BookOpen },
+  { href: "/dashboard/calories", label: "Calories", icon: Flame },
+  { href: "/dashboard/connect", label: "Connecte tes données", icon: Plug2 },
+  { href: "/dashboard/bmi", label: "IMC", icon: ClipboardList },
+  { href: "/dashboard/motivation", label: "Motivation", icon: MessageCircle },
+  { href: "/dashboard/music", label: "Musique", icon: Music2 },
+  { href: "/dashboard/avis", label: "Votre avis", icon: MessageCircle },
+  { href: "/dashboard/settings", label: "Réglages", icon: Settings },
 ];
 
 export default function Sidebar() {
@@ -60,10 +45,10 @@ export default function Sidebar() {
   const [open, setOpen] = useState(false); // fermé par défaut
   const { lang } = useLanguage();
 
-  // Filet de sécurité : replier à chaque changement de route
+  // Replier à chaque changement de route
   useEffect(() => setOpen(false), [pathname]);
 
-  // Fermer APRÈS que le clic ait été géré par <Link> (fiable iOS)
+  // Fermer APRÈS le clic (fiable iOS)
   const closeAfterClick = () => {
     requestAnimationFrame(() => setOpen(false));
   };
@@ -75,7 +60,7 @@ export default function Sidebar() {
         `fc-lang=${newLang}`,
         "Path=/",
         "SameSite=Lax",
-        "Max-Age=31536000`, // 1 an
+        "Max-Age=31536000", // 1 an ✅ (guillemets normaux)
       ].join("; ");
       window.location.reload();
     } catch {
@@ -192,9 +177,8 @@ export default function Sidebar() {
           overflowY: "auto",
         }}
       >
-        {NAV_ITEMS.map(({ href, key, icon: Icon }) => {
+        {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
           const active = pathname === href || pathname.startsWith(href + "/");
-
           return (
             <li key={href}>
               <Link
@@ -223,8 +207,7 @@ export default function Sidebar() {
                   }}
                 >
                   {Icon ? <Icon size={18} /> : null}
-                  {/* texte du menu = traduction nav.X */}
-                  <span>{/* on ne peut pas utiliser useLanguage ici directement */}</span>
+                  <span>{label}</span>
                 </div>
               </Link>
             </li>
