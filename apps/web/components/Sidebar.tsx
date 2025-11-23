@@ -17,45 +17,42 @@ import {
   Music2,
   Settings,
 } from "lucide-react";
-import { useLanguage } from "@/components/LanguageProvider"; // ⬅️ on récupère lang + setLang
+import { useLanguage } from "@/components/LanguageProvider";
 
 type NavItem = {
   href: string;
-  label: string;
+  labelKey: string;
   icon?: React.ComponentType<{ size?: number }>;
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { href: "/dashboard", label: "Accueil", icon: Home },
-  { href: "/dashboard/profile", label: "Mon profil", icon: User2 },
-  { href: "/dashboard/progress", label: "Mes progrès", icon: LineChart },
-  { href: "/dashboard/corrector", label: "Files te corrige", icon: Wand2 },
-  { href: "/dashboard/recipes", label: "Recettes", icon: BookOpen },
-  { href: "/dashboard/calories", label: "Calories", icon: Flame },
-  { href: "/dashboard/connect", label: "Connecte tes données", icon: Plug2 },
-  { href: "/dashboard/bmi", label: "IMC", icon: ClipboardList },
-  { href: "/dashboard/motivation", label: "Motivation", icon: MessageCircle },
-  { href: "/dashboard/music", label: "Musique", icon: Music2 },
-  { href: "/dashboard/avis", label: "Votre avis", icon: MessageCircle },
-  { href: "/dashboard/settings", label: "Réglages", icon: Settings },
+  { href: "/dashboard", labelKey: "nav.home", icon: Home },
+  { href: "/dashboard/profile", labelKey: "nav.profile", icon: User2 },
+  { href: "/dashboard/progress", labelKey: "nav.progress", icon: LineChart },
+  { href: "/dashboard/corrector", labelKey: "nav.corrector", icon: Wand2 },
+  { href: "/dashboard/recipes", labelKey: "nav.recipes", icon: BookOpen },
+  { href: "/dashboard/calories", labelKey: "nav.calories", icon: Flame },
+  { href: "/dashboard/connect", labelKey: "nav.connect", icon: Plug2 },
+  { href: "/dashboard/bmi", labelKey: "nav.bmi", icon: ClipboardList },
+  { href: "/dashboard/motivation", labelKey: "nav.motivation", icon: MessageCircle },
+  { href: "/dashboard/music", labelKey: "nav.music", icon: Music2 },
+  { href: "/dashboard/avis", labelKey: "nav.avis", icon: MessageCircle },
+  { href: "/dashboard/settings", labelKey: "nav.settings", icon: Settings },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const [open, setOpen] = useState(false); // fermé par défaut
-  const { lang, setLang } = useLanguage(); // 🔹 langue actuelle + setter
+  const [open, setOpen] = useState(false);
+  const { lang, setLang, t } = useLanguage(); // 👈 on récupère t aussi
 
-  // Filet de sécurité : replier à chaque changement de route
   useEffect(() => setOpen(false), [pathname]);
 
-  // Fermer APRÈS que le clic ait été géré par <Link> (fiable iOS)
   const closeAfterClick = () => {
     requestAnimationFrame(() => setOpen(false));
   };
 
-  // 🔤 change la langue via le LanguageProvider (qui gère déjà le cookie)
   const changeLang = (l: "fr" | "en") => {
-    setLang(l); // met à jour lang + fc-lang
+    setLang(l);
   };
 
   return (
@@ -93,7 +90,6 @@ export default function Sidebar() {
               cursor: "pointer",
             }}
           >
-            {/* Pastille verte (non interactive) */}
             <span
               aria-hidden
               style={{
@@ -106,7 +102,6 @@ export default function Sidebar() {
                   "linear-gradient(135deg,var(--brand,#22c55e),var(--brand2,#15803d))",
               }}
             />
-            {/* Bouton d’ouverture */}
             <b
               style={{
                 fontSize: 18,
@@ -126,7 +121,7 @@ export default function Sidebar() {
             />
           </button>
 
-          {/* 🔤 Switch langue juste à côté de Files-Menu */}
+          {/* 🔤 Switch langue */}
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
             <button
               type="button"
@@ -162,7 +157,7 @@ export default function Sidebar() {
         </div>
       </div>
 
-      {/* ===== Liste des onglets — masquée par défaut ===== */}
+      {/* ===== Liste des onglets ===== */}
       <ul
         id="sidebar-links"
         style={{
@@ -174,7 +169,7 @@ export default function Sidebar() {
           overflowY: "auto",
         }}
       >
-        {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+        {NAV_ITEMS.map(({ href, labelKey, icon: Icon }) => {
           const active = pathname === href || pathname.startsWith(href + "/");
           return (
             <li key={href}>
@@ -206,7 +201,7 @@ export default function Sidebar() {
                   }}
                 >
                   {Icon ? <Icon size={18} /> : null}
-                  <span>{label}</span>
+                  <span>{t(labelKey)}</span>
                 </div>
               </Link>
             </li>
