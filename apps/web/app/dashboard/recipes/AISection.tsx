@@ -1,4 +1,4 @@
-//apps/web/app/dashboard/recipes/AISection.tsx
+// apps/web/app/dashboard/recipes/AISection.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -46,7 +46,7 @@ export function AIExtraSection({
   allergens,
   dislikes,
 }: Props) {
-  const { t } = useLanguage(); // ✅ i18n
+  const { t } = useLanguage(); // ✅ i18n côté client
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -88,7 +88,7 @@ export function AIExtraSection({
             text
           );
           if (!cancelled) {
-            setError(`${t("recipes.aiSection.unavailable")} (HTTP ${res.status})`);
+            setError(`${t("aiSection.unavailable")} (HTTP ${res.status})`);
             setLoading(false);
           }
           return;
@@ -103,7 +103,7 @@ export function AIExtraSection({
             data.error,
             data.detail
           );
-          setError(`${t("recipes.aiSection.unavailable")} (${data.error})`);
+          setError(`${t("aiSection.unavailable")} (${data.error})`);
           setLoading(false);
           return;
         }
@@ -118,7 +118,7 @@ export function AIExtraSection({
       } catch (e) {
         console.error("[AIExtraSection] fetch error /api/recipes/ai:", e);
         if (!cancelled) {
-          setError(`${t("recipes.aiSection.unavailable")} (FETCH_ERROR)`);
+          setError(`${t("aiSection.unavailable")} (FETCH_ERROR)`);
           setLoading(false);
         }
       }
@@ -128,14 +128,15 @@ export function AIExtraSection({
     return () => {
       cancelled = true;
     };
+    // on dépend de la langue via t, et des filtres
   }, [kind, kcal, kcalMin, kcalMax, allergensKey, dislikesKey, t]);
 
   return (
     <section className="section" style={{ marginTop: 12 }}>
       <div className="section-head" style={{ marginBottom: 8 }}>
-        <h2>{t("recipes.aiSection.title")}</h2>
+        <h2>{t("aiSection.title")}</h2>
         <p className="text-xs" style={{ color: "#6b7280", marginTop: 4 }}>
-          {t("recipes.aiSection.subtitle")}
+          {t("aiSection.subtitle")}
         </p>
       </div>
 
@@ -149,7 +150,7 @@ export function AIExtraSection({
       {/* État chargement (si pas d'erreur) */}
       {!error && loading && recipes.length === 0 && (
         <div className="card text-xs" style={{ color: "#6b7280" }}>
-          {t("recipes.aiSection.loading")}
+          {t("aiSection.loading")}
         </div>
       )}
 
@@ -167,7 +168,7 @@ export function AIExtraSection({
                   <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>
                     {r.title}
                   </h3>
-                  <span className="badge">{t("recipes.aiSection.badge")}</span>
+                  <span className="badge">{t("aiSection.badge")}</span>
                 </div>
 
                 {r.subtitle && (
@@ -192,8 +193,6 @@ export function AIExtraSection({
                     <span className="badge">{r.timeMin} min</span>
                   )}
                 </div>
-
-                {/* 🔹 plus d'ingrédients visibles sur la carte IA */}
 
                 <div
                   style={{
