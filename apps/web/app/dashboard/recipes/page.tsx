@@ -99,7 +99,7 @@ function encodeB64UrlJson(data: any): string {
   return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-/* ---- dictionnaire "re-travailler" pour plus tard ---- */
+/* ---- dictionnaire "re-travailler" pour plus tard (non utilisé ici) ---- */
 const REWORK_TIPS: Record<string, string[]> = {
   brocoli: [
     "Rôti au four parmesan-citron",
@@ -127,8 +127,8 @@ const REWORK_TIPS: Record<string, string[]> = {
   lentilles: ["Dal coco", "Salade tiède", "Soupe carotte-cumin"],
 };
 
-/* ---- base healthy (dispo pour tous) ---- */
-const HEALTHY_BASE: Recipe[] = [
+/* ---- base healthy FR ---- */
+const HEALTHY_BASE_FR: Recipe[] = [
   {
     id: "salade-quinoa",
     title: "Salade de quinoa croquante",
@@ -257,8 +257,138 @@ const HEALTHY_BASE: Recipe[] = [
   },
 ];
 
-/* ---- base Bar à prot' ---- */
-const SHAKES_BASE: Recipe[] = [
+/* ---- base healthy EN (mêmes id, valeurs, mais titres traduits) ---- */
+const HEALTHY_BASE_EN: Recipe[] = [
+  {
+    id: "salade-quinoa",
+    title: "Crunchy quinoa salad",
+    subtitle: "Chickpeas, cucumber, lemon",
+    kcal: 520,
+    timeMin: 15,
+    tags: ["vegetarian", "gluten-free"],
+    goals: ["balance"],
+    minPlan: "BASIC",
+    ingredients: [
+      "quinoa",
+      "chickpeas",
+      "cucumber",
+      "lemon",
+      "olive oil",
+      "salt",
+      "pepper",
+      "parsley",
+    ],
+    steps: ["Rinse, cook, season"],
+  },
+  {
+    id: "bowl-poulet-riz",
+    title: "Chicken & brown rice bowl",
+    subtitle: "Avocado, corn, greek yogurt",
+    kcal: 640,
+    timeMin: 20,
+    tags: ["high-protein"],
+    goals: ["muscle gain", "balance"],
+    minPlan: "BASIC",
+    ingredients: [
+      "chicken",
+      "brown rice",
+      "avocado",
+      "corn",
+      "greek yogurt",
+      "cumin",
+      "lemon",
+      "salt",
+      "pepper",
+    ],
+    steps: ["Cook rice, sear chicken, assemble"],
+  },
+  {
+    id: "omelette-herbes",
+    title: "Mushroom & herb omelette",
+    subtitle: "Quick breakfast",
+    kcal: 420,
+    timeMin: 10,
+    tags: ["quick", "gluten-free"],
+    goals: ["balance"],
+    minPlan: "BASIC",
+    ingredients: [
+      "eggs",
+      "mushrooms",
+      "chives",
+      "butter",
+      "salt",
+      "pepper",
+      "parmesan",
+    ],
+    steps: ["Whisk, cook, fold"],
+  },
+  {
+    id: "saumon-four",
+    title: "Baked salmon & roasted veggies",
+    subtitle: "Carrots, broccoli, lemon",
+    kcal: 580,
+    timeMin: 25,
+    tags: ["omega-3", "gluten-free"],
+    goals: ["balance", "health"],
+    minPlan: "BASIC",
+    ingredients: [
+      "salmon",
+      "broccoli",
+      "carrots",
+      "lemon",
+      "olive oil",
+      "garlic",
+      "salt",
+      "pepper",
+    ],
+    steps: ["Preheat, roast, serve"],
+  },
+  {
+    id: "curry-chiche",
+    title: "Coconut chickpea curry",
+    subtitle: "Vegan & comforting",
+    kcal: 600,
+    timeMin: 30,
+    tags: ["vegan", "gluten-free"],
+    goals: ["balance"],
+    minPlan: "BASIC",
+    ingredients: [
+      "chickpeas",
+      "coconut milk",
+      "crushed tomatoes",
+      "onion",
+      "garlic",
+      "curry",
+      "basmati rice",
+      "salt",
+    ],
+    steps: ["Sauté, simmer, serve"],
+  },
+  {
+    id: "tofu-brocoli-wok",
+    title: "Stir-fried tofu & broccoli",
+    subtitle: "Soy-sesame sauce",
+    kcal: 530,
+    timeMin: 15,
+    tags: ["vegan", "quick"],
+    goals: ["cutting", "balance"],
+    minPlan: "BASIC",
+    ingredients: [
+      "firm tofu",
+      "broccoli",
+      "soy sauce",
+      "garlic",
+      "ginger",
+      "sesame seeds",
+      "oil",
+      "cornstarch",
+    ],
+    steps: ["Sear, thicken, coat"],
+  },
+];
+
+/* ---- base Bar à prot' FR ---- */
+const SHAKES_BASE_FR: Recipe[] = [
   {
     id: "shake-choco-banane",
     title: "Choco-banane protéiné",
@@ -331,6 +461,83 @@ const SHAKES_BASE: Recipe[] = [
       "citron vert",
     ],
     steps: ["Mixer 40 s", "Servir avec glaçons"],
+  },
+];
+
+/* ---- base Bar à prot' EN ---- */
+const SHAKES_BASE_EN: Recipe[] = [
+  {
+    id: "shake-choco-banane",
+    title: "Chocolate banana shake",
+    subtitle: "Milk, chocolate whey",
+    kcal: 360,
+    timeMin: 5,
+    tags: ["shake", "quick"],
+    goals: ["muscle gain", "balance"],
+    minPlan: "BASIC",
+    ingredients: [
+      "banana",
+      "milk (or plant-based)",
+      "chocolate whey",
+      "peanut butter",
+      "ice cubes",
+    ],
+    steps: ["Blend 30–40 s", "Serve chilled"],
+  },
+  {
+    id: "shake-vanille-cafe",
+    title: "Vanilla coffee frappé",
+    subtitle: "Skyr, vanilla",
+    kcal: 280,
+    timeMin: 5,
+    tags: ["shake", "coffee"],
+    goals: ["cutting", "balance"],
+    minPlan: "BASIC",
+    ingredients: [
+      "skyr",
+      "milk (or plant-based)",
+      "cold espresso",
+      "vanilla",
+      "sweetener (optional)",
+      "ice cubes",
+    ],
+    steps: ["Pour into blender", "Blend and enjoy"],
+  },
+  {
+    id: "shake-fruits-rouges",
+    title: "Berry & greek yogurt shake",
+    subtitle: "Fresh & creamy",
+    kcal: 320,
+    timeMin: 5,
+    tags: ["shake", "fruity"],
+    goals: ["balance"],
+    minPlan: "BASIC",
+    ingredients: [
+      "0% greek yogurt",
+      "milk (or plant-based)",
+      "frozen berries",
+      "neutral whey",
+      "honey (optional)",
+    ],
+    steps: ["Blend until smooth", "Taste and adjust"],
+  },
+  {
+    id: "shake-tropical",
+    title: "Tropical coconut shake",
+    subtitle: "Mango, coconut",
+    kcal: 340,
+    timeMin: 5,
+    tags: ["shake", "fruity"],
+    goals: ["balance"],
+    minPlan: "BASIC",
+    ingredients: [
+      "light coconut milk",
+      "mango",
+      "pineapple",
+      "neutral or pea protein",
+      "lime",
+    ],
+    steps: ["Blend 40 s", "Serve with ice"],
   },
 ];
 
@@ -441,8 +648,12 @@ export default async function Page({
 
   const seed = Number(searchParams?.rnd ?? "0") || 123456789;
 
-  const healthyPick = pickRandomSeeded(HEALTHY_BASE, 6, seed);
-  const shakesPick = pickRandomSeeded(SHAKES_BASE, 6, seed + 7);
+  // 🔄 on choisit la base selon la langue
+  const healthyBase = lang === "en" ? HEALTHY_BASE_EN : HEALTHY_BASE_FR;
+  const shakesBase = lang === "en" ? SHAKES_BASE_EN : SHAKES_BASE_FR;
+
+  const healthyPick = pickRandomSeeded(healthyBase, 6, seed);
+  const shakesPick = pickRandomSeeded(shakesBase, 6, seed + 7);
 
   // QS gardés (sans view)
   const qsParts: string[] = [];
@@ -1032,8 +1243,6 @@ function Card({
           <span className="badge">{r.timeMin} min</span>
         )}
       </div>
-
-      {/* Ingrédients retirés de la carte pour n'être visibles que dans la page détail */}
 
       <div
         style={{
