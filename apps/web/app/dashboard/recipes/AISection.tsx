@@ -1,4 +1,3 @@
-// apps/web/app/dashboard/recipes/AISection.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -46,7 +45,25 @@ export function AIExtraSection({
   allergens,
   dislikes,
 }: Props) {
-  const { t } = useLanguage(); // ✅ i18n côté client
+  const { t: tRaw } = useLanguage();
+
+  // 🔁 Petit wrapper pour remapper les chemins vers ceux du fichier de traductions
+  const t = (path: string): string => {
+    let realPath = path;
+
+    // dans translations.ts : settings.aiSection.*
+    if (path.startsWith("recipes.aiSection.")) {
+      realPath = path.replace("recipes.aiSection", "settings.aiSection");
+    }
+
+    // dans translations.ts : settings.recipes.card.*
+    if (path.startsWith("recipes.card.")) {
+      realPath = path.replace("recipes.card", "settings.recipes.card");
+    }
+
+    return tRaw(realPath);
+  };
+
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -77,8 +94,6 @@ export function AIExtraSection({
           }),
         });
 
-        console.log("[AIExtraSection] /api/recipes/ai status:", res.status);
-
         if (!res.ok) {
           const text = await res.text().catch(() => "");
           console.error(
@@ -88,14 +103,13 @@ export function AIExtraSection({
             text
           );
           if (!cancelled) {
-            setError(`${t("aiSection.unavailable")} (HTTP ${res.status})`);
+            setError(`${t("recipes.aiSection.unavailable")} (HTTP ${res.status})`);
             setLoading(false);
           }
           return;
         }
 
         const data = await res.json();
-        console.log("[AIExtraSection] data:", data);
 
         if (!cancelled && data && data.error) {
           console.error(
@@ -103,7 +117,7 @@ export function AIExtraSection({
             data.error,
             data.detail
           );
-          setError(`${t("aiSection.unavailable")} (${data.error})`);
+          setError(`${t("recipes.aiSection.unavailable")} (${data.error})`);
           setLoading(false);
           return;
         }
@@ -118,7 +132,7 @@ export function AIExtraSection({
       } catch (e) {
         console.error("[AIExtraSection] fetch error /api/recipes/ai:", e);
         if (!cancelled) {
-          setError(`${t("aiSection.unavailable")} (FETCH_ERROR)`);
+          setError(`${t("recipes.aiSection.unavailable")} (FETCH_ERROR)`);
           setLoading(false);
         }
       }
@@ -128,15 +142,14 @@ export function AIExtraSection({
     return () => {
       cancelled = true;
     };
-    // on dépend de la langue via t, et des filtres
-  }, [kind, kcal, kcalMin, kcalMax, allergensKey, dislikesKey, t]);
+  }, [kind, kcal, kcalMin, kcalMax, allergensKey, dislikesKey]);
 
   return (
     <section className="section" style={{ marginTop: 12 }}>
       <div className="section-head" style={{ marginBottom: 8 }}>
-        <h2>{t("aiSection.title")}</h2>
+        <h2>{t("recipes.aiSection.title")}</h2>
         <p className="text-xs" style={{ color: "#6b7280", marginTop: 4 }}>
-          {t("aiSection.subtitle")}
+          {t("recipes.aiSection.subtitle")}
         </p>
       </div>
 
@@ -150,7 +163,7 @@ export function AIExtraSection({
       {/* État chargement (si pas d'erreur) */}
       {!error && loading && recipes.length === 0 && (
         <div className="card text-xs" style={{ color: "#6b7280" }}>
-          {t("aiSection.loading")}
+          {t("recipes.aiSection.loading")}
         </div>
       )}
 
@@ -168,7 +181,7 @@ export function AIExtraSection({
                   <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>
                     {r.title}
                   </h3>
-                  <span className="badge">{t("aiSection.badge")}</span>
+                  <span className="badge">{t("recipes.aiSection.badge")}</span>
                 </div>
 
                 {r.subtitle && (
@@ -214,3 +227,4 @@ export function AIExtraSection({
     </section>
   );
 }
+
