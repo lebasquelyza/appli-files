@@ -1,5 +1,6 @@
-// apps/web/components/Sidebar.tsx
+// components/Sidebar.tsx
 "use client";
+
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -17,7 +18,6 @@ import {
   Music2,
   Settings,
 } from "lucide-react";
-import { useLanguage } from "@/components/LanguageProvider";
 
 type NavItem = {
   href: string;
@@ -42,26 +42,36 @@ const NAV_ITEMS: NavItem[] = [
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const [open, setOpen] = useState(false); // fermé par défaut
-  const { lang } = useLanguage();
+  const [open, setOpen] = useState(false);
+  const [lang, setLang] = useState<"fr" | "en">("fr");
 
-  // Replier à chaque changement de route
+  // Replier le menu à chaque changement de route
   useEffect(() => setOpen(false), [pathname]);
 
-  // Fermer APRÈS le clic (fiable iOS)
+  // Lire la langue actuelle depuis le cookie (pour mettre le bouton actif)
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const match = document.cookie.match(/(?:^|;\s*)fc-lang=(fr|en)/);
+    if (match) {
+      setLang(match[1] as "fr" | "en");
+    }
+  }, []);
+
+  // Fermer APRÈS que le clic ait été géré par <Link>
   const closeAfterClick = () => {
     requestAnimationFrame(() => setOpen(false));
   };
 
-  // 🔤 change la langue via cookie + reload
+  // Change la langue via cookie + reload
   const changeLang = (newLang: "fr" | "en") => {
     try {
       document.cookie = [
         `fc-lang=${newLang}`,
         "Path=/",
         "SameSite=Lax",
-        "Max-Age=31536000", // 1 an ✅ (guillemets normaux)
+        "Max-Age=31536000", // 1 an
       ].join("; ");
+      setLang(newLang);
       window.location.reload();
     } catch {
       // on ignore si ça plante
@@ -115,7 +125,6 @@ export default function Sidebar() {
                   "linear-gradient(135deg,var(--brand,#22c55e),var(--brand2,#15803d))",
               }}
             />
-            {/* Bouton d’ouverture */}
             <b style={{ fontSize: 18, lineHeight: 1, color: "var(--text, #111)" }}>
               Files-Menu
             </b>
@@ -137,10 +146,10 @@ export default function Sidebar() {
               style={{
                 padding: "3px 8px",
                 borderRadius: 999,
-                border: "1px solid #d1d5db",
+                border: lang === "fr" ? "1px solid #16a34a" : "1px solid #d1d5db",
                 fontSize: 11,
-                background: lang === "fr" ? "#16a34a" : "#fff",
-                color: lang === "fr" ? "#fff" : "#374151",
+                background: lang === "fr" ? "#dcfce7" : "#fff",
+                color: lang === "fr" ? "#166534" : "#374151",
                 cursor: "pointer",
               }}
             >
@@ -152,10 +161,10 @@ export default function Sidebar() {
               style={{
                 padding: "3px 8px",
                 borderRadius: 999,
-                border: "1px solid #d1d5db",
+                border: lang === "en" ? "1px solid #16a34a" : "1px solid #d1d5db",
                 fontSize: 11,
-                background: lang === "en" ? "#16a34a" : "#fff",
-                color: lang === "en" ? "#fff" : "#374151",
+                background: lang === "en" ? "#dcfce7" : "#fff",
+                color: lang === "en" ? "#166534" : "#374151",
                 cursor: "pointer",
               }}
             >
@@ -197,9 +206,7 @@ export default function Sidebar() {
                     background: active
                       ? "linear-gradient(135deg,var(--brand,#22c55e),var(--brand2,#15803d))"
                       : "transparent",
-                    border: active
-                      ? "1px solid rgba(22,163,74,.25)"
-                      : "1px solid transparent",
+                    border: active ? "1px solid rgba(22,163,74,.25)" : "1px solid transparent",
                     boxShadow: active ? "0 10px 20px rgba(0,0,0,.08)" : "none",
                     color: active ? "#fff" : "var(--text, #111)",
                     fontWeight: 600,
