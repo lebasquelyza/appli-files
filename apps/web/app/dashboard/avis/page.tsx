@@ -31,9 +31,6 @@ function getLang(): Lang {
 async function sendFeedback(formData: FormData) {
   "use server";
 
-  const lang = getLang();
-  const t = (path: string, fallback?: string) => tServer(lang, path, fallback);
-
   const messageRaw = formData.get("feedback");
   const emailRaw = formData.get("email");
 
@@ -56,18 +53,12 @@ async function sendFeedback(formData: FormData) {
   const emailBlock = email
     ? `
       <p style="margin:0 0 12px 0;font-size:14px;">
-        <strong>${t(
-          "feedback.email.clientEmailLabel",
-          "Email du client"
-        )} :</strong> ${safeEmail}
+        <strong>Email du client :</strong> ${safeEmail}
       </p>
     `
     : `
       <p style="margin:0 0 12px 0;font-size:12px;color:#6b7280;font-style:italic;">
-        ${t(
-          "feedback.email.emailNotProvided",
-          "Email non renseigné"
-        )}
+        Email non renseigné
       </p>
     `;
 
@@ -81,17 +72,11 @@ async function sendFeedback(formData: FormData) {
       body: JSON.stringify({
         from: "Files Coaching <no-reply@appli.files-coaching.com>",
         to: "sportifandpro@gmail.com",
-        subject: t("feedback.email.subject", "Nouvel avis utilisateur"),
+        subject: "Nouvel avis utilisateur",
         html: `
           <div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto">
-            <h2 style="color:#111">${t(
-              "feedback.email.title",
-              "Nouvel avis utilisateur"
-            )}</h2>
-            <p>${t(
-              "feedback.email.intro",
-              "Un utilisateur a envoyé un avis depuis l'app Files Coaching :"
-            )}</p>
+            <h2 style="color:#111">Nouvel avis utilisateur</h2>
+            <p>Un utilisateur a envoyé un avis depuis l'app Files Coaching :</p>
 
             ${emailBlock}
 
@@ -101,10 +86,7 @@ async function sendFeedback(formData: FormData) {
 
             <hr style="border:none;border-top:1px solid #eee;margin:18px 0"/>
             <p style="font-size:12px;color:#888">
-              ${t(
-                "feedback.email.footer",
-                "Cet e-mail a été généré automatiquement par la page « Votre avis »."
-              )}
+              Cet e-mail a été généré automatiquement par la page &laquo; Votre avis &raquo;.
             </p>
           </div>
         `.trim(),
@@ -141,13 +123,10 @@ export default function Page({
       <div className="page-header">
         <div>
           <h1 className="h1" style={{ fontSize: 22 }}>
-            {t("feedback.pageTitle", "Votre avis")}
+            {t("avis.page.title")}
           </h1>
           <p className="lead" style={{ fontSize: 13, marginTop: 4 }}>
-            {t(
-              "feedback.subtitle",
-              "Dis-nous ce que tu penses de l’app pour qu’on puisse l’améliorer 🙌",
-            )}
+            {t("avis.page.subtitle")}
           </p>
         </div>
       </div>
@@ -163,10 +142,7 @@ export default function Page({
             fontWeight: 600,
           }}
         >
-          {t(
-            "feedback.messages.sent",
-            "Merci pour ton avis 🙏 On lit tous les messages avec attention.",
-          )}
+          {t("avis.status.sent")}
         </div>
       )}
 
@@ -180,10 +156,7 @@ export default function Page({
             fontWeight: 600,
           }}
         >
-          {t(
-            "feedback.messages.empty",
-            "Oups 😅 Merci d'écrire un petit message avant d'envoyer.",
-          )}
+          {t("avis.status.errors.empty")}
         </div>
       )}
 
@@ -197,10 +170,7 @@ export default function Page({
             fontWeight: 600,
           }}
         >
-          {t(
-            "feedback.messages.server",
-            "Une erreur est survenue côté serveur (configuration e-mail). Réessaie plus tard.",
-          )}
+          {t("avis.status.errors.server")}
         </div>
       )}
 
@@ -214,10 +184,7 @@ export default function Page({
             fontWeight: 600,
           }}
         >
-          {t(
-            "feedback.messages.send",
-            "Impossible d'envoyer ton avis pour le moment 😕 Réessaie un peu plus tard.",
-          )}
+          {t("avis.status.errors.send")}
         </div>
       )}
 
@@ -231,10 +198,7 @@ export default function Page({
               className="label"
               style={{ display: "block", fontWeight: 700, marginBottom: 6 }}
             >
-              {t(
-                "feedback.form.emailLabel",
-                "Ton e-mail (si tu veux qu'on te réponde)",
-              )}
+              {t("avis.form.emailLabel")}
             </label>
             <input
               id="email"
@@ -242,10 +206,7 @@ export default function Page({
               type="email"
               className="input"
               style={{ width: "100%", marginBottom: 12 }}
-              placeholder={t(
-                "feedback.form.emailPlaceholder",
-                "ton.email@exemple.com",
-              )}
+              placeholder={t("avis.form.emailPlaceholder")}
             />
 
             {/* Champ message */}
@@ -254,7 +215,7 @@ export default function Page({
               className="label"
               style={{ display: "block", fontWeight: 700, marginBottom: 6 }}
             >
-              {t("feedback.form.messageLabel", "Ton message")}
+              {t("avis.form.messageLabel")}
             </label>
 
             <textarea
@@ -263,10 +224,7 @@ export default function Page({
               rows={6}
               className="input"
               style={{ width: "100%", resize: "vertical" }}
-              placeholder={t(
-                "feedback.form.messagePlaceholder",
-                "Dis-nous ce qui te plaît, ce qu’on peut améliorer, des idées de fonctionnalités...",
-              )}
+              placeholder={t("avis.form.messagePlaceholder")}
             />
 
             <button
@@ -274,7 +232,7 @@ export default function Page({
               className="btn btn-dash"
               style={{ marginTop: 12, fontWeight: 700 }}
             >
-              {t("feedback.form.submit", "Envoyer mon avis")}
+              {t("avis.form.submit")}
             </button>
           </form>
         </div>
@@ -282,4 +240,3 @@ export default function Page({
     </div>
   );
 }
-
