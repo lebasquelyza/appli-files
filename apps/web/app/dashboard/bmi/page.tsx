@@ -3,10 +3,10 @@
 
 import { useState } from "react";
 import { Section } from "@/components/ui/Page";
-import { useTranslation } from "@/app/i18n/client";
+import { useLanguage } from "@/components/LanguageProvider";
 
 export default function Page() {
-  const { t } = useTranslation();
+  const { t } = useLanguage();
 
   const [h, setH] = useState("170");
   const [w, setW] = useState("70");
@@ -78,10 +78,7 @@ export default function Page() {
         </div>
 
         {/* Note sous le bloc */}
-        <p
-          className="text-xs mt-3"
-          style={{ color: "#6b7280" }}
-        >
+        <p className="text-xs mt-3" style={{ color: "#6b7280" }}>
           {t("bmi.note")}
         </p>
       </Section>
