@@ -1,8 +1,8 @@
 // apps/web/app/dashboard/recipes/page.tsx
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
+import { AIExtraSection } from "./AISection";
 import { translations } from "@/app/i18n/translations";
-import RecipesClient from "./RecipesClient";
 
 /* ===================== Config Next ===================== */
 export const runtime = "nodejs";
@@ -45,10 +45,6 @@ type Recipe = {
   steps: string[];
   rework?: Rework[];
 };
-
-type RecipeCardData = Recipe & { detailQS: string };
-
-type SavedItem = { id: string; title: string };
 
 /* ===================== Utils ===================== */
 function parseCsv(value?: string | string[]): string[] {
@@ -102,6 +98,34 @@ function encodeB64UrlJson(data: any): string {
   else b64 = "";
   return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
+
+/* ---- dictionnaire "re-travailler" pour plus tard (non utilisé ici) ---- */
+const REWORK_TIPS: Record<string, string[]> = {
+  brocoli: [
+    "Rôti au four parmesan-citron",
+    "Wok soja-sésame",
+    "Velouté crème légère",
+  ],
+  saumon: [
+    "Mariné miso/soja",
+    "Papillote citron-aneth",
+    "Rillettes au yaourt",
+  ],
+  tofu: [
+    "Mariné puis snacké",
+    "Panure maïzena + sauce douce",
+    "Émietté façon brouillade",
+  ],
+  poivron: ["Confit puis pelé", "Coulis doux", "Grillé salade"],
+  champignons: ["Poêlés très chauds", "Hachés en bolo", "Rôtis entiers"],
+  courgette: [
+    "Tagliatelles ail-citron",
+    "Gratin ricotta-menthe",
+    "Galettes râpées",
+  ],
+  épinards: ["Sautés minute", "Pesto doux", "Fondue légère"],
+  lentilles: ["Dal coco", "Salade tiède", "Soupe carotte-cumin"],
+};
 
 /* ---- base healthy FR ---- */
 const HEALTHY_BASE_FR: Recipe[] = [
@@ -233,7 +257,7 @@ const HEALTHY_BASE_FR: Recipe[] = [
   },
 ];
 
-/* ---- base healthy EN ---- */
+/* ---- base healthy EN (mêmes id, valeurs, mais titres traduits) ---- */
 const HEALTHY_BASE_EN: Recipe[] = [
   {
     id: "salade-quinoa",
@@ -517,7 +541,28 @@ const SHAKES_BASE_EN: Recipe[] = [
   },
 ];
 
+/* ===================== Filtres (Server Action) ===================== */
+async function applyFiltersAction(formData: FormData): Promise<void> {
+  "use server";
+  const params = new URLSearchParams();
+  const fields = [
+    "kcal",
+    "kcalMin",
+    "kcalMax",
+    "allergens",
+    "dislikes",
+    "view",
+  ] as const;
+  for (const f of fields) {
+    const val = (formData.get(f) ?? "").toString().trim();
+    if (val) params.set(f, val);
+  }
+  params.set("rnd", String(Date.now()));
+  redirect(`/dashboard/recipes?${params.toString()}`);
+}
+
 /* ===================== Sauvegarde via Cookie (Server Actions) ===================== */
+type SavedItem = { id: string; title: string };
 const SAVED_COOKIE = "saved_recipes_v1";
 
 function readSaved(): SavedItem[] {
@@ -542,26 +587,6 @@ function writeSaved(list: SavedItem[]) {
     sameSite: "lax",
     maxAge: 60 * 60 * 24 * 365,
   });
-}
-
-/* ===================== Server Actions ===================== */
-async function applyFiltersAction(formData: FormData): Promise<void> {
-  "use server";
-  const params = new URLSearchParams();
-  const fields = [
-    "kcal",
-    "kcalMin",
-    "kcalMax",
-    "allergens",
-    "dislikes",
-    "view",
-  ] as const;
-  for (const f of fields) {
-    const val = (formData.get(f) ?? "").toString().trim();
-    if (val) params.set(f, val);
-  }
-  params.set("rnd", String(Date.now()));
-  redirect(`/dashboard/recipes?${params.toString()}`);
 }
 
 async function saveRecipeAction(formData: FormData) {
@@ -590,7 +615,7 @@ async function removeRecipeAction(formData: FormData) {
   redirect(returnTo);
 }
 
-/* ===================== Page (server) ===================== */
+/* ===================== Page ===================== */
 export default async function Page({
   searchParams,
 }: {
@@ -605,6 +630,7 @@ export default async function Page({
   };
 }) {
   const lang = getLang();
+  const t = (path: string, fallback?: string) => tServer(lang, path, fallback);
 
   const kcal = Number(searchParams?.kcal ?? "");
   const kcalMin = Number(searchParams?.kcalMin ?? "");
@@ -622,12 +648,12 @@ export default async function Page({
 
   const seed = Number(searchParams?.rnd ?? "0") || 123456789;
 
-  // Base selon la langue
+  // 🔄 on choisit la base selon la langue
   const healthyBase = lang === "en" ? HEALTHY_BASE_EN : HEALTHY_BASE_FR;
   const shakesBase = lang === "en" ? SHAKES_BASE_EN : SHAKES_BASE_FR;
 
-  const healthyPickBase = pickRandomSeeded(healthyBase, 6, seed);
-  const shakesPickBase = pickRandomSeeded(shakesBase, 6, seed + 7);
+  const healthyPick = pickRandomSeeded(healthyBase, 6, seed);
+  const shakesPick = pickRandomSeeded(shakesBase, 6, seed + 7);
 
   // QS gardés (sans view)
   const qsParts: string[] = [];
@@ -639,21 +665,11 @@ export default async function Page({
   if (dislikes.length)
     qsParts.push(`dislikes=${encodeURIComponent(dislikes.join(","))}`);
   const baseQS = qsParts.length ? `${qsParts.join("&")}&` : "";
-
-  const encodeRecipe = (r: Recipe) =>
-    `?${baseQS}data=${encodeB64UrlJson(r)}`;
-
-  const healthyPick: RecipeCardData[] = healthyPickBase.map((r) => ({
-    ...r,
-    detailQS: encodeRecipe(r),
-  }));
-  const shakesPick: RecipeCardData[] = shakesPickBase.map((r) => ({
-    ...r,
-    detailQS: encodeRecipe(r),
-  }));
+  const encode = (r: Recipe) => `?${baseQS}data=${encodeB64UrlJson(r)}`;
 
   // Lecture des recettes enregistrées (cookie)
   const saved = readSaved();
+  const savedSet = new Set(saved.map((s) => s.id));
   const currentUrlParts = [...qsParts, `view=${view}`];
   const currentUrl = `/dashboard/recipes?${currentUrlParts.join("&")}`;
 
@@ -662,24 +678,622 @@ export default async function Page({
   const linkShakes = `/dashboard/recipes?${baseQS}view=shakes`;
 
   return (
-    <RecipesClient
-      lang={lang}
-      view={view}
-      kcal={hasKcalTarget ? kcal : undefined}
-      kcalMin={hasKcalMin ? kcalMin : undefined}
-      kcalMax={hasKcalMax ? kcalMax : undefined}
-      allergens={allergens}
-      dislikes={dislikes}
-      baseQS={baseQS}
-      linkMeals={linkMeals}
-      linkShakes={linkShakes}
-      currentUrl={currentUrl}
-      healthyPick={healthyPick}
-      shakesPick={shakesPick}
-      saved={saved}
-      applyFiltersAction={applyFiltersAction}
-      saveRecipeAction={saveRecipeAction}
-      removeRecipeAction={removeRecipeAction}
-    />
+    <>
+      <div className="h-10" aria-hidden="true" />
+
+      <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
+        <div className="page-header">
+          <div>
+            <h1
+              className="h1"
+              style={{
+                marginBottom: 2,
+                fontSize: "clamp(20px, 2.2vw, 24px)",
+                lineHeight: 1.15,
+              }}
+            >
+              {t("recipes.pageTitle", "Recettes")}
+            </h1>
+            <p
+              className="lead"
+              style={{
+                marginTop: 4,
+                fontSize: "clamp(12px, 1.6vw, 14px)",
+                lineHeight: 1.35,
+                color: "#4b5563",
+              }}
+            >
+              {t(
+                "recipes.pageSubtitle",
+                "Base healthy pour tous + suggestions perso IA selon tes filtres.",
+              )}{" "}
+              <strong>IA</strong>
+            </p>
+
+            {/* Récap filtres actifs */}
+            <div
+              className="text-xs"
+              style={{ color: "#6b7280", marginTop: 8 }}
+            >
+              {t("recipes.filters.activeLabel", "Filtres actifs —")}
+              {hasKcalTarget && (
+                <>
+                  {" "}
+                  {t("recipes.filters.target", "cible")}: ~{kcal}{" "}
+                  {t("recipes.filters.kcalSuffix", "kcal")}
+                </>
+              )}
+              {!hasKcalTarget && (hasKcalMin || hasKcalMax) && (
+                <>
+                  {" "}
+                  {t("recipes.filters.range", "plage")}:{" "}
+                  {hasKcalMin ? kcalMin : "…"}–{hasKcalMax ? kcalMax : "…"}{" "}
+                  {t("recipes.filters.kcalSuffix", "kcal")}
+                </>
+              )}
+              {allergens.length ? (
+                <>
+                  {" "}
+                  · {t("recipes.filters.allergens", "allergènes")}:{" "}
+                  {allergens.join(", ")}
+                </>
+              ) : null}
+              {dislikes.length ? (
+                <>
+                  {" "}
+                  · {t("recipes.filters.dislikes", "non aimés")}:{" "}
+                  {dislikes.join(", ")}
+                </>
+              ) : null}
+              {!hasKcalTarget &&
+                !hasKcalMin &&
+                !hasKcalMax &&
+                !allergens.length &&
+                !dislikes.length &&
+                ` ${t("recipes.filters.none", "aucun")}`}
+            </div>
+          </div>
+        </div>
+
+        {/* =================== Choix rapide (blocs cliquables) =================== */}
+        <div
+          className="grid gap-4 sm:grid-cols-2"
+          style={{ marginTop: 12 }}
+        >
+          <a
+            href={linkMeals}
+            className="card"
+            style={{
+              textDecoration: "none",
+              color: "inherit",
+              borderColor: view === "meals" ? "#111" : undefined,
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <div>
+                <strong>
+                  {t(
+                    "recipes.quickSwitch.meals.title",
+                    "Recettes — Healthy",
+                  )}
+                </strong>
+                <div
+                  className="text-sm"
+                  style={{ color: "#6b7280" }}
+                >
+                  {t(
+                    "recipes.quickSwitch.meals.subtitle",
+                    "Plats + bowls healthy",
+                  )}
+                </div>
+              </div>
+              {view === "meals" && (
+                <span className="badge">
+                  {t("recipes.quickSwitch.activeBadge", "Actif")}
+                </span>
+              )}
+            </div>
+          </a>
+
+          <a
+            href={linkShakes}
+            className="card"
+            style={{
+              textDecoration: "none",
+              color: "inherit",
+              borderColor: view === "shakes" ? "#111" : undefined,
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <div>
+                <strong>
+                  {t(
+                    "recipes.quickSwitch.shakes.title",
+                    "Bar à prot’ — Boissons protéinées",
+                  )}
+                </strong>
+                <div
+                  className="text-sm"
+                  style={{ color: "#6b7280" }}
+                >
+                  {t(
+                    "recipes.quickSwitch.shakes.subtitle",
+                    "Shakes/smoothies en 5 min",
+                  )}
+                </div>
+              </div>
+              {view === "shakes" && (
+                <span className="badge">
+                  {t("recipes.quickSwitch.activeBadge", "Actif")}
+                </span>
+              )}
+            </div>
+          </a>
+        </div>
+
+        {/* =================== Contraintes & filtres (pour IA) =================== */}
+        <div className="section" style={{ marginTop: 12 }}>
+          <div
+            className="section-head"
+            style={{
+              marginBottom: 8,
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              flexWrap: "wrap",
+            }}
+          >
+            <h2
+              style={{
+                margin: 0,
+                fontSize: "clamp(16px,1.9vw,18px)",
+                lineHeight: 1.2,
+              }}
+            >
+              {t(
+                "recipes.constraints.title",
+                "Contraintes & filtres (pour l'IA)",
+              )}
+            </h2>
+          </div>
+
+          <form
+            action={applyFiltersAction}
+            className="grid gap-6 lg:grid-cols-2"
+          >
+            {/* On garde la vue actuelle (meals/shakes) */}
+            <input type="hidden" name="view" value={view} />
+
+            <fieldset style={{ display: "contents" }}>
+              <div>
+                <label className="label">
+                  {t(
+                    "recipes.constraints.kcalTargetLabel",
+                    "Cible calories (kcal)",
+                  )}
+                </label>
+                <input
+                  className="input"
+                  type="number"
+                  name="kcal"
+                  placeholder="ex: 600"
+                  defaultValue={
+                    !isNaN(kcal) && kcal > 0 ? String(kcal) : ""
+                  }
+                />
+              </div>
+              <div className="grid gap-6 sm:grid-cols-2">
+                <div>
+                  <label className="label">
+                    {t(
+                      "recipes.constraints.kcalMinLabel",
+                      "Min kcal",
+                    )}
+                  </label>
+                  <input
+                    className="input"
+                    type="number"
+                    name="kcalMin"
+                    placeholder="ex: 450"
+                    defaultValue={
+                      !isNaN(kcalMin) && kcalMin > 0
+                        ? String(kcalMin)
+                        : ""
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="label">
+                    {t(
+                      "recipes.constraints.kcalMaxLabel",
+                      "Max kcal",
+                    )}
+                  </label>
+                  <input
+                    className="input"
+                    type="number"
+                    name="kcalMax"
+                    placeholder="ex: 700"
+                    defaultValue={
+                      !isNaN(kcalMax) && kcalMax > 0
+                        ? String(kcalMax)
+                        : ""
+                    }
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="label">
+                  {t(
+                    "recipes.constraints.allergensLabel",
+                    "Allergènes / intolérances (séparés par virgules)",
+                  )}
+                </label>
+                <input
+                  className="input"
+                  type="text"
+                  name="allergens"
+                  placeholder={t(
+                    "recipes.constraints.allergensPlaceholder",
+                    "arachide, lactose, gluten",
+                  )}
+                  defaultValue={allergens.join(", ")}
+                />
+              </div>
+
+              <div>
+                <label className="label">
+                  {t(
+                    "recipes.constraints.dislikesLabel",
+                    "Aliments non aimés (re-travailler)",
+                  )}
+                </label>
+                <input
+                  className="input"
+                  type="text"
+                  name="dislikes"
+                  placeholder={t(
+                    "recipes.constraints.dislikesPlaceholder",
+                    "brocoli, saumon, tofu...",
+                  )}
+                  defaultValue={dislikes.join(", ")}
+                />
+                <div
+                  className="text-xs"
+                  style={{ color: "#6b7280", marginTop: 4 }}
+                >
+                  {t(
+                    "recipes.constraints.dislikesHelp",
+                    "L'IA les garde, mais propose une autre façon de les cuisiner.",
+                  )}
+                </div>
+              </div>
+            </fieldset>
+
+            <div className="flex items-center justify-between lg:col-span-2">
+              <div
+                className="text-sm"
+                style={{ color: "#6b7280" }}
+              >
+                {t(
+                  "recipes.constraints.footerNote",
+                  "Les filtres s'appliquent surtout aux suggestions perso IA.",
+                )}
+              </div>
+              <div style={{ display: "flex", gap: 10 }}>
+                <a
+                  href="/dashboard/recipes"
+                  className="btn btn-outline"
+                  style={{ color: "#111" }}
+                >
+                  {t(
+                    "recipes.constraints.resetButton",
+                    "Réinitialiser",
+                  )}
+                </a>
+                <button className="btn btn-dash" type="submit">
+                  {t(
+                    "recipes.constraints.regenerateButton",
+                    "Régénérer",
+                  )}
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+
+        {/* Vos recettes enregistrées */}
+        {saved.length > 0 && (
+          <section
+            className="section"
+            style={{ marginTop: 12 }}
+          >
+            <div
+              className="section-head"
+              style={{ marginBottom: 8 }}
+            >
+              <h2>
+                {t(
+                  "recipes.saved.title",
+                  "Vos recettes enregistrées",
+                )}
+              </h2>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-2">
+              {saved.map((s) => (
+                <article
+                  key={s.id}
+                  className="card"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 12,
+                  }}
+                >
+                  <a
+                    href={`/dashboard/recipes/${s.id}`}
+                    className="font-semibold"
+                    style={{
+                      textDecoration: "none",
+                      color: "var(--text,#111)",
+                    }}
+                  >
+                    {s.title}
+                  </a>
+                  <form action={removeRecipeAction}>
+                    <input type="hidden" name="id" value={s.id} />
+                    <input
+                      type="hidden"
+                      name="returnTo"
+                      value={currentUrl || "/dashboard/recipes"}
+                    />
+                    <button
+                      type="submit"
+                      className="btn btn-outline"
+                      style={{ color: "var(--text, #111)" }}
+                    >
+                      {t(
+                        "recipes.saved.removeButton",
+                        "Retirer",
+                      )}
+                    </button>
+                  </form>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* =================== CONTENU selon view =================== */}
+        {view === "meals" ? (
+          <>
+            <section
+              className="section"
+              style={{ marginTop: 12 }}
+            >
+              <div
+                className="section-head"
+                style={{ marginBottom: 8 }}
+              >
+                <h2>
+                  {t("recipes.mealsSection.title", "Recettes")}
+                </h2>
+                <p
+                  className="text-xs"
+                  style={{ color: "#6b7280", marginTop: 4 }}
+                >
+                  {t(
+                    "recipes.mealsSection.subtitle",
+                    "Recettes fixes, stables et testées.",
+                  )}
+                </p>
+              </div>
+              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
+                {healthyPick.map((r) => (
+                  <Card
+                    key={r.id}
+                    r={r}
+                    detailQS={encode(r)}
+                    isSaved={savedSet.has(r.id)}
+                    currentUrl={
+                      currentUrl || "/dashboard/recipes"
+                    }
+                    t={t}
+                  />
+                ))}
+              </div>
+            </section>
+
+            {/* Suggestions IA en plus */}
+            <AIExtraSection
+              kind="meals"
+              baseQS={baseQS}
+              kcal={hasKcalTarget ? kcal : undefined}
+              kcalMin={hasKcalMin ? kcalMin : undefined}
+              kcalMax={hasKcalMax ? kcalMax : undefined}
+              allergens={allergens}
+              dislikes={dislikes}
+            />
+          </>
+        ) : (
+          <>
+            <section
+              className="section"
+              style={{ marginTop: 12 }}
+            >
+              <div
+                className="section-head"
+                style={{ marginBottom: 8 }}
+              >
+                <h2>
+                  {t(
+                    "recipes.shakesSection.title",
+                    "Boissons protéinées — base",
+                  )}
+                </h2>
+                <p
+                  className="text-xs"
+                  style={{ color: "#6b7280", marginTop: 4 }}
+                >
+                  {t(
+                    "recipes.shakesSection.subtitle",
+                    "Shakes & smoothies rapides.",
+                  )}
+                </p>
+              </div>
+              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
+                {shakesPick.map((r) => (
+                  <Card
+                    key={r.id}
+                    r={r}
+                    detailQS={encode(r)}
+                    isSaved={savedSet.has(r.id)}
+                    currentUrl={
+                      currentUrl || "/dashboard/recipes"
+                    }
+                    t={t}
+                  />
+                ))}
+              </div>
+            </section>
+
+            {/* Suggestions IA en plus */}
+            <AIExtraSection
+              kind="shakes"
+              baseQS={baseQS}
+              kcal={hasKcalTarget ? kcal : undefined}
+              kcalMin={hasKcalMin ? kcalMin : undefined}
+              kcalMax={hasKcalMax ? kcalMax : undefined}
+              allergens={allergens}
+              dislikes={dislikes}
+            />
+          </>
+        )}
+      </div>
+    </>
+  );
+}
+
+/* ===================== Carte Recette (base) ===================== */
+function Card({
+  r,
+  detailQS,
+  isSaved,
+  currentUrl,
+  t,
+}: {
+  r: Recipe;
+  detailQS: string;
+  isSaved: boolean;
+  currentUrl: string;
+  t: (path: string, fallback?: string) => string;
+}) {
+  const href = `/dashboard/recipes/${r.id}${detailQS}`;
+
+  return (
+    <article className="card" style={{ overflow: "hidden" }}>
+      <div className="flex items-center justify-between">
+        <h3
+          style={{
+            margin: 0,
+            fontSize: 18,
+            fontWeight: 800,
+          }}
+        >
+          {r.title}
+        </h3>
+      </div>
+
+      {r.subtitle && (
+        <p
+          className="text-sm"
+          style={{ marginTop: 4, color: "#6b7280" }}
+        >
+          {r.subtitle}
+        </p>
+      )}
+
+      <div
+        className="text-sm"
+        style={{
+          marginTop: 10,
+          display: "flex",
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
+        {typeof r.kcal === "number" && (
+          <span className="badge">{r.kcal} kcal</span>
+        )}
+        {typeof r.timeMin === "number" && (
+          <span className="badge">{r.timeMin} min</span>
+        )}
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          gap: 10,
+          marginTop: 12,
+          flexWrap: "wrap",
+        }}
+      >
+        <a className="btn btn-dash" href={href}>
+          {t("recipes.card.viewRecipe", "Voir la recette")}
+        </a>
+
+        {isSaved ? (
+          <form action={removeRecipeAction}>
+            <input type="hidden" name="id" value={r.id} />
+            <input
+              type="hidden"
+              name="returnTo"
+              value={currentUrl}
+            />
+            <button
+              type="submit"
+              className="btn btn-outline"
+              style={{ color: "var(--text, #111)" }}
+            >
+              {t(
+                "recipes.card.savedRemove",
+                "Enregistrée ✓ (Retirer)",
+              )}
+            </button>
+          </form>
+        ) : (
+          <form action={saveRecipeAction}>
+            <input type="hidden" name="id" value={r.id} />
+            <input type="hidden" name="title" value={r.title} />
+            <input
+              type="hidden"
+              name="returnTo"
+              value={currentUrl}
+            />
+            <button
+              type="submit"
+              className="btn btn-outline"
+              style={{ color: "var(--text, #111)" }}
+            >
+              {t("recipes.card.save", "Enregistrer")}
+            </button>
+          </form>
+        )}
+      </div>
+    </article>
   );
 }
