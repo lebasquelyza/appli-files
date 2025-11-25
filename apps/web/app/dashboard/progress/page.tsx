@@ -54,11 +54,15 @@ function parseStore(val?: string | null): Store {
   }
 }
 
-function fmtDate(dateISO: string) {
+function fmtDate(dateISO: string, locale: string) {
   try {
     const d = new Date(dateISO);
     if (!isNaN(d.getTime())) {
-      return d.toLocaleDateString("fr-FR", { year: "numeric", month: "long", day: "numeric" });
+      return d.toLocaleDateString(locale, {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
     }
   } catch {}
   return dateISO;
@@ -95,11 +99,23 @@ function parseYMDLocal(s: string) {
 function entryBadgeStyles(t: EntryType): CSSProperties {
   switch (t) {
     case "steps":
-      return { border: "1px solid rgba(14,165,233,.25)", background: "rgba(14,165,233,.08)", color: "#0369a1" };
+      return {
+        border: "1px solid rgba(14,165,233,.25)",
+        background: "rgba(14,165,233,.08)",
+        color: "#0369a1",
+      };
     case "load":
-      return { border: "1px solid rgba(245,158,11,.25)", background: "rgba(245,158,11,.08)", color: "#92400e" };
+      return {
+        border: "1px solid rgba(245,158,11,.25)",
+        background: "rgba(245,158,11,.08)",
+        color: "#92400e",
+      };
     case "weight":
-      return { border: "1px solid rgba(139,92,246,.25)", background: "rgba(139,92,246,.08)", color: "#5b21b6" };
+      return {
+        border: "1px solid rgba(139,92,246,.25)",
+        background: "rgba(139,92,246,.08)",
+        color: "#5b21b6",
+      };
   }
 }
 
@@ -112,12 +128,18 @@ async function addProgressAction(formData: FormData) {
   const repsStr = (formData.get("reps") || "").toString().replace(",", ".");
   const note = (formData.get("note") || "").toString().slice(0, 240);
 
-  if (!["steps", "load", "weight"].includes(type)) redirect("/dashboard/progress?error=type");
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) redirect("/dashboard/progress?error=date");
+  if (!["steps", "load", "weight"].includes(type)) {
+    redirect("/dashboard/progress?error=type");
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    redirect("/dashboard/progress?error=date");
+  }
 
   const value = Number(valueStr);
   const reps = repsStr ? Number(repsStr) : undefined;
-  if (!isFinite(value) || value <= 0) redirect("/dashboard/progress?error=valeur");
+  if (!isFinite(value) || value <= 0) {
+    redirect("/dashboard/progress?error=valeur");
+  }
 
   const jar = cookies();
   const store = parseStore(jar.get("app_progress")?.value);
@@ -127,7 +149,10 @@ async function addProgressAction(formData: FormData) {
     type,
     date,
     value,
-    reps: type === "load" && isFinite(Number(reps)) && Number(reps) > 0 ? Number(reps) : undefined,
+    reps:
+      type === "load" && isFinite(Number(reps)) && Number(reps) > 0
+        ? Number(reps)
+        : undefined,
     note: note || undefined,
     createdAt: new Date().toISOString(),
   };
@@ -151,7 +176,9 @@ async function deleteEntryAction(formData: FormData) {
 
   const jar = cookies();
   const store = parseStore(jar.get("app_progress")?.value);
-  const next: Store = { entries: store.entries.filter(e => e.id !== id) };
+  const next: Store = {
+    entries: store.entries.filter((e) => e.id !== id),
+  };
 
   jar.set("app_progress", JSON.stringify(next), {
     path: "/",
@@ -166,8 +193,11 @@ async function deleteEntryAction(formData: FormData) {
 /** ------ Page ------ */
 export default async function Page({
   searchParams,
-}: { searchParams?: { success?: string; error?: string; deleted?: string } }) {
+}: {
+  searchParams?: { success?: string; error?: string; deleted?: string };
+}) {
   const lang = getLang();
+  const locale = lang === "en" ? "en-US" : "fr-FR";
   const t = (path: string, fallback?: string) => tServer(lang, path, fallback);
 
   const jar = cookies();
@@ -178,9 +208,9 @@ export default async function Page({
     .slice(0, 12);
 
   const lastByType: Record<EntryType, ProgressEntry | undefined> = {
-    steps: store.entries.find(e => e.type === "steps"),
-    load: store.entries.find(e => e.type === "load"),
-    weight: store.entries.find(e => e.type === "weight"),
+    steps: store.entries.find((e) => e.type === "steps"),
+    load: store.entries.find((e) => e.type === "load"),
+    weight: store.entries.find((e) => e.type === "weight"),
   };
 
   const today = new Date();
@@ -196,8 +226,8 @@ export default async function Page({
   const sundayYMD = toYMD(sunday);
 
   const stepsThisWeek = store.entries
-    .filter(e => e.type === "steps")
-    .filter(e => {
+    .filter((e) => e.type === "steps")
+    .filter((e) => {
       const d = parseYMDLocal(e.date);
       return d >= monday && d <= sunday;
     })
@@ -205,15 +235,16 @@ export default async function Page({
 
   const daysCovered = new Set(
     store.entries
-      .filter(e => e.type === "steps")
-      .filter(e => {
+      .filter((e) => e.type === "steps")
+      .filter((e) => {
         const d = parseYMDLocal(e.date);
         return d >= monday && d <= sunday;
       })
-      .map(e => e.date)
+      .map((e) => e.date),
   ).size;
 
-  const avgPerDay = daysCovered > 0 ? Math.round(stepsThisWeek / daysCovered) : 0;
+  const avgPerDay =
+    daysCovered > 0 ? Math.round(stepsThisWeek / daysCovered) : 0;
   const hasWeekData = stepsThisWeek > 0 && daysCovered > 0;
 
   return (
@@ -223,17 +254,26 @@ export default async function Page({
         <div>
           <h1
             className="h1"
-            style={{ marginBottom: 2, fontSize: "clamp(20px, 2.2vw, 24px)", lineHeight: 1.15 }}
+            style={{
+              marginBottom: 2,
+              fontSize: "clamp(20px, 2.2vw, 24px)",
+              lineHeight: 1.15,
+            }}
           >
             {t("progress.pageTitle", "Mes progrès")}
           </h1>
           <p
             className="lead"
-            style={{ marginTop: 4, fontSize: "clamp(12px, 1.6vw, 14px)", lineHeight: 1.35, color: "#4b5563" }}
+            style={{
+              marginTop: 4,
+              fontSize: "clamp(12px, 1.6vw, 14px)",
+              lineHeight: 1.35,
+              color: "#4b5563",
+            }}
           >
             {t(
               "progress.pageSubtitle",
-              "Ajoutez vos pas, vos charges et votre poids. Vos données restent en local (cookie)."
+              "Ajoutez vos pas, vos charges et votre poids. Vos données restent en local (cookie).",
             )}
           </p>
         </div>
@@ -274,7 +314,8 @@ export default async function Page({
               fontWeight: 600,
             }}
           >
-            {t("progress.messages.errorPrefix", "⚠️ Erreur :")} {searchParams.error}
+            {t("progress.messages.errorPrefix", "⚠️ Erreur :")}{" "}
+            {searchParams.error}
           </div>
         )}
       </div>
@@ -282,7 +323,13 @@ export default async function Page({
       {/* === 1) Section Formulaire === */}
       <div className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
-          <h2 style={{ margin: 0, fontSize: "clamp(16px, 1.9vw, 18px)", lineHeight: 1.2 }}>
+          <h2
+            style={{
+              margin: 0,
+              fontSize: "clamp(16px, 1.9vw, 18px)",
+              lineHeight: 1.2,
+            }}
+          >
             {t("progress.form.title", "Ajouter une entrée")}
           </h2>
         </div>
@@ -293,7 +340,12 @@ export default async function Page({
               <label className="label">
                 {t("progress.form.type.label", "Type")}
               </label>
-              <select name="type" className="input" defaultValue="steps" required>
+              <select
+                name="type"
+                className="input"
+                defaultValue="steps"
+                required
+              >
                 <option value="steps">
                   {t("progress.form.type.steps", "Pas (steps)")}
                 </option>
@@ -304,10 +356,13 @@ export default async function Page({
                   {t("progress.form.type.weight", "Poids (kg)")}
                 </option>
               </select>
-              <div className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>
+              <div
+                className="text-xs"
+                style={{ color: "#6b7280", marginTop: 6 }}
+              >
                 {t(
                   "progress.form.type.help",
-                  "Pour charges, vous pouvez renseigner les répétitions ci-dessous."
+                  "Pour charges, vous pouvez renseigner les répétitions ci-dessous.",
                 )}
               </div>
             </div>
@@ -336,7 +391,7 @@ export default async function Page({
                 step="any"
                 placeholder={t(
                   "progress.form.value.placeholder",
-                  "ex: 8000 (pas) / 60 (kg)"
+                  "ex: 8000 (pas) / 60 (kg)",
                 )}
                 required
               />
@@ -346,7 +401,7 @@ export default async function Page({
               <label className="label">
                 {t(
                   "progress.form.reps.label",
-                  "Répétitions (optionnel, charges)"
+                  "Répétitions (optionnel, charges)",
                 )}
               </label>
               <input
@@ -368,14 +423,18 @@ export default async function Page({
                 name="note"
                 placeholder={t(
                   "progress.form.note.placeholder",
-                  "ex: Marche rapide, Squat barre, etc."
+                  "ex: Marche rapide, Squat barre, etc.",
                 )}
               />
             </div>
 
             <div
               className="lg:col-span-3"
-              style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: 10,
+              }}
             >
               <button className="btn btn-dash" type="submit">
                 {t("progress.form.submit", "Enregistrer")}
@@ -411,15 +470,17 @@ export default async function Page({
           <div>
             <div className="text-sm" style={{ color: "#6b7280" }}>
               {t("progress.week.rangePrefix", "Du")}{" "}
-              <b>{fmtDate(mondayYMD)}</b> {t("progress.week.rangeTo", "au")}{" "}
-              <b>{fmtDate(sundayYMD)}</b>
+              <b>{fmtDate(mondayYMD, locale)}</b>{" "}
+              {t("progress.week.rangeTo", "au")}{" "}
+              <b>{fmtDate(sundayYMD, locale)}</b>
             </div>
 
             {hasWeekData ? (
               <div
                 className="grid"
                 style={{
-                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                  gridTemplateColumns:
+                    "repeat(auto-fit, minmax(220px, 1fr))",
                   gap: 12,
                   marginTop: 12,
                 }}
@@ -430,7 +491,7 @@ export default async function Page({
                     {t("progress.week.totalLabel", "Total")}
                   </div>
                   <div style={{ fontSize: 22, fontWeight: 900 }}>
-                    {stepsThisWeek.toLocaleString("fr-FR")}{" "}
+                    {stepsThisWeek.toLocaleString(locale)}{" "}
                     <span
                       className="text-xs"
                       style={{
@@ -448,11 +509,11 @@ export default async function Page({
                   <div className="text-sm" style={{ color: "#6b7280" }}>
                     {t(
                       "progress.week.avgPerDayLabel",
-                      "Moyenne / jour"
+                      "Moyenne / jour",
                     )}
                   </div>
                   <div style={{ fontSize: 22, fontWeight: 900 }}>
-                    {avgPerDay.toLocaleString("fr-FR")}{" "}
+                    {avgPerDay.toLocaleString(locale)}{" "}
                     <span
                       className="text-xs"
                       style={{
@@ -460,7 +521,10 @@ export default async function Page({
                         fontWeight: 400,
                       }}
                     >
-                      {t("progress.week.stepsPerDayUnit", "pas/jour")}
+                      {t(
+                        "progress.week.stepsPerDayUnit",
+                        "pas/jour",
+                      )}
                     </span>
                   </div>
                 </div>
@@ -472,7 +536,7 @@ export default async function Page({
               >
                 {t(
                   "progress.week.noData",
-                  "Aucune donnée saisie pour cette semaine. Ajoutez une entrée ci-dessus pour voir vos stats."
+                  "Aucune donnée saisie pour cette semaine. Ajoutez une entrée ci-dessus pour voir vos stats.",
                 )}
               </div>
             )}
@@ -511,14 +575,14 @@ export default async function Page({
             {lastByType.steps ? (
               <div style={{ marginTop: 8 }}>
                 <div style={{ fontSize: 22, fontWeight: 900 }}>
-                  {lastByType.steps.value.toLocaleString("fr-FR")}{" "}
+                  {lastByType.steps.value.toLocaleString(locale)}{" "}
                   {t("progress.latest.steps.unit", "pas")}
                 </div>
                 <div
                   className="text-sm"
                   style={{ color: "#6b7280" }}
                 >
-                  {fmtDate(lastByType.steps.date)}
+                  {fmtDate(lastByType.steps.date, locale)}
                 </div>
               </div>
             ) : (
@@ -556,7 +620,7 @@ export default async function Page({
                   className="text-sm"
                   style={{ color: "#6b7280" }}
                 >
-                  {fmtDate(lastByType.load.date)}
+                  {fmtDate(lastByType.load.date, locale)}
                 </div>
               </div>
             ) : (
@@ -591,7 +655,7 @@ export default async function Page({
                   className="text-sm"
                   style={{ color: "#6b7280" }}
                 >
-                  {fmtDate(lastByType.weight.date)}
+                  {fmtDate(lastByType.weight.date, locale)}
                 </div>
               </div>
             ) : (
@@ -621,13 +685,10 @@ export default async function Page({
         </div>
 
         {recent.length === 0 ? (
-          <div
-            className="card text-sm"
-            style={{ color: "#6b7280" }}
-          >
+          <div className="card text-sm" style={{ color: "#6b7280" }}>
             {t(
               "progress.recent.empty",
-              "Pas encore de données — commencez en ajoutant une entrée ci-dessus."
+              "Pas encore de données — commencez en ajoutant une entrée ci-dessus.",
             )}
           </div>
         ) : (
@@ -652,17 +713,15 @@ export default async function Page({
                       t("progress.recent.type.weight", "Poids")}
                   </strong>
                   <span className="badge">
-                    {fmtDate(e.date)}
+                    {fmtDate(e.date, locale)}
                   </span>
                 </div>
 
-                <div
-                  style={{ fontSize: 18, fontWeight: 800 }}
-                >
+                <div style={{ fontSize: 18, fontWeight: 800 }}>
                   {e.type === "steps" &&
-                    `${e.value.toLocaleString("fr-FR")} ${t(
+                    `${e.value.toLocaleString(locale)} ${t(
                       "progress.latest.steps.unit",
-                      "pas"
+                      "pas",
                     )}`}
                   {e.type === "load" &&
                     `${e.value} kg${
@@ -680,10 +739,7 @@ export default async function Page({
                   </div>
                 )}
 
-                <form
-                  action={deleteEntryAction}
-                  style={{ marginTop: 4 }}
-                >
+                <form action={deleteEntryAction} style={{ marginTop: 4 }}>
                   <input type="hidden" name="id" value={e.id} />
                   <button
                     className="btn btn-outline"
@@ -701,5 +757,3 @@ export default async function Page({
     </div>
   );
 }
-
-
