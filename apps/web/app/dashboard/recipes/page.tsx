@@ -2,7 +2,7 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { AIExtraSection } from "./AISection";
-import { translations } from "@/app/i18n/translations";
+import { translations } from "@/components/LanguageProvider";
 
 /* ===================== Config Next ===================== */
 export const runtime = "nodejs";
