@@ -25,6 +25,10 @@ type Props = {
   showDebug: boolean;
   questionnaireUrl: string;
   questionnaireBase: string;
+
+  // 🔥 ajouté : ProfileClient accepte (optionnel) un lang envoyé par page.tsx,
+  // mais il ne l'utilise pas (LanguageProvider lit le cookie)
+  lang?: "fr" | "en";
 };
 
 /* Helpers côté client */
@@ -53,7 +57,8 @@ export default function ProfileClient(props: Props) {
     questionnaireBase,
   } = props;
 
-  const { t, lang } = useLanguage();
+  // 🔥 IMPORTANT : on utilise UNIQUEMENT le t() du LanguageProvider
+  const { t } = useLanguage();
 
   // helper t avec fallback si la clé n’existe pas
   const tf = (path: string, fallback?: string) => {
@@ -75,7 +80,7 @@ export default function ProfileClient(props: Props) {
   const clientAge =
     typeof p?.age === "number" && p.age > 0 ? p.age : undefined;
 
-  // goalLabel – même logique qu’avant, en utilisant t() du contexte
+  // goalLabel
   const goalLabel = useMemo(() => {
     const g = String((p as any)?.objectif || (p as any)?.goal || "").toLowerCase();
     if (!g) return "";
@@ -83,7 +88,7 @@ export default function ProfileClient(props: Props) {
     const translated = t(key);
     if (translated && translated !== key) return translated;
 
-    // fallback FR “dur” si la clé n’existe pas
+    // fallback FR
     const map: Record<string, string> = {
       hypertrophy: "Hypertrophie / Esthétique",
       fatloss: "Perte de gras",
@@ -93,9 +98,9 @@ export default function ProfileClient(props: Props) {
       general: "Forme générale",
     };
     return map[g] || (p as any)?.objectif || "";
-  }, [p, t, lang]);
+  }, [p, t]);
 
-  // Conserver saved/later quand on change de mode
+  // query keep
   const qsKeep = [
     hasGenerate ? "generate=1" : undefined,
     savedIdSet.size ? `saved=${[...savedIdSet].join(",")}` : undefined,
@@ -112,7 +117,6 @@ export default function ProfileClient(props: Props) {
       ? tf("profile.sessions.titleNoEquip", "Mes séances (sans matériel)")
       : tf("profile.sessions.title", "Mes séances");
 
-  // Base de query pour les liens vers les détails de séance (et pour garder les listes)
   const baseLinkQuery = [
     equipMode === "none" ? "equip=none" : undefined,
     "generate=1",
@@ -226,7 +230,7 @@ export default function ProfileClient(props: Props) {
                   {tf(
                     "profile.info.firstName.label",
                     "Prénom"
-                  )}{" "}
+                  )}
                   :
                 </b>{" "}
                 {clientPrenom ||
@@ -240,6 +244,7 @@ export default function ProfileClient(props: Props) {
                   ))}
               </span>
             )}
+
             {(typeof clientAge === "number" || showPlaceholders) && (
               <span>
                 <b>{tf("profile.info.age.label", "Âge")} :</b>{" "}
@@ -255,13 +260,14 @@ export default function ProfileClient(props: Props) {
                     )}
               </span>
             )}
+
             {(goalLabel || showPlaceholders) && (
               <span>
                 <b>
                   {tf(
                     "profile.info.goal.label",
                     "Objectif actuel"
-                  )}{" "}
+                  )}
                   :
                 </b>{" "}
                 {goalLabel ||
@@ -319,7 +325,7 @@ export default function ProfileClient(props: Props) {
         </div>
       </section>
 
-      {/* ===== Génération / Mes séances + bascule matériel/sans matériel ===== */}
+      {/* ===== Génération / Mes séances ===== */}
       <section className="section" style={{ marginTop: 16 }}>
         <div
           className="section-head"
@@ -419,7 +425,7 @@ export default function ProfileClient(props: Props) {
         )}
       </section>
 
-      {/* ===== Bloc bas de page : Séance faite ✅ / À faire plus tard ⏳ ===== */}
+      {/* ===== Listes ===== */}
       <section className="section" style={{ marginTop: 20 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
           <h2 style={{ margin: 0 }}>
@@ -431,7 +437,7 @@ export default function ProfileClient(props: Props) {
           className="grid"
           style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}
         >
-          {/* Séance faite ✅ */}
+          {/* Séance faite */}
           <div className="card">
             <div
               className="text-sm"
@@ -443,6 +449,7 @@ export default function ProfileClient(props: Props) {
               )}{" "}
               <span aria-hidden>✅</span>
             </div>
+
             {savedList.length > 0 && (
               <ul
                 className="text-sm"
@@ -490,10 +497,8 @@ export default function ProfileClient(props: Props) {
                         }}
                       >
                         {s.title || `Séance ${idx + 1}`}
-                        {s.type && (
-                          <span style={{ color: "#6b7280" }}> · {s.type}</span>
-                        )}
                       </a>
+
                       <a
                         href={removeHref}
                         aria-label={tf(
@@ -507,10 +512,6 @@ export default function ProfileClient(props: Props) {
                           borderRadius: 999,
                           border: "1px solid #e5e7eb",
                           color: "#6b7280",
-                          lineHeight: 1,
-                          display: "inline-flex",
-                          alignItems: "center",
-                          justifyContent: "center",
                         }}
                       >
                         🗑️
@@ -522,7 +523,7 @@ export default function ProfileClient(props: Props) {
             )}
           </div>
 
-          {/* À faire plus tard ⏳ */}
+          {/* À faire plus tard */}
           <div className="card">
             <div
               className="text-sm"
@@ -534,6 +535,7 @@ export default function ProfileClient(props: Props) {
               )}{" "}
               <span aria-hidden>⏳</span>
             </div>
+
             {laterList.length > 0 && (
               <ul
                 className="text-sm"
@@ -581,10 +583,8 @@ export default function ProfileClient(props: Props) {
                         }}
                       >
                         {s.title || `Séance ${idx + 1}`}
-                        {s.type && (
-                          <span style={{ color: "#6b7280" }}> · {s.type}</span>
-                        )}
                       </a>
+
                       <a
                         href={removeHref}
                         aria-label={tf(
@@ -598,10 +598,6 @@ export default function ProfileClient(props: Props) {
                           borderRadius: 999,
                           border: "1px solid #e5e7eb",
                           color: "#6b7280",
-                          lineHeight: 1,
-                          display: "inline-flex",
-                          alignItems: "center",
-                          justifyContent: "center",
                         }}
                       >
                         🗑️
