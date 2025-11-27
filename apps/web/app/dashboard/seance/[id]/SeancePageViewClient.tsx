@@ -50,6 +50,47 @@ function focusLabelT(focus: Focus, t: (path: string) => string): string {
   }
 }
 
+/**
+ * Mini trad FR → EN des noms d’exos les plus courants.
+ * Ça ne touche QUE l’affichage, les données restent brutes.
+ */
+function translateExerciseName(
+  name: string | undefined,
+  lang: "fr" | "en"
+): string {
+  if (!name) return "";
+  if (lang === "fr") return name;
+
+  const clean = name.trim();
+
+  const map: Record<string, string> = {
+    // Fallbacks muscu sans matos
+    "Squat au poids du corps": "Bodyweight squat",
+    "Pompes": "Push-ups",
+    "Fentes alternées": "Alternating lunges",
+    "Planche": "Plank",
+
+    // Fallbacks muscu avec matos
+    "Goblet Squat": "Goblet squat",
+    "Développé haltères": "Dumbbell press",
+    "Rowing unilatéral": "One-arm row",
+
+    // Cardio
+    "Échauffement Z1": "Warm-up Z1",
+    "Cardio continu Z2": "Continuous cardio Z2",
+    "Retour au calme + mobilité": "Cool-down + mobility",
+    "Marche progressive Z1→Z2": "Progressive walk Z1→Z2",
+
+    // Mobilité
+    "Respiration diaphragmatique": "Diaphragmatic breathing",
+    "90/90 hanches": "90/90 hips",
+    "T-spine rotations": "T-spine rotations",
+    "Down-Dog → Cobra": "Down-Dog → Cobra",
+  };
+
+  return map[clean] ?? name;
+}
+
 function Chip({
   label,
   value,
@@ -77,7 +118,7 @@ const SeancePageViewClient: React.FC<Props> = ({
   plannedMin,
   backHref,
 }) => {
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
 
   const displayTitle =
     stripVariantLetterLocal(base.title) || focusLabelT(focus, t);
@@ -134,10 +175,15 @@ const SeancePageViewClient: React.FC<Props> = ({
                   : "",
               );
               const rest = cleanTextLocal(ex.rest || "");
+              const translatedName = translateExerciseName(
+                ex.name,
+                lang as "fr" | "en",
+              );
+
               return (
                 <article key={i} className="compact-card">
                   <div className="flex items-start justify-between gap-3">
-                    <div className="exoname">{ex.name}</div>
+                    <div className="exoname">{translatedName}</div>
                   </div>
                   <div className="chips">
                     {typeof ex.sets === "number" && (
