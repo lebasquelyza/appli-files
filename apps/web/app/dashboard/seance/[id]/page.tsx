@@ -12,9 +12,26 @@ import {
   type Profile,
 } from "../../../../lib/coach/ai";
 import SeancePageViewClient from "./SeancePageViewClient";
-import { useLanguage } from "@/components/LanguageProvider";
+import { translations } from "@/app/i18n/translations";
 
+/* ======================== i18n server helpers ======================== */
+type Lang = "fr" | "en";
 
+function getLang(): Lang {
+  const cookieLang = cookies().get("fc-lang")?.value;
+  return cookieLang === "en" ? "en" : "fr";
+}
+
+function getFromPath(obj: any, path: string): any {
+  return path.split(".").reduce((acc, key) => acc?.[key], obj);
+}
+
+function tServer(lang: Lang, path: string, fallback?: string): string {
+  const dict = translations[lang] as any;
+  const v = getFromPath(dict, path);
+  if (typeof v === "string") return v;
+  return fallback ?? path;
+}
 
 /* ======================== Utils ======================== */
 async function getSignedInEmail(): Promise<string> {
@@ -175,15 +192,6 @@ function inferFocusFromProfile(profile?: Profile | null): Focus | null {
     return "full";
   return null;
 }
-function focusLabel(focus: Focus): string {
-  return focus === "upper"
-    ? "Haut du corps"
-    : focus === "lower"
-    ? "Bas du corps"
-    : focus === "full"
-    ? "Full body"
-    : "Mix";
-}
 
 /** Tags zones */
 function isLower(ex: NormalizedExercise): boolean {
@@ -303,7 +311,8 @@ function ensureAtLeast4Exercises(
 /* ====================== Chargement (IA + focus + matériel) ====================== */
 async function loadData(
   id: string,
-  searchParams?: Record<string, string | string[] | undefined>,
+  searchParams: Record<string, string | string[] | undefined> | undefined,
+  lang: Lang,
 ): Promise<{
   base: AiSession;
   exercises: NormalizedExercise[];
@@ -338,18 +347,13 @@ async function loadData(
 
     const regenProg = await generateProgrammeFromAnswers(answers);
     const regen = regenProg.sessions || [];
-    // ou équivalent :
-    /*
-    const { sessions: regen = [] } = await generateProgrammeFromAnswers(answers);
-    */
 
     // Match par title d'abord, sinon par id
     base =
       (qpTitle &&
         regen.find(
           (s) =>
-            stripVariantLetter(s.title) ===
-            stripVariantLetter(qpTitle),
+            stripVariantLetter(s.title) === stripVariantLetter(qpTitle),
         )) ||
       undefined;
     if (!base) base = regen.find((s) => s.id === id);
@@ -362,7 +366,11 @@ async function loadData(
   if (!base) {
     base = {
       id,
-      title: "Séance personnalisée",
+      title: tServer(
+        lang,
+        "settings.seancePage.fallbackTitle",
+        "Séance personnalisée",
+      ),
       date: "",
       type: "muscu",
       plannedMin: 45,
@@ -414,16 +422,30 @@ export default async function Page({
   params: { id?: string };
   searchParams?: Record<string, string | string[] | undefined>;
 }) {
+  const lang = getLang();
+  const notFoundMsg = tServer(
+    lang,
+    "settings.seancePage.errors.notFound",
+    "Séance introuvable",
+  );
+
   const id = decodeURIComponent(params?.id ?? "");
   if (!id && !(searchParams?.title || searchParams?.type)) {
-    redirect("/dashboard/profile?error=Seance%20introuvable");
+    redirect(
+      `/dashboard/profile?error=${encodeURIComponent(notFoundMsg)}`,
+    );
   }
 
   const { base, exercises, focus, plannedMin } = await loadData(
     id,
     searchParams,
+    lang,
   );
-  if (!base) redirect("/dashboard/profile?error=Seance%20introuvable");
+  if (!base) {
+    redirect(
+      `/dashboard/profile?error=${encodeURIComponent(notFoundMsg)}`,
+    );
+  }
 
   // Helper pour gérer string | string[]
   const getParam = (name: string) => {
@@ -452,7 +474,9 @@ export default async function Page({
   if (saved) qs.set("saved", saved);
   if (later) qs.set("later", later);
 
-  const backHref = `/dashboard/profile${qs.toString() ? `?${qs.toString()}` : ""}`;
+  const backHref = `/dashboard/profile${
+    qs.toString() ? `?${qs.toString()}` : ""
+  }`;
 
   return (
     <SeancePageViewClient
@@ -464,3 +488,4 @@ export default async function Page({
     />
   );
 }
+
