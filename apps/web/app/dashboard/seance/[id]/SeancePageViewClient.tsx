@@ -1,3 +1,4 @@
+//apps/web/app/dashboard/seance/[id]/SeancePageViewClient.tsx
 "use client";
 
 import React from "react";
