@@ -25,9 +25,6 @@ type Props = {
   showDebug: boolean;
   questionnaireUrl: string;
   questionnaireBase: string;
-
-  // 🔥 ajouté : ProfileClient accepte (optionnel) un lang envoyé par page.tsx,
-  // mais il ne l'utilise pas (LanguageProvider lit le cookie)
   lang?: "fr" | "en";
 };
 
@@ -57,7 +54,6 @@ export default function ProfileClient(props: Props) {
     questionnaireBase,
   } = props;
 
-  // 🔥 IMPORTANT : on utilise UNIQUEMENT le t() du LanguageProvider
   const { t } = useLanguage();
 
   // helper t avec fallback si la clé n’existe pas
@@ -67,8 +63,14 @@ export default function ProfileClient(props: Props) {
     return fallback ?? path;
   };
 
-  const savedIdSet = useMemo(() => parseIdListFromArray(savedIds), [savedIds]);
-  const laterIdSet = useMemo(() => parseIdListFromArray(laterIds), [laterIds]);
+  const savedIdSet = useMemo(
+    () => parseIdListFromArray(savedIds),
+    [savedIds]
+  );
+  const laterIdSet = useMemo(
+    () => parseIdListFromArray(laterIds),
+    [laterIds]
+  );
 
   const showPlaceholders = !forceBlank;
   const p = (profile ?? {}) as Partial<ProfileT>;
@@ -80,15 +82,17 @@ export default function ProfileClient(props: Props) {
   const clientAge =
     typeof p?.age === "number" && p.age > 0 ? p.age : undefined;
 
-  // goalLabel
+  // goalLabel – utilise settings.profile.goal.labels.*
   const goalLabel = useMemo(() => {
-    const g = String((p as any)?.objectif || (p as any)?.goal || "").toLowerCase();
+    const g = String(
+      (p as any)?.objectif || (p as any)?.goal || ""
+    ).toLowerCase();
     if (!g) return "";
-    const key = `profile.goal.labels.${g}`;
+    const key = `settings.profile.goal.labels.${g}`;
     const translated = t(key);
     if (translated && translated !== key) return translated;
 
-    // fallback FR
+    // fallback FR “dur”
     const map: Record<string, string> = {
       hypertrophy: "Hypertrophie / Esthétique",
       fatloss: "Perte de gras",
@@ -100,7 +104,7 @@ export default function ProfileClient(props: Props) {
     return map[g] || (p as any)?.objectif || "";
   }, [p, t]);
 
-  // query keep
+  // Conserver saved/later quand on change de mode
   const qsKeep = [
     hasGenerate ? "generate=1" : undefined,
     savedIdSet.size ? `saved=${[...savedIdSet].join(",")}` : undefined,
@@ -114,9 +118,13 @@ export default function ProfileClient(props: Props) {
 
   const titleList =
     equipMode === "none"
-      ? tf("profile.sessions.titleNoEquip", "Mes séances (sans matériel)")
-      : tf("profile.sessions.title", "Mes séances");
+      ? tf(
+          "settings.profile.sessions.titleNoEquip",
+          "Mes séances (sans matériel)"
+        )
+      : tf("settings.profile.sessions.title", "Mes séances");
 
+  // Base de query pour les liens vers les détails de séance
   const baseLinkQuery = [
     equipMode === "none" ? "equip=none" : undefined,
     "generate=1",
@@ -150,7 +158,7 @@ export default function ProfileClient(props: Props) {
       <div className="page-header">
         <div>
           <h1 className="h1" style={{ fontSize: 22 }}>
-            {tf("profile.title", "Mon profil")}
+            {tf("settings.profile.title", "Mon profil")}
           </h1>
           {showDebug && (
             <div
@@ -180,11 +188,11 @@ export default function ProfileClient(props: Props) {
           >
             {displayedSuccess === "programme"
               ? tf(
-                  "profile.messages.programmeUpdated",
+                  "settings.profile.messages.programmeUpdated",
                   "✓ Programme IA mis à jour à partir de vos dernières réponses au questionnaire."
                 )
               : tf(
-                  "profile.messages.successGeneric",
+                  "settings.profile.messages.successGeneric",
                   "✓ Opération réussie."
                 )}
           </div>
@@ -216,7 +224,12 @@ export default function ProfileClient(props: Props) {
             gap: 12,
           }}
         >
-          <h2>{tf("profile.infoSection.title", "Mes infos")}</h2>
+          <h2>
+            {tf(
+              "settings.profile.infoSection.title",
+              "Mes infos"
+            )}
+          </h2>
         </div>
 
         <div className="card">
@@ -228,16 +241,16 @@ export default function ProfileClient(props: Props) {
               <span>
                 <b>
                   {tf(
-                    "profile.info.firstName.label",
+                    "settings.profile.info.firstName.label",
                     "Prénom"
-                  )}
+                  )}{" "}
                   :
                 </b>{" "}
                 {clientPrenom ||
                   (showPlaceholders && (
                     <i className="text-gray-400">
                       {tf(
-                        "profile.info.firstName.missing",
+                        "settings.profile.info.firstName.missing",
                         "Non renseigné"
                       )}
                     </i>
@@ -247,13 +260,19 @@ export default function ProfileClient(props: Props) {
 
             {(typeof clientAge === "number" || showPlaceholders) && (
               <span>
-                <b>{tf("profile.info.age.label", "Âge")} :</b>{" "}
+                <b>
+                  {tf(
+                    "settings.profile.info.age.label",
+                    "Âge"
+                  )}{" "}
+                  :
+                </b>{" "}
                 {typeof clientAge === "number"
                   ? `${clientAge} ans`
                   : showPlaceholders && (
                       <i className="text-gray-400">
                         {tf(
-                          "profile.info.age.missing",
+                          "settings.profile.info.age.missing",
                           "Non renseigné"
                         )}
                       </i>
@@ -265,16 +284,16 @@ export default function ProfileClient(props: Props) {
               <span>
                 <b>
                   {tf(
-                    "profile.info.goal.label",
+                    "settings.profile.info.goal.label",
                     "Objectif actuel"
-                  )}
+                  )}{" "}
                   :
                 </b>{" "}
                 {goalLabel ||
                   (showPlaceholders && (
                     <i className="text-gray-400">
                       {tf(
-                        "profile.info.goal.missing",
+                        "settings.profile.info.goal.missing",
                         "Non défini"
                       )}
                     </i>
@@ -295,7 +314,11 @@ export default function ProfileClient(props: Props) {
               title={emailForDisplay || (showPlaceholders ? "Non renseigné" : "")}
             >
               <b>
-                {tf("profile.info.mail.label", "Mail")} :
+                {tf(
+                  "settings.profile.info.mail.label",
+                  "Mail"
+                )}{" "}
+                :
               </b>{" "}
               {emailForDisplay ? (
                 <a href={`mailto:${emailForDisplay}`} className="underline">
@@ -305,7 +328,7 @@ export default function ProfileClient(props: Props) {
                 showPlaceholders && (
                   <span className="text-gray-400">
                     {tf(
-                      "profile.info.mail.missing",
+                      "settings.profile.info.mail.missing",
                       "Non renseigné"
                     )}
                   </span>
@@ -317,7 +340,7 @@ export default function ProfileClient(props: Props) {
           <div className="text-sm" style={{ marginTop: 10 }}>
             <a href={questionnaireUrl} className="underline">
               {tf(
-                "profile.info.questionnaire.updateLink",
+                "settings.profile.info.questionnaire.updateLink",
                 "Mettre à jour mes réponses au questionnaire"
               )}
             </a>
@@ -325,7 +348,7 @@ export default function ProfileClient(props: Props) {
         </div>
       </section>
 
-      {/* ===== Génération / Mes séances ===== */}
+      {/* ===== Génération / Mes séances + bascule matériel/sans matériel ===== */}
       <section className="section" style={{ marginTop: 16 }}>
         <div
           className="section-head"
@@ -353,12 +376,12 @@ export default function ProfileClient(props: Props) {
                     : "inline-flex items-center rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-semibold text-neutral-900"
                 }
                 title={tf(
-                  "profile.sessions.toggle.withEquipTitle",
+                  "settings.profile.sessions.toggle.withEquipTitle",
                   "Voir la liste avec matériel"
                 )}
               >
                 {tf(
-                  "profile.sessions.toggle.withEquip",
+                  "settings.profile.sessions.toggle.withEquip",
                   "Matériel"
                 )}
               </a>
@@ -370,12 +393,12 @@ export default function ProfileClient(props: Props) {
                     : "inline-flex items-center rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-semibold text-neutral-900"
                 }
                 title={tf(
-                  "profile.sessions.toggle.withoutEquipTitle",
+                  "settings.profile.sessions.toggle.withoutEquipTitle",
                   "Voir la liste sans matériel"
                 )}
               >
                 {tf(
-                  "profile.sessions.toggle.withoutEquip",
+                  "settings.profile.sessions.toggle.withoutEquip",
                   "Sans matériel"
                 )}
               </a>
@@ -395,7 +418,7 @@ export default function ProfileClient(props: Props) {
           >
             <div className="text-sm" style={{ color: "#4b5563" }}>
               {tf(
-                "profile.sessions.generateCard.text",
+                "settings.profile.sessions.generateCard.text",
                 "Cliquez sur « Générer » pour afficher vos séances personnalisées."
               )}
             </div>
@@ -403,12 +426,12 @@ export default function ProfileClient(props: Props) {
               href={hrefGenerate}
               className="inline-flex items-center rounded-md border border-neutral-900 bg-neutral-900 px-4 py-2 text-sm font-semibold text-white"
               title={tf(
-                "profile.sessions.generateCard.buttonTitle",
+                "settings.profile.sessions.generateCard.buttonTitle",
                 "Générer mes séances"
               )}
             >
               {tf(
-                "profile.sessions.generateCard.button",
+                "settings.profile.sessions.generateCard.button",
                 "Générer"
               )}
             </a>
@@ -425,31 +448,34 @@ export default function ProfileClient(props: Props) {
         )}
       </section>
 
-      {/* ===== Listes ===== */}
+      {/* ===== Bloc bas de page : Séance faite ✅ / À faire plus tard ⏳ ===== */}
       <section className="section" style={{ marginTop: 20 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
           <h2 style={{ margin: 0 }}>
-            {tf("profile.lists.title", "Mes listes")}
+            {tf(
+              "settings.profile.lists.title",
+              "Mes listes"
+            )}
           </h2>
         </div>
 
+        {/* deux colonnes sur la même ligne */}
         <div
           className="grid"
           style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}
         >
-          {/* Séance faite */}
+          {/* Séance faite ✅ */}
           <div className="card">
             <div
               className="text-sm"
               style={{ fontWeight: 600, marginBottom: 6 }}
             >
               {tf(
-                "profile.lists.done.title",
+                "settings.profile.lists.done.title",
                 "Séance faite"
               )}{" "}
               <span aria-hidden>✅</span>
             </div>
-
             {savedList.length > 0 && (
               <ul
                 className="text-sm"
@@ -460,7 +486,9 @@ export default function ProfileClient(props: Props) {
                     s.id || key
                   )}${baseLinkQuery ? `?${baseLinkQuery}` : ""}`;
 
-                  const newSavedKeys = [...savedIdSet].filter((k) => k !== key);
+                  const newSavedKeys = [...savedIdSet].filter(
+                    (k) => k !== key
+                  );
                   const removeQuery = [
                     "generate=1",
                     equipMode === "none" ? "equip=none" : undefined,
@@ -497,12 +525,17 @@ export default function ProfileClient(props: Props) {
                         }}
                       >
                         {s.title || `Séance ${idx + 1}`}
+                        {s.type && (
+                          <span style={{ color: "#6b7280" }}>
+                            {" "}
+                            · {s.type}
+                          </span>
+                        )}
                       </a>
-
                       <a
                         href={removeHref}
                         aria-label={tf(
-                          "profile.lists.removeLabel",
+                          "settings.profile.lists.removeLabel",
                           "Supprimer cette séance"
                         )}
                         className="text-xs"
@@ -512,6 +545,10 @@ export default function ProfileClient(props: Props) {
                           borderRadius: 999,
                           border: "1px solid #e5e7eb",
                           color: "#6b7280",
+                          lineHeight: 1,
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
                         }}
                       >
                         🗑️
@@ -523,19 +560,18 @@ export default function ProfileClient(props: Props) {
             )}
           </div>
 
-          {/* À faire plus tard */}
+          {/* À faire plus tard ⏳ */}
           <div className="card">
             <div
               className="text-sm"
               style={{ fontWeight: 600, marginBottom: 6 }}
             >
               {tf(
-                "profile.lists.later.title",
+                "settings.profile.lists.later.title",
                 "À faire plus tard"
               )}{" "}
               <span aria-hidden>⏳</span>
             </div>
-
             {laterList.length > 0 && (
               <ul
                 className="text-sm"
@@ -546,7 +582,9 @@ export default function ProfileClient(props: Props) {
                     s.id || key
                   )}${baseLinkQuery ? `?${baseLinkQuery}` : ""}`;
 
-                  const newLaterKeys = [...laterIdSet].filter((k) => k !== key);
+                  const newLaterKeys = [...laterIdSet].filter(
+                    (k) => k !== key
+                  );
                   const removeQuery = [
                     "generate=1",
                     equipMode === "none" ? "equip=none" : undefined,
@@ -583,12 +621,17 @@ export default function ProfileClient(props: Props) {
                         }}
                       >
                         {s.title || `Séance ${idx + 1}`}
+                        {s.type && (
+                          <span style={{ color: "#6b7280" }}>
+                            {" "}
+                            · {s.type}
+                          </span>
+                        )}
                       </a>
-
                       <a
                         href={removeHref}
                         aria-label={tf(
-                          "profile.lists.removeLabel",
+                          "settings.profile.lists.removeLabel",
                           "Supprimer cette séance"
                         )}
                         className="text-xs"
@@ -598,6 +641,10 @@ export default function ProfileClient(props: Props) {
                           borderRadius: 999,
                           border: "1px solid #e5e7eb",
                           color: "#6b7280",
+                          lineHeight: 1,
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
                         }}
                       >
                         🗑️
