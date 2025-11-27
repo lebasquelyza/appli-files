@@ -2,7 +2,6 @@
 
 import { useMemo } from "react";
 import { useLanguage } from "@/components/LanguageProvider";
-import { translations } from "@/app/i18n/translations";
 import GenerateClient from "./GenerateClient";
 import type {
   Profile as ProfileT,
@@ -36,10 +35,6 @@ function sessionKey(_s: AiSessionT, idx: number) {
   return `s${idx}`;
 }
 
-function getFromPath(obj: any, path: string) {
-  return path.split(".").reduce((acc, key) => acc?.[key], obj);
-}
-
 export default function ProfileClient(props: Props) {
   const {
     emailForDisplay,
@@ -58,13 +53,12 @@ export default function ProfileClient(props: Props) {
     questionnaireBase,
   } = props;
 
-  const { lang } = useLanguage(); // on ne prend plus t/messages du contexte
+  const { t, lang } = useLanguage();
 
-  // Petit helper t local, basé directement sur translations + lang
-  const t = (path: string, fallback?: string): string => {
-    const dict = translations[lang] as any;
-    const v = getFromPath(dict, path);
-    if (typeof v === "string") return v;
+  // helper t avec fallback si la clé n’existe pas
+  const tf = (path: string, fallback?: string) => {
+    const v = t(path);
+    if (v && v !== path) return v;
     return fallback ?? path;
   };
 
@@ -81,7 +75,7 @@ export default function ProfileClient(props: Props) {
   const clientAge =
     typeof p?.age === "number" && p.age > 0 ? p.age : undefined;
 
-  // goalLabel – même logique qu’avant, avec t local
+  // goalLabel – même logique qu’avant, en utilisant t() du contexte
   const goalLabel = useMemo(() => {
     const g = String((p as any)?.objectif || (p as any)?.goal || "").toLowerCase();
     if (!g) return "";
@@ -89,6 +83,7 @@ export default function ProfileClient(props: Props) {
     const translated = t(key);
     if (translated && translated !== key) return translated;
 
+    // fallback FR “dur” si la clé n’existe pas
     const map: Record<string, string> = {
       hypertrophy: "Hypertrophie / Esthétique",
       fatloss: "Perte de gras",
@@ -98,7 +93,7 @@ export default function ProfileClient(props: Props) {
       general: "Forme générale",
     };
     return map[g] || (p as any)?.objectif || "";
-  }, [p, lang]); // dépend de lang pour se mettre à jour
+  }, [p, t, lang]);
 
   // Conserver saved/later quand on change de mode
   const qsKeep = [
@@ -114,8 +109,8 @@ export default function ProfileClient(props: Props) {
 
   const titleList =
     equipMode === "none"
-      ? t("profile.sessions.titleNoEquip", "Mes séances (sans matériel)")
-      : t("profile.sessions.title", "Mes séances");
+      ? tf("profile.sessions.titleNoEquip", "Mes séances (sans matériel)")
+      : tf("profile.sessions.title", "Mes séances");
 
   // Base de query pour les liens vers les détails de séance (et pour garder les listes)
   const baseLinkQuery = [
@@ -151,7 +146,7 @@ export default function ProfileClient(props: Props) {
       <div className="page-header">
         <div>
           <h1 className="h1" style={{ fontSize: 22 }}>
-            {t("profile.title", "Mon profil")}
+            {tf("profile.title", "Mon profil")}
           </h1>
           {showDebug && (
             <div
@@ -180,11 +175,14 @@ export default function ProfileClient(props: Props) {
             }}
           >
             {displayedSuccess === "programme"
-              ? t(
+              ? tf(
                   "profile.messages.programmeUpdated",
                   "✓ Programme IA mis à jour à partir de vos dernières réponses au questionnaire."
                 )
-              : t("profile.messages.successGeneric", "✓ Opération réussie.")}
+              : tf(
+                  "profile.messages.successGeneric",
+                  "✓ Opération réussie."
+                )}
           </div>
         )}
         {!!displayedError && (
@@ -214,7 +212,7 @@ export default function ProfileClient(props: Props) {
             gap: 12,
           }}
         >
-          <h2>{t("profile.infoSection.title", "Mes infos")}</h2>
+          <h2>{tf("profile.infoSection.title", "Mes infos")}</h2>
         </div>
 
         <div className="card">
@@ -225,12 +223,16 @@ export default function ProfileClient(props: Props) {
             {(clientPrenom || showPlaceholders) && (
               <span>
                 <b>
-                  {t("profile.info.firstName.label", "Prénom")} :
+                  {tf(
+                    "profile.info.firstName.label",
+                    "Prénom"
+                  )}{" "}
+                  :
                 </b>{" "}
                 {clientPrenom ||
                   (showPlaceholders && (
                     <i className="text-gray-400">
-                      {t(
+                      {tf(
                         "profile.info.firstName.missing",
                         "Non renseigné"
                       )}
@@ -240,12 +242,12 @@ export default function ProfileClient(props: Props) {
             )}
             {(typeof clientAge === "number" || showPlaceholders) && (
               <span>
-                <b>{t("profile.info.age.label", "Âge")} :</b>{" "}
+                <b>{tf("profile.info.age.label", "Âge")} :</b>{" "}
                 {typeof clientAge === "number"
                   ? `${clientAge} ans`
                   : showPlaceholders && (
                       <i className="text-gray-400">
-                        {t(
+                        {tf(
                           "profile.info.age.missing",
                           "Non renseigné"
                         )}
@@ -256,7 +258,7 @@ export default function ProfileClient(props: Props) {
             {(goalLabel || showPlaceholders) && (
               <span>
                 <b>
-                  {t(
+                  {tf(
                     "profile.info.goal.label",
                     "Objectif actuel"
                   )}{" "}
@@ -265,7 +267,7 @@ export default function ProfileClient(props: Props) {
                 {goalLabel ||
                   (showPlaceholders && (
                     <i className="text-gray-400">
-                      {t(
+                      {tf(
                         "profile.info.goal.missing",
                         "Non défini"
                       )}
@@ -286,7 +288,9 @@ export default function ProfileClient(props: Props) {
               }}
               title={emailForDisplay || (showPlaceholders ? "Non renseigné" : "")}
             >
-              <b>{t("profile.info.mail.label", "Mail")} :</b>{" "}
+              <b>
+                {tf("profile.info.mail.label", "Mail")} :
+              </b>{" "}
               {emailForDisplay ? (
                 <a href={`mailto:${emailForDisplay}`} className="underline">
                   {emailForDisplay}
@@ -294,7 +298,7 @@ export default function ProfileClient(props: Props) {
               ) : (
                 showPlaceholders && (
                   <span className="text-gray-400">
-                    {t(
+                    {tf(
                       "profile.info.mail.missing",
                       "Non renseigné"
                     )}
@@ -306,7 +310,7 @@ export default function ProfileClient(props: Props) {
 
           <div className="text-sm" style={{ marginTop: 10 }}>
             <a href={questionnaireUrl} className="underline">
-              {t(
+              {tf(
                 "profile.info.questionnaire.updateLink",
                 "Mettre à jour mes réponses au questionnaire"
               )}
@@ -342,12 +346,12 @@ export default function ProfileClient(props: Props) {
                     ? "inline-flex items-center rounded-md border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-sm font-semibold text-white"
                     : "inline-flex items-center rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-semibold text-neutral-900"
                 }
-                title={t(
+                title={tf(
                   "profile.sessions.toggle.withEquipTitle",
                   "Voir la liste avec matériel"
                 )}
               >
-                {t(
+                {tf(
                   "profile.sessions.toggle.withEquip",
                   "Matériel"
                 )}
@@ -359,12 +363,12 @@ export default function ProfileClient(props: Props) {
                     ? "inline-flex items-center rounded-md border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-sm font-semibold text-white"
                     : "inline-flex items-center rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-semibold text-neutral-900"
                 }
-                title={t(
+                title={tf(
                   "profile.sessions.toggle.withoutEquipTitle",
                   "Voir la liste sans matériel"
                 )}
               >
-                {t(
+                {tf(
                   "profile.sessions.toggle.withoutEquip",
                   "Sans matériel"
                 )}
@@ -384,7 +388,7 @@ export default function ProfileClient(props: Props) {
             }}
           >
             <div className="text-sm" style={{ color: "#4b5563" }}>
-              {t(
+              {tf(
                 "profile.sessions.generateCard.text",
                 "Cliquez sur « Générer » pour afficher vos séances personnalisées."
               )}
@@ -392,12 +396,12 @@ export default function ProfileClient(props: Props) {
             <a
               href={hrefGenerate}
               className="inline-flex items-center rounded-md border border-neutral-900 bg-neutral-900 px-4 py-2 text-sm font-semibold text-white"
-              title={t(
+              title={tf(
                 "profile.sessions.generateCard.buttonTitle",
                 "Générer mes séances"
               )}
             >
-              {t(
+              {tf(
                 "profile.sessions.generateCard.button",
                 "Générer"
               )}
@@ -419,7 +423,7 @@ export default function ProfileClient(props: Props) {
       <section className="section" style={{ marginTop: 20 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
           <h2 style={{ margin: 0 }}>
-            {t("profile.lists.title", "Mes listes")}
+            {tf("profile.lists.title", "Mes listes")}
           </h2>
         </div>
 
@@ -433,7 +437,7 @@ export default function ProfileClient(props: Props) {
               className="text-sm"
               style={{ fontWeight: 600, marginBottom: 6 }}
             >
-              {t(
+              {tf(
                 "profile.lists.done.title",
                 "Séance faite"
               )}{" "}
@@ -492,7 +496,7 @@ export default function ProfileClient(props: Props) {
                       </a>
                       <a
                         href={removeHref}
-                        aria-label={t(
+                        aria-label={tf(
                           "profile.lists.removeLabel",
                           "Supprimer cette séance"
                         )}
@@ -524,7 +528,7 @@ export default function ProfileClient(props: Props) {
               className="text-sm"
               style={{ fontWeight: 600, marginBottom: 6 }}
             >
-              {t(
+              {tf(
                 "profile.lists.later.title",
                 "À faire plus tard"
               )}{" "}
@@ -583,7 +587,7 @@ export default function ProfileClient(props: Props) {
                       </a>
                       <a
                         href={removeHref}
-                        aria-label={t(
+                        aria-label={tf(
                           "profile.lists.removeLabel",
                           "Supprimer cette séance"
                         )}
