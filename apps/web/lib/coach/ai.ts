@@ -41,6 +41,8 @@ export type Profile = {
   age?: number;
   objectif?: string; // libellé FR brut (colonne G)
   goal?: string;     // clé normalisée (hypertrophy/fatloss/strength/endurance/mobility/general)
+  // ⭐ NEW : langue de génération
+  lang?: "fr" | "en";
 };
 
 // --- ENV & URL helpers ---
@@ -369,12 +371,27 @@ export function buildProfileFromAnswers(ans: Record<string, any>): Profile {
       : Number(String(ageRaw).replace(/[^\d.-]/g, ""));
   const goal = normalizeGoal(String(objectifBrut));
 
+  // ⭐ NEW : on récupère éventuellement une langue si elle a été mise dans les réponses
+  const langRaw =
+    ans["lang"] ??
+    ans["Lang"] ??
+    ans["language"] ??
+    ans["langue"];
+  let lang: "fr" | "en" | undefined;
+  if (typeof langRaw === "string") {
+    const v = langRaw.trim().toLowerCase();
+    if (v === "en" || v === "fr") {
+      lang = v;
+    }
+  }
+
   const profile: Profile = {
     email: String(email || "").trim().toLowerCase() || undefined,
     prenom: (typeof prenom === "string" ? prenom.trim() : "") || undefined,
     age: Number.isFinite(age) && age > 0 ? age : undefined,
     objectif: String(objectifBrut || "").trim() || undefined,
     goal: goal || undefined,
+    lang, // ⭐ NEW
   };
 
   return profile;
@@ -529,6 +546,10 @@ export function generateProgrammeFromAnswers(
 ): { sessions: AiSession[] } {
   const profile = buildProfileFromAnswers(ans);
 
+  // ⭐ NEW : langue de génération (profile.lang vient du cookie via answers.lang)
+  const lang: "fr" | "en" =
+    profile.lang === "en" ? "en" : "fr";
+
   // Lecture “souple” des colonnes D..J (avec fallback col_D..col_J si pas d’en-têtes)
   const level =
     normLevel(
@@ -600,6 +621,7 @@ export function generateProgrammeFromAnswers(
     injuries,
     equipItems,
     availabilityText, // 👈 utile si jours nommés
+    lang,             // ⭐ NEW : on passe la langue au moteur
   } as any;
 
   if (process.env.NODE_ENV !== "production") {
@@ -612,6 +634,7 @@ export function generateProgrammeFromAnswers(
       "=> maxSessions:",
       maxSessions
     );
+    console.log("[ai.ts] lang:", lang); // ⭐ NEW : log debug
   }
 
   // maxSessions = 1..6 (7 est clampé à 6 par design UI)
@@ -622,3 +645,4 @@ export function generateProgrammeFromAnswers(
 export async function getAiSessions(_email: string): Promise<AiSession[]> {
   return [];
 }
+
