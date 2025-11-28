@@ -16,6 +16,8 @@ export type PlanOptions = {
   maxSessions?: number; // 1..6 (jours/semaine)
   /** Preset figé : renvoie un plan déterministe (exemple) */
   preset?: "example_v1";
+  /** Langue de génération des labels (FR/EN) */
+  lang?: "fr" | "en";
 };
 
 type ProfileInput = {
@@ -32,6 +34,8 @@ type ProfileInput = {
   email?: string;
   likes?: string[];
   dislikes?: string[];
+  /** Langue passée directement dans le profil (optionnel) */
+  lang?: "fr" | "en";
 };
 
 /* ====== Focus par séance (split) ====== */
@@ -53,6 +57,20 @@ const FOCUS_LABEL: Record<StrengthFocus, string> = {
   haut_mix: "Haut (mix)",
   bras_core: "Bras & Core",
 };
+
+const FOCUS_LABEL_EN: Record<StrengthFocus, string> = {
+  full: "Full body",
+  bas_quads: "Lower (quads)",
+  bas_iscios_glutes: "Lower (hamstrings/glutes)",
+  haut_push: "Upper (push)",
+  haut_pull: "Upper (pull)",
+  haut_mix: "Upper (mixed)",
+  bras_core: "Arms & core",
+};
+
+function focusLabelIntl(f: StrengthFocus, lang: "fr" | "en"): string {
+  return lang === "en" ? FOCUS_LABEL_EN[f] : FOCUS_LABEL[f];
+}
 
 /* =================== Détecteurs objectif brut (tous muscles) =================== */
 function norm(s?: string) {
@@ -204,6 +222,10 @@ export function planProgrammeFromProfile(
 ): { sessions: AiSessionT[] } {
   const { today = new Date(), maxSessions: maxOpt, preset } = opts ?? {};
 
+  // 🔤 langue globale pour ce plan
+  const lang: "fr" | "en" =
+    opts?.lang === "en" || profile.lang === "en" ? "en" : "fr";
+
   if (preset === "example_v1") {
     const sessions = buildFixedExampleSessions(today);
     return { sessions };
@@ -227,6 +249,7 @@ export function planProgrammeFromProfile(
     goalKey,
     injuries: normalizeInjuries(profile.injuries),
     equipItems: normalizeItems(profile.equipItems),
+    lang,
   };
   // 🔎 Debug (désactivable en prod en mettant __BETON_DEBUG__ = false)
   const __BETON_DEBUG__ = (globalThis as any).__BETON_DEBUG__ ?? true;
@@ -254,7 +277,7 @@ export function planProgrammeFromProfile(
     focusPlan = makeFocusPlan(maxSessions, goalKey, muscleFocus);
   }
 
-  if (__BETON_DEBUG__) console.debug("[beton] plan", { objectiveRaw, muscleFocus, maxSessions, type, goalKey, focusPlan });
+  if (__BETON_DEBUG__) console.debug("[beton] plan", { objectiveRaw, muscleFocus, maxSessions, type, goalKey, focusPlan, lang });
 
   const sessions: AiSessionT[] = [];
   for (let i = 0; i < maxSessions; i++) {
@@ -272,15 +295,32 @@ export function planProgrammeFromProfile(
     const focus: StrengthFocus | undefined = (type === "muscu" && focusPlan.length)
       ? focusPlan[i % focusPlan.length]
       : undefined;
-    const focusSuffix = focus ? ` · ${FOCUS_LABEL[focus]}` : "";
 
-    const title = profile.prenom
-      ? singleNoDay
-        ? `Séance pour ${profile.prenom}${focusSuffix}`
-        : `Séance pour ${profile.prenom} — ${dayLabel}${focusSuffix}`
-      : singleNoDay
-      ? `${defaultBaseTitle(type)}${focusSuffix}`
-      : `${defaultBaseTitle(type)} — ${dayLabel}${focusSuffix}`;
+    const focusLabel = focus ? focusLabelIntl(focus, lang) : "";
+    const focusSuffix = focusLabel ? ` · ${focusLabel}` : "";
+
+    const baseTitle = baseTitleForType(type, lang);
+
+    let title: string;
+    if (lang === "en") {
+      if (profile.prenom) {
+        title = singleNoDay
+          ? `Workout for ${profile.prenom}${focusSuffix}`
+          : `Workout for ${profile.prenom} — ${dayLabel}${focusSuffix}`;
+      } else {
+        title = singleNoDay
+          ? `${baseTitle}${focusSuffix}`
+          : `${baseTitle} — ${dayLabel}${focusSuffix}`;
+      }
+    } else {
+      title = profile.prenom
+        ? singleNoDay
+          ? `Séance pour ${profile.prenom}${focusSuffix}`
+          : `Séance pour ${profile.prenom} — ${dayLabel}${focusSuffix}`
+        : singleNoDay
+        ? `${baseTitle}${focusSuffix}`
+        : `${baseTitle} — ${dayLabel}${focusSuffix}`;
+    }
 
     let exos: NormalizedExercise[] =
       type === "cardio"   ? buildCardio(ctx, variant)
@@ -297,7 +337,14 @@ export function planProgrammeFromProfile(
       type: type as WorkoutType,
       date: dateStr,
       plannedMin: minutes,
-      intensity: type === "hiit" ? "élevée" : "modérée",
+      intensity:
+        lang === "en"
+          ? type === "hiit"
+            ? "high"
+            : "moderate"
+          : type === "hiit"
+          ? "élevée"
+          : "modérée",
       exercises: exos,
     } as AiSessionT);
   }
@@ -429,6 +476,18 @@ function defaultBaseTitle(t: WorkoutType) {
   return t === "cardio" ? "Cardio" : t === "mobilité" ? "Mobilité" : t === "hiit" ? "HIIT" : "Muscu";
 }
 
+type Lang = "fr" | "en";
+
+function baseTitleForType(t: WorkoutType, lang: Lang) {
+  if (lang === "en") {
+    if (t === "cardio") return "Cardio";
+    if (t === "mobilité") return "Mobility";
+    if (t === "hiit") return "HIIT";
+    return "Strength training";
+  }
+  return defaultBaseTitle(t);
+}
+
 /* ========================= Contexte & utils ========================= */
 type Ctx = {
   level: "debutant" | "intermediaire" | "avance";
@@ -437,6 +496,7 @@ type Ctx = {
   goalKey: string;
   injuries: Injuries;
   equipItems: Items;
+  lang: "fr" | "en";
 };
 
 type Injuries = {
@@ -517,23 +577,96 @@ function normalizeItems(list?: string[]): Items {
   };
 }
 
+/* ========================= Traduction des noms d'exos ========================= */
+
+const EX_NAME_TRANSLATIONS: Record<string, { en: string }> = {
+  "Échauffement Z1": { en: "Warm-up Z1" },
+  "Retour au calme + mobilité": { en: "Cool-down + mobility" },
+  "Vélo Z2 continu": { en: "Steady-state bike Z2" },
+  "Rameur Z2 continu": { en: "Steady-state rower Z2" },
+  "Z2 continu": { en: "Steady-state cardio Z2" },
+  "Fractionné Z2/Z3 sur tapis": { en: "Intervals Z2/Z3 on treadmill" },
+  "Fractionné Z2/Z3": { en: "Intervals Z2/Z3" },
+  "Respiration diaphragmatique": { en: "Diaphragmatic breathing" },
+  "90/90 hanches": { en: "90/90 hips" },
+  "Down-Dog → Cobra": { en: "Down-Dog → Cobra" },
+  "Activation hanches/chevilles": { en: "Hips/ankles activation" },
+  "Activation épaules/omoplates": { en: "Shoulders/scapulae activation" },
+  "Mollets debout (haltères/élastique)": {
+    en: "Standing calf raises (dumbbells/band)",
+  },
+  "Mollets debout (charge/élastique)": {
+    en: "Standing calf raises (load/band)",
+  },
+  "Mollets debout au poids du corps": {
+    en: "Standing calf raises (bodyweight)",
+  },
+  "Curl poignets (avant-bras)": { en: "Wrist curls (forearms)" },
+  "Farmer carry (charges/poids du corps)": {
+    en: "Farmer carry (loaded/bodyweight)",
+  },
+  "Respiration + Flow léger": { en: "Breathing + light flow" },
+  "Étirements complets": { en: "Full-body stretches" },
+  "Marche rapide / step-ups bas": {
+    en: "Brisk walk / low step-ups",
+  },
+  "Marche progressive Z1→Z2": { en: "Progressive walk Z1→Z2" },
+  "Marche rapide inclinée": { en: "Incline brisk walk" },
+  "Gainage planche": { en: "Plank hold" },
+  "Side Plank (gauche/droite)": { en: "Side plank (left/right)" },
+  "Crunchs + Gainage": { en: "Crunches + plank" },
+  "Burpees (option sans saut)": { en: "Burpees (no-jump option)" },
+  "Hip Thrust au sol": { en: "Hip thrust on floor" },
+  "Glute Bridge": { en: "Glute bridge" },
+  "Fente arrière": { en: "Reverse lunge" },
+  "Fentes latérales": { en: "Lateral lunges" },
+  "Abduction hanches (élastique)": { en: "Hip abduction (band)" },
+  "Activation hanches/fessiers": { en: "Hips/glutes activation" },
+};
+
+function exName(label: string, ctx: Ctx): string {
+  if (ctx.lang === "fr") return label;
+  const entry = EX_NAME_TRANSLATIONS[label];
+  return entry?.en || label;
+}
+
 /* ========================= Cardio/Mobility/HIIT ========================= */
 function buildCardio(ctx: Ctx, variantIdx: number): NormalizedExercise[] {
   const { minutes, equipItems } = ctx;
-  const warm = { name: "Échauffement Z1", reps: "8–10 min", block: "echauffement" } as NormalizedExercise;
-  const cool = { name: "Retour au calme + mobilité", reps: "5–8 min", block: "fin" } as NormalizedExercise;
+  const warm = {
+    name: exName("Échauffement Z1", ctx),
+    reps: "8–10 min",
+    block: "echauffement",
+  } as NormalizedExercise;
+  const cool = {
+    name: exName("Retour au calme + mobilité", ctx),
+    reps: "5–8 min",
+    block: "fin",
+  } as NormalizedExercise;
 
   let main: NormalizedExercise;
   if (variantIdx % 2 === 0) {
     const dur = Math.max(15, minutes - 12);
     main = {
-      name: equipItems.bike ? "Vélo Z2 continu" : equipItems.rower ? "Rameur Z2 continu" : "Z2 continu",
+      name: exName(
+        equipItems.bike
+          ? "Vélo Z2 continu"
+          : equipItems.rower
+          ? "Rameur Z2 continu"
+          : "Z2 continu",
+        ctx
+      ),
       reps: `${dur} min`,
       block: "principal",
     };
   } else {
     main = {
-      name: equipItems.treadmill ? "Fractionné Z2/Z3 sur tapis" : "Fractionné Z2/Z3",
+      name: exName(
+        equipItems.treadmill
+          ? "Fractionné Z2/Z3 sur tapis"
+          : "Fractionné Z2/Z3",
+        ctx
+      ),
       reps: "12×(1’/1’)",
       block: "principal",
     };
@@ -541,22 +674,48 @@ function buildCardio(ctx: Ctx, variantIdx: number): NormalizedExercise[] {
   return [warm, main, cool];
 }
 
-function buildMobility(_ctx: Ctx): NormalizedExercise[] {
+function buildMobility(ctx: Ctx): NormalizedExercise[] {
   return [
-    { name: "Respiration diaphragmatique", reps: "2–3 min", block: "echauffement" },
-    { name: "90/90 hanches", reps: "8–10/ côté", block: "principal" },
-    { name: "T-spine rotations", reps: "8–10/ côté", block: "principal" },
-    { name: "Down-Dog → Cobra", reps: "6–8", block: "fin" },
+    {
+      name: exName("Respiration diaphragmatique", ctx),
+      reps: "2–3 min",
+      block: "echauffement",
+    },
+    {
+      name: exName("90/90 hanches", ctx),
+      reps: "8–10/ côté",
+      block: "principal",
+    },
+    {
+      name: "T-spine rotations",
+      reps: "8–10/ côté",
+      block: "principal",
+    },
+    {
+      name: exName("Down-Dog → Cobra", ctx),
+      reps: "6–8",
+      block: "fin",
+    },
   ];
 }
 
 function buildHiit(ctx: Ctx): NormalizedExercise[] {
   const out: NormalizedExercise[] = [];
-  out.push({ name: "Air Squats", reps: "40s", rest: "20s", block: "principal" });
-  out.push({ name: "Mountain Climbers", reps: "40s", rest: "20s", block: "principal" });
+  out.push({
+    name: exName("Air Squats", ctx),
+    reps: "40s",
+    rest: "20s",
+    block: "principal",
+  });
+  out.push({
+    name: exName("Mountain Climbers", ctx),
+    reps: "40s",
+    rest: "20s",
+    block: "principal",
+  });
   out.push(
     adjustForInjuries(ctx, {
-      name: "Burpees (option sans saut)",
+      name: exName("Burpees (option sans saut)", ctx),
       reps: "30–40s",
       rest: "30–40s",
       block: "principal",
@@ -708,7 +867,12 @@ function buildStrengthFocused(
   const out: NormalizedExercise[] = [];
 
   out.push({
-    name: focus.startsWith("bas") ? "Activation hanches/chevilles" : "Activation épaules/omoplates",
+    name: exName(
+      focus.startsWith("bas")
+        ? "Activation hanches/chevilles"
+        : "Activation épaules/omoplates",
+      ctx
+    ),
     reps: "3–5 min",
     block: "echauffement",
   });
@@ -745,7 +909,7 @@ function buildStrengthFocused(
     const isMain = p.kind === "main";
 
     const base: NormalizedExercise = {
-      name: usableName,
+      name: exName(usableName, ctx),
       sets: defaultSets(ctx.level, isBW),
       reps: defaultReps(g, isMain),
       rest: g === "strength" ? "120–150s" : g === "fatloss" ? "45–60s" : isMain ? "75–90s" : "60–75s",
@@ -768,7 +932,7 @@ function buildStrengthFocused(
       if (targetMin - usedMin >= 5) {
         out.push(
           adjustForInjuries(ctx, {
-            name: "Gainage planche",
+            name: exName("Gainage planche", ctx),
             sets: 2,
             reps: "30–45s",
             rest: g === "fatloss" ? "30–45s" : "45–60s",
@@ -784,7 +948,7 @@ function buildStrengthFocused(
   if (estimateTotalMinutes(out, g) < targetMin - 6) {
     out.push(
       adjustForInjuries(ctx, {
-        name: "Side Plank (gauche/droite)",
+        name: exName("Side Plank (gauche/droite)", ctx),
         sets: 2,
         reps: "20–30s/ côté",
         rest: "45s",
@@ -807,7 +971,12 @@ function addObjectiveExtras(exos: NormalizedExercise[], objectifBrut: string|und
   // Mollets
   pushIf(targetCalves(s) && !hasName(/mollets?|calf/),
     adjustForInjuries(ctx, {
-      name: ctx.equipItems.db || ctx.equipItems.bands ? "Mollets debout (charge/élastique)" : "Mollets debout au poids du corps",
+      name: exName(
+        ctx.equipItems.db || ctx.equipItems.bands
+          ? "Mollets debout (charge/élastique)"
+          : "Mollets debout au poids du corps",
+        ctx
+      ),
       sets: 3, reps: "12–20", rest: "45–60s", block: "fin"
     })
   );
@@ -815,7 +984,12 @@ function addObjectiveExtras(exos: NormalizedExercise[], objectifBrut: string|und
   // Avant-bras
   pushIf(targetForearms(s) && !hasName(/poignets?|forearm|farmer/),
     adjustForInjuries(ctx, {
-      name: ctx.equipItems.db ? "Curl poignets (haltères)" : "Farmer carry (charges improvisées)",
+      name: exName(
+        ctx.equipItems.db
+          ? "Curl poignets (avant-bras)"
+          : "Farmer carry (charges/poids du corps)",
+        ctx
+      ),
       sets: 2, reps: "12–20 ou 30–45s", rest: "45–60s", block: "fin"
     })
   );
@@ -823,14 +997,19 @@ function addObjectiveExtras(exos: NormalizedExercise[], objectifBrut: string|und
   // Arrière d'épaules
   pushIf(targetRearDelts(s) && !hasName(/face pull|oiseau|arriere/),
     adjustForInjuries(ctx, {
-      name: ctx.equipItems.bands ? "Face Pull (élastique)" : "Oiseau au poids du corps (penché)",
+      name: ctx.equipItems.bands
+        ? "Face Pull (élastique)"
+        : "Oiseau au poids du corps (penché)",
       sets: 3, reps: "12–15", rest: "45–60s", block: "fin"
     })
   );
 
   // Abdos
   pushIf(targetAbs(s) && !hasName(/hollow|plank|gainage|crunch/),
-    { name: "Crunchs + Gainage", sets: 2, reps: "15 + 30–40s", rest: "45–60s", block: "fin" }
+    {
+      name: exName("Crunchs + Gainage", ctx),
+      sets: 2, reps: "15 + 30–40s", rest: "45–60s", block: "fin"
+    }
   );
 
   return out;
@@ -854,7 +1033,7 @@ function adjustForInjuries(ctx: Ctx, ex: NormalizedExercise): NormalizedExercise
   if (ctx.injuries.shoulder) {
     if (/militaire|overhead|développé militaire|élevations latérales lourdes/i.test(e.name)) {
       return swap(e, {
-        name: "Développé haltères neutre",
+        name: exName("Développé haltères neutre", ctx),
         sets: e.sets ?? 3,
         reps: repsFor(ctx.goalKey),
         rest: "75s",
@@ -865,7 +1044,7 @@ function adjustForInjuries(ctx: Ctx, ex: NormalizedExercise): NormalizedExercise
     }
     if (/dips/i.test(e.name)) {
       return swap(e, {
-        name: "Pompes surélevées",
+        name: exName("Pompes surélevées", ctx),
         sets: e.sets ?? 3,
         reps: pickBodyweight(ctx.goalKey),
         rest: "60–75s",
@@ -877,7 +1056,7 @@ function adjustForInjuries(ctx: Ctx, ex: NormalizedExercise): NormalizedExercise
   if (ctx.injuries.knee) {
     if (/sauté|jump|burpee/i.test(e.name)) {
       return swap(e, {
-        name: "Marche rapide / step-ups bas",
+        name: exName("Marche rapide / step-ups bas", ctx),
         sets: e.sets ?? 3,
         reps: "10–12/ côté",
         rest: "60s",
@@ -896,14 +1075,24 @@ function adjustForInjuries(ctx: Ctx, ex: NormalizedExercise): NormalizedExercise
     e.notes = joinNotes(e.notes, "Amplitude confortable, focus stabilité hanche.");
   }
   if (ctx.injuries.ankle && /sauté|jump/i.test(e.name)) {
-    return swap(e, { name: "Marche rapide inclinée", sets: e.sets ?? 3, reps: "2–3 min", rest: "60s", block: "principal" });
+    return swap(e, {
+      name: exName("Marche rapide inclinée", ctx),
+      sets: e.sets ?? 3,
+      reps: "2–3 min",
+      rest: "60s",
+      block: "principal",
+    });
   }
 
   if (/tirage élastique|row|tirage/i.test(e.name)) {
     if ((ctx.equipItems as any).bands) e.equipment = e.equipment || "élastiques";
   }
   if (/kettlebell|kb/i.test(e.name) && !(ctx.equipItems as any).kb) {
-    return swap(e, { ...e, name: e.name.replace(/kettlebell|KB/i, "haltère"), equipment: "haltères" });
+    return swap(e, {
+      ...e,
+      name: e.name.replace(/kettlebell|KB/i, "haltère"),
+      equipment: "haltères",
+    });
   }
   if (/trx|suspension/i.test(e.name) && !(ctx.equipItems as any).trx) {
     return swap(e, bodyOrBand("Tirage élastique / serviette", ctx, { reps: e.reps || pickBodyweight(ctx.goalKey) }));
@@ -951,19 +1140,19 @@ function pickBodyweight(goal: string) {
 
 /* ====== Factories ====== */
 function barbell(name: string, ctx: Ctx, _area?: "bas" | "haut" | "dos", extra?: Partial<NormalizedExercise>): NormalizedExercise {
-  return { name, sets: setsFor(ctx.level), reps: repsFor(ctx.goalKey), rest: "90s", tempo: tempoFor(ctx.goalKey), rir: rirFor(ctx.level), block: "principal", equipment: "barre", ...extra };
+  return { name: exName(name, ctx), sets: setsFor(ctx.level), reps: repsFor(ctx.goalKey), rest: "90s", tempo: tempoFor(ctx.goalKey), rir: rirFor(ctx.level), block: "principal", equipment: "barre", ...extra };
 }
 function dumbbell(name: string, ctx: Ctx, _area?: "bas" | "haut" | "dos", extra?: Partial<NormalizedExercise>): NormalizedExercise {
-  return { name, sets: setsFor(ctx.level), reps: repsFor(ctx.goalKey), rest: "75s", tempo: tempoFor(ctx.goalKey), rir: rirFor(ctx.level), block: "principal", equipment: "haltères", ...extra };
+  return { name: exName(name, ctx), sets: setsFor(ctx.level), reps: repsFor(ctx.goalKey), rest: "75s", tempo: tempoFor(ctx.goalKey), rir: rirFor(ctx.level), block: "principal", equipment: "haltères", ...extra };
 }
 function cableOrMachine(name: string, ctx: Ctx, _area?: "bas" | "haut" | "dos", extra?: Partial<NormalizedExercise>): NormalizedExercise {
-  return { name, sets: setsFor(ctx.level), reps: repsFor(ctx.goalKey), rest: "75–90s", tempo: tempoFor(ctx.goalKey), rir: rirFor(ctx.level), block: "principal", equipment: "machine/câble", ...extra };
+  return { name: exName(name, ctx), sets: setsFor(ctx.level), reps: repsFor(ctx.goalKey), rest: "75–90s", tempo: tempoFor(ctx.goalKey), rir: rirFor(ctx.level), block: "principal", equipment: "machine/câble", ...extra };
 }
 function bodyOrBand(name: string, ctx: Ctx, extra?: Partial<NormalizedExercise>): NormalizedExercise {
-  return { name, sets: setsFor(ctx.level, true), reps: extra?.reps || pickBodyweight(ctx.goalKey), rest: "60–75s", block: "principal", equipment: "poids du corps / élastiques", ...extra };
+  return { name: exName(name, ctx), sets: setsFor(ctx.level, true), reps: extra?.reps || pickBodyweight(ctx.goalKey), rest: "60–75s", block: "principal", equipment: "poids du corps / élastiques", ...extra };
 }
 function body(name: string, ctx: Ctx, extra?: Partial<NormalizedExercise>): NormalizedExercise {
-  return { name, sets: setsFor(ctx.level, true), reps: extra?.reps || pickBodyweight(ctx.goalKey), rest: "60s", block: "principal", equipment: "poids du corps", ...extra };
+  return { name: exName(name, ctx), sets: setsFor(ctx.level, true), reps: extra?.reps || pickBodyweight(ctx.goalKey), rest: "60s", block: "principal", equipment: "poids du corps", ...extra };
 }
 
 /* ========================= Divers utils (email/timestamp) ========================= */
