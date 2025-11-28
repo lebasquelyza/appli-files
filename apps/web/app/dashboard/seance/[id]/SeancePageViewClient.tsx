@@ -1,4 +1,4 @@
-//apps/web/app/dashboard/seance/[id]/SeancePageViewClient.tsx
+// apps/web/app/dashboard/seance/[id]/SeancePageViewClient.tsx
 "use client";
 
 import React from "react";
@@ -39,56 +39,265 @@ function cleanTextLocal(s?: string): string {
 function focusLabelT(focus: Focus, t: (path: string) => string): string {
   switch (focus) {
     case "upper":
-      return t("settings.seancePage.focus.upper");
+      return t("seancePage.focus.upper");
     case "lower":
-      return t("settings.seancePage.focus.lower");
+      return t("seancePage.focus.lower");
     case "full":
-      return t("settings.seancePage.focus.full");
+      return t("seancePage.focus.full");
     case "mix":
     default:
-      return t("settings.seancePage.focus.mix");
+      return t("seancePage.focus.mix");
   }
 }
 
-/**
- * Mini trad FR → EN des noms d’exos les plus courants.
- * Ça ne touche QUE l’affichage, les données restent brutes.
- */
+/** 🔤 Dictionnaire FR -> EN pour les noms d'exos générés côté "béton" + fallbacks */
+const EXERCISE_NAME_I18N: Record<
+  string,
+  { fr: string; en: string }
+> = {
+  // -------- Cardio / mobilité / HIIT --------
+  "Échauffement Z1": { fr: "Échauffement Z1", en: "Z1 warm-up" },
+  "Cardio continu Z2": {
+    fr: "Cardio continu Z2",
+    en: "Z2 steady-state cardio",
+  },
+  "Retour au calme + mobilité": {
+    fr: "Retour au calme + mobilité",
+    en: "Cool-down + mobility",
+  },
+  "Marche progressive Z1→Z2": {
+    fr: "Marche progressive Z1→Z2",
+    en: "Progressive walk Z1→Z2",
+  },
+  "Vélo Z2 continu": {
+    fr: "Vélo Z2 continu",
+    en: "Bike Z2 steady-state",
+  },
+  "Rameur Z2 continu": {
+    fr: "Rameur Z2 continu",
+    en: "Rower Z2 steady-state",
+  },
+  "Z2 continu": { fr: "Z2 continu", en: "Z2 steady-state" },
+  "Fractionné Z2/Z3 sur tapis": {
+    fr: "Fractionné Z2/Z3 sur tapis",
+    en: "Z2/Z3 intervals on treadmill",
+  },
+  "Fractionné Z2/Z3": {
+    fr: "Fractionné Z2/Z3",
+    en: "Z2/Z3 intervals",
+  },
+  "Respiration diaphragmatique": {
+    fr: "Respiration diaphragmatique",
+    en: "Diaphragmatic breathing",
+  },
+  "90/90 hanches": { fr: "90/90 hanches", en: "90/90 hips" },
+  "T-spine rotations": {
+    fr: "T-spine rotations",
+    en: "T-spine rotations",
+  },
+  "Down-Dog → Cobra": {
+    fr: "Down-Dog → Cobra",
+    en: "Down-Dog → Cobra",
+  },
+  "Air Squats": { fr: "Air Squats", en: "Air squats" },
+  "Mountain Climbers": {
+    fr: "Mountain Climbers",
+    en: "Mountain climbers",
+  },
+  "Burpees (option sans saut)": {
+    fr: "Burpees (option sans saut)",
+    en: "Burpees (no-jump option)",
+  },
+
+  // -------- Fallback muscu sans matériel --------
+  "Squat au poids du corps": {
+    fr: "Squat au poids du corps",
+    en: "Bodyweight squat",
+  },
+  Pompes: { fr: "Pompes", en: "Push-ups" },
+  "Fentes alternées": {
+    fr: "Fentes alternées",
+    en: "Alternating lunges",
+  },
+  Planche: { fr: "Planche", en: "Plank" },
+
+  // -------- Fallback muscu avec matériel --------
+  "Goblet Squat": { fr: "Goblet Squat", en: "Goblet squat" },
+  "Développé haltères": {
+    fr: "Développé haltères",
+    en: "Dumbbell press",
+  },
+  "Rowing unilatéral": {
+    fr: "Rowing unilatéral",
+    en: "One-arm row",
+  },
+
+  // -------- Pools muscu / bas du corps --------
+  "Tirage vertical": {
+    fr: "Tirage vertical",
+    en: "Vertical pull",
+  },
+  "Tirage élastique": {
+    fr: "Tirage élastique",
+    en: "Band row",
+  },
+  "Élévations latérales": {
+    fr: "Élévations latérales",
+    en: "Lateral raises",
+  },
+  "Curl biceps (élastique/haltères)": {
+    fr: "Curl biceps (élastique/haltères)",
+    en: "Biceps curl (band/dumbbells)",
+  },
+  "Front Squat": { fr: "Front Squat", en: "Front squat" },
+  "Presse à cuisses": {
+    fr: "Presse à cuisses",
+    en: "Leg press",
+  },
+  "Fente arrière": {
+    fr: "Fente arrière",
+    en: "Reverse lunge",
+  },
+  "Leg Extension (élastique/machine)": {
+    fr: "Leg Extension (élastique/machine)",
+    en: "Leg extension (band/machine)",
+  },
+  "Hip Thrust (barre/haltère)": {
+    fr: "Hip Thrust (barre/haltère)",
+    en: "Hip thrust (bar/dumbbell)",
+  },
+  "Hip Thrust au sol": {
+    fr: "Hip Thrust au sol",
+    en: "Floor hip thrust",
+  },
+  "Soulevé de terre roumain": {
+    fr: "Soulevé de terre roumain",
+    en: "Romanian deadlift",
+  },
+  "RDL haltères": {
+    fr: "RDL haltères",
+    en: "Dumbbell Romanian deadlift",
+  },
+  "Good Morning haltères": {
+    fr: "Good Morning haltères",
+    en: "Dumbbell good morning",
+  },
+  "Pont fessier": {
+    fr: "Pont fessier",
+    en: "Glute bridge",
+  },
+  "Leg Curl (élastique)": {
+    fr: "Leg Curl (élastique)",
+    en: "Leg curl (band)",
+  },
+  "Nordic curl assisté": {
+    fr: "Nordic curl assisté",
+    en: "Assisted Nordic curl",
+  },
+  "Abduction hanches (élastique)": {
+    fr: "Abduction hanches (élastique)",
+    en: "Hip abduction (band)",
+  },
+
+  // -------- Pools muscu / haut du corps --------
+  "Bench Press": { fr: "Bench Press", en: "Bench press" },
+  "Développé haltères incliné": {
+    fr: "Développé haltères incliné",
+    en: "Incline dumbbell press",
+  },
+  "Triceps extension (poulie/élastique)": {
+    fr: "Triceps extension (poulie/élastique)",
+    en: "Triceps extension (cable/band)",
+  },
+  "Extension triceps haltères": {
+    fr: "Extension triceps haltères",
+    en: "Dumbbell triceps extension",
+  },
+  "Écartés (haltères/élastique)": {
+    fr: "Écartés (haltères/élastique)",
+    en: "Chest fly (dumbbell/band)",
+  },
+  "Tractions / Tirage vertical": {
+    fr: "Tractions / Tirage vertical",
+    en: "Pull-ups / Lat pulldown",
+  },
+  "Rowing buste penché": {
+    fr: "Rowing buste penché",
+    en: "Bent-over row",
+  },
+  "Row avec serviette/table": {
+    fr: "Row avec serviette/table",
+    en: "Inverted row with towel/table",
+  },
+  "Face Pull (câble/élastique)": {
+    fr: "Face Pull (câble/élastique)",
+    en: "Face pull (cable/band)",
+  },
+  "Tirage horizontal élastique": {
+    fr: "Tirage horizontal élastique",
+    en: "Horizontal row (band)",
+  },
+  "Curl incliné (haltères)": {
+    fr: "Curl incliné (haltères)",
+    en: "Incline dumbbell curl",
+  },
+  "Extension triceps (poulie/élastique)": {
+    fr: "Extension triceps (poulie/élastique)",
+    en: "Triceps extension (cable/band)",
+  },
+
+  // -------- Warm-up / core / divers --------
+  "Activation hanches/chevilles": {
+    fr: "Activation hanches/chevilles",
+    en: "Hips/ankles activation",
+  },
+  "Activation épaules/omoplates": {
+    fr: "Activation épaules/omoplates",
+    en: "Shoulders/scapula activation",
+  },
+  "Gainage planche": {
+    fr: "Gainage planche",
+    en: "Plank hold",
+  },
+  "Side Plank (gauche/droite)": {
+    fr: "Side Plank (gauche/droite)",
+    en: "Side plank (left/right)",
+  },
+
+  // -------- Ajustements blessures --------
+  "Développé haltères neutre": {
+    fr: "Développé haltères neutre",
+    en: "Neutral-grip dumbbell press",
+  },
+  "Pompes surélevées": {
+    fr: "Pompes surélevées",
+    en: "Elevated push-ups",
+  },
+  "Marche rapide / step-ups bas": {
+    fr: "Marche rapide / step-ups bas",
+    en: "Brisk walk / low step-ups",
+  },
+  "Marche rapide inclinée": {
+    fr: "Marche rapide inclinée",
+    en: "Incline brisk walk",
+  },
+  "Tirage élastique / serviette": {
+    fr: "Tirage élastique / serviette",
+    en: "Band/towel row",
+  },
+};
+
+/** Traduit un nom d'exercice FR -> EN si possible, sinon renvoie le nom brut */
 function translateExerciseName(
-  name: string | undefined,
+  raw: string,
   lang: "fr" | "en"
 ): string {
-  if (!name) return "";
-  if (lang === "fr") return name;
-
-  const clean = name.trim();
-
-  const map: Record<string, string> = {
-    // Fallbacks muscu sans matos
-    "Squat au poids du corps": "Bodyweight squat",
-    "Pompes": "Push-ups",
-    "Fentes alternées": "Alternating lunges",
-    "Planche": "Plank",
-
-    // Fallbacks muscu avec matos
-    "Goblet Squat": "Goblet squat",
-    "Développé haltères": "Dumbbell press",
-    "Rowing unilatéral": "One-arm row",
-
-    // Cardio
-    "Échauffement Z1": "Warm-up Z1",
-    "Cardio continu Z2": "Continuous cardio Z2",
-    "Retour au calme + mobilité": "Cool-down + mobility",
-    "Marche progressive Z1→Z2": "Progressive walk Z1→Z2",
-
-    // Mobilité
-    "Respiration diaphragmatique": "Diaphragmatic breathing",
-    "90/90 hanches": "90/90 hips",
-    "T-spine rotations": "T-spine rotations",
-    "Down-Dog → Cobra": "Down-Dog → Cobra",
-  };
-
-  return map[clean] ?? name;
+  if (!raw) return raw;
+  if (lang === "fr") return raw;
+  const key = raw.trim();
+  const entry = EXERCISE_NAME_I18N[key];
+  if (!entry) return raw; // fallback : nom original
+  return entry.en;
 }
 
 function Chip({
@@ -143,10 +352,10 @@ const SeancePageViewClient: React.FC<Props> = ({
         style={{ paddingInline: 12 }}
       >
         <a href={backHref} className="btn-ghost">
-          {t("settings.seancePage.backButton")}
+          {t("seancePage.backButton")}
         </a>
         <div className="text-xs text-gray-400">
-          {t("settings.seancePage.aiBadge")}
+          {t("seancePage.aiBadge")}
         </div>
       </div>
 
@@ -158,8 +367,7 @@ const SeancePageViewClient: React.FC<Props> = ({
           <div>
             <h1 className="h1-compact">{displayTitle}</h1>
             <p className="lead-compact">
-              {plannedMin} {t("settings.seancePage.plannedMinSuffix")} ·{" "}
-              {base.type}
+              {plannedMin} {t("seancePage.plannedMinSuffix")} · {base.type}
             </p>
           </div>
         </div>
@@ -172,12 +380,12 @@ const SeancePageViewClient: React.FC<Props> = ({
                   ? String(ex.reps)
                   : ex.durationSec
                   ? `${ex.durationSec}s`
-                  : "",
+                  : ""
               );
               const rest = cleanTextLocal(ex.rest || "");
               const translatedName = translateExerciseName(
                 ex.name,
-                lang as "fr" | "en",
+                lang
               );
 
               return (
@@ -190,23 +398,23 @@ const SeancePageViewClient: React.FC<Props> = ({
                       <Chip
                         label="🧱"
                         value={`${ex.sets} ${t(
-                          "settings.seancePage.chips.setsLabel",
+                          "seancePage.chips.setsLabel"
                         )}`}
-                        title={t("settings.seancePage.chips.setsLabel")}
+                        title={t("seancePage.chips.setsLabel")}
                       />
                     )}
                     {reps && (
                       <Chip
                         label="🔁"
                         value={reps}
-                        title={t("settings.seancePage.chips.repsLabel")}
+                        title={t("seancePage.chips.repsLabel")}
                       />
                     )}
                     {rest && (
                       <Chip
                         label="⏲️"
                         value={rest}
-                        title={t("settings.seancePage.chips.restLabel")}
+                        title={t("seancePage.chips.restLabel")}
                       />
                     )}
                   </div>
