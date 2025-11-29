@@ -104,7 +104,7 @@ const SeancePageViewClient: React.FC<Props> = ({
         }}
       />
 
-      {/* Ligne retour + badge IA (spécifique à cette page) */}
+      {/* Ligne retour + badge IA */}
       <div
         className="mb-2 flex items-center justify-between no-print"
         style={{ paddingInline: 12 }}
@@ -117,7 +117,7 @@ const SeancePageViewClient: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* Header — même logique que bmi/page.tsx */}
+      {/* Header aligné sur la logique BMI */}
       <div className="page-header" style={{ marginTop: 12 }}>
         <div>
           <h1
@@ -145,7 +145,7 @@ const SeancePageViewClient: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* Contenu principal dans un <Section /> comme pour BMI */}
+      {/* Contenu principal dans un Section comme pour BMI */}
       <Section title={t("settings.seancePage.section.title")}>
         <div className="grid gap-3">
           {exercises.map((ex, i) => {
