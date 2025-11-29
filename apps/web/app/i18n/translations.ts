@@ -2130,7 +2130,16 @@ abonnementSuccess: {
           "OpenFoodFacts unavailable or no product found. Enter values manually or use a photo.",
         offUnavailable:
           "OFF unreachable. Try again later or enter values manually.",
-      },
+      },// ...dans en.calories.foodSnap
+note: {
+  photo: "Photo: food",
+  platePrefix: "Plate:",
+  productPrefix: "Product:",
+  defaultItem: "food",
+  approx: "~{{grams}}g",
+  atPer100g: "@{{kcal}}kcal/100g",
+},
+
       header: {
         title:
           'Add from a <u>photo</u>, a <u>barcode</u> or a <u>search</u>',
