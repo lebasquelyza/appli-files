@@ -909,7 +909,16 @@ export const translations = {
         offNoProduct:
           "OpenFoodFacts indisponible ou aucun produit. Saisis manuellement ou utilise la photo.",
         offUnavailable:
-          "OFF non joignable. Essaie plus tard ou saisis manuellement.",
+          "OFF non joignable. Essaie plus tard ou saisis manuellement.",// ...dans fr.calories.foodSnap
+note: {
+  photo: "Photo : aliment",
+  platePrefix: "Assiette :",
+  productPrefix: "Produit :",
+  defaultItem: "aliment",
+  approx: "~{{grams}}g",
+  atPer100g: "@{{kcal}}kcal/100g",
+},
+
       },
       header: {
         title:
