@@ -5,7 +5,7 @@ import React from "react";
 import type { AiSession, NormalizedExercise } from "../../../../lib/coach/ai";
 import type { Focus } from "./page";
 import { useLanguage } from "@/components/LanguageProvider";
-import { Section } from "@/components/ui/Page";
+import { translateExerciseName } from "@/lib/exerciseI18n";
 
 type Props = {
   base: AiSession;
@@ -35,30 +35,21 @@ function cleanTextLocal(s?: string): string {
     .trim();
 }
 
-// ⚠️ ICI on rajoute "settings." devant les chemins
-function focusLabelT(focus: Focus, t: (path: string) => string): string {
+function focusLabelT(focus: Focus, t: any): string {
   switch (focus) {
     case "upper":
-      return t("settings.seancePage.focus.upper");
+      return t("seancePage.focus.upper");
     case "lower":
-      return t("settings.seancePage.focus.lower");
+      return t("seancePage.focus.lower");
     case "full":
-      return t("settings.seancePage.focus.full");
+      return t("seancePage.focus.full");
     case "mix":
     default:
-      return t("settings.seancePage.focus.mix");
+      return t("seancePage.focus.mix");
   }
 }
 
-function Chip({
-  label,
-  value,
-  title,
-}: {
-  label: string;
-  value: string;
-  title?: string;
-}) {
+function Chip({ label, value, title }: { label: string; value: string; title?: string }) {
   if (!value) return null;
   return (
     <span
@@ -77,121 +68,132 @@ const SeancePageViewClient: React.FC<Props> = ({
   plannedMin,
   backHref,
 }) => {
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
 
   const displayTitle =
     stripVariantLetterLocal(base.title) || focusLabelT(focus, t);
 
   return (
-    <div
-      className="container"
-      style={{
-        paddingTop: 24,
-        paddingBottom: 32,
-        fontSize: "var(--settings-fs, 12px)",
-      }}
-    >
+    <div>
       <style
         dangerouslySetInnerHTML={{
           __html: `
-  .compact-card { padding: 12px; border-radius: 16px; background:#fff; box-shadow: 0 1px 0 rgba(17,24,39,.05); border:1px solid #e5e7eb; }
-  .h1-compact { margin-bottom:2px; font-size: clamp(20px, 2.2vw, 24px); line-height:1.15; font-weight:800; }
-  .lead-compact { margin-top:4px; font-size: clamp(12px, 1.6vw, 14px); line-height:1.35; color:#4b5563; }
-  .exoname { font-size: 15.5px; line-height:1.25; font-weight:700; }
-  .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
-  .btn-ghost { background:#fff; color:#111827; border:1px solid #e5e7eb; border-radius:8px; padding:6px 10px; font-weight:600; }
-          `,
+        .compact-card {
+          padding: 12px;
+          border-radius: 16px;
+          background: #fff;
+          box-shadow: 0 1px 0 rgba(17,24,39,.05);
+          border: 1px solid #e5e7eb;
+        }
+        .h1-compact {
+          margin-bottom:2px;
+          font-size: clamp(20px, 2.2vw, 24px);
+          line-height:1.15;
+          font-weight:800;
+        }
+        .lead-compact {
+          margin-top:4px;
+          font-size: clamp(12px, 1.6vw, 14px);
+          line-height:1.35;
+          color:#4b5563;
+        }
+        .exoname {
+          font-size: 15.5px;
+          line-height:1.25;
+          font-weight:700;
+        }
+        .chips {
+          display:flex;
+          flex-wrap:wrap;
+          gap:6px;
+          margin-top:8px;
+        }
+        .btn-ghost {
+          background:#fff;
+          color:#111827;
+          border:1px solid #e5e7eb;
+          border-radius:8px;
+          padding:6px 10px;
+          font-weight:600;
+        }
+      `,
         }}
       />
 
-      {/* Ligne retour + badge IA */}
-      <div
-        className="mb-2 flex items-center justify-between no-print"
-        style={{ paddingInline: 12 }}
-      >
+      {/* HEADER */}
+      <div className="mb-2 flex items-center justify-between no-print" style={{ paddingInline: 12 }}>
         <a href={backHref} className="btn-ghost">
-          {t("settings.seancePage.backButton")}
+          {t("seancePage.backButton")}
         </a>
         <div className="text-xs text-gray-400">
-          {t("settings.seancePage.aiBadge")}
+          {t("seancePage.aiBadge")}
         </div>
       </div>
 
-      {/* Header aligné sur la logique BMI */}
-      <div className="page-header" style={{ marginTop: 12 }}>
-        <div>
-          <h1
-            className="h1-compact"
-            style={{
-              marginBottom: 2,
-              fontSize: "clamp(20px, 2.2vw, 24px)",
-              lineHeight: 1.15,
-            }}
-          >
-            {displayTitle}
-          </h1>
-          <p
-            className="lead-compact"
-            style={{
-              marginTop: 4,
-              fontSize: "clamp(12px, 1.6vw, 14px)",
-              lineHeight: 1.35,
-              color: "#4b5563",
-            }}
-          >
-            {plannedMin} {t("settings.seancePage.plannedMinSuffix")} ·{" "}
-            {base.type}
-          </p>
+      <div
+        className="mx-auto w-full"
+        style={{ maxWidth: 640, paddingInline: 12, paddingBottom: 24 }}
+      >
+        {/* TITLE */}
+        <div className="page-header">
+          <div>
+            <h1 className="h1-compact">{displayTitle}</h1>
+            <p className="lead-compact">
+              {plannedMin} {t("seancePage.plannedMinSuffix")} · {base.type}
+            </p>
+          </div>
         </div>
-      </div>
 
-      {/* Contenu principal dans un Section comme pour BMI */}
-      <Section title={t("settings.seancePage.section.title")}>
-        <div className="grid gap-3">
-          {exercises.map((ex, i) => {
-            const reps = cleanTextLocal(
-              ex.reps
-                ? String(ex.reps)
-                : ex.durationSec
-                ? `${ex.durationSec}s`
-                : "",
-            );
-            const rest = cleanTextLocal(ex.rest || "");
-            return (
-              <article key={i} className="compact-card">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="exoname">{ex.name}</div>
-                </div>
-                <div className="chips">
-                  {typeof ex.sets === "number" && (
-                    <Chip
-                      label="🧱"
-                      value={`${ex.sets} ${t(
-                        "settings.seancePage.chips.setsLabel",
-                      )}`}
-                      title={t("settings.seancePage.chips.setsLabel")}
-                    />
-                  )}
-                  {reps && (
-                    <Chip
-                      label="🔁"
-                      value={reps}
-                      title={t("settings.seancePage.chips.repsLabel")}
-                    />
-                  )}
-                  {rest && (
-                    <Chip
-                      label="⏲️"
-                      value={rest}
-                      title={t("settings.seancePage.chips.restLabel")}
-                    />
-                  )}
-                </div>
-              </article>
-            );
-          })}
-        </div>
-      </Section>
+        {/* EXERCISES */}
+        <section className="section" style={{ marginTop: 12 }}>
+          <div className="grid gap-3">
+            {exercises.map((ex, i) => {
+              const translatedName = translateExerciseName(ex.name, lang);
+
+              const reps = cleanTextLocal(
+                ex.reps
+                  ? String(ex.reps)
+                  : ex.durationSec
+                  ? `${ex.durationSec}s`
+                  : ""
+              );
+              const rest = cleanTextLocal(ex.rest || "");
+
+              return (
+                <article key={i} className="compact-card">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="exoname">{translatedName}</div>
+                  </div>
+
+                  <div className="chips">
+                    {typeof ex.sets === "number" && (
+                      <Chip
+                        label="🧱"
+                        value={`${ex.sets} ${t("seancePage.chips.setsLabel")}`}
+                        title={t("seancePage.chips.setsLabel")}
+                      />
+                    )}
+                    {reps && (
+                      <Chip
+                        label="🔁"
+                        value={reps}
+                        title={t("seancePage.chips.repsLabel")}
+                      />
+                    )}
+                    {rest && (
+                      <Chip
+                        label="⏲️"
+                        value={rest}
+                        title={t("seancePage.chips.restLabel")}
+                      />
+                    )}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      </div>
     </div>
   );
 };
