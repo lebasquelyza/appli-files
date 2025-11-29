@@ -18,7 +18,7 @@ function getFromPath(obj: any, path: string): any {
   return path.split(".").reduce((acc, key) => (acc ? acc[key] : undefined), obj);
 }
 
-// 🔹 Même logique que BMI/Progress : pas de texte en dur dans les appels
+// i18n client (même logique que BMI / Progress)
 function t(path: string): string {
   const lang = getClientLang();
   const dict = translations[lang] as any;
@@ -112,9 +112,11 @@ export default function FoodSnap({ today, onSave }: Props) {
     setQResults([]);
     setQErr(null);
   }
+
   function onPick() {
     inputRef.current?.click();
   }
+
   function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (!f) return;
@@ -198,7 +200,7 @@ export default function FoodSnap({ today, onSave }: Props) {
         setError(t("calories.foodSnap.errors.offNoProduct"));
         setResult({
           top: {
-            label: "Produit (manuel)",
+            label: t("calories.foodSnap.product.manualLabel"),
             kcal_per_100g: 0,
             proteins_g_per_100g: null,
             source: "IA",
@@ -258,6 +260,7 @@ export default function FoodSnap({ today, onSave }: Props) {
     if (!Number.isFinite(n) || n <= 0) return null;
     return Math.round((n * (portion || 0)) / 100);
   }
+
   function totalProteins(): number | null {
     if (!result) return null;
     if ("items" in result) {
@@ -276,17 +279,26 @@ export default function FoodSnap({ today, onSave }: Props) {
     return Math.round(((p * (portion || 0)) / 100) * 10) / 10;
   }
 
+  /* ---------------- Note envoyée dans le formulaire principal ---------------- */
   function buildNote(): string {
-    if (!result) return "Photo: aliment";
+    if (!result) {
+      return t("calories.foodSnap.note.photo");
+    }
+
     if ("items" in result) {
       const parts = items
         .slice(0, 4)
         .map((it) => `${it.label} ${it.grams}g`);
-      return `Assiette: ` + parts.join(" + ");
+      return `${t("calories.foodSnap.note.platePrefix")} ${parts.join(" + ")}`;
     }
-    return `Produit: ${
-      label || "aliment"
-    } ~${portion}g @${kcal100 || "?"}kcal/100g (${source})`;
+
+    const itemLabel =
+      label || t("calories.foodSnap.note.defaultItem");
+
+    const gramsPart = `~${portion}g`;
+    const kcalPart = `@${kcal100 || "?"}kcal/100g`;
+
+    return `${t("calories.foodSnap.note.productPrefix")} ${itemLabel} ${gramsPart} ${kcalPart} (${source})`;
   }
 
   function injectToMainForm() {
@@ -329,9 +341,7 @@ export default function FoodSnap({ today, onSave }: Props) {
           <div
             style={{ fontWeight: 600 }}
             dangerouslySetInnerHTML={{
-              __html: t(
-                "calories.foodSnap.header.title",
-              ),
+              __html: t("calories.foodSnap.header.title"),
             }}
           />
           <div
