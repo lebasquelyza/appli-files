@@ -52,7 +52,7 @@ export const translations = {
       },
     },
 
-    // 🔹 Commun FR (fusion de tous les blocs common)
+    // 🔹 Commun FR
     common: {
       password: {
         show: "Afficher le mot de passe",
@@ -472,11 +472,9 @@ export const translations = {
       pageTitle: "Musique",
       pageSubtitle:
         "Minuteur simple + Tabata + lecteur Spotify + titres likés.",
-
       loading: {
         subtitle: "Chargement…",
       },
-
       simpleTimer: {
         title: "Minuteur simple",
         minutesLabel: "Minutes",
@@ -486,37 +484,30 @@ export const translations = {
         resume: "Reprendre",
         reset: "Réinitialiser",
       },
-
       tabata: {
         cardTitle: "Timer",
         jumpToTabata: "Tabata",
-
         roundsLabel: "Rounds",
         workSecondsLabel: "Travail (s)",
         restSecondsLabel: "Repos (s)",
-
         presetTabata: "Tabata 8× 20/10",
         preset4515: "10× 45/15",
         preset3030: "6× 30/30",
-
         stateWork: "Travail",
         stateRest: "Repos",
         stateDone: "Terminé",
         stateIdle: "Prêt",
-
         start: "Démarrer",
         pause: "Pause",
         resume: "Reprendre",
         reset: "Réinitialiser",
       },
-
       spotifyAuth: {
         connectButton: "Se connecter à Spotify",
         disconnectButton: "⏻ Se déconnecter",
         disconnectTitle: "Se déconnecter",
         connectGeneric: "Se connecter",
       },
-
       spotifyPlayer: {
         title: "Lecteur Spotify",
         connectedDescription:
@@ -525,11 +516,9 @@ export const translations = {
           "Connecte-toi pour utiliser le lecteur Spotify.",
         connectButton: "Se connecter",
       },
-
       spotifyLibrary: {
         connectHint:
           "Connecte-toi à Spotify pour voir tes titres likés et rechercher une musique.",
-
         errors: {
           likedFetch:
             "Impossible de récupérer les titres likés",
@@ -538,20 +527,17 @@ export const translations = {
           playFailed: "Impossible de lancer la lecture",
           searchFailed: "Erreur de recherche",
         },
-
         liked: {
           title: "Titres likés",
           loading: "Chargement…",
           empty: "Aucun titre liké trouvé.",
         },
-
         search: {
           title: "Rechercher une musique",
           placeholder: "Nom du titre, artiste…",
           submit: "Rechercher",
           loading: "Recherche en cours…",
         },
-
         playButton: "Lire",
       },
     },
@@ -661,18 +647,7 @@ export const translations = {
           message:
             "Bloque 10 minutes rien que pour toi maintenant. Ton corps et ta tête te diront merci.",
         },
-      },    barcodeScanner: {
-      cameraError: "Caméra indisponible ou permissions refusées.",
-      title: "Scanner un code-barres",
-      close: "Fermer",
-      notSupported:
-        "Le scanner natif n’est pas supporté sur cet appareil/navigateur. Saisis le code-barres manuellement ou prends une photo de l’étiquette.",
-      manualPlaceholder: "Saisir le code-barres (ex: 3228857000856)",
-      invalid: "Code-barres invalide (8 à 14 chiffres).",
-      useButton: "Utiliser",
-      tip: "Astuce : approche bien le code et évite les reflets.",
-    },
-
+      },
     },
 
     // Coach vidéo
@@ -899,309 +874,253 @@ export const translations = {
           note: "Note",
         },
       },
+
+      // FoodSnap imbriqué
+      foodSnap: {
+        errors: {
+          analyzeGeneric: "Analyse impossible",
+          unknown: "Erreur inconnue",
+          offNoProduct:
+            "OpenFoodFacts indisponible ou aucun produit. Saisis manuellement ou utilise la photo.",
+          offUnavailable:
+            "OFF non joignable. Essaie plus tard ou saisis manuellement.",
+        },
+        header: {
+          title:
+            'Ajouter depuis une <u>photo</u>, un <u>code-barres</u> ou une <u>recherche</u>',
+          subtitle:
+            "OFF/USDA prioritaire (valeurs réelles), sinon IA/manuel.",
+        },
+        buttons: {
+          photo: "📸 Photo",
+          scan: "🧾 Scanner",
+        },
+        search: {
+          title: "Recherche manuelle (OFF + USDA)",
+          placeholder:
+            'ex: "riz basmati", "banane", "blanc de poulet", "yaourt grec 0%"',
+          loading: "Recherche…",
+          submit: "Rechercher",
+          noResult:
+            "Aucun résultat. Saisis manuellement kcal/100g ou essaie un autre terme.",
+          error:
+            "Recherche indisponible. Essaie plus tard ou saisis manuellement.",
+          proteinsShort: "prot",
+          sourceLabel: "Source",
+          choose: "Choisir",
+        },
+        preview: {
+          alt: "prévisualisation",
+          analyzeLoading: "Analyse…",
+          analyze: "Analyser la photo",
+          reset: "Réinitialiser",
+        },
+        plate: {
+          title: "Décomposition de l’assiette (éditable)",
+          grams: "Grammes",
+          kcalPer100: "kcal/100g",
+          protPer100: "Prot/100g",
+          proteinsShort: "g prot",
+          total: "Total",
+          totalProteinsShort: "g protéines",
+        },
+        product: {
+          title: "Produit",
+          sourceLabel: "Source",
+          manualLabel: "Produit (manuel)",
+          portion: "Portion (g)",
+          kcalPer100: "kcal / 100 g",
+          protPer100: "Prot / 100 g",
+          total: "Total",
+          totalProteinsShort: "g protéines",
+        },
+        note: {
+          photo: "Photo : aliment",
+          platePrefix: "Assiette :",
+          productPrefix: "Produit :",
+          defaultItem: "aliment",
+        },
+        help: {
+          manual:
+            "⚡ Si aucune base ne répond, tu peux saisir les valeurs manuellement (kcal/prot pour 100 g), puis indiquer la portion.",
+        },
+        actions: {
+          fillForm: "Remplir le formulaire en haut",
+          addToCalories: "Ajouter à mes calories",
+        },
+      },
     },
 
-    // FoodSnap
-    foodSnap: {
-      errors: {
-        analyzeGeneric: "Analyse impossible",
-        unknown: "Erreur inconnue",
-        offNoProduct:
-          "OpenFoodFacts indisponible ou aucun produit. Saisis manuellement ou utilise la photo.",
-        offUnavailable:
-          "OFF non joignable. Essaie plus tard ou saisis manuellement.",// ...dans fr.calories.foodSnap
-note: {
-  photo: "Photo : aliment",
-  platePrefix: "Assiette :",
-  productPrefix: "Produit :",
-  defaultItem: "aliment",
-  approx: "~{{grams}}g",
-  atPer100g: "@{{kcal}}kcal/100g",
-},
+    barcodeScanner: {
+      cameraError: "Caméra indisponible ou permissions refusées.",
+      title: "Scanner un code-barres",
+      close: "Fermer",
+      notSupported:
+        "Le scanner natif n’est pas supporté sur cet appareil/navigateur. Saisis le code-barres manuellement ou prends une photo de l’étiquette.",
+      manualPlaceholder: "Saisir le code-barres (ex: 3228857000856)",
+      invalid: "Code-barres invalide (8 à 14 chiffres).",
+      useButton: "Utiliser",
+      tip: "Astuce : approche bien le code et évite les reflets.",
+    },
 
+    bmi: {
+      page: {
+        title: "IMC",
+        subtitle: "Calcule ton indice de masse corporelle",
       },
-      header: {
-        title:
-          'Ajouter depuis une <u>photo</u>, un <u>code-barres</u> ou une <u>recherche</u>',
+      section: {
+        title: "Calculatrice",
+      },
+      fields: {
+        heightLabel: "Taille (cm)",
+        weightLabel: "Poids (kg)",
+      },
+      result: {
+        normalRange: "18.5–24.9 = normal",
+      },
+      note: "N’oublie pas : l’IMC et le poids ne sont que des chiffres ;)",
+    },
+
+    avis: {
+      page: {
+        title: "Votre avis",
         subtitle:
-          "OFF/USDA prioritaire (valeurs réelles), sinon IA/manuel.",
+          "Dis-nous ce que tu penses de l’app pour qu’on puisse l’améliorer 🙌",
       },
-      buttons: {
-        photo: "📸 Photo",
-        scan: "🧾 Scanner",
+      status: {
+        sent:
+          "Merci pour ton avis 🙏 On lit tous les messages avec attention.",
+        errors: {
+          empty:
+            "Oups 😅 Merci d'écrire un petit message avant d'envoyer.",
+          server:
+            "Une erreur est survenue côté serveur (configuration e-mail). Réessaie plus tard.",
+          send:
+            "Impossible d'envoyer ton avis pour le moment 😕 Réessaie un peu plus tard.",
+        },
       },
-      search: {
-        title: "Recherche manuelle (OFF + USDA)",
-        placeholder:
-          'ex: "riz basmati", "banane", "blanc de poulet", "yaourt grec 0%"',
-        loading: "Recherche…",
-        submit: "Rechercher",
-        noResult:
-          "Aucun résultat. Saisis manuellement kcal/100g ou essaie un autre terme.",
-        error:
-          "Recherche indisponible. Essaie plus tard ou saisis manuellement.",
-        proteinsShort: "prot",
-        sourceLabel: "Source",
-        choose: "Choisir",
+      form: {
+        emailLabel:
+          "Ton e-mail (si tu veux qu'on te réponde)",
+        emailPlaceholder: "ton.email@exemple.com",
+        messageLabel: "Ton message",
+        messagePlaceholder:
+          "Dis-nous ce qui te plaît, ce qu’on peut améliorer, des idées de fonctionnalités...",
+        submit: "Envoyer mon avis",
       },
-      preview: {
-        alt: "prévisualisation",
-        analyzeLoading: "Analyse…",
-        analyze: "Analyser la photo",
-        reset: "Réinitialiser",
+    },
+
+    abonnement: {
+      page: {
+        title: "Abonnements",
+        headerTitle: "Abonnement & Tarifs",
+        headerDescription:
+          "Choisissez la formule qui vous convient et activez Coaching+ si besoin.\nLes changements s’appliquent immédiatement dans l’app (démo : sans paiement réel).",
+        currentPlanLabel: "Plan actuel",
       },
-      plate: {
-        title: "Décomposition de l’assiette (éditable)",
-        grams: "Grammes",
-        kcalPer100: "kcal/100g",
-        protPer100: "Prot/100g",
-        proteinsShort: "g prot",
-        total: "Total",
-        totalProteinsShort: "g protéines",
+      alerts: {
+        success: "✅ Mise à jour enregistrée.",
+        errorPrefix: "⚠️ Erreur :",
       },
-      product: {
-        title: "Produit",
-        sourceLabel: "Source",
-        portion: "Portion (g)",
-        kcalPer100: "kcal / 100 g",
-        protPer100: "Prot / 100 g",
-        total: "Total",
-        totalProteinsShort: "g protéines",
+      current: {
+        sectionTitle: "Votre abonnement",
+        activeBadge: "Plan actif",
+        nextPayment: "Prochain prélèvement :",
+        expiresAt: "Expiration :",
+        coachingOption: "Option Coaching+ :",
+        monthlyTotal: "Total mensuel :",
       },
-      help: {
-        manual:
-          "⚡ Si aucune base ne répond, tu peux saisir les valeurs manuellement (kcal/prot pour 100 g), puis indiquer la portion.",
+      explainer: {
+        title: "Ce que vous obtenez",
+        items: {
+          basic:
+            "Basic : Recettes healthy + minuteur d’exercices.",
+          plus:
+            "Plus : IA recettes personnalisées (calories, allergènes), historique & favoris.",
+          premium:
+            "Premium : Plans hebdo IA + correction vidéo + support prioritaire.",
+          coaching:
+            "Coaching+ : Visio/séances réelles en supplément au mois.",
+        },
       },
-      actions: {
-        fillForm: "Remplir le formulaire en haut",
-        addToCalories: "Ajouter à mes calories",
+      plans: {
+        sectionTitle: "Formules",
+        badges: {
+          recommended: "Recommandé",
+          active: "Actif",
+        },
+        coachingOptionLabel: "Option Coaching+",
+        totalIndicative: "Total indicatif :",
+        buttons: {
+          update: "Mettre à jour",
+          chooseBasic: "Choisir Basic",
+          choosePlus: "Choisir Plus",
+          choosePremium: "Choisir Premium",
+        },
       },
-    },bmi: {
-  page: {
-    title: "IMC",
-    subtitle: "Calcule ton indice de masse corporelle",
-  },
-  section: {
-    title: "Calculatrice",
-  },
-  fields: {
-    heightLabel: "Taille (cm)",
-    weightLabel: "Poids (kg)",
-  },
-  result: {
-    normalRange: "18.5–24.9 = normal",
-  },
-  note: "N’oublie pas : l’IMC et le poids ne sont que des chiffres ;)",
-},avis: {
-  page: {
-    title: "Votre avis",
-    subtitle: "Dis-nous ce que tu penses de l’app pour qu’on puisse l’améliorer 🙌",
-  },
-  status: {
-    sent: "Merci pour ton avis 🙏 On lit tous les messages avec attention.",
-    errors: {
-      empty: "Oups 😅 Merci d'écrire un petit message avant d'envoyer.",
-      server: "Une erreur est survenue côté serveur (configuration e-mail). Réessaie plus tard.",
-      send: "Impossible d'envoyer ton avis pour le moment 😕 Réessaie un peu plus tard.",
+      cards: {
+        BASIC: {
+          title: "Basic",
+          tagline: "Recettes + Minuteur",
+          features: [
+            "Recettes générales",
+            "Minuteur d’exercices",
+            "Support par email",
+          ],
+        },
+        PLUS: {
+          title: "Plus",
+          tagline: "Basic + Personnalisation",
+          features: [
+            "Recettes personnalisées (IA)",
+            "Filtres avancés (allergènes, régimes)",
+            "Historique & favoris",
+          ],
+        },
+        PREMIUM: {
+          title: "Premium",
+          tagline: "Plus + IA correction",
+          features: [
+            "Plans repas hebdo IA",
+            "Correction vidéo des exercices",
+            "Priorité support",
+          ],
+        },
+      },
+      coachingPlusOptions: {
+        none: "Sans option Coaching+",
+        visio1:
+          "1 visio/mois avec coach (+20 €)",
+        real1:
+          "1 séance réelle/mois (+40 €)",
+        real4:
+          "Pack 4 séances réelles/mois (+140 €)",
+        real8:
+          "Pack 8 séances réelles/mois (+240 €)",
+      },
     },
-  },
-  form: {
-    emailLabel: "Ton e-mail (si tu veux qu'on te réponde)",
-    emailPlaceholder: "ton.email@exemple.com",
-    messageLabel: "Ton message",
-    messagePlaceholder: "Dis-nous ce qui te plaît, ce qu’on peut améliorer, des idées de fonctionnalités...",
-    submit: "Envoyer mon avis",
-  },
-},abonnement: {
-  page: {
-    title: "Abonnements",
-    headerTitle: "Abonnement & Tarifs",
-    headerDescription:
-      "Choisissez la formule qui vous convient et activez Coaching+ si besoin.\nLes changements s’appliquent immédiatement dans l’app (démo : sans paiement réel).",
-    currentPlanLabel: "Plan actuel",
-  },
 
-  alerts: {
-    success: "✅ Mise à jour enregistrée.",
-    errorPrefix: "⚠️ Erreur :",
-  },
-
-  current: {
-    sectionTitle: "Votre abonnement",
-    activeBadge: "Plan actif",
-    nextPayment: "Prochain prélèvement :",
-    expiresAt: "Expiration :",
-    coachingOption: "Option Coaching+ :",
-    monthlyTotal: "Total mensuel :",
-  },
-
-  explainer: {
-    title: "Ce que vous obtenez",
-    items: {
-      basic: "Basic : Recettes healthy + minuteur d’exercices.",
-      plus: "Plus : IA recettes personnalisées (calories, allergènes), historique & favoris.",
-      premium: "Premium : Plans hebdo IA + correction vidéo + support prioritaire.",
-      coaching: "Coaching+ : Visio/séances réelles en supplément au mois.",
+    abonnementSuccess: {
+      noSession: {
+        title: "Paiement",
+        text: "Session Stripe introuvable.",
+        back: "Retour",
+      },
+      pending: {
+        title: "Paiement en cours",
+        text: "Le paiement n’est pas encore confirmé. Réessayez dans quelques instants.",
+        back: "Retour",
+      },
+      done: {
+        title: "Abonnement activé",
+        text: "Merci ! Votre accès premium est maintenant actif.",
+        totalLabel: "Total mensuel : {{amount}} €",
+        back: "Retour à l’abonnement",
+      },
     },
   },
 
-  plans: {
-    sectionTitle: "Formules",
-    badges: {
-      recommended: "Recommandé",
-      active: "Actif",
-    },
-    coachingOptionLabel: "Option Coaching+",
-    totalIndicative: "Total indicatif :",
-    buttons: {
-      update: "Mettre à jour",
-      chooseBasic: "Choisir Basic",
-      choosePlus: "Choisir Plus",
-      choosePremium: "Choisir Premium",
-    },
-  },
-
-  cards: {
-    BASIC: {
-      title: "Basic",
-      tagline: "Recettes + Minuteur",
-      features: [
-        "Recettes générales",
-        "Minuteur d’exercices",
-        "Support par email",
-      ],
-    },
-    PLUS: {
-      title: "Plus",
-      tagline: "Basic + Personnalisation",
-      features: [
-        "Recettes personnalisées (IA)",
-        "Filtres avancés (allergènes, régimes)",
-        "Historique & favoris",
-      ],
-    },
-    PREMIUM: {
-      title: "Premium",
-      tagline: "Plus + IA correction",
-      features: [
-        "Plans repas hebdo IA",
-        "Correction vidéo des exercices",
-        "Priorité support",
-      ],
-    },
-  },
-
-  coachingPlusOptions: {
-    none: "Sans option Coaching+",
-    visio1: "1 visio/mois avec coach (+20 €)",
-    real1: "1 séance réelle/mois (+40 €)",
-    real4: "Pack 4 séances réelles/mois (+140 €)",
-    real8: "Pack 8 séances réelles/mois (+240 €)",
-  },
-},// Dans translations.fr
-abonnementSuccess: {
-  noSession: {
-    title: "Paiement",
-    text: "Session Stripe introuvable.",
-    back: "Retour",
-  },
-  pending: {
-    title: "Paiement en cours",
-    text: "Le paiement n’est pas encore confirmé. Réessayez dans quelques instants.",
-    back: "Retour",
-  },
-  done: {
-    title: "Abonnement activé",
-    text: "Merci ! Votre accès premium est maintenant actif.",
-    totalLabel: "Total mensuel : {{amount}} €",
-    back: "Retour à l’abonnement",
-  },
-},
-    progress: {
-  pageTitle: "Mes progrès",
-  pageSubtitle:
-    "Ajoutez vos pas, vos charges et votre poids. Vos données restent en local (cookie).",
-
-  messages: {
-    saved: "✓ Entrée enregistrée.",
-    deleted: "Entrée supprimée.",
-    errorPrefix: "⚠️ Erreur :",
-  },
-
-  form: {
-    title: "Ajouter une entrée",
-    type: {
-      label: "Type",
-      steps: "Pas (steps)",
-      load: "Charges portées (kg)",
-      weight: "Poids (kg)",
-      help: "Pour charges, vous pouvez renseigner les répétitions ci-dessous.",
-    },
-    date: {
-      label: "Date",
-    },
-    value: {
-      label: "Valeur",
-      placeholder: "ex: 8000 (pas) / 60 (kg)",
-    },
-    reps: {
-      label: "Répétitions (optionnel, charges)",
-      placeholder: "ex: 8",
-    },
-    note: {
-      label: "Note (optionnel)",
-      placeholder: "ex: Marche rapide, Squat barre, etc.",
-    },
-    submit: "Enregistrer",
-  },
-
-  week: {
-    title: "Pas — semaine en cours",
-    rangePrefix: "Du",
-    rangeTo: "au",
-    totalLabel: "Total",
-    stepsUnit: "pas",
-    avgPerDayLabel: "Moyenne / jour",
-    stepsPerDayUnit: "pas/jour",
-    noData:
-      "Aucune donnée saisie pour cette semaine. Ajoutez une entrée ci-dessus pour voir vos stats.",
-  },
-
-  latest: {
-    title: "Dernières valeurs",
-    steps: {
-      title: "Pas",
-      unit: "pas",
-    },
-    load: {
-      title: "Charges",
-    },
-    weight: {
-      title: "Poids",
-    },
-    noData: "Aucune donnée.",
-  },
-
-  recent: {
-    title: "Entrées récentes",
-    empty:
-      "Pas encore de données — commencez en ajoutant une entrée ci-dessus.",
-    type: {
-      steps: "Pas",
-      load: "Charges",
-      weight: "Poids",
-    },
-    delete: "Supprimer",
-  },
-},
-
-
-
-
-
-
-  },
-
+  // ================= EN ==================
   en: {
     home: {
       hero: {
@@ -1259,7 +1178,6 @@ abonnementSuccess: {
       },
     },
 
-    // 🔹 Commun EN (fusion de tous les blocs common)
     common: {
       password: {
         show: "Show password",
@@ -1704,11 +1622,9 @@ abonnementSuccess: {
       pageTitle: "Music",
       pageSubtitle:
         "Simple timer + Tabata + Spotify player + liked tracks.",
-
       loading: {
         subtitle: "Loading...",
       },
-
       simpleTimer: {
         title: "Simple timer",
         minutesLabel: "Minutes",
@@ -1718,37 +1634,30 @@ abonnementSuccess: {
         resume: "Resume",
         reset: "Reset",
       },
-
       tabata: {
         cardTitle: "Timer",
         jumpToTabata: "Tabata",
-
         roundsLabel: "Rounds",
         workSecondsLabel: "Work (s)",
         restSecondsLabel: "Rest (s)",
-
         presetTabata: "Tabata 8× 20/10",
         preset4515: "10× 45/15",
         preset3030: "6× 30/30",
-
         stateWork: "Work",
         stateRest: "Rest",
         stateDone: "Done",
         stateIdle: "Ready",
-
         start: "Start",
         pause: "Pause",
         resume: "Resume",
         reset: "Reset",
       },
-
       spotifyAuth: {
         connectButton: "Sign in with Spotify",
         disconnectButton: "⏻ Log out",
         disconnectTitle: "Log out",
         connectGeneric: "Sign in",
       },
-
       spotifyPlayer: {
         title: "Spotify player",
         connectedDescription:
@@ -1757,11 +1666,9 @@ abonnementSuccess: {
           "Sign in to use the Spotify player.",
         connectButton: "Sign in",
       },
-
       spotifyLibrary: {
         connectHint:
           "Sign in to Spotify to see your liked tracks and search for music.",
-
         errors: {
           likedFetch: "Unable to fetch liked tracks",
           playerNotReady:
@@ -1769,20 +1676,17 @@ abonnementSuccess: {
           playFailed: "Unable to start playback",
           searchFailed: "Search error",
         },
-
         liked: {
           title: "Liked tracks",
           loading: "Loading...",
           empty: "No liked tracks found.",
         },
-
         search: {
           title: "Search a track",
           placeholder: "Track name, artist…",
           submit: "Search",
           loading: "Searching…",
         },
-
         playButton: "Play",
       },
     },
@@ -2119,316 +2023,249 @@ abonnementSuccess: {
           note: "Note",
         },
       },
+
+      foodSnap: {
+        errors: {
+          analyzeGeneric: "Analysis failed",
+          unknown: "Unknown error",
+          offNoProduct:
+            "OpenFoodFacts unavailable or no product found. Enter values manually or use a photo.",
+          offUnavailable:
+            "OFF unreachable. Try again later or enter values manually.",
+        },
+        header: {
+          title:
+            'Add from a <u>photo</u>, a <u>barcode</u> or a <u>search</u>',
+          subtitle:
+            "OFF/USDA is used first (real values), otherwise AI/manual.",
+        },
+        buttons: {
+          photo: "📸 Photo",
+          scan: "🧾 Scan",
+        },
+        search: {
+          title: "Manual search (OFF + USDA)",
+          placeholder:
+            'e.g. "basmati rice", "banana", "chicken breast", "greek yogurt 0%"',
+          loading: "Searching…",
+          submit: "Search",
+          noResult:
+            "No result. Enter kcal/100g manually or try another term.",
+          error:
+            "Search unavailable. Try again later or enter values manually.",
+          proteinsShort: "prot",
+          sourceLabel: "Source",
+          choose: "Select",
+        },
+        preview: {
+          alt: "preview",
+          analyzeLoading: "Analyzing…",
+          analyze: "Analyze photo",
+          reset: "Reset",
+        },
+        plate: {
+          title: "Plate breakdown (editable)",
+          grams: "Grams",
+          kcalPer100: "kcal/100g",
+          protPer100: "Protein/100g",
+          proteinsShort: "g protein",
+          total: "Total",
+          totalProteinsShort: "g protein",
+        },
+        product: {
+          title: "Product",
+          sourceLabel: "Source",
+          manualLabel: "Manual product",
+          portion: "Portion (g)",
+          kcalPer100: "kcal / 100 g",
+          protPer100: "Prot / 100 g",
+          total: "Total",
+          totalProteinsShort: "g protein",
+        },
+        note: {
+          photo: "Photo: food",
+          platePrefix: "Plate:",
+          productPrefix: "Product:",
+          defaultItem: "food",
+        },
+        help: {
+          manual:
+            "⚡ If no database returns a match, you can enter values manually (kcal/protein per 100 g), then set the portion.",
+        },
+        actions: {
+          fillForm: "Fill the form above",
+          addToCalories: "Add to my calories",
+        },
+      },
     },
 
-    // FoodSnap
-    foodSnap: {
-      errors: {
-        analyzeGeneric: "Analysis failed",
-        unknown: "Unknown error",
-        offNoProduct:
-          "OpenFoodFacts unavailable or no product found. Enter values manually or use a photo.",
-        offUnavailable:
-          "OFF unreachable. Try again later or enter values manually.",
-      },// ...dans en.calories.foodSnap
-note: {
-  photo: "Photo: food",
-  platePrefix: "Plate:",
-  productPrefix: "Product:",
-  defaultItem: "food",
-  approx: "~{{grams}}g",
-  atPer100g: "@{{kcal}}kcal/100g",
-},
-
-      header: {
-        title:
-          'Add from a <u>photo</u>, a <u>barcode</u> or a <u>search</u>',
-        subtitle:
-          "OFF/USDA is used first (real values), otherwise AI/manual.",
-      },
-      buttons: {
-        photo: "📸 Photo",
-        scan: "🧾 Scan",
-      },
-      search: {
-        title: "Manual search (OFF + USDA)",
-        placeholder:
-          'e.g. "basmati rice", "banana", "chicken breast", "greek yogurt 0%"',
-        loading: "Searching…",
-        submit: "Search",
-        noResult:
-          "No result. Enter kcal/100g manually or try another term.",
-        error:
-          "Search unavailable. Try again later or enter values manually.",
-        proteinsShort: "prot",
-        sourceLabel: "Source",
-        choose: "Select",
-      },
-      preview: {
-        alt: "preview",
-        analyzeLoading: "Analyzing…",
-        analyze: "Analyze photo",
-        reset: "Reset",
-      },
-      plate: {
-        title: "Plate breakdown (editable)",
-        grams: "Grams",
-        kcalPer100: "kcal/100g",
-        protPer100: "Protein/100g",
-        proteinsShort: "g protein",
-        total: "Total",
-        totalProteinsShort: "g protein",
-      },
-      product: {
-        title: "Product",
-        sourceLabel: "Source",
-        portion: "Portion (g)",
-        kcalPer100: "kcal / 100 g",
-        protPer100: "Protein / 100 g",
-        total: "Total",
-        totalProteinsShort: "g protein",
-      },
-      help: {
-        manual:
-          "⚡ If no database returns a match, you can enter values manually (kcal/protein per 100 g), then set the portion.",
-      },
-      actions: {
-        fillForm: "Fill the form above",
-        addToCalories: "Add to my calories",
-      },
-    },    barcodeScanner: {
+    barcodeScanner: {
       cameraError: "Camera unavailable or permissions denied.",
       title: "Scan a barcode",
       close: "Close",
       notSupported:
         "The native scanner is not supported on this device/browser. Enter the barcode manually or take a photo of the label.",
-      manualPlaceholder: "Enter the barcode (e.g. 3228857000856)",
+      manualPlaceholder:
+        "Enter the barcode (e.g. 3228857000856)",
       invalid: "Invalid barcode (8 to 14 digits).",
       useButton: "Use",
       tip: "Tip: hold the barcode close and avoid glare.",
-    },bmi: {
-  page: {
-    title: "BMI",
-    subtitle: "Calculate your Body Mass Index",
-  },
-  section: {
-    title: "Calculator",
-  },
-  fields: {
-    heightLabel: "Height (cm)",
-    weightLabel: "Weight (kg)",
-  },
-  result: {
-    normalRange: "18.5–24.9 = normal",
-  },
-  note: "Remember: BMI and weight are just numbers ;)",
-},avis: {
-  page: {
-    title: "Your feedback",
-    subtitle: "Tell us what you think about the app so we can improve it 🙌",
-  },
-  status: {
-    sent: "Thank you for your feedback 🙏 We read every message carefully.",
-    errors: {
-      empty: "Oops 😅 Please write a short message before sending.",
-      server: "A server error occurred (email configuration). Please try again later.",
-      send: "We couldn’t send your feedback right now 😕 Please try again later.",
     },
-  },
-  form: {
-    emailLabel: "Your email (if you want a reply)",
-    emailPlaceholder: "your.email@example.com",
-    messageLabel: "Your message",
-    messagePlaceholder: "Tell us what you like, what we can improve, ideas for features...",
-    submit: "Send my feedback",
-  },
-},abonnement: {
-  page: {
-    title: "Subscriptions",
-    headerTitle: "Subscription & Pricing",
-    headerDescription:
-      "Choose the plan that fits you and enable Coaching+ if needed.\nChanges apply immediately in the app (demo: no real payment).",
-    currentPlanLabel: "Current plan",
-  },
 
-  alerts: {
-    success: "✅ Update saved.",
-    errorPrefix: "⚠️ Error:",
-  },
-
-  current: {
-    sectionTitle: "Your subscription",
-    activeBadge: "Active plan",
-    nextPayment: "Next payment:",
-    expiresAt: "Expiration:",
-    coachingOption: "Coaching+ option:",
-    monthlyTotal: "Monthly total:",
-  },
-
-  explainer: {
-    title: "What you get",
-    items: {
-      basic: "Basic: Healthy recipes + exercise timer.",
-      plus: "Plus: AI-personalised recipes (calories, allergens), history & favourites.",
-      premium: "Premium: Weekly AI meal plans + video form check + priority support.",
-      coaching: "Coaching+: Video calls / real-life sessions as a monthly add-on.",
+    bmi: {
+      page: {
+        title: "BMI",
+        subtitle: "Calculate your Body Mass Index",
+      },
+      section: {
+        title: "Calculator",
+      },
+      fields: {
+        heightLabel: "Height (cm)",
+        weightLabel: "Weight (kg)",
+      },
+      result: {
+        normalRange: "18.5–24.9 = normal",
+      },
+      note: "Remember: BMI and weight are just numbers ;)",
     },
-  },
 
-  plans: {
-    sectionTitle: "Plans",
-    badges: {
-      recommended: "Recommended",
-      active: "Active",
+    avis: {
+      page: {
+        title: "Your feedback",
+        subtitle:
+          "Tell us what you think about the app so we can improve it 🙌",
+      },
+      status: {
+        sent:
+          "Thank you for your feedback 🙏 We read every message carefully.",
+        errors: {
+          empty:
+            "Oops 😅 Please write a short message before sending.",
+          server:
+            "A server error occurred (email configuration). Please try again later.",
+          send:
+            "We couldn’t send your feedback right now 😕 Please try again later.",
+        },
+      },
+      form: {
+        emailLabel:
+          "Your email (if you want a reply)",
+        emailPlaceholder: "your.email@example.com",
+        messageLabel: "Your message",
+        messagePlaceholder:
+          "Tell us what you like, what we can improve, ideas for features...",
+        submit: "Send my feedback",
+      },
     },
-    coachingOptionLabel: "Coaching+ option",
-    totalIndicative: "Indicative total:",
-    buttons: {
-      update: "Update",
-      chooseBasic: "Choose Basic",
-      choosePlus: "Choose Plus",
-      choosePremium: "Choose Premium",
-    },
-  },
 
-  cards: {
-    BASIC: {
-      title: "Basic",
-      tagline: "Recipes + Timer",
-      features: [
-        "General recipes",
-        "Exercise timer",
-        "Email support",
-      ],
+    abonnement: {
+      page: {
+        title: "Subscriptions",
+        headerTitle: "Subscription & Pricing",
+        headerDescription:
+          "Choose the plan that fits you and enable Coaching+ if needed.\nChanges apply immediately in the app (demo: no real payment).",
+        currentPlanLabel: "Current plan",
+      },
+      alerts: {
+        success: "✅ Update saved.",
+        errorPrefix: "⚠️ Error:",
+      },
+      current: {
+        sectionTitle: "Your subscription",
+        activeBadge: "Active plan",
+        nextPayment: "Next payment:",
+        expiresAt: "Expiration:",
+        coachingOption: "Coaching+ option:",
+        monthlyTotal: "Monthly total:",
+      },
+      explainer: {
+        title: "What you get",
+        items: {
+          basic:
+            "Basic: Healthy recipes + exercise timer.",
+          plus:
+            "Plus: AI-personalised recipes (calories, allergens), history & favourites.",
+          premium:
+            "Premium: Weekly AI meal plans + video form check + priority support.",
+          coaching:
+            "Coaching+: Video calls / real-life sessions as a monthly add-on.",
+        },
+      },
+      plans: {
+        sectionTitle: "Plans",
+        badges: {
+          recommended: "Recommended",
+          active: "Active",
+        },
+        coachingOptionLabel: "Coaching+ option",
+        totalIndicative: "Indicative total:",
+        buttons: {
+          update: "Update",
+          chooseBasic: "Choose Basic",
+          choosePlus: "Choose Plus",
+          choosePremium: "Choose Premium",
+        },
+      },
+      cards: {
+        BASIC: {
+          title: "Basic",
+          tagline: "Recipes + Timer",
+          features: [
+            "General recipes",
+            "Exercise timer",
+            "Email support",
+          ],
+        },
+        PLUS: {
+          title: "Plus",
+          tagline: "Basic + Personalisation",
+          features: [
+            "AI-personalised recipes",
+            "Advanced filters (allergens, diets)",
+            "History & favourites",
+          ],
+        },
+        PREMIUM: {
+          title: "Premium",
+          tagline: "Plus + AI form check",
+          features: [
+            "Weekly AI meal plans",
+            "Video exercise form correction",
+            "Priority support",
+          ],
+        },
+      },
+      coachingPlusOptions: {
+        none: "Without Coaching+ add-on",
+        visio1:
+          "1 video call/month with coach (+€20)",
+        real1:
+          "1 in-person session/month (+€40)",
+        real4:
+          "Pack of 4 in-person sessions/month (+€140)",
+        real8:
+          "Pack of 8 in-person sessions/month (+€240)",
+      },
     },
-    PLUS: {
-      title: "Plus",
-      tagline: "Basic + Personalisation",
-      features: [
-        "AI-personalised recipes",
-        "Advanced filters (allergens, diets)",
-        "History & favourites",
-      ],
+
+    abonnementSuccess: {
+      noSession: {
+        title: "Payment",
+        text: "Stripe session not found.",
+        back: "Back",
+      },
+      pending: {
+        title: "Payment in progress",
+        text: "The payment has not been confirmed yet. Please try again in a few moments.",
+        back: "Back",
+      },
+      done: {
+        title: "Subscription activated",
+        text: "Thank you! Your premium access is now active.",
+        totalLabel: "Monthly total: {{amount}} €",
+        back: "Back to subscription",
+      },
     },
-    PREMIUM: {
-      title: "Premium",
-      tagline: "Plus + AI form check",
-      features: [
-        "Weekly AI meal plans",
-        "Video exercise form correction",
-        "Priority support",
-      ],
-    },
-  },
-
-  coachingPlusOptions: {
-    none: "Without Coaching+ add-on",
-    visio1: "1 video call/month with coach (+€20)",
-    real1: "1 in-person session/month (+€40)",
-    real4: "Pack of 4 in-person sessions/month (+€140)",
-    real8: "Pack of 8 in-person sessions/month (+€240)",
-  },
-},// Dans translations.en
-abonnementSuccess: {
-  noSession: {
-    title: "Payment",
-    text: "Stripe session not found.",
-    back: "Back",
-  },
-  pending: {
-    title: "Payment in progress",
-    text: "The payment has not been confirmed yet. Please try again in a few moments.",
-    back: "Back",
-  },
-  done: {
-    title: "Subscription activated",
-    text: "Thank you! Your premium access is now active.",
-    totalLabel: "Monthly total: {{amount}} €",
-    back: "Back to subscription",
-  },
-},
-    progress: {
-  pageTitle: "My progress",
-  pageSubtitle:
-    "Add your steps, lifts and bodyweight. Your data stays local (cookie).",
-
-  messages: {
-    saved: "✓ Entry saved.",
-    deleted: "Entry deleted.",
-    errorPrefix: "⚠️ Error:",
-  },
-
-  form: {
-    title: "Add an entry",
-    type: {
-      label: "Type",
-      steps: "Steps",
-      load: "Lifts (kg)",
-      weight: "Bodyweight (kg)",
-      help: "For lifts, you can also fill the reps field below.",
-    },
-    date: {
-      label: "Date",
-    },
-    value: {
-      label: "Value",
-      placeholder: "e.g. 8000 (steps) / 60 (kg)",
-    },
-    reps: {
-      label: "Reps (optional, lifts)",
-      placeholder: "e.g. 8",
-    },
-    note: {
-      label: "Note (optional)",
-      placeholder: "e.g. Fast walk, barbell squat, etc.",
-    },
-    submit: "Save",
-  },
-
-  week: {
-    title: "Steps — current week",
-    rangePrefix: "From",
-    rangeTo: "to",
-    totalLabel: "Total",
-    stepsUnit: "steps",
-    avgPerDayLabel: "Average / day",
-    stepsPerDayUnit: "steps/day",
-    noData:
-      "No data for this week yet. Add an entry above to see your stats.",
-  },
-
-  latest: {
-    title: "Latest values",
-    steps: {
-      title: "Steps",
-      unit: "steps",
-    },
-    load: {
-      title: "Lifts",
-    },
-    weight: {
-      title: "Weight",
-    },
-    noData: "No data.",
-  },
-
-  recent: {
-    title: "Recent entries",
-    empty:
-      "No data yet — start by adding an entry above.",
-    type: {
-      steps: "Steps",
-      load: "Lifts",
-      weight: "Weight",
-    },
-    delete: "Delete",
-  },
-},
-
-
-
-
-
-
   },
 } as const;
