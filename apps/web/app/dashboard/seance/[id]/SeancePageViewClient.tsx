@@ -5,6 +5,7 @@ import React from "react";
 import type { AiSession, NormalizedExercise } from "../../../../lib/coach/ai";
 import type { Focus } from "./page";
 import { useLanguage } from "@/components/LanguageProvider";
+import { Section } from "@/components/ui/Page";
 
 type Props = {
   base: AiSession;
@@ -82,7 +83,14 @@ const SeancePageViewClient: React.FC<Props> = ({
     stripVariantLetterLocal(base.title) || focusLabelT(focus, t);
 
   return (
-    <div>
+    <div
+      className="container"
+      style={{
+        paddingTop: 24,
+        paddingBottom: 32,
+        fontSize: "var(--settings-fs, 12px)",
+      }}
+    >
       <style
         dangerouslySetInnerHTML={{
           __html: `
@@ -96,6 +104,7 @@ const SeancePageViewClient: React.FC<Props> = ({
         }}
       />
 
+      {/* Ligne retour + badge IA (spécifique à cette page) */}
       <div
         className="mb-2 flex items-center justify-between no-print"
         style={{ paddingInline: 12 }}
@@ -108,73 +117,81 @@ const SeancePageViewClient: React.FC<Props> = ({
         </div>
       </div>
 
-      <div
-        className="mx-auto w-full"
-        style={{ maxWidth: 640, paddingInline: 12, paddingBottom: 24 }}
-      >
-        <div className="page-header">
-          <div>
-            <h1 className="h1-compact">{displayTitle}</h1>
-            <p className="lead-compact">
-              {plannedMin} {t("settings.seancePage.plannedMinSuffix")} ·{" "}
-              {base.type}
-            </p>
-          </div>
+      {/* Header — même logique que bmi/page.tsx */}
+      <div className="page-header" style={{ marginTop: 12 }}>
+        <div>
+          <h1
+            className="h1-compact"
+            style={{
+              marginBottom: 2,
+              fontSize: "clamp(20px, 2.2vw, 24px)",
+              lineHeight: 1.15,
+            }}
+          >
+            {displayTitle}
+          </h1>
+          <p
+            className="lead-compact"
+            style={{
+              marginTop: 4,
+              fontSize: "clamp(12px, 1.6vw, 14px)",
+              lineHeight: 1.35,
+              color: "#4b5563",
+            }}
+          >
+            {plannedMin} {t("settings.seancePage.plannedMinSuffix")} ·{" "}
+            {base.type}
+          </p>
         </div>
-
-        <section className="section" style={{ marginTop: 12 }}>
-          <div className="grid gap-3">
-            {exercises.map((ex, i) => {
-              const reps = cleanTextLocal(
-                ex.reps
-                  ? String(ex.reps)
-                  : ex.durationSec
-                  ? `${ex.durationSec}s`
-                  : "",
-              );
-              const rest = cleanTextLocal(ex.rest || "");
-              return (
-                <article key={i} className="compact-card">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="exoname">{ex.name}</div>
-                  </div>
-                  <div className="chips">
-                    {typeof ex.sets === "number" && (
-                      <Chip
-                        label="🧱"
-                        value={`${ex.sets} ${t(
-                          "settings.seancePage.chips.setsLabel",
-                        )}`}
-                        title={t(
-                          "settings.seancePage.chips.setsLabel",
-                        )}
-                      />
-                    )}
-                    {reps && (
-                      <Chip
-                        label="🔁"
-                        value={reps}
-                        title={t(
-                          "settings.seancePage.chips.repsLabel",
-                        )}
-                      />
-                    )}
-                    {rest && (
-                      <Chip
-                        label="⏲️"
-                        value={rest}
-                        title={t(
-                          "settings.seancePage.chips.restLabel",
-                        )}
-                      />
-                    )}
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        </section>
       </div>
+
+      {/* Contenu principal dans un <Section /> comme pour BMI */}
+      <Section title={t("settings.seancePage.section.title")}>
+        <div className="grid gap-3">
+          {exercises.map((ex, i) => {
+            const reps = cleanTextLocal(
+              ex.reps
+                ? String(ex.reps)
+                : ex.durationSec
+                ? `${ex.durationSec}s`
+                : "",
+            );
+            const rest = cleanTextLocal(ex.rest || "");
+            return (
+              <article key={i} className="compact-card">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="exoname">{ex.name}</div>
+                </div>
+                <div className="chips">
+                  {typeof ex.sets === "number" && (
+                    <Chip
+                      label="🧱"
+                      value={`${ex.sets} ${t(
+                        "settings.seancePage.chips.setsLabel",
+                      )}`}
+                      title={t("settings.seancePage.chips.setsLabel")}
+                    />
+                  )}
+                  {reps && (
+                    <Chip
+                      label="🔁"
+                      value={reps}
+                      title={t("settings.seancePage.chips.repsLabel")}
+                    />
+                  )}
+                  {rest && (
+                    <Chip
+                      label="⏲️"
+                      value={rest}
+                      title={t("settings.seancePage.chips.restLabel")}
+                    />
+                  )}
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      </Section>
     </div>
   );
 };
