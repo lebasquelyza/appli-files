@@ -1,4 +1,4 @@
-//apps/web/lib/coach/beton/index.ts
+// apps/web/lib/coach/beton/index.ts
 import type {
   AiSession as AiSessionT,
   WorkoutType,
@@ -253,7 +253,6 @@ export function planProgrammeFromProfile(
   };
   // 🔎 Debug (désactivable en prod en mettant __BETON_DEBUG__ = false)
   const __BETON_DEBUG__ = (globalThis as any).__BETON_DEBUG__ ?? true;
-
 
   // 3) Jours (affichage)
   const daysList = extractDaysList(profile.availabilityText);
@@ -580,6 +579,7 @@ function normalizeItems(list?: string[]): Items {
 /* ========================= Traduction des noms d'exos ========================= */
 
 const EX_NAME_TRANSLATIONS: Record<string, { en: string }> = {
+  // Cardio / warmup / mobilité
   "Échauffement Z1": { en: "Warm-up Z1" },
   "Retour au calme + mobilité": { en: "Cool-down + mobility" },
   "Vélo Z2 continu": { en: "Steady-state bike Z2" },
@@ -588,10 +588,20 @@ const EX_NAME_TRANSLATIONS: Record<string, { en: string }> = {
   "Fractionné Z2/Z3 sur tapis": { en: "Intervals Z2/Z3 on treadmill" },
   "Fractionné Z2/Z3": { en: "Intervals Z2/Z3" },
   "Respiration diaphragmatique": { en: "Diaphragmatic breathing" },
+  "Respiration + Flow léger": { en: "Breathing + light flow" },
   "90/90 hanches": { en: "90/90 hips" },
   "Down-Dog → Cobra": { en: "Down-Dog → Cobra" },
+  "Étirements complets": { en: "Full-body stretches" },
+  "Marche progressive Z1→Z2": { en: "Progressive walk Z1→Z2" },
+  "Marche rapide / step-ups bas": { en: "Brisk walk / low step-ups" },
+  "Marche rapide inclinée": { en: "Incline brisk walk" },
+
+  // Activation / échauffement muscu
   "Activation hanches/chevilles": { en: "Hips/ankles activation" },
-  "Activation épaules/omoplates": { en: "Shoulders/scapulae activation" },
+  "Activation épaules/omoplates": { en: "Shoulder/scapula activation" },
+  "Activation hanches/fessiers": { en: "Hips/glutes activation" },
+
+  // Mollets / avant-bras / grip
   "Mollets debout (haltères/élastique)": {
     en: "Standing calf raises (dumbbells/band)",
   },
@@ -605,23 +615,92 @@ const EX_NAME_TRANSLATIONS: Record<string, { en: string }> = {
   "Farmer carry (charges/poids du corps)": {
     en: "Farmer carry (loaded/bodyweight)",
   },
-  "Respiration + Flow léger": { en: "Breathing + light flow" },
-  "Étirements complets": { en: "Full-body stretches" },
-  "Marche rapide / step-ups bas": {
-    en: "Brisk walk / low step-ups",
-  },
-  "Marche progressive Z1→Z2": { en: "Progressive walk Z1→Z2" },
-  "Marche rapide inclinée": { en: "Incline brisk walk" },
+
+  // Gainage / abdos
   "Gainage planche": { en: "Plank hold" },
   "Side Plank (gauche/droite)": { en: "Side plank (left/right)" },
   "Crunchs + Gainage": { en: "Crunches + plank" },
-  "Burpees (option sans saut)": { en: "Burpees (no-jump option)" },
-  "Hip Thrust au sol": { en: "Hip thrust on floor" },
-  "Glute Bridge": { en: "Glute bridge" },
+  "Hollow Hold": { en: "Hollow hold" },
+
+  // Bas du corps
+  "Goblet Squat": { en: "Goblet squat" },
+  "Front Squat": { en: "Front squat" },
+  "Presse à cuisses": { en: "Leg press" },
   "Fente arrière": { en: "Reverse lunge" },
   "Fentes latérales": { en: "Lateral lunges" },
+  "Leg Extension (élastique/machine)": {
+    en: "Leg extension (band/machine)",
+  },
+  "Leg Extension (élastique)": { en: "Leg extension (band)" },
+  "Leg Curl (élastique)": { en: "Leg curl (band)" },
+  "Hip Thrust au sol": { en: "Floor hip thrust" },
+  "Hip Thrust (barre/haltère)": { en: "Hip thrust (bar/dumbbell)" },
+  "Hip Thrust (haltère)": { en: "Dumbbell hip thrust" },
+  "Soulevé de terre roumain": { en: "Romanian deadlift" },
+  "Soulevé de terre roumain (haltères)": {
+    en: "Dumbbell Romanian deadlift",
+  },
+  "Glute Bridge": { en: "Glute bridge" },
   "Abduction hanches (élastique)": { en: "Hip abduction (band)" },
-  "Activation hanches/fessiers": { en: "Hips/glutes activation" },
+
+  // Haut du corps (push)
+  "Développé haltères": { en: "Dumbbell press" },
+  "Développé haltères incliné": { en: "Incline dumbbell press" },
+  "Développé militaire haltères": { en: "Dumbbell military press" },
+  "Développé haltères neutre": { en: "Neutral-grip dumbbell press" },
+  "Pompes": { en: "Push-ups" },
+  "Pompes surélevées": { en: "Incline push-ups" },
+  "Écartés (haltères/élastique)": {
+    en: "Flyes (dumbbells/band)",
+  },
+  "Écartés (élastiques)": { en: "Band flyes" },
+  "Triceps extension (poulie/élastique)": {
+    en: "Triceps extension (cable/band)",
+  },
+  "Extension triceps (poulie/élastique)": {
+    en: "Triceps extension (cable/band)",
+  },
+  "Extension triceps haltères": {
+    en: "Dumbbell triceps extension",
+  },
+  "Élévations latérales": { en: "Lateral raises" },
+
+  // Haut du corps (pull / dos / biceps)
+  "Tirage vertical": { en: "Vertical pull" },
+  "Tractions / Tirage vertical": { en: "Pull-ups / vertical pull" },
+  "Tirage élastique": { en: "Band row" },
+  "Tirage horizontal élastique": { en: "Horizontal band row" },
+  "Tirage élastique / serviette": {
+    en: "Band/towel row",
+  },
+  "Rowing unilatéral": { en: "One-arm row" },
+  "Rowing buste penché": { en: "Bent-over row" },
+  "Face Pull (câble/élastique)": {
+    en: "Face pull (cable/band)",
+  },
+  "Face Pull (élastique)": { en: "Face pull (band)" },
+  "Curl biceps (élastique/haltères)": {
+    en: "Biceps curl (band/dumbbells)",
+  },
+  "Curl biceps (haltères/élastique)": {
+    en: "Biceps curl (dumbbells/band)",
+  },
+  "Curl incliné (haltères)": { en: "Incline dumbbell curl" },
+
+  // Bodyweight / rear delts
+  "Oiseau au poids du corps (penché)": {
+    en: "Bent-over rear-delt raises (bodyweight)",
+  },
+
+  // HIIT / cardio bodyweight
+  "Burpees (option sans saut)": { en: "Burpees (no-jump option)" },
+  "Air Squats": { en: "Air squats" },
+  "Mountain Climbers": { en: "Mountain climbers" },
+
+  // Preset / mobilité démo
+  "Cat-Cow": { en: "Cat-Cow" },
+  "Bird-Dog": { en: "Bird-dog" },
+  "Plank": { en: "Plank" },
 };
 
 function exName(label: string, ctx: Ctx): string {
@@ -1017,21 +1096,25 @@ function addObjectiveExtras(exos: NormalizedExercise[], objectifBrut: string|und
 
 /* ========================= Ajustements (blessures & items) ========================= */
 function adjustForInjuries(ctx: Ctx, ex: NormalizedExercise): NormalizedExercise {
-  const e: NormalizedExercise = { ...ex };
+  // ✅ s'assurer que tous les noms passent par exName → traduisibles (FR/EN)
+  const e: NormalizedExercise = {
+    ...ex,
+    name: ex.name ? exName(ex.name, ctx) : ex.name,
+  };
 
   if (e.sets && !e.rir) e.rir = rirFor(ctx.level);
   if (e.sets && !e.tempo) e.tempo = tempoFor(ctx.goalKey);
 
   if (ctx.injuries.back) {
-    if (/back squat|soulevé de terre|deadlift|row à la barre/i.test(e.name)) {
+    if (/back squat|soulevé de terre|deadlift|row à la barre/i.test(e.name || "")) {
       return swap(e, preferBackFriendly(e, ctx));
     }
-    if (/superman/i.test(e.name)) {
+    if (/superman/i.test(e.name || "")) {
       e.notes = joinNotes(e.notes, "Si gêne au dos, réduire l’amplitude ou remplacer par Bird-Dog.");
     }
   }
   if (ctx.injuries.shoulder) {
-    if (/militaire|overhead|développé militaire|élevations latérales lourdes/i.test(e.name)) {
+    if (/militaire|overhead|développé militaire|élevations latérales lourdes/i.test(e.name || "")) {
       return swap(e, {
         name: exName("Développé haltères neutre", ctx),
         sets: e.sets ?? 3,
@@ -1042,7 +1125,7 @@ function adjustForInjuries(ctx: Ctx, ex: NormalizedExercise): NormalizedExercise
         notes: "Prise neutre, amplitude confortable.",
       });
     }
-    if (/dips/i.test(e.name)) {
+    if (/dips/i.test(e.name || "")) {
       return swap(e, {
         name: exName("Pompes surélevées", ctx),
         sets: e.sets ?? 3,
@@ -1054,7 +1137,7 @@ function adjustForInjuries(ctx: Ctx, ex: NormalizedExercise): NormalizedExercise
     }
   }
   if (ctx.injuries.knee) {
-    if (/sauté|jump|burpee/i.test(e.name)) {
+    if (/sauté|jump|burpee/i.test(e.name || "")) {
       return swap(e, {
         name: exName("Marche rapide / step-ups bas", ctx),
         sets: e.sets ?? 3,
@@ -1064,17 +1147,17 @@ function adjustForInjuries(ctx: Ctx, ex: NormalizedExercise): NormalizedExercise
         notes: "Hauteur basse, sans douleur.",
       });
     }
-    if (/squat(?!.*goblet)|fente/i.test(e.name)) {
+    if (/squat(?!.*goblet)|fente/i.test(e.name || "")) {
       e.notes = joinNotes(e.notes, "Amplitude contrôlée, pas de douleur, option appui/assistance.");
     }
   }
-  if (ctx.injuries.wrist && /pompes|push-up/i.test(e.name)) {
+  if (ctx.injuries.wrist && /pompes|push-up/i.test(e.name || "")) {
     e.notes = joinNotes(e.notes, "Utiliser poignées de pompe ou poings fermés pour garder le poignet neutre.");
   }
-  if (ctx.injuries.hip && /squat|fente/i.test(e.name)) {
+  if (ctx.injuries.hip && /squat|fente/i.test(e.name || "")) {
     e.notes = joinNotes(e.notes, "Amplitude confortable, focus stabilité hanche.");
   }
-  if (ctx.injuries.ankle && /sauté|jump/i.test(e.name)) {
+  if (ctx.injuries.ankle && /sauté|jump/i.test(e.name || "")) {
     return swap(e, {
       name: exName("Marche rapide inclinée", ctx),
       sets: e.sets ?? 3,
@@ -1084,26 +1167,33 @@ function adjustForInjuries(ctx: Ctx, ex: NormalizedExercise): NormalizedExercise
     });
   }
 
-  if (/tirage élastique|row|tirage/i.test(e.name)) {
+  if (/tirage élastique|row|tirage/i.test(e.name || "")) {
     if ((ctx.equipItems as any).bands) e.equipment = e.equipment || "élastiques";
   }
-  if (/kettlebell|kb/i.test(e.name) && !(ctx.equipItems as any).kb) {
-    return swap(e, {
-      ...e,
-      name: e.name.replace(/kettlebell|KB/i, "haltère"),
-      equipment: "haltères",
-    });
+  if (/kettlebell|kb/i.test(e.name || "")) {
+    if (!(ctx.equipItems as any).kb) {
+      return swap(e, {
+        ...e,
+        name: exName(
+          (e.name || "").replace(/kettlebell|KB/i, "haltère"),
+          ctx
+        ),
+        equipment: "haltères",
+      });
+    }
   }
-  if (/trx|suspension/i.test(e.name) && !(ctx.equipItems as any).trx) {
-    return swap(e, bodyOrBand("Tirage élastique / serviette", ctx, { reps: e.reps || pickBodyweight(ctx.goalKey) }));
+  if (/trx|suspension/i.test(e.name || "")) {
+    if (!(ctx.equipItems as any).trx) {
+      return swap(e, bodyOrBand("Tirage élastique / serviette", ctx, { reps: e.reps || pickBodyweight(ctx.goalKey) }));
+    }
   }
   return e;
 }
 
 function preferBackFriendly(ex: NormalizedExercise, ctx: Ctx): NormalizedExercise {
-  if (/back squat|front squat/i.test(ex.name)) return dumbbell("Goblet Squat", ctx);
-  if (/soulevé de terre/i.test(ex.name)) return dumbbell("Hip Thrust (haltère)", ctx);
-  if (/row à la barre/i.test(ex.name)) return dumbbell("Rowing unilatéral", ctx, "dos", { reps: "10–12/ côté" });
+  if (/back squat|front squat/i.test(ex.name || "")) return dumbbell("Goblet Squat", ctx);
+  if (/soulevé de terre/i.test(ex.name || "")) return dumbbell("Hip Thrust (haltère)", ctx);
+  if (/row à la barre/i.test(ex.name || "")) return dumbbell("Rowing unilatéral", ctx, "dos", { reps: "10–12/ côté" });
   return ex;
 }
 
