@@ -35,21 +35,30 @@ function cleanTextLocal(s?: string): string {
     .trim();
 }
 
-function focusLabelT(focus: Focus, t: any): string {
+// ⚠️ IMPORTANT : on garde bien "settings.seancePage" ici
+function focusLabelT(focus: Focus, t: (key: string) => string): string {
   switch (focus) {
     case "upper":
-      return t("seancePage.focus.upper");
+      return t("settings.seancePage.focus.upper");
     case "lower":
-      return t("seancePage.focus.lower");
+      return t("settings.seancePage.focus.lower");
     case "full":
-      return t("seancePage.focus.full");
+      return t("settings.seancePage.focus.full");
     case "mix":
     default:
-      return t("seancePage.focus.mix");
+      return t("settings.seancePage.focus.mix");
   }
 }
 
-function Chip({ label, value, title }: { label: string; value: string; title?: string }) {
+function Chip({
+  label,
+  value,
+  title,
+}: {
+  label: string;
+  value: string;
+  title?: string;
+}) {
   if (!value) return null;
   return (
     <span
@@ -121,12 +130,15 @@ const SeancePageViewClient: React.FC<Props> = ({
       />
 
       {/* HEADER */}
-      <div className="mb-2 flex items-center justify-between no-print" style={{ paddingInline: 12 }}>
+      <div
+        className="mb-2 flex items-center justify-between no-print"
+        style={{ paddingInline: 12 }}
+      >
         <a href={backHref} className="btn-ghost">
-          {t("seancePage.backButton")}
+          {t("settings.seancePage.backButton")}
         </a>
         <div className="text-xs text-gray-400">
-          {t("seancePage.aiBadge")}
+          {t("settings.seancePage.aiBadge")}
         </div>
       </div>
 
@@ -139,7 +151,8 @@ const SeancePageViewClient: React.FC<Props> = ({
           <div>
             <h1 className="h1-compact">{displayTitle}</h1>
             <p className="lead-compact">
-              {plannedMin} {t("seancePage.plannedMinSuffix")} · {base.type}
+              {plannedMin}{" "}
+              {t("settings.seancePage.plannedMinSuffix")} · {base.type}
             </p>
           </div>
         </div>
@@ -169,22 +182,24 @@ const SeancePageViewClient: React.FC<Props> = ({
                     {typeof ex.sets === "number" && (
                       <Chip
                         label="🧱"
-                        value={`${ex.sets} ${t("seancePage.chips.setsLabel")}`}
-                        title={t("seancePage.chips.setsLabel")}
+                        value={`${ex.sets} ${t(
+                          "settings.seancePage.chips.setsLabel"
+                        )}`}
+                        title={t("settings.seancePage.chips.setsLabel")}
                       />
                     )}
                     {reps && (
                       <Chip
                         label="🔁"
                         value={reps}
-                        title={t("seancePage.chips.repsLabel")}
+                        title={t("settings.seancePage.chips.repsLabel")}
                       />
                     )}
                     {rest && (
                       <Chip
                         label="⏲️"
                         value={rest}
-                        title={t("seancePage.chips.restLabel")}
+                        title={t("settings.seancePage.chips.restLabel")}
                       />
                     )}
                   </div>
