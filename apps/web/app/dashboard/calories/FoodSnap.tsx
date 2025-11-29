@@ -18,12 +18,13 @@ function getFromPath(obj: any, path: string): any {
   return path.split(".").reduce((acc, key) => (acc ? acc[key] : undefined), obj);
 }
 
-function t(path: string, fallback: string): string {
+// 🔹 Même logique que BMI/Progress : pas de texte en dur dans les appels
+function t(path: string): string {
   const lang = getClientLang();
   const dict = translations[lang] as any;
   const v = getFromPath(dict, path);
   if (typeof v === "string") return v;
-  return fallback;
+  return path;
 }
 
 type Candidate = {
@@ -134,7 +135,7 @@ export default function FoodSnap({ today, onSave }: Props) {
       if (!res.ok)
         throw new Error(
           (await res.text().catch(() => "")) ||
-            t("calories.foodSnap.errors.analyzeGeneric", "Analyse impossible")
+            t("calories.foodSnap.errors.analyzeGeneric")
         );
       const data: AnalyzeResponse = await res.json();
       setResult(data);
@@ -156,10 +157,7 @@ export default function FoodSnap({ today, onSave }: Props) {
           setPortion(data.net_weight_g);
       }
     } catch (e: any) {
-      setError(
-        e?.message ||
-          t("calories.foodSnap.errors.unknown", "Erreur inconnue")
-      );
+      setError(e?.message || t("calories.foodSnap.errors.unknown"));
     } finally {
       setLoading(false);
     }
@@ -197,12 +195,7 @@ export default function FoodSnap({ today, onSave }: Props) {
         setBarcode(scan);
         setError(null);
       } else {
-        setError(
-          t(
-            "calories.foodSnap.errors.offNoProduct",
-            "OpenFoodFacts indisponible ou aucun produit. Saisis manuellement ou utilise la photo."
-          )
-        );
+        setError(t("calories.foodSnap.errors.offNoProduct"));
         setResult({
           top: {
             label: "Produit (manuel)",
@@ -217,12 +210,7 @@ export default function FoodSnap({ today, onSave }: Props) {
         });
       }
     } catch {
-      setError(
-        t(
-          "calories.foodSnap.errors.offUnavailable",
-          "OFF non joignable. Essaie plus tard ou saisis manuellement."
-        )
-      );
+      setError(t("calories.foodSnap.errors.offUnavailable"));
     }
   }
 
@@ -244,21 +232,12 @@ export default function FoodSnap({ today, onSave }: Props) {
         j = await res.json();
       } catch {}
       const list: Candidate[] = j?.candidates || [];
-      if (!list.length)
-        setQErr(
-          t(
-            "calories.foodSnap.search.noResult",
-            "Aucun résultat. Saisis manuellement kcal/100g ou essaie un autre terme."
-          )
-        );
+      if (!list.length) {
+        setQErr(t("calories.foodSnap.search.noResult"));
+      }
       setQResults(list);
     } catch {
-      setQErr(
-        t(
-          "calories.foodSnap.search.error",
-          "Recherche indisponible. Essaie plus tard ou saisis manuellement."
-        )
-      );
+      setQErr(t("calories.foodSnap.search.error"));
     } finally {
       setQLoading(false);
     }
@@ -352,7 +331,6 @@ export default function FoodSnap({ today, onSave }: Props) {
             dangerouslySetInnerHTML={{
               __html: t(
                 "calories.foodSnap.header.title",
-                'Ajouter depuis une <u>photo</u>, un <u>code-barres</u> ou une <u>recherche</u>'
               ),
             }}
           />
@@ -360,10 +338,7 @@ export default function FoodSnap({ today, onSave }: Props) {
             className="text-xs"
             style={{ color: "#6b7280" }}
           >
-            {t(
-              "calories.foodSnap.header.subtitle",
-              "OFF/USDA prioritaire (valeurs réelles), sinon IA/manuel."
-            )}
+            {t("calories.foodSnap.header.subtitle")}
           </div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
@@ -372,7 +347,7 @@ export default function FoodSnap({ today, onSave }: Props) {
             onClick={onPick}
             style={{ fontSize: 13 }}
           >
-            {t("calories.foodSnap.buttons.photo", "📸 Photo")}
+            {t("calories.foodSnap.buttons.photo")}
           </button>
           <button
             className="btn"
@@ -380,7 +355,7 @@ export default function FoodSnap({ today, onSave }: Props) {
             onClick={() => setShowScanner(true)}
             style={{ fontSize: 13 }}
           >
-            {t("calories.foodSnap.buttons.scan", "🧾 Scanner")}
+            {t("calories.foodSnap.buttons.scan")}
           </button>
         </div>
         <input
@@ -413,10 +388,7 @@ export default function FoodSnap({ today, onSave }: Props) {
         style={{ marginTop: 10, padding: 10, border: "1px solid #e5e7eb" }}
       >
         <div style={{ fontWeight: 600, marginBottom: 6 }}>
-          {t(
-            "calories.foodSnap.search.title",
-            "Recherche manuelle (OFF + USDA)"
-          )}
+          {t("calories.foodSnap.search.title")}
         </div>
         <div
           style={{
@@ -428,10 +400,7 @@ export default function FoodSnap({ today, onSave }: Props) {
           <input
             className="input"
             type="search"
-            placeholder={t(
-              "calories.foodSnap.search.placeholder",
-              'ex: "riz basmati", "banane", "blanc de poulet", "yaourt grec 0%"'
-            )}
+            placeholder={t("calories.foodSnap.search.placeholder")}
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
@@ -442,14 +411,8 @@ export default function FoodSnap({ today, onSave }: Props) {
             disabled={qLoading}
           >
             {qLoading
-              ? t(
-                  "calories.foodSnap.search.loading",
-                  "Recherche…"
-                )
-              : t(
-                  "calories.foodSnap.search.submit",
-                  "Rechercher"
-                )}
+              ? t("calories.foodSnap.search.loading")
+              : t("calories.foodSnap.search.submit")}
           </button>
         </div>
         {qErr && (
@@ -505,15 +468,9 @@ export default function FoodSnap({ today, onSave }: Props) {
                   >
                     {c.kcal_per_100g || "?"} kcal / 100g ·{" "}
                     {c.proteins_g_per_100g ?? "?"} g{" "}
-                    {t(
-                      "calories.foodSnap.search.proteinsShort",
-                      "prot"
-                    )}{" "}
+                    {t("calories.foodSnap.search.proteinsShort")}{" "}
                     —{" "}
-                    {t(
-                      "calories.foodSnap.search.sourceLabel",
-                      "Source"
-                    )}
+                    {t("calories.foodSnap.search.sourceLabel")}
                     : {c.source}
                   </div>
                 </div>
@@ -539,7 +496,7 @@ export default function FoodSnap({ today, onSave }: Props) {
                     setBarcode(null);
                   }}
                 >
-                  {t("calories.foodSnap.search.choose", "Choisir")}
+                  {t("calories.foodSnap.search.choose")}
                 </button>
               </div>
             ))}
@@ -558,10 +515,7 @@ export default function FoodSnap({ today, onSave }: Props) {
         >
           <img
             src={preview}
-            alt={t(
-              "calories.foodSnap.preview.alt",
-              "prévisualisation"
-            )}
+            alt={t("calories.foodSnap.preview.alt")}
             style={{ maxWidth: "100%", borderRadius: 8 }}
           />
           <div style={{ display: "flex", gap: 8 }}>
@@ -571,23 +525,14 @@ export default function FoodSnap({ today, onSave }: Props) {
               disabled={loading}
             >
               {loading
-                ? t(
-                    "calories.foodSnap.preview.analyzeLoading",
-                    "Analyse…"
-                  )
-                : t(
-                    "calories.foodSnap.preview.analyze",
-                    "Analyser la photo"
-                  )}
+                ? t("calories.foodSnap.preview.analyzeLoading")
+                : t("calories.foodSnap.preview.analyze")}
             </button>
             <button
               className="btn"
               onClick={resetAll}
             >
-              {t(
-                "calories.foodSnap.preview.reset",
-                "Réinitialiser"
-              )}
+              {t("calories.foodSnap.preview.reset")}
             </button>
           </div>
         </div>
@@ -630,10 +575,7 @@ export default function FoodSnap({ today, onSave }: Props) {
                 </div>
               )}
               <div style={{ fontWeight: 600 }}>
-                {t(
-                  "calories.foodSnap.plate.title",
-                  "Décomposition de l’assiette (éditable)"
-                )}
+                {t("calories.foodSnap.plate.title")}
               </div>
               <div
                 style={{ display: "grid", gap: 8 }}
@@ -671,10 +613,7 @@ export default function FoodSnap({ today, onSave }: Props) {
                         className="label"
                         style={{ margin: 0 }}
                       >
-                        {t(
-                          "calories.foodSnap.plate.grams",
-                          "Grammes"
-                        )}
+                        {t("calories.foodSnap.plate.grams")}
                         <input
                           className="input"
                           type="number"
@@ -701,10 +640,7 @@ export default function FoodSnap({ today, onSave }: Props) {
                         className="label"
                         style={{ margin: 0 }}
                       >
-                        {t(
-                          "calories.foodSnap.plate.kcalPer100",
-                          "kcal/100g"
-                        )}
+                        {t("calories.foodSnap.plate.kcalPer100")}
                         <input
                           className="input"
                           type="number"
@@ -733,10 +669,7 @@ export default function FoodSnap({ today, onSave }: Props) {
                         className="label"
                         style={{ margin: 0 }}
                       >
-                        {t(
-                          "calories.foodSnap.plate.protPer100",
-                          "Prot/100g"
-                        )}
+                        {t("calories.foodSnap.plate.protPer100")}
                         <input
                           className="input"
                           type="number"
@@ -775,7 +708,6 @@ export default function FoodSnap({ today, onSave }: Props) {
                         {kcal} kcal · {prot}{" "}
                         {t(
                           "calories.foodSnap.plate.proteinsShort",
-                          "g prot"
                         )}
                       </div>
                       <button
@@ -795,15 +727,11 @@ export default function FoodSnap({ today, onSave }: Props) {
                 })}
               </div>
               <div style={{ fontWeight: 700 }}>
-                {t(
-                  "calories.foodSnap.plate.total",
-                  "Total"
-                )}{" "}
-                : {totalKcal() ?? "—"} kcal ·{" "}
+                {t("calories.foodSnap.plate.total")} :{" "}
+                {totalKcal() ?? "—"} kcal ·{" "}
                 {totalProteins() ?? "—"}{" "}
                 {t(
                   "calories.foodSnap.plate.totalProteinsShort",
-                  "g protéines"
                 )}
               </div>
             </>
@@ -826,10 +754,7 @@ export default function FoodSnap({ today, onSave }: Props) {
               )}
               <div style={{ fontSize: 14 }}>
                 <strong>
-                  {t(
-                    "calories.foodSnap.product.title",
-                    "Produit"
-                  )}
+                  {t("calories.foodSnap.product.title")}
                 </strong>
                 {" : "}
                 {label}
@@ -849,7 +774,6 @@ export default function FoodSnap({ today, onSave }: Props) {
               >
                 {t(
                   "calories.foodSnap.product.sourceLabel",
-                  "Source"
                 )}{" "}
                 : <strong>{source}</strong>
               </div>
@@ -863,10 +787,7 @@ export default function FoodSnap({ today, onSave }: Props) {
                 }}
               >
                 <label className="label">
-                  {t(
-                    "calories.foodSnap.product.portion",
-                    "Portion (g)"
-                  )}
+                  {t("calories.foodSnap.product.portion")}
                   <input
                     className="input"
                     type="number"
@@ -881,10 +802,7 @@ export default function FoodSnap({ today, onSave }: Props) {
                   />
                 </label>
                 <label className="label">
-                  {t(
-                    "calories.foodSnap.product.kcalPer100",
-                    "kcal / 100 g"
-                  )}
+                  {t("calories.foodSnap.product.kcalPer100")}
                   <input
                     className="input"
                     type="number"
@@ -897,10 +815,7 @@ export default function FoodSnap({ today, onSave }: Props) {
                   />
                 </label>
                 <label className="label">
-                  {t(
-                    "calories.foodSnap.product.protPer100",
-                    "Prot / 100 g"
-                  )}
+                  {t("calories.foodSnap.product.protPer100")}
                   <input
                     className="input"
                     type="number"
@@ -919,15 +834,11 @@ export default function FoodSnap({ today, onSave }: Props) {
                   fontWeight: 700,
                 }}
               >
-                {t(
-                  "calories.foodSnap.product.total",
-                  "Total"
-                )}{" "}
-                : {totalKcal() ?? "—"} kcal ·{" "}
+                {t("calories.foodSnap.product.total")} :{" "}
+                {totalKcal() ?? "—"} kcal ·{" "}
                 {totalProteins() ?? "—"}{" "}
                 {t(
                   "calories.foodSnap.product.totalProteinsShort",
-                  "g protéines"
                 )}
               </div>
             </>
@@ -937,10 +848,7 @@ export default function FoodSnap({ today, onSave }: Props) {
             className="text-xs"
             style={{ color: "#6b7280" }}
           >
-            {t(
-              "calories.foodSnap.help.manual",
-              "⚡ Si aucune base ne répond, tu peux saisir les valeurs manuellement (kcal/prot pour 100 g), puis indiquer la portion."
-            )}
+            {t("calories.foodSnap.help.manual")}
           </div>
 
           {/* Actions */}
@@ -956,10 +864,7 @@ export default function FoodSnap({ today, onSave }: Props) {
               onClick={injectToMainForm}
               disabled={!totalKcal()}
             >
-              {t(
-                "calories.foodSnap.actions.fillForm",
-                "Remplir le formulaire en haut"
-              )}
+              {t("calories.foodSnap.actions.fillForm")}
             </button>
             {onSave && (
               <form
@@ -991,7 +896,6 @@ export default function FoodSnap({ today, onSave }: Props) {
                 >
                   {t(
                     "calories.foodSnap.actions.addToCalories",
-                    "Ajouter à mes calories"
                   )}
                 </button>
               </form>
