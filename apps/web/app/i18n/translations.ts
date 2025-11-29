@@ -1107,53 +1107,7 @@ abonnementSuccess: {
     totalLabel: "Total mensuel : {{amount}} €",
     back: "Retour à l’abonnement",
   },
-},{
-  "progress.pageTitle": "Mes progrès",
-  "progress.pageSubtitle": "Ajoutez vos pas, vos charges et votre poids. Vos données restent en local (cookie).",
-
-  "progress.messages.saved": "✓ Entrée enregistrée.",
-  "progress.messages.deleted": "Entrée supprimée.",
-  "progress.messages.errorPrefix": "⚠️ Erreur :",
-
-  "progress.form.title": "Ajouter une entrée",
-  "progress.form.type.label": "Type",
-  "progress.form.type.steps": "Pas (steps)",
-  "progress.form.type.load": "Charges portées (kg)",
-  "progress.form.type.weight": "Poids (kg)",
-  "progress.form.type.help": "Pour charges, vous pouvez renseigner les répétitions ci-dessous.",
-  "progress.form.date.label": "Date",
-  "progress.form.value.label": "Valeur",
-  "progress.form.value.placeholder": "ex: 8000 (pas) / 60 (kg)",
-  "progress.form.reps.label": "Répétitions (optionnel, charges)",
-  "progress.form.reps.placeholder": "ex: 8",
-  "progress.form.note.label": "Note (optionnel)",
-  "progress.form.note.placeholder": "ex: Marche rapide, Squat barre, etc.",
-  "progress.form.submit": "Enregistrer",
-
-  "progress.week.title": "Pas — semaine en cours",
-  "progress.week.rangePrefix": "Du",
-  "progress.week.rangeTo": "au",
-  "progress.week.totalLabel": "Total",
-  "progress.week.stepsUnit": "pas",
-  "progress.week.avgPerDayLabel": "Moyenne / jour",
-  "progress.week.stepsPerDayUnit": "pas/jour",
-  "progress.week.noData": "Aucune donnée saisie pour cette semaine. Ajoutez une entrée ci-dessus pour voir vos stats.",
-
-  "progress.latest.title": "Dernières valeurs",
-  "progress.latest.steps.title": "Pas",
-  "progress.latest.steps.unit": "pas",
-  "progress.latest.load.title": "Charges",
-  "progress.latest.weight.title": "Poids",
-  "progress.latest.noData": "Aucune donnée.",
-
-  "progress.recent.title": "Entrées récentes",
-  "progress.recent.empty": "Pas encore de données — commencez en ajoutant une entrée ci-dessus.",
-  "progress.recent.type.steps": "Pas",
-  "progress.recent.type.load": "Charges",
-  "progress.recent.type.weight": "Poids",
-  "progress.recent.delete": "Supprimer"
 },
-   },
 
 
 
@@ -2296,54 +2250,7 @@ abonnementSuccess: {
     totalLabel: "Monthly total: {{amount}} €",
     back: "Back to subscription",
   },
-},{
-  "progress.pageTitle": "My progress",
-  "progress.pageSubtitle": "Add your steps, loads and bodyweight. Your data stays local (cookie).",
-
-  "progress.messages.saved": "✓ Entry saved.",
-  "progress.messages.deleted": "Entry deleted.",
-  "progress.messages.errorPrefix": "⚠️ Error:",
-
-  "progress.form.title": "Add an entry",
-  "progress.form.type.label": "Type",
-  "progress.form.type.steps": "Steps",
-  "progress.form.type.load": "Lifts (kg)",
-  "progress.form.type.weight": "Bodyweight (kg)",
-  "progress.form.type.help": "For lifts, you can also fill the reps field below.",
-  "progress.form.date.label": "Date",
-  "progress.form.value.label": "Value",
-  "progress.form.value.placeholder": "e.g. 8000 (steps) / 60 (kg)",
-  "progress.form.reps.label": "Reps (optional, lifts)",
-  "progress.form.reps.placeholder": "e.g. 8",
-  "progress.form.note.label": "Note (optional)",
-  "progress.form.note.placeholder": "e.g. Fast walk, barbell squat, etc.",
-  "progress.form.submit": "Save",
-
-  "progress.week.title": "Steps — current week",
-  "progress.week.rangePrefix": "From",
-  "progress.week.rangeTo": "to",
-  "progress.week.totalLabel": "Total",
-  "progress.week.stepsUnit": "steps",
-  "progress.week.avgPerDayLabel": "Average / day",
-  "progress.week.stepsPerDayUnit": "steps/day",
-  "progress.week.noData": "No data for this week yet. Add an entry above to see your stats.",
-
-  "progress.latest.title": "Latest values",
-  "progress.latest.steps.title": "Steps",
-  "progress.latest.steps.unit": "steps",
-  "progress.latest.load.title": "Lifts",
-  "progress.latest.weight.title": "Weight",
-  "progress.latest.noData": "No data.",
-
-  "progress.recent.title": "Recent entries",
-  "progress.recent.empty": "No data yet — start by adding an entry above.",
-  "progress.recent.type.steps": "Steps",
-  "progress.recent.type.load": "Lifts",
-  "progress.recent.type.weight": "Weight",
-  "progress.recent.delete": "Delete"
 },
-  },
-
 
 
 
