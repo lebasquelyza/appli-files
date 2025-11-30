@@ -1,4 +1,4 @@
-//apps/web/app/dashboard/recipes/[id]/page.tsx
+// apps/web/app/dashboard/recipes/[id]/page.tsx
 import { cookies } from "next/headers";
 import { translations } from "@/app/i18n/translations";
 
@@ -124,16 +124,16 @@ export default async function Page({
                 lineHeight: 1.2,
               }}
             >
-              {t("recipes.detail.notFound.title", "Recette introuvable")}
+              {t("detail.notFound.title", "Recette introuvable")}
             </h2>
             <p>
               {t(
-                "recipes.detail.notFound.description",
+                "detail.notFound.description",
                 "Ouvrez la fiche depuis la liste des recettes."
               )}
             </p>
             <a href="/dashboard/recipes" className="btn btn-dash">
-              {t("recipes.detail.notFound.back", "← Retour aux recettes")}
+              {t("detail.notFound.back", "← Retour aux recettes")}
             </a>
           </div>
         </div>
@@ -195,7 +195,7 @@ export default async function Page({
         <div className="grid gap-6 lg:grid-cols-2">
           <article className="card">
             <h3 style={{ marginTop: 0 }}>
-              {t("recipes.detail.ingredients.title", "Ingrédients")}
+              {t("detail.ingredients.title", "Ingrédients")}
             </h3>
             {ing.length ? (
               <ul style={{ marginTop: 6, paddingLeft: 18 }}>
@@ -204,12 +204,9 @@ export default async function Page({
                 ))}
               </ul>
             ) : (
-              <p
-                className="text-sm"
-                style={{ color: "#6b7280" }}
-              >
+              <p className="text-sm" style={{ color: "#6b7280" }}>
                 {t(
-                  "recipes.detail.ingredients.empty",
+                  "detail.ingredients.empty",
                   "Pas d’ingrédients détaillés."
                 )}
               </p>
@@ -218,7 +215,7 @@ export default async function Page({
 
           <article className="card">
             <h3 style={{ marginTop: 0 }}>
-              {t("recipes.detail.steps.title", "Préparation")}
+              {t("detail.steps.title", "Préparation")}
             </h3>
             {steps.length ? (
               <ol style={{ marginTop: 6, paddingLeft: 18 }}>
@@ -227,12 +224,9 @@ export default async function Page({
                 ))}
               </ol>
             ) : (
-              <p
-                className="text-sm"
-                style={{ color: "#6b7280" }}
-              >
+              <p className="text-sm" style={{ color: "#6b7280" }}>
                 {t(
-                  "recipes.detail.steps.empty",
+                  "detail.steps.empty",
                   "Pas d’étapes détaillées."
                 )}
               </p>
@@ -245,7 +239,7 @@ export default async function Page({
           <article className="card" style={{ marginTop: 12 }}>
             <h3 style={{ marginTop: 0 }}>
               {t(
-                "recipes.detail.rework.title",
+                "detail.rework.title",
                 "Re-travailler les aliments non aimés"
               )}
             </h3>
@@ -254,7 +248,7 @@ export default async function Page({
               style={{ color: "#6b7280", marginTop: -4 }}
             >
               {t(
-                "recipes.detail.rework.description",
+                "detail.rework.description",
                 "On garde le produit et on propose d’autres façons de le cuisiner :"
               )}
             </p>
@@ -281,7 +275,7 @@ export default async function Page({
             href="/dashboard/recipes"
             style={{ color: "var(--text, #111)" }}
           >
-            {t("recipes.detail.back", "← Retour")}
+            {t("detail.back", "← Retour")}
           </a>
         </div>
       </div>
