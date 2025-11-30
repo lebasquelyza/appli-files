@@ -34,7 +34,7 @@ export async function GET(req: Request) {
       );
     }
 
-    // ⭐ NEW : déterminer la langue depuis le cookie fc-lang
+    // ⭐ Langue depuis le cookie fc-lang
     const langCookie = cookies().get("fc-lang")?.value;
     const lang: "fr" | "en" = langCookie === "en" ? "en" : "fr";
     (answers as any).lang = lang;
@@ -42,16 +42,30 @@ export async function GET(req: Request) {
     // 2) Génération du programme via IA (LLM) + fallback “béton”
     const { sessions: rawSessions } = await generateProgrammeFromAnswers(answers);
 
-    // 3) Normalisation de base (sécurité)
-    const sessions = (rawSessions || []).map((s, i) => ({
-      ...s,
-      date: s.date || "",
-      id: s.id || `session-${i + 1}`,
-      // 🔹 Fallback titre FR / EN
-      title:
-        s.title ||
-        (lang === "en" ? `Session ${i + 1}` : `Séance ${i + 1}`),
-    }));
+    // 3) Normalisation de base (sécurité) + forçage du titre selon la langue
+    const sessions = (rawSessions || []).map((s, i) => {
+      let title = s.title || (lang === "en" ? `Session ${i + 1}` : `Séance ${i + 1}`);
+
+      // 🛠 Patch : si la langue est EN mais le titre est en FR,
+      // on le convertit en anglais.
+      if (lang === "en") {
+        // "Séance pour Lyza — Lundi · Full body"
+        if (title.startsWith("Séance pour ")) {
+          title = title.replace(/^Séance pour /, "Workout for ");
+        }
+        // "Séance 1", "Séance — Lundi"
+        else if (title.startsWith("Séance")) {
+          title = title.replace(/^Séance/, "Workout");
+        }
+      }
+
+      return {
+        ...s,
+        date: s.date || "",
+        id: s.id || `session-${i + 1}`,
+        title,
+      };
+    });
 
     return NextResponse.json({ sessions }, { status: 200 });
   } catch (e: any) {
@@ -62,3 +76,4 @@ export async function GET(req: Request) {
     );
   }
 }
+
