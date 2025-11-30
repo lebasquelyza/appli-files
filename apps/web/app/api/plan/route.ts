@@ -31,8 +31,12 @@ function inferNumeric1to6(text?: string | null): number | undefined {
 
 export async function POST(req: Request) {
   try {
-    const payload = await req.json(); // { profile, maxSessions? }
+    const payload = await req.json(); // { profile, maxSessions?, lang? }
     const profile = payload?.profile || {};
+
+    // 🔤 langue demandée par le client (fr par défaut)
+    const lang: "fr" | "en" = payload?.lang === "en" ? "en" : "fr";
+
     // 1) Prend d'abord les jours nommés
     const days = extractDaysList(profile?.availabilityText);
     // 2) Sinon, prend un chiffre 1..6 s'il est présent
@@ -45,7 +49,8 @@ export async function POST(req: Request) {
 
     const { sessions } = planProgrammeFromProfile(profile, {
       maxSessions,
-      preset: "example_v1", // on garde le programme figé
+      preset: "example_v1", // programme figé
+      lang,                 // 👈 on transmet la langue à la lib béton
     } as any);
 
     return NextResponse.json({ sessions }, { status: 200 });
