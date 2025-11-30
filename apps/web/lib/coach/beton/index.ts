@@ -289,7 +289,11 @@ export function planProgrammeFromProfile(
     const variant = i % 3;
     const labelABC = ["A", "B", "C"][variant];
 
-    const dayLabel = daysList[i] ? capitalize(daysList[i]) : labelABC;
+    const rawDay = daysList[i] ? daysList[i] : labelABC;
+    const dayLabel =
+      lang === "en"
+        ? DAY_LABEL_EN[rawDay.toLowerCase()] || rawDay
+        : capitalize(rawDay);
     const singleNoDay = maxSessions === 1 && daysList.length === 0;
     const focus: StrengthFocus | undefined = (type === "muscu" && focusPlan.length)
       ? focusPlan[i % focusPlan.length]
@@ -419,6 +423,16 @@ export function planProgrammeFromAnswers(
 
 /* ========================= Inférence du nb de séances & Jours ========================= */
 const DAYS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"];
+
+const DAY_LABEL_EN: Record<string, string> = {
+  lundi: "Monday",
+  mardi: "Tuesday",
+  mercredi: "Wednesday",
+  jeudi: "Thursday",
+  vendredi: "Friday",
+  samedi: "Saturday",
+  dimanche: "Sunday",
+};
 
 function inferMaxSessions(text?: string | null): number | undefined {
   if (!text) return undefined;
