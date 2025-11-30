@@ -63,7 +63,11 @@ function genericFallback(
   }
   if (type === "mobilité") {
     return [
-      { name: "Respiration diaphragmatique", reps: "2–3 min", block: "echauffement" },
+      {
+        name: "Respiration diaphragmatique",
+        reps: "2–3 min",
+        block: "echauffement",
+      },
       { name: "90/90 hanches", reps: "8–10/ côté", block: "principal" },
       { name: "T-spine rotations", reps: "8–10/ côté", block: "principal" },
       { name: "Down-Dog → Cobra", reps: "6–8", block: "fin" },
@@ -71,17 +75,65 @@ function genericFallback(
   }
   if (equip === "none") {
     return [
-      { name: "Squat au poids du corps", sets: 3, reps: "12–15", rest: "60–75s", block: "principal" },
-      { name: "Pompes", sets: 3, reps: "8–15", rest: "60–75s", block: "principal" },
-      { name: "Fentes alternées", sets: 3, reps: "10–12/ côté", rest: "60–75s", block: "principal" },
-      { name: "Planche", sets: 2, reps: "30–45s", rest: "45s", block: "fin" },
+      {
+        name: "Squat au poids du corps",
+        sets: 3,
+        reps: "12–15",
+        rest: "60–75s",
+        block: "principal",
+      },
+      {
+        name: "Pompes",
+        sets: 3,
+        reps: "8–15",
+        rest: "60–75s",
+        block: "principal",
+      },
+      {
+        name: "Fentes alternées",
+        sets: 3,
+        reps: "10–12/ côté",
+        rest: "60–75s",
+        block: "principal",
+      },
+      {
+        name: "Planche",
+        sets: 2,
+        reps: "30–45s",
+        rest: "45s",
+        block: "fin",
+      },
     ];
   }
   return [
-    { name: "Goblet Squat", sets: 3, reps: "8–12", rest: "75s", block: "principal" },
-    { name: "Développé haltères", sets: 3, reps: "8–12", rest: "75s", block: "principal" },
-    { name: "Rowing unilatéral", sets: 3, reps: "10–12/ côté", rest: "75s", block: "principal" },
-    { name: "Planche", sets: 2, reps: "30–45s", rest: "45s", block: "fin" },
+    {
+      name: "Goblet Squat",
+      sets: 3,
+      reps: "8–12",
+      rest: "75s",
+      block: "principal",
+    },
+    {
+      name: "Développé haltères",
+      sets: 3,
+      reps: "8–12",
+      rest: "75s",
+      block: "principal",
+    },
+    {
+      name: "Rowing unilatéral",
+      sets: 3,
+      reps: "10–12/ côté",
+      rest: "75s",
+      block: "principal",
+    },
+    {
+      name: "Planche",
+      sets: 2,
+      reps: "30–45s",
+      rest: "45s",
+      block: "fin",
+    },
   ];
 }
 function uniqByName(list: NormalizedExercise[]): NormalizedExercise[] {
@@ -105,10 +157,16 @@ function scoreExercise(ex: NormalizedExercise): number {
   if (ex.sets && ex.reps) s += 1;
   return s;
 }
-function ensureAtLeast4(list: NormalizedExercise[], type: WorkoutType, equip: "full" | "none") {
+function ensureAtLeast4(
+  list: NormalizedExercise[],
+  type: WorkoutType,
+  equip: "full" | "none"
+) {
   const out = [...list];
   if (out.length >= 4) return uniqByName(out);
-  const fb = genericFallback(type, equip).sort((a, b) => scoreExercise(b) - scoreExercise(a));
+  const fb = genericFallback(type, equip).sort(
+    (a, b) => scoreExercise(b) - scoreExercise(a)
+  );
   for (const ex of fb) {
     if (out.length >= 4) break;
     if (equip === "none" && requiresEquipment(ex)) continue;
@@ -263,12 +321,8 @@ async function loadInitialSessions(email: string, equipParam?: string) {
   const equip: "full" | "none" =
     String(equipParam || "").toLowerCase() === "none" ? "none" : "full";
 
-  // 🔤 Détection de la langue depuis le cookie NEXT_LOCALE
-  const locale = cookies().get("NEXT_LOCALE")?.value;
-  const lang: "fr" | "en" = locale === "en" ? "en" : "fr";
-
   try {
-    const { sessions } = await planProgrammeFromEmail(email, { lang });
+    const { sessions } = await planProgrammeFromEmail(email);
     const baseSessions: AiSessionT[] = sessions || [];
 
     const finalSessions = baseSessions.map((s) => {
