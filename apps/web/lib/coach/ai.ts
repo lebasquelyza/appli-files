@@ -82,7 +82,7 @@ function parseCSV(text: string): string[][] {
 
   function pushCell() {
     cur.push(cell);
-    cell = "";
+  cell = "";
   }
   function pushRow() {
     pushCell();
@@ -638,11 +638,10 @@ export function generateProgrammeFromAnswers(
   }
 
   // maxSessions = 1..6 (7 est clampé à 6 par design UI)
-  return planProgrammeFromProfile(enriched, { maxSessions });
+  return planProgrammeFromProfile(enriched, { maxSessions, lang });
 }
 
 // 4) Sessions “stockées” (stub) — ici on retourne vide pour laisser la génération locale prendre le relais
 export async function getAiSessions(_email: string): Promise<AiSession[]> {
   return [];
 }
-
