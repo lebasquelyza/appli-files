@@ -34,36 +34,44 @@ export async function GET(req: Request) {
       );
     }
 
-    // ⭐ Langue depuis le cookie fc-lang
-    const langCookie = cookies().get("fc-lang")?.value;
-    const lang: "fr" | "en" = langCookie === "en" ? "en" : "fr";
+    // ⭐ Langue depuis le cookie fc-lang (robuste: "en", "EN", "en-US", etc.)
+    const rawLang = cookies().get("fc-lang")?.value || "";
+    const lang: "fr" | "en" =
+      rawLang.toLowerCase().startsWith("en") ? "en" : "fr";
+
     (answers as any).lang = lang;
 
     // 2) Génération du programme via IA (LLM) + fallback “béton”
     const { sessions: rawSessions } = await generateProgrammeFromAnswers(answers);
 
-    // 3) Normalisation de base (sécurité) + forçage du titre selon la langue
+    // 3) Normalisation de base (sécurité) + ajustement du titre selon la langue
     const sessions = (rawSessions || []).map((s, i) => {
-      let title = s.title || (lang === "en" ? `Session ${i + 1}` : `Séance ${i + 1}`);
+      let title =
+        s.title ||
+        (lang === "en" ? `Workout ${i + 1}` : `Séance ${i + 1}`);
 
+      // 🔤 Post-traitement des titres en fonction de la langue
       if (lang === "en") {
-        // On normalise pour enlever les accents → "Séance" devient "Seance"
-        const normalized = title
+        // On normalise pour enlever les accents, pour détecter "Séance" / "Seance"
+        const normalized = (title || "")
           .normalize("NFD")
           .replace(/\p{Diacritic}/gu, "");
 
         // Cas 1 : "Séance pour X …"
-        if (normalized.startsWith("Seance pour ")) {
-          // on remplace uniquement le début
-          const after = title.slice(title.indexOf("pour ") + "pour ".length);
-          // ex: "Lyza — Lundi · Full body"
+        // ex: "Séance pour Lyza — Lundi · Full body"
+        if (/^Seance pour\s+/i.test(normalized)) {
+          // On enlève le "Séance pour " / "Seance pour " sur la version originale
+          const after = title
+            .replace(/^Séance pour\s+/i, "")
+            .replace(/^Seance pour\s+/i, "");
           title = `Workout for ${after}`;
         }
         // Cas 2 : "Séance ..." (sans "pour")
-        else if (normalized.startsWith("Seance")) {
-          // "Séance 1" / "Séance — Lundi" → "Workout …"
-          // on remplace juste le mot au début
-          title = title.replace(/^Séance/i, "Workout");
+        // ex: "Séance 1", "Séance — Lundi"
+        else if (/^Seance\b/i.test(normalized)) {
+          title = title
+            .replace(/^Séance\b/i, "Workout")
+            .replace(/^Seance\b/i, "Workout");
         }
       }
 
