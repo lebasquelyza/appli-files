@@ -263,8 +263,12 @@ async function loadInitialSessions(email: string, equipParam?: string) {
   const equip: "full" | "none" =
     String(equipParam || "").toLowerCase() === "none" ? "none" : "full";
 
+  // 🔤 Détection de la langue depuis le cookie NEXT_LOCALE
+  const locale = cookies().get("NEXT_LOCALE")?.value;
+  const lang: "fr" | "en" = locale === "en" ? "en" : "fr";
+
   try {
-    const { sessions } = await planProgrammeFromEmail(email);
+    const { sessions } = await planProgrammeFromEmail(email, { lang });
     const baseSessions: AiSessionT[] = sessions || [];
 
     const finalSessions = baseSessions.map((s) => {
@@ -371,4 +375,3 @@ export default async function Page({
     />
   );
 }
-
