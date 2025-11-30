@@ -46,16 +46,24 @@ export async function GET(req: Request) {
     const sessions = (rawSessions || []).map((s, i) => {
       let title = s.title || (lang === "en" ? `Session ${i + 1}` : `Séance ${i + 1}`);
 
-      // 🛠 Patch : si la langue est EN mais le titre est en FR,
-      // on le convertit en anglais.
       if (lang === "en") {
-        // "Séance pour Lyza — Lundi · Full body"
-        if (title.startsWith("Séance pour ")) {
-          title = title.replace(/^Séance pour /, "Workout for ");
+        // On normalise pour enlever les accents → "Séance" devient "Seance"
+        const normalized = title
+          .normalize("NFD")
+          .replace(/\p{Diacritic}/gu, "");
+
+        // Cas 1 : "Séance pour X …"
+        if (normalized.startsWith("Seance pour ")) {
+          // on remplace uniquement le début
+          const after = title.slice(title.indexOf("pour ") + "pour ".length);
+          // ex: "Lyza — Lundi · Full body"
+          title = `Workout for ${after}`;
         }
-        // "Séance 1", "Séance — Lundi"
-        else if (title.startsWith("Séance")) {
-          title = title.replace(/^Séance/, "Workout");
+        // Cas 2 : "Séance ..." (sans "pour")
+        else if (normalized.startsWith("Seance")) {
+          // "Séance 1" / "Séance — Lundi" → "Workout …"
+          // on remplace juste le mot au début
+          title = title.replace(/^Séance/i, "Workout");
         }
       }
 
@@ -76,4 +84,3 @@ export async function GET(req: Request) {
     );
   }
 }
-
