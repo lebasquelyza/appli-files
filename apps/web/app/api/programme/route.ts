@@ -47,7 +47,10 @@ export async function GET(req: Request) {
       ...s,
       date: s.date || "",
       id: s.id || `session-${i + 1}`,
-      title: s.title || `Séance ${i + 1}`,
+      // 🔹 Fallback titre FR / EN
+      title:
+        s.title ||
+        (lang === "en" ? `Session ${i + 1}` : `Séance ${i + 1}`),
     }));
 
     return NextResponse.json({ sessions }, { status: 200 });
