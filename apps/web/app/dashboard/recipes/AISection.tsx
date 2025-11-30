@@ -45,24 +45,7 @@ export function AIExtraSection({
   allergens,
   dislikes,
 }: Props) {
-  const { t: tRaw } = useLanguage();
-
-  // 🔁 Petit wrapper pour remapper les chemins vers ceux du fichier de traductions
-  const t = (path: string): string => {
-    let realPath = path;
-
-    // dans translations.ts : settings.aiSection.*
-    if (path.startsWith("recipes.aiSection.")) {
-      realPath = path.replace("recipes.aiSection", "settings.aiSection");
-    }
-
-    // dans translations.ts : settings.recipes.card.*
-    if (path.startsWith("recipes.card.")) {
-      realPath = path.replace("recipes.card", "settings.recipes.card");
-    }
-
-    return tRaw(realPath);
-  };
+  const { t } = useLanguage();
 
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [loading, setLoading] = useState(false);
@@ -103,7 +86,9 @@ export function AIExtraSection({
             text
           );
           if (!cancelled) {
-            setError(`${t("recipes.aiSection.unavailable")} (HTTP ${res.status})`);
+            setError(
+              `${t("aiSection.unavailable")} (HTTP ${res.status})`
+            );
             setLoading(false);
           }
           return;
@@ -117,7 +102,9 @@ export function AIExtraSection({
             data.error,
             data.detail
           );
-          setError(`${t("recipes.aiSection.unavailable")} (${data.error})`);
+          setError(
+            `${t("aiSection.unavailable")} (${data.error})`
+          );
           setLoading(false);
           return;
         }
@@ -132,7 +119,7 @@ export function AIExtraSection({
       } catch (e) {
         console.error("[AIExtraSection] fetch error /api/recipes/ai:", e);
         if (!cancelled) {
-          setError(`${t("recipes.aiSection.unavailable")} (FETCH_ERROR)`);
+          setError(`${t("aiSection.unavailable")} (FETCH_ERROR)`);
           setLoading(false);
         }
       }
@@ -142,14 +129,14 @@ export function AIExtraSection({
     return () => {
       cancelled = true;
     };
-  }, [kind, kcal, kcalMin, kcalMax, allergensKey, dislikesKey]);
+  }, [kind, kcal, kcalMin, kcalMax, allergensKey, dislikesKey, t]);
 
   return (
     <section className="section" style={{ marginTop: 12 }}>
       <div className="section-head" style={{ marginBottom: 8 }}>
-        <h2>{t("recipes.aiSection.title")}</h2>
+        <h2>{t("aiSection.title")}</h2>
         <p className="text-xs" style={{ color: "#6b7280", marginTop: 4 }}>
-          {t("recipes.aiSection.subtitle")}
+          {t("aiSection.subtitle")}
         </p>
       </div>
 
@@ -163,7 +150,7 @@ export function AIExtraSection({
       {/* État chargement (si pas d'erreur) */}
       {!error && loading && recipes.length === 0 && (
         <div className="card text-xs" style={{ color: "#6b7280" }}>
-          {t("recipes.aiSection.loading")}
+          {t("aiSection.loading")}
         </div>
       )}
 
@@ -176,16 +163,25 @@ export function AIExtraSection({
             )}`;
 
             return (
-              <article key={r.id} className="card" style={{ overflow: "hidden" }}>
+              <article
+                key={r.id}
+                className="card"
+                style={{ overflow: "hidden" }}
+              >
                 <div className="flex items-center justify-between">
                   <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>
                     {r.title}
                   </h3>
-                  <span className="badge">{t("recipes.aiSection.badge")}</span>
+                  <span className="badge">
+                    {t("aiSection.badge")}
+                  </span>
                 </div>
 
                 {r.subtitle && (
-                  <p className="text-sm" style={{ marginTop: 4, color: "#6b7280" }}>
+                  <p
+                    className="text-sm"
+                    style={{ marginTop: 4, color: "#6b7280" }}
+                  >
                     {r.subtitle}
                   </p>
                 )}
@@ -216,7 +212,7 @@ export function AIExtraSection({
                   }}
                 >
                   <a className="btn btn-dash" href={href}>
-                    {t("recipes.card.viewRecipe")}
+                    {t("recipes.recipes.card.viewRecipe")}
                   </a>
                 </div>
               </article>
@@ -227,4 +223,3 @@ export function AIExtraSection({
     </section>
   );
 }
-
