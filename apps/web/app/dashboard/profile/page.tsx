@@ -322,9 +322,37 @@ async function loadInitialSessions(email: string, equipParam?: string) {
     String(equipParam || "").toLowerCase() === "none" ? "none" : "full";
 
   try {
-    const { sessions } = await planProgrammeFromEmail(email);
-    const baseSessions: AiSessionT[] = sessions || [];
+    let baseSessions: AiSessionT[] = [];
 
+    // 1) On tente d'abord de récupérer le DERNIER programme déjà généré
+    const supabaseAdmin = await getSupabaseAdmin();
+    if (supabaseAdmin) {
+      const normalizedEmail = (email || "").trim().toLowerCase();
+      try {
+        const { data, error } = await supabaseAdmin
+          .from("programme_insights")
+          .select("sessions")
+          .eq("email", normalizedEmail)
+          .eq("questionnaire_key", "onboarding_v1")
+          .order("created_at", { ascending: false })
+          .limit(1);
+
+        if (!error && data && data.length && data[0]?.sessions) {
+          baseSessions = data[0].sessions as AiSessionT[];
+        }
+      } catch {
+        // en cas d'erreur, on tombera sur la régénération plus bas
+      }
+    }
+
+    // 2) Si aucun programme trouvé, on génère via l'IA puis on log
+    if (!baseSessions.length) {
+      const { sessions } = await planProgrammeFromEmail(email);
+      baseSessions = sessions || [];
+      await logProgrammeInsightToSupabase(email, null, baseSessions);
+    }
+
+    // 3) Post-traitement existant (équipement, au moins 4 exos, etc.)
     const finalSessions = baseSessions.map((s) => {
       const type = (s.type || "muscu") as WorkoutType;
       let exs = (s.exercises || []).slice();
@@ -335,6 +363,7 @@ async function loadInitialSessions(email: string, equipParam?: string) {
       return { ...s, exercises: exs };
     });
 
+    // On log uniquement lors de la génération (déjà fait ci-dessus)
     await logProgrammeInsightToSupabase(email, null, finalSessions);
 
     return finalSessions;
