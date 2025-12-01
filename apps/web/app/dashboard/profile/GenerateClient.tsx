@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import type { AiSession } from "../../../lib/coach/ai";
 import { useLanguage } from "@/components/LanguageProvider";
@@ -8,7 +8,8 @@ import { useLanguage } from "@/components/LanguageProvider";
 type Props = {
   email: string;
   questionnaireBase: string;
-  initialSessions?: AiSession[];
+  initialSessions?: AiSession[]; // on le garde dans le type, mais on ne l'utilise plus
+  /** Optionnel : ex. "equip=none" pour conserver le mode dans les liens des séances */
   linkQuery?: string;
 };
 
@@ -46,7 +47,8 @@ export default function GenerateClient({
     return fallback ?? path;
   };
 
-  const [sessions, setSessions] = useState<AiSession[]>(initialSessions);
+  // 🔥 CLÉ : on ne part plus d'initialSessions, on part toujours de []
+  const [sessions, setSessions] = useState<AiSession[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -58,10 +60,6 @@ export default function GenerateClient({
     () => parseSet(searchParams.get("later")),
     [searchParams]
   );
-
-  useEffect(() => {
-    setSessions(initialSessions);
-  }, [initialSessions]);
 
   /* ===== GENERATION ===== */
   async function handleGenerate() {
@@ -85,8 +83,8 @@ export default function GenerateClient({
         );
       }
 
-      // 🔥 ESSENTIEL : garder les titres EXACTS de l’IA
-      setSessions(data.sessions);
+      // On prend les séances EXACTES renvoyées par l'API (FR ou EN)
+      setSessions(data.sessions as AiSession[]);
     } catch (e: any) {
       setError(
         e?.message ||
@@ -163,6 +161,10 @@ export default function GenerateClient({
             opacity: loading ? 0.7 : 1,
             whiteSpace: "nowrap",
           }}
+          title={tf(
+            "settings.profile.generate.button.title",
+            "Générer ou mettre à jour le programme"
+          )}
         >
           {loading
             ? tf(
@@ -193,14 +195,15 @@ export default function GenerateClient({
         </div>
       )}
 
-      {/* LISTE DES SEANCES */}
+      {/* Liste des séances – uniquement après clic sur Générer */}
       {sessions && sessions.length > 0 && (
         <ul className="space-y-2 list-none pl-0">
           {sessions.map((s, i) => {
             const key = sessionKey(s, i);
-            const href = `/dashboard/seance/${encodeURIComponent(
+            const baseHref = `/dashboard/seance/${encodeURIComponent(
               s.id
-            )}${linkQuery ? `?${linkQuery}` : ""}`;
+            )}`;
+            const href = linkQuery ? `${baseHref}?${linkQuery}` : baseHref;
 
             return (
               <li
@@ -214,30 +217,40 @@ export default function GenerateClient({
                 }}
               >
                 <div className="flex items-center justify-between gap-3">
+                  {/* Zone cliquable pour ouvrir la séance */}
                   <div
                     onClick={() => router.push(href)}
-                    className="cursor-pointer"
+                    className={loading ? "cursor-not-allowed" : "cursor-pointer"}
+                    style={{ minWidth: 0 }}
                   >
-                    {/* 🎉 TITRE 100% IA, SANS AUCUNE MODIFICATION */}
+                    {/* Titre EXACT de l’IA, FR ou EN */}
                     <div className="font-medium text-sm truncate">
-                      {s.title}
+                      {s.title ||
+                        tf(
+                          "settings.profile.generate.defaultTitle",
+                          "Séance"
+                        )}
                     </div>
-
                     <div className="text-xs text-gray-500">
                       {s.type}
                       {s.plannedMin ? ` · ${s.plannedMin} min` : ""}
                     </div>
                   </div>
 
-                  {/* Menu Enregistrer */}
+                  {/* Bouton Enregistrer / Plus tard */}
                   <div style={{ position: "relative" }}>
                     <button
                       type="button"
-                      className="inline-flex items-center rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-semibold text-neutral-900"
+                      className="inline-flex items-center rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-semibold text-neutral-900 hover:border-neutral-400"
                       onClick={(e) => {
                         e.stopPropagation();
                         markDone(key);
                       }}
+                      title={tf(
+                        "settings.profile.generate.menu.doneTitle",
+                        "Ajouter à « Séances enregistrées »"
+                      )}
+                      disabled={loading}
                     >
                       {tf(
                         "settings.profile.generate.menu.buttonLabel",
@@ -252,12 +265,12 @@ export default function GenerateClient({
         </ul>
       )}
 
-      {/* Aucun résultat */}
+      {/* État vide : avant génération ou si aucune séance */}
       {!loading && (!sessions || sessions.length === 0) && (
         <div className="text-sm text-gray-500">
           {tf(
             "settings.profile.generate.empty",
-            "Aucune séance disponible pour le moment."
+            "Clique sur « Générer » pour voir tes séances personnalisées."
           )}
         </div>
       )}
