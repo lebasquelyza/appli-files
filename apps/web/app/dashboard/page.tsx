@@ -3,7 +3,6 @@
 import { useMemo } from "react";
 import Link from "next/link";
 import { useLanguage } from "@/components/LanguageProvider";
-import { getSessionClient } from "@/lib/session-client"; // ⚠️ Ajout simple pour les sessions côté client
 
 type KcalStore = Record<string, number>;
 type Workout = { status: "active" | "done"; startedAt?: string; endedAt?: string };
