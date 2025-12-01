@@ -2445,9 +2445,6 @@ export const translations = {
       button: "View my sessions →"
     },
    },
- },
-  
-
-
   },
+ },
 } as const;
