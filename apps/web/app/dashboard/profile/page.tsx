@@ -321,6 +321,10 @@ async function loadInitialSessions(email: string, equipParam?: string) {
   const equip: "full" | "none" =
     String(equipParam || "").toLowerCase() === "none" ? "none" : "full";
 
+  // 🔤 Détection de la langue à partir du cookie NEXT_LOCALE
+  const locale = cookies().get("NEXT_LOCALE")?.value;
+  const lang: "fr" | "en" = locale === "en" ? "en" : "fr";
+
   try {
     let baseSessions: AiSessionT[] = [];
 
@@ -341,13 +345,13 @@ async function loadInitialSessions(email: string, equipParam?: string) {
           baseSessions = data[0].sessions as AiSessionT[];
         }
       } catch {
-        // en cas d'erreur, on tombera sur la régénération plus bas
+        // si erreur, on tombera sur la régénération plus bas
       }
     }
 
-    // 2) Si aucun programme trouvé, on génère via l'IA puis on log
+    // 2) Si aucun programme trouvé, on génère via l'IA (avec la langue) puis on log
     if (!baseSessions.length) {
-      const { sessions } = await planProgrammeFromEmail(email);
+      const { sessions } = await planProgrammeFromEmail(email, { lang });
       baseSessions = sessions || [];
       await logProgrammeInsightToSupabase(email, null, baseSessions);
     }
@@ -363,7 +367,7 @@ async function loadInitialSessions(email: string, equipParam?: string) {
       return { ...s, exercises: exs };
     });
 
-    // On log uniquement lors de la génération (déjà fait ci-dessus)
+    // log (ça doublonne un peu mais on garde ta logique)
     await logProgrammeInsightToSupabase(email, null, finalSessions);
 
     return finalSessions;
