@@ -1184,9 +1184,31 @@ export const translations = {
             "On garde le produit et on propose d’autres façons de le cuisiner :",
         },
         back: "← Retour",
-      },
+      },dashboard: {
+  header: {
+    title: "Bienvenue 👋",
+    subtitle: "Aperçu rapide de ta progression et des données du jour."
+  },
+  kpi: {
+    calories: "Calories aujourd'hui",
+    steps: "Steps du jour",
+    lastSession: "Dernière séance",
+    manage: "Gérer"
+  },
+  quick: {
+    calories: {
+      title: "Calories",
+      text: "Consulte ton historique ou ajoute ta consommation d’aujourd’hui.",
+      button: "Gérer mes calories →"
+    },
+    workouts: {
+      title: "Entraînements",
+      text: "Crée, démarre ou consulte tes séances d’entraînement passées.",
+      button: "Voir mes séances →"
     },
   },
+},
+
 
   /* ================================================================= */
   /* =============================== EN =============================== */
@@ -2398,7 +2420,30 @@ export const translations = {
             "We keep the ingredient and suggest other ways to cook it:",
         },
         back: "← Back",
-      },
+      },dashboard: {
+  header: {
+    title: "Welcome 👋",
+    subtitle: "Quick overview of your progress and today's data."
+  },
+  kpi: {
+    calories: "Calories today",
+    steps: "Steps today",
+    lastSession: "Last session",
+    manage: "Manage"
+  },
+  quick: {
+    calories: {
+      title: "Calories",
+      text: "View your history or add today's intake.",
+      button: "Manage my calories →"
+    },
+    workouts: {
+      title: "Workouts",
+      text: "Create, start, or review your past workout sessions.",
+      button: "View my sessions →"
+    },
+  
+
     },
   },
 } as const;
