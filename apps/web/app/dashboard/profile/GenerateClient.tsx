@@ -2,83 +2,17 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import type { AiSession } from "../../../lib/coach/ai"; // app/dashboard/profile -> app -> web -> lib
+import type { AiSession } from "../../../lib/coach/ai";
 import { useLanguage } from "@/components/LanguageProvider";
 
 type Props = {
   email: string;
   questionnaireBase: string;
   initialSessions?: AiSession[];
-  /** Optionnel : ex. "equip=none" pour conserver le mode dans les liens des séances */
   linkQuery?: string;
 };
 
-type Focus = "upper" | "lower" | "mix" | "full";
-
-/* ===== helpers focus ===== */
-function cycleForGoal(goal?: string): Focus[] {
-  const g = String(goal || "").toLowerCase();
-  if (g === "hypertrophy" || g === "strength")
-    return ["upper", "lower", "upper", "lower", "mix", "upper"];
-  if (g === "fatloss" || g === "endurance")
-    return ["full", "mix", "full", "mix", "full", "mix"];
-  if (g === "mobility") return ["mix", "mix", "mix", "mix", "mix", "mix"];
-  return ["full", "mix", "upper", "lower", "mix", "full"];
-}
-
-// label de focus basé sur les traductions settings.seancePage.focus.*
-function focusLabel(f: Focus, t: (path: string) => string): string {
-  const key = `settings.seancePage.focus.${f}`;
-  const translated = t(key);
-  if (translated && translated !== key) return translated;
-
-  // fallback FR si jamais la clé n'existe pas
-  switch (f) {
-    case "upper":
-      return "Haut du corps";
-    case "lower":
-      return "Bas du corps";
-    case "full":
-      return "Full body";
-    case "mix":
-    default:
-      return "Mix";
-  }
-}
-
-function extractNameFromTitle(raw?: string) {
-  const s = String(raw || "");
-  return (s.match(/S[ée]ance\s+pour\s+([^—–-]+)/i)?.[1] || "").trim();
-}
-/* Supprime les variantes “— A”, “- B”, “· C”, “(D)” éventuelles */
-function stripVariantLetter(s?: string) {
-  return String(s || "")
-    .replace(/\s*[—–-]\s*[A-Z]\b/gi, "") // "— A" / "- B"
-    .replace(/\s*·\s*[A-Z]\b/gi, "") // "· C"
-    .replace(/\s*\(([A-Z])\)\s*$/gi, "") // "(D)"
-    .trim();
-}
-
-function makeTitle(
-  raw: string | undefined,
-  focus: Focus,
-  t: (path: string) => string,
-  lang: "fr" | "en"
-) {
-  const base = stripVariantLetter(raw);
-  const name = extractNameFromTitle(base);
-  const label = focusLabel(focus, t);
-
-  if (!name) return label;
-
-  // petit switch FR/EN pour le préfixe
-  if (lang === "en") {
-    return `Session for ${name} — ${label}`;
-  }
-  return `Séance pour ${name} — ${label}`;
-}
-
-/* ===== helpers URL (saved/later) ===== */
+/* ----- Helpers URL ----- */
 function parseSet(param: string | null): Set<string> {
   return new Set(
     (param || "")
@@ -91,7 +25,6 @@ function toParam(set: Set<string>) {
   return [...set].join(",");
 }
 function sessionKey(_s: AiSession, idx: number) {
-  // Clé simple et stable basée sur l'index, en cohérence avec la page / bloc "Mes listes"
   return `s${idx}`;
 }
 
@@ -104,9 +37,9 @@ export default function GenerateClient({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { t, lang } = useLanguage();
+  const { t } = useLanguage();
 
-  // helper t avec fallback + bonne racine settings.profile / settings.seance
+  // Fallback i18n helper
   const tf = (path: string, fallback?: string) => {
     const v = t(path);
     if (v && v !== path) return v;
@@ -116,12 +49,7 @@ export default function GenerateClient({
   const [sessions, setSessions] = useState<AiSession[]>(initialSessions);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [goal, setGoal] = useState<string>("");
 
-  // Menu inline "Enregistrer" ouvert pour quel index ?
-  const [openIdx, setOpenIdx] = useState<number | null>(null);
-
-  // Sets actuels d'après l'URL (pour afficher les pills + cohérence avec "Mes listes")
   const savedSet = useMemo(
     () => parseSet(searchParams.get("saved")),
     [searchParams]
@@ -135,36 +63,18 @@ export default function GenerateClient({
     setSessions(initialSessions);
   }, [initialSessions]);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const url = email
-          ? `/api/answers?email=${encodeURIComponent(email)}`
-          : `/api/answers`;
-        const res = await fetch(url, { cache: "no-store" });
-        const data = await res.json();
-        const raw = String(
-          data?.profile?.goal ||
-            data?.answers?.goal ||
-            data?.answers?.objectif ||
-            ""
-        ).toLowerCase();
-        setGoal(raw);
-      } catch {
-        // silencieux
-      }
-    })();
-  }, [email]);
-
+  /* ===== GENERATION ===== */
   async function handleGenerate() {
     try {
       setLoading(true);
       setError(null);
+
       const res = await fetch(
         `/api/programme?email=${encodeURIComponent(email)}`,
         { cache: "no-store" }
       );
       const data = await res.json();
+
       if (!res.ok || !data.sessions) {
         throw new Error(
           data.error ||
@@ -174,18 +84,9 @@ export default function GenerateClient({
             )
         );
       }
-      // applique un focus par position selon l’objectif
-      const cycle = cycleForGoal(goal);
-      const focused: AiSession[] = (data.sessions as AiSession[]).map(
-        (s: AiSession, i: number) => {
-          const f = cycle[i % cycle.length];
-          return {
-            ...s,
-            title: makeTitle(s.title, f, t, lang), // inscrit focus + sans lettre A/B/C + i18n
-          };
-        }
-      );
-      setSessions(focused);
+
+      // 🔥 ESSENTIEL : garder les titres EXACTS de l’IA
+      setSessions(data.sessions);
     } catch (e: any) {
       setError(
         e?.message ||
@@ -199,15 +100,18 @@ export default function GenerateClient({
     }
   }
 
-  /* ---- Mise à jour de l'URL pour saved/later (sans toucher à la logique serveur) ---- */
+  /* ----- Mise à jour URL saved/later ----- */
   const navigateWith = (nextSaved: Set<string>, nextLater: Set<string>) => {
     const sp = new URLSearchParams(searchParams?.toString() || "");
     const savedStr = toParam(nextSaved);
     const laterStr = toParam(nextLater);
+
     if (savedStr) sp.set("saved", savedStr);
     else sp.delete("saved");
+
     if (laterStr) sp.set("later", laterStr);
     else sp.delete("later");
+
     router.push(`${pathname}?${sp.toString()}`);
   };
 
@@ -217,7 +121,6 @@ export default function GenerateClient({
     nextSaved.add(key);
     nextLater.delete(key);
     navigateWith(nextSaved, nextLater);
-    setOpenIdx(null);
   };
 
   const markLater = (key: string) => {
@@ -226,9 +129,9 @@ export default function GenerateClient({
     nextLater.add(key);
     nextSaved.delete(key);
     navigateWith(nextSaved, nextLater);
-    setOpenIdx(null);
   };
 
+  /* ===== UI ===== */
   return (
     <section className="section" style={{ marginTop: 24 }}>
       <div
@@ -244,6 +147,8 @@ export default function GenerateClient({
         <h2 className="font-semibold text-lg">
           {tf("settings.profile.generate.title", "Mes séances")}
         </h2>
+
+        {/* Bouton Générer */}
         <button
           onClick={handleGenerate}
           disabled={loading}
@@ -258,10 +163,6 @@ export default function GenerateClient({
             opacity: loading ? 0.7 : 1,
             whiteSpace: "nowrap",
           }}
-          title={tf(
-            "settings.profile.generate.button.title",
-            "Générer ou mettre à jour le programme"
-          )}
         >
           {loading
             ? tf(
@@ -275,23 +176,7 @@ export default function GenerateClient({
         </button>
       </div>
 
-      {/* ⚙️ Message pendant la génération */}
-      {loading && (
-        <div
-          className="card"
-          style={{
-            marginBottom: 8,
-            padding: "8px 10px",
-            fontSize: 13,
-          }}
-        >
-          {tf(
-            "settings.profile.generate.loadingMessage",
-            "Création de tes séances en cours…"
-          )}
-        </div>
-      )}
-
+      {/* Message si erreur */}
       {error && (
         <div
           style={{
@@ -299,30 +184,23 @@ export default function GenerateClient({
             border: "1px solid rgba(239,68,68,0.3)",
             padding: "8px 10px",
             borderRadius: 6,
-            fontSize: 13,
             color: "#b91c1c",
             marginBottom: 8,
+            fontSize: 13,
           }}
         >
           ⚠️ {error}
         </div>
       )}
 
-      {/* 🔁 On laisse la liste visible même pendant le chargement */}
+      {/* LISTE DES SEANCES */}
       {sessions && sessions.length > 0 && (
         <ul className="space-y-2 list-none pl-0">
           {sessions.map((s, i) => {
-            const cleanTitle = stripVariantLetter(s.title);
-            const baseHref = `/dashboard/seance/${encodeURIComponent(
-              s.id
-            )}?title=${encodeURIComponent(cleanTitle)}&type=${encodeURIComponent(
-              s.type
-            )}`;
-            const href = linkQuery ? `${baseHref}&${linkQuery}` : baseHref;
-
             const key = sessionKey(s, i);
-            const isSaved = savedSet.has(key);
-            const isLater = laterSet.has(key);
+            const href = `/dashboard/seance/${encodeURIComponent(
+              s.id
+            )}${linkQuery ? `?${linkQuery}` : ""}`;
 
             return (
               <li
@@ -336,149 +214,36 @@ export default function GenerateClient({
                 }}
               >
                 <div className="flex items-center justify-between gap-3">
-                  {/* Zone cliquable pour ouvrir la séance */}
                   <div
-                    onClick={() => !loading && router.push(href)}
-                    className={loading ? "cursor-not-allowed" : "cursor-pointer"}
-                    style={{ minWidth: 0 }}
+                    onClick={() => router.push(href)}
+                    className="cursor-pointer"
                   >
+                    {/* 🎉 TITRE 100% IA, SANS AUCUNE MODIFICATION */}
                     <div className="font-medium text-sm truncate">
-                      {cleanTitle ||
-                        tf(
-                          "settings.profile.generate.defaultTitle",
-                          "Séance"
-                        )}
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      {s.type}
-                      {s.plannedMin
-                        ? ` · ${s.plannedMin} ${tf(
-                            "settings.seance.fallback.minSuffix",
-                            "min"
-                          )}`
-                        : ""}
+                      {s.title}
                     </div>
 
-                    {/* Badges d'état */}
-                    <div className="flex items-center gap-2 mt-1">
-                      {isSaved && (
-                        <span
-                          className="inline-flex items-center text-[11px] px-2 py-0.5 rounded-full border border-emerald-600"
-                          aria-label={tf(
-                            "settings.profile.generate.badge.saved",
-                            "Enregistrée"
-                          )}
-                        >
-                          ✅{" "}
-                          {tf(
-                            "settings.profile.generate.badge.saved",
-                            "Enregistrée"
-                          )}
-                        </span>
-                      )}
-                      {isLater && (
-                        <span
-                          className="inline-flex items-center text-[11px] px-2 py-0.5 rounded-full border border-amber-600"
-                          aria-label={tf(
-                            "settings.profile.generate.badge.later",
-                            "Plus tard"
-                          )}
-                        >
-                          ⏳{" "}
-                          {tf(
-                            "settings.profile.generate.badge.later",
-                            "Plus tard"
-                          )}
-                        </span>
-                      )}
+                    <div className="text-xs text-gray-500">
+                      {s.type}
+                      {s.plannedMin ? ` · ${s.plannedMin} min` : ""}
                     </div>
                   </div>
 
-                  {/* Bouton Enregistrer + mini-menu */}
+                  {/* Menu Enregistrer */}
                   <div style={{ position: "relative" }}>
                     <button
                       type="button"
-                      className="inline-flex items-center rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-semibold text-neutral-900 hover:border-neutral-400"
+                      className="inline-flex items-center rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-semibold text-neutral-900"
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (loading) return;
-                        setOpenIdx(openIdx === i ? null : i);
+                        markDone(key);
                       }}
-                      aria-haspopup="menu"
-                      aria-expanded={openIdx === i}
-                      title={tf(
-                        "settings.profile.generate.menu.buttonTitle",
-                        "Enregistrer cette séance"
-                      )}
-                      disabled={loading}
                     >
                       {tf(
                         "settings.profile.generate.menu.buttonLabel",
                         "Enregistrer"
                       )}
                     </button>
-
-                    {openIdx === i && (
-                      <div
-                        role="menu"
-                        className="card"
-                        onClick={(e) => e.stopPropagation()}
-                        style={{
-                          position: "absolute",
-                          right: 0,
-                          top: "calc(100% + 6px)",
-                          zIndex: 20,
-                          padding: 8,
-                          minWidth: 220,
-                          border: "1px solid #e5e7eb",
-                          borderRadius: 8,
-                          background: "white",
-                          boxShadow: "0 8px 24px rgba(0,0,0,.08)",
-                        }}
-                      >
-                        <div
-                          className="text-xs"
-                          style={{ color: "#6b7280", marginBottom: 6 }}
-                        >
-                          {tf(
-                            "settings.profile.generate.menu.title",
-                            "Choisir une action"
-                          )}
-                        </div>
-                        <div className="space-y-2">
-                          <button
-                            role="menuitem"
-                            className="w-full text-left inline-flex items-center justify-between rounded-md border border-emerald-600/50 bg-emerald-50 px-3 py-1.5 text-sm font-semibold hover:bg-emerald-100"
-                            onClick={() => markDone(key)}
-                            title={tf(
-                              "settings.profile.generate.menu.doneTitle",
-                              "Ajouter à « Séances enregistrées »"
-                            )}
-                          >
-                            {tf(
-                              "settings.profile.generate.menu.done",
-                              "Fait"
-                            )}{" "}
-                            <span aria-hidden>✅</span>
-                          </button>
-                          <button
-                            role="menuitem"
-                            className="w-full text-left inline-flex items-center justify-between rounded-md border border-amber-600/50 bg-amber-50 px-3 py-1.5 text-sm font-semibold hover:bg-amber-100"
-                            onClick={() => markLater(key)}
-                            title={tf(
-                              "settings.profile.generate.menu.laterTitle",
-                              "Ajouter à « À faire plus tard »"
-                            )}
-                          >
-                            {tf(
-                              "settings.profile.generate.menu.later",
-                              "À faire plus tard"
-                            )}{" "}
-                            <span aria-hidden>⏳</span>
-                          </button>
-                        </div>
-                      </div>
-                    )}
                   </div>
                 </div>
               </li>
@@ -487,7 +252,7 @@ export default function GenerateClient({
         </ul>
       )}
 
-      {/* Si vraiment aucune séance (ex: première fois / erreur / pas de data) */}
+      {/* Aucun résultat */}
       {!loading && (!sessions || sessions.length === 0) && (
         <div className="text-sm text-gray-500">
           {tf(
