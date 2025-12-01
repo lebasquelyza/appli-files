@@ -8,8 +8,7 @@ import { useLanguage } from "@/components/LanguageProvider";
 type Props = {
   email: string;
   questionnaireBase: string;
-  initialSessions?: AiSession[]; // on le garde dans le type, mais on ne l'utilise plus
-  /** Optionnel : ex. "equip=none" pour conserver le mode dans les liens des séances */
+  initialSessions?: AiSession[];
   linkQuery?: string;
 };
 
@@ -38,7 +37,7 @@ export default function GenerateClient({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
 
   // Fallback i18n helper
   const tf = (path: string, fallback?: string) => {
@@ -47,7 +46,7 @@ export default function GenerateClient({
     return fallback ?? path;
   };
 
-  // 🔥 CLÉ : on ne part plus d'initialSessions, on part toujours de []
+  // 🔥 ON NE PART JAMAIS DES initialSessions
   const [sessions, setSessions] = useState<AiSession[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,7 +60,7 @@ export default function GenerateClient({
     [searchParams]
   );
 
-  /* ===== GENERATION ===== */
+  /* ======== GÉNÉRATION ======== */
   async function handleGenerate() {
     try {
       setLoading(true);
@@ -78,19 +77,21 @@ export default function GenerateClient({
           data.error ||
             tf(
               "settings.profile.generate.error.generic",
-              "Erreur de génération du programme."
+              lang === "fr"
+                ? "Erreur de génération du programme."
+                : "Error while generating your program."
             )
         );
       }
 
-      // On prend les séances EXACTES renvoyées par l'API (FR ou EN)
+      // 🔥 On prend les titres EXACTS de l’IA (FR / EN)
       setSessions(data.sessions as AiSession[]);
     } catch (e: any) {
       setError(
         e?.message ||
           tf(
             "settings.profile.generate.error.unknown",
-            "Erreur inconnue"
+            lang === "fr" ? "Erreur inconnue." : "Unknown error."
           )
       );
     } finally {
@@ -106,7 +107,6 @@ export default function GenerateClient({
 
     if (savedStr) sp.set("saved", savedStr);
     else sp.delete("saved");
-
     if (laterStr) sp.set("later", laterStr);
     else sp.delete("later");
 
@@ -129,9 +129,11 @@ export default function GenerateClient({
     navigateWith(nextSaved, nextLater);
   };
 
-  /* ===== UI ===== */
+  /* ======== UI ======== */
+
   return (
     <section className="section" style={{ marginTop: 24 }}>
+      {/* HEADER */}
       <div
         className="section-head"
         style={{
@@ -143,7 +145,10 @@ export default function GenerateClient({
         }}
       >
         <h2 className="font-semibold text-lg">
-          {tf("settings.profile.generate.title", "Mes séances")}
+          {tf(
+            "settings.profile.generate.title",
+            lang === "fr" ? "Mes séances" : "My sessions"
+          )}
         </h2>
 
         {/* Bouton Générer */}
@@ -161,24 +166,20 @@ export default function GenerateClient({
             opacity: loading ? 0.7 : 1,
             whiteSpace: "nowrap",
           }}
-          title={tf(
-            "settings.profile.generate.button.title",
-            "Générer ou mettre à jour le programme"
-          )}
         >
           {loading
             ? tf(
                 "settings.profile.generate.button.generating",
-                "⏳ Génération…"
+                lang === "fr" ? "⏳ Génération…" : "⏳ Generating…"
               )
             : tf(
                 "settings.profile.generate.button.generate",
-                "⚙️ Générer"
+                lang === "fr" ? "⚙️ Générer" : "⚙️ Generate"
               )}
         </button>
       </div>
 
-      {/* Message si erreur */}
+      {/* ERREURS */}
       {error && (
         <div
           style={{
@@ -195,7 +196,39 @@ export default function GenerateClient({
         </div>
       )}
 
-      {/* Liste des séances – uniquement après clic sur Générer */}
+      {/* MESSAGE AVANT GÉNÉRATION */}
+      {!loading && sessions.length === 0 && (
+        <div
+          className="card"
+          style={{
+            padding: "14px 16px",
+            border: "1px solid #e5e7eb",
+            background: "#f9fafb",
+            borderRadius: 8,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            marginTop: 10,
+          }}
+        >
+          <div className="text-sm" style={{ color: "#4b5563" }}>
+            {lang === "fr"
+              ? "🔧 Files doit créer ton programme personnalisé. Clique sur « Générer » pour afficher tes séances."
+              : "🔧 Files needs to create your personalized program. Click “Generate” to display your sessions."}
+          </div>
+
+          <button
+            onClick={handleGenerate}
+            disabled={loading}
+            className="inline-flex items-center rounded-md border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-sm font-semibold text-white"
+          >
+            {lang === "fr" ? "Générer" : "Generate"}
+          </button>
+        </div>
+      )}
+
+      {/* LISTE DES SÉANCES APRÈS GÉNÉRATION */}
       {sessions && sessions.length > 0 && (
         <ul className="space-y-2 list-none pl-0">
           {sessions.map((s, i) => {
@@ -217,27 +250,23 @@ export default function GenerateClient({
                 }}
               >
                 <div className="flex items-center justify-between gap-3">
-                  {/* Zone cliquable pour ouvrir la séance */}
+                  {/* Zone cliquable */}
                   <div
                     onClick={() => router.push(href)}
                     className={loading ? "cursor-not-allowed" : "cursor-pointer"}
                     style={{ minWidth: 0 }}
                   >
-                    {/* Titre EXACT de l’IA, FR ou EN */}
+                    {/* Titre IA EXACT (FR ou EN) */}
                     <div className="font-medium text-sm truncate">
-                      {s.title ||
-                        tf(
-                          "settings.profile.generate.defaultTitle",
-                          "Séance"
-                        )}
+                      {s.title}
                     </div>
+
                     <div className="text-xs text-gray-500">
                       {s.type}
                       {s.plannedMin ? ` · ${s.plannedMin} min` : ""}
                     </div>
                   </div>
 
-                  {/* Bouton Enregistrer / Plus tard */}
                   <div style={{ position: "relative" }}>
                     <button
                       type="button"
@@ -246,16 +275,9 @@ export default function GenerateClient({
                         e.stopPropagation();
                         markDone(key);
                       }}
-                      title={tf(
-                        "settings.profile.generate.menu.doneTitle",
-                        "Ajouter à « Séances enregistrées »"
-                      )}
                       disabled={loading}
                     >
-                      {tf(
-                        "settings.profile.generate.menu.buttonLabel",
-                        "Enregistrer"
-                      )}
+                      {lang === "fr" ? "Enregistrer" : "Save"}
                     </button>
                   </div>
                 </div>
@@ -263,16 +285,6 @@ export default function GenerateClient({
             );
           })}
         </ul>
-      )}
-
-      {/* État vide : avant génération ou si aucune séance */}
-      {!loading && (!sessions || sessions.length === 0) && (
-        <div className="text-sm text-gray-500">
-          {tf(
-            "settings.profile.generate.empty",
-            "Clique sur « Générer » pour voir tes séances personnalisées."
-          )}
-        </div>
       )}
     </section>
   );
