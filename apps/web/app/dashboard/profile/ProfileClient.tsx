@@ -406,6 +406,7 @@ export default function ProfileClient(props: Props) {
           )}
         </div>
 
+        {/* 🟡 ÉTAT AVANT CLIC SUR GÉNÉRER */}
         {!hasGenerate && (
           <div
             className="card"
@@ -419,7 +420,7 @@ export default function ProfileClient(props: Props) {
             <div className="text-sm" style={{ color: "#4b5563" }}>
               {tf(
                 "settings.profile.sessions.generateCard.text",
-                "Cliquez sur « Générer » pour afficher vos séances personnalisées."
+                "Files te prépare ton programme. Clique sur « Générer » pour l’afficher."
               )}
             </div>
             <a
@@ -427,12 +428,12 @@ export default function ProfileClient(props: Props) {
               className="inline-flex items-center rounded-md border border-neutral-900 bg-neutral-900 px-4 py-2 text-sm font-semibold text-white"
               title={tf(
                 "settings.profile.sessions.generateCard.buttonTitle",
-                "Générer mes séances"
+                "Générer mon programme"
               )}
             >
               {tf(
                 "settings.profile.sessions.generateCard.button",
-                "Générer"
+                "→ Générer mon programme"
               )}
             </a>
           </div>
