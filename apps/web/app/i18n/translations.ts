@@ -1184,7 +1184,8 @@ export const translations = {
             "On garde le produit et on propose d’autres façons de le cuisiner :",
         },
         back: "← Retour",
-      },dashboard: {
+        
+    dashboard: {
   header: {
     title: "Bienvenue 👋",
     subtitle: "Aperçu rapide de ta progression et des données du jour."
