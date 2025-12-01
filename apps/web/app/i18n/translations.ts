@@ -2442,6 +2442,8 @@ export const translations = {
       text: "Create, start, or review your past workout sessions.",
       button: "View my sessions →"
     },
+   },
+ },
   
 
     },
