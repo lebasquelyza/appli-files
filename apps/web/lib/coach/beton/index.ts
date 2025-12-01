@@ -300,7 +300,12 @@ export function planProgrammeFromProfile(
       : undefined;
 
     const focusLabel = focus ? focusLabelIntl(focus, lang) : "";
-    const focusSuffix = focusLabel ? ` · ${focusLabel}` : "";
+
+    // 🔧 NOUVELLE LOGIQUE :
+    // - En FR : on garde " · Bas (quadris)" etc.
+    // - En EN : on retire le suffixe du titre pour éviter les titres qui se réduisent à "Full body"
+    const focusSuffix =
+      lang === "fr" && focusLabel ? ` · ${focusLabel}` : "";
 
     const baseTitle = baseTitleForType(type, lang);
 
@@ -308,12 +313,12 @@ export function planProgrammeFromProfile(
     if (lang === "en") {
       if (profile.prenom) {
         title = singleNoDay
-          ? `Workout for ${profile.prenom}${focusSuffix}`
-          : `Workout for ${profile.prenom} — ${dayLabel}${focusSuffix}`;
+          ? `Workout for ${profile.prenom}`
+          : `Workout for ${profile.prenom} — ${dayLabel}`;
       } else {
         title = singleNoDay
-          ? `${baseTitle}${focusSuffix}`
-          : `${baseTitle} — ${dayLabel}${focusSuffix}`;
+          ? `${baseTitle}`
+          : `${baseTitle} — ${dayLabel}`;
       }
     } else {
       title = profile.prenom
