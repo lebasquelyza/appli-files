@@ -1,8 +1,9 @@
-//apps/web/app/page.tsx
+// apps/web/app/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import { getSupabase } from "../lib/supabaseClient";
 import { useLanguage } from "@/components/LanguageProvider";
 
@@ -57,8 +58,10 @@ export default function HomePage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
+  const searchParams = useSearchParams();
 
+  // petit délai pour que le clavier mobile se comporte bien
   useEffect(() => {
     const tmo = setTimeout(() => {
       setInputsReady(true);
@@ -70,6 +73,7 @@ export default function HomePage() {
     return () => clearTimeout(tmo);
   }, []);
 
+  // si déjà connecté, synchronise le cookie au mount
   useEffect(() => {
     (async () => {
       try {
@@ -104,7 +108,24 @@ export default function HomePage() {
 
   useEffect(() => {
     trackPageView();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 🔔 arrive depuis le lien de confirmation: /?confirmed=1
+  useEffect(() => {
+    const confirmed = searchParams.get("confirmed");
+    if (confirmed === "1") {
+      setError(null);
+      setMessage(
+        lang === "en"
+          ? "Your email is confirmed ✅ You can now log in."
+          : "Ton e-mail est confirmé ✅ Tu peux maintenant te connecter."
+      );
+      // on ouvre le panneau de login automatiquement
+      setShowSignup(false);
+      setShowLogin(true);
+    }
+  }, [searchParams, lang]);
 
   async function trackLoginPageView(emailValue?: string) {
     try {
@@ -149,7 +170,7 @@ export default function HomePage() {
   }
 
   /* ============================================================
-     LOGIN — AVEC DETECTION EMAIL NON CONFIRMÉ
+     LOGIN — DETECTION EMAIL NON CONFIRMÉ
   ============================================================ */
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -161,10 +182,11 @@ export default function HomePage() {
       const supabase = getSupabase();
       const emailTrim = email.trim().toLowerCase();
 
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: emailTrim,
-        password: password.trim(),
-      });
+      const { error: signInError } =
+        await supabase.auth.signInWithPassword({
+          email: emailTrim,
+          password: password.trim(),
+        });
 
       if (signInError) throw signInError;
 
@@ -184,26 +206,37 @@ export default function HomePage() {
       setMessage(t("home.login.success"));
       window.location.href = "/dashboard";
     } catch (err: any) {
-      const msg = String(err?.message || "").toLowerCase();
+      const raw = String(err?.message || "");
+      const msg = raw.toLowerCase();
 
-      // 🔥 **Détection email non confirmé**
-      if (msg.includes("email not confirmed") || msg.includes("email_not_confirmed")) {
-        setError("Veuillez confirmer votre adresse email avant de vous connecter. 📩");
+      // 🔥 Email non confirmé
+      if (
+        msg.includes("email not confirmed") ||
+        msg.includes("email_not_confirmed")
+      ) {
+        setError(
+          lang === "en"
+            ? "Please confirm your email address before logging in. 📩 Check your inbox (and spam)."
+            : "Veuillez confirmer votre adresse e-mail avant de vous connecter. 📩 Va voir dans tes mails (et spams)."
+        );
         return;
       }
 
-      setError(
-        msg.includes("invalid login credentials")
-          ? t("home.login.error.invalidCredentials")
-          : msg || t("home.login.error.generic")
-      );
+      // Credentials invalides
+      if (msg.includes("invalid login credentials")) {
+        setError(t("home.login.error.invalidCredentials"));
+        return;
+      }
+
+      // Fallback message brut ou générique
+      setError(raw || t("home.login.error.generic"));
     } finally {
       setLoading(false);
     }
   }
 
   /* ============================================================
-     SIGNUP — INCHANGE
+     SIGNUP — ENVOI DU MAIL + REDIRECT VERS /auth/callback
   ============================================================ */
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault();
@@ -216,25 +249,34 @@ export default function HomePage() {
       const emailTrim = emailSu.trim().toLowerCase();
       const pwd = passwordSu.trim();
 
-      const { data, error: signUpError } = await supabase.auth.signUp({
-        email: emailTrim,
-        password: pwd,
-        options: {
-          emailRedirectTo: `${window.location.origin}/callback?source=confirm`,
-        },
-      });
+      const { data, error: signUpError } =
+        await supabase.auth.signUp({
+          email: emailTrim,
+          password: pwd,
+          options: {
+            // IMPORTANT : route correcte vers ton callback
+            emailRedirectTo: `${window.location.origin}/auth/callback?source=confirm`,
+          },
+        });
 
       if (signUpError) throw signUpError;
 
       if (emailTrim) setAppEmailCookie(emailTrim);
 
+      // On force la déconnexion pour obliger la confirmation mail
       if (data?.session) {
         await supabase.auth.signOut();
       }
 
+      // Notif backend
       await notifyAuthEvent("signup", emailTrim);
 
+      // Message déjà traduit dans translations.ts :
+      // FR: "Compte créé ✅ Vérifie tes e-mails pour confirmer ton inscription."
+      // EN: "Account created ✅ Check your emails to confirm your registration."
       setMessage(t("home.signup.success"));
+
+      // On ferme signup, on ouvre login pré-rempli avec l'email
       setShowSignup(false);
       setShowLogin(true);
       setEmail(emailTrim);
@@ -262,16 +304,19 @@ export default function HomePage() {
     setError(null);
     try {
       const supabase = getSupabase();
-      const { error } = await supabase.auth.resetPasswordForEmail(
-        emailTrim,
-        {
-          redirectTo: `${window.location.origin}/reset-password`,
-        }
-      );
+      const { error } =
+        await supabase.auth.resetPasswordForEmail(
+          emailTrim,
+          {
+            redirectTo: `${window.location.origin}/reset-password`,
+          }
+        );
       if (error) throw error;
       setMessage(t("home.forgotPassword.success"));
     } catch (err: any) {
-      setError(err.message || t("home.forgotPassword.error"));
+      setError(
+        err.message || t("home.forgotPassword.error")
+      );
     } finally {
       setLoading(false);
     }
@@ -478,7 +523,10 @@ export default function HomePage() {
 
         {/* SIGNUP PANEL */}
         {showSignup && (
-          <div id="signup-panel" className="max-w-md mx-auto">
+          <div
+            id="signup-panel"
+            className="max-w-md mx-auto"
+          >
             <form
               onSubmit={handleSignup}
               className="space-y-4"
