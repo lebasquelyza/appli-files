@@ -1,22 +1,25 @@
-//apps/web/app/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { getSupabase } from "../lib/supabaseClient";
-import { useLanguage } from "@/components/LanguageProvider"; // ✅ ajout
+import { useLanguage } from "@/components/LanguageProvider"; // ⬅️ traduction
 
 // --- helper cookie (lisible serveur + client) ---
 function setAppEmailCookie(val: string) {
   try {
-    const isHttps = typeof window !== "undefined" && window.location.protocol === "https:";
+    const isHttps =
+      typeof window !== "undefined" &&
+      window.location.protocol === "https:";
     document.cookie = [
       `app_email=${encodeURIComponent(val)}`,
       "Path=/",
       "SameSite=Lax",
       isHttps ? "Secure" : "",
-      "Max-Age=31536000" // 365 jours
-    ].filter(Boolean).join("; ");
+      "Max-Age=31536000",
+    ]
+      .filter(Boolean)
+      .join("; ");
   } catch {}
 }
 
@@ -29,7 +32,6 @@ async function notifyAuthEvent(type: "login" | "signup", userEmail: string) {
       body: JSON.stringify({ type, userEmail }),
     });
   } catch (err) {
-    // on ne casse pas le flow utilisateur si l'email échoue
     console.error("notifyAuthEvent error:", err);
   }
 }
@@ -45,6 +47,7 @@ export default function HomePage() {
   // Auth (login)
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+
   // Auth (signup)
   const [emailSu, setEmailSu] = useState("");
   const [passwordSu, setPasswordSu] = useState("");
@@ -53,31 +56,39 @@ export default function HomePage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const { t } = useLanguage(); // ✅ ajout
+  // ⬅️ Traduction
+  const { t, language, setLanguage } = useLanguage();
+
+  function changeLang(lang: "en" | "fr") {
+    if (lang !== language) setLanguage(lang);
+  }
 
   useEffect(() => {
     const tmo = setTimeout(() => {
       setInputsReady(true);
       if (typeof document !== "undefined") {
-        document.activeElement instanceof HTMLElement && document.activeElement.blur();
+        document.activeElement instanceof HTMLElement &&
+          document.activeElement.blur();
       }
     }, 300);
     return () => clearTimeout(tmo);
   }, []);
 
-  // (facultatif) si déjà connecté, synchronise le cookie au mount
+  // sync cookie if logged
   useEffect(() => {
     (async () => {
       try {
         const supabase = getSupabase();
-        const { data: { user } } = await supabase.auth.getUser();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
         const currentEmail = user?.email?.trim().toLowerCase();
         if (currentEmail) setAppEmailCookie(currentEmail);
       } catch {}
     })();
   }, []);
 
-  // --- NOUVEAU : track vue de page (landing) ---
+  // Track landing view
   async function trackPageView(emailValue?: string) {
     try {
       await fetch("/api/track-page-view", {
@@ -96,13 +107,10 @@ export default function HomePage() {
     }
   }
 
-  // appelle trackPageView au chargement de la page
   useEffect(() => {
     trackPageView();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // --- track vue de la "page" de connexion (ouverture du panneau login) ---
   async function trackLoginPageView(emailValue?: string) {
     try {
       await fetch("/api/track-login-view", {
@@ -126,13 +134,13 @@ export default function HomePage() {
       const next = !v;
       if (next) {
         setShowSignup(false);
-        // 🔔 on enregistre la vue de la "page" de connexion
         const emailTrim = email.trim().toLowerCase();
         trackLoginPageView(emailTrim || undefined);
       }
       return next;
     });
-    setMessage(null); setError(null);
+    setMessage(null);
+    setError(null);
   }
 
   function openSignup() {
@@ -141,7 +149,8 @@ export default function HomePage() {
       if (next) setShowLogin(false);
       return next;
     });
-    setMessage(null); setError(null);
+    setMessage(null);
+    setError(null);
   }
 
   async function handleLogin(e: React.FormEvent) {
@@ -149,6 +158,7 @@ export default function HomePage() {
     setLoading(true);
     setMessage(null);
     setError(null);
+
     try {
       const supabase = getSupabase();
       const emailTrim = email.trim().toLowerCase();
@@ -159,11 +169,14 @@ export default function HomePage() {
       });
       if (signInError) throw signInError;
 
-      const { data: { user } } = await supabase.auth.getUser();
-      const sessionEmail = (user?.email || emailTrim).trim().toLowerCase();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      const sessionEmail = (user?.email || emailTrim)
+        .trim()
+        .toLowerCase();
       if (sessionEmail) {
         setAppEmailCookie(sessionEmail);
-        // 🔔 NOTIF LOGIN
         await notifyAuthEvent("login", sessionEmail);
       }
 
@@ -174,7 +187,7 @@ export default function HomePage() {
       setError(
         msg.toLowerCase().includes("invalid login credentials")
           ? t("home.login.error.invalidCredentials")
-          : msg || t("home.login.error.generic")
+          : t("home.login.error.generic")
       );
     } finally {
       setLoading(false);
@@ -186,20 +199,20 @@ export default function HomePage() {
     setLoading(true);
     setMessage(null);
     setError(null);
+
     try {
       const supabase = getSupabase();
       const emailTrim = emailSu.trim().toLowerCase();
       const pwd = passwordSu.trim();
 
-      // 1) Créer le compte → envoie l’e-mail de confirmation
       const { data, error: signUpError } = await supabase.auth.signUp({
         email: emailTrim,
         password: pwd,
         options: {
-          // redirection après clic sur le lien de confirmation
           emailRedirectTo: `${window.location.origin}/callback?source=confirm`,
         },
       });
+
       if (signUpError) throw signUpError;
 
       if (emailTrim) setAppEmailCookie(emailTrim);
@@ -208,10 +221,8 @@ export default function HomePage() {
         await supabase.auth.signOut();
       }
 
-      // 🔔 NOTIF SIGNUP (compte créé)
       await notifyAuthEvent("signup", emailTrim);
 
-      // 3) Message clair et on bascule vers le panneau de connexion
       setMessage(t("home.signup.success"));
       setShowSignup(false);
       setShowLogin(true);
@@ -221,7 +232,7 @@ export default function HomePage() {
       setError(
         /email|courriel/i.test(msg)
           ? t("home.signup.error.invalidEmail")
-          : msg || t("home.signup.error.generic")
+          : t("home.signup.error.generic")
       );
     } finally {
       setLoading(false);
@@ -234,15 +245,21 @@ export default function HomePage() {
       setError(t("home.forgotPassword.noEmail"));
       return;
     }
+
     setLoading(true);
     setMessage(null);
     setError(null);
+
     try {
       const supabase = getSupabase();
-      const { error } = await supabase.auth.resetPasswordForEmail(emailTrim, {
-        redirectTo: `${window.location.origin}/reset-password`,
-      });
+      const { error } = await supabase.auth.resetPasswordForEmail(
+        emailTrim,
+        {
+          redirectTo: `${window.location.origin}/reset-password`,
+        }
+      );
       if (error) throw error;
+
       setMessage(t("home.forgotPassword.success"));
     } catch (err: any) {
       setError(err.message || t("home.forgotPassword.error"));
@@ -251,37 +268,65 @@ export default function HomePage() {
     }
   }
 
-  /** Style "pill" compact et cohérent */
+  /** Style "pill" */
   const pillClass =
-    "inline-flex items-center justify-center font-semibold shadow " +
-    "px-3 py-1.5 select-none active:translate-y-px focus:outline-none " +
-    "focus-visible:ring-2 focus-visible:ring-emerald-500/30 leading-none";
+    "inline-flex items-center justify-center font-semibold shadow px-3 py-1.5 select-none active:translate-y-px focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/30 leading-none";
   const pillStyle: React.CSSProperties = {
     background: "linear-gradient(90deg,#22c55e,#16a34a)",
     color: "#fff",
     textDecoration: "none",
     borderRadius: 9999,
-    WebkitTapHighlightColor: "transparent",
     whiteSpace: "nowrap",
   };
 
   return (
     <main className="hide-topbar-menu pt-10 sm:pt-12 pb-12">
       <div className="container max-w-screen-lg mx-auto px-4">
-        {/* Titre */}
-        <header className="mb-0">
+
+        {/* ---- HEADER avec le switch EN/FR ---- */}
+        <header className="mb-0 flex items-start justify-between gap-4">
           <h1
             className="font-bold leading-tight not-prose
                        [font-size:theme(fontSize.3xl)!important]
                        sm:[font-size:theme(fontSize.5xl)!important]"
           >
-            {t("home.hero.titleLine1")}<br />{t("home.hero.titleLine2")}
+            {t("home.hero.titleLine1")}
+            <br />
+            {t("home.hero.titleLine2")}
           </h1>
+
+          {/* SWITCH EN/FR */}
+          <div className="inline-flex items-center rounded-full border border-gray-200 bg-white shadow-sm text-xs sm:text-sm overflow-hidden">
+            <button
+              type="button"
+              onClick={() => changeLang("en")}
+              className={
+                "px-3 py-1 sm:px-4 sm:py-1.5 transition " +
+                (language === "en"
+                  ? "bg-emerald-500 text-white font-semibold"
+                  : "text-gray-700 hover:bg-gray-50")
+              }
+            >
+              EN
+            </button>
+            <button
+              type="button"
+              onClick={() => changeLang("fr")}
+              className={
+                "px-3 py-1 sm:px-4 sm:py-1.5 transition " +
+                (language === "fr"
+                  ? "bg-emerald-500 text-white font-semibold"
+                  : "text-gray-700 hover:bg-gray-50")
+              }
+            >
+              FR
+            </button>
+          </div>
         </header>
 
         <div className="mt-10 sm:mt-12" aria-hidden="true" />
 
-        {/* Accroche */}
+        {/* ACCROCHE */}
         <section className="mb-8">
           <h3 className="text-xl sm:text-2xl font-semibold mb-4">
             {t("home.hero.subtitle")}
@@ -295,7 +340,10 @@ export default function HomePage() {
 
         {/* CTA */}
         <section className="w-full grid grid-rows-[1fr_auto]">
-          <div aria-hidden="true" className="bg-white invisible h-[45vh] sm:h-[55vh]" />
+          <div
+            aria-hidden="true"
+            className="bg-white invisible h-[45vh] sm:h-[55vh]"
+          />
           <div className="justify-self-center flex flex-col sm:flex-row items-center gap-3 mb-10">
             <button
               type="button"
@@ -331,7 +379,7 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* Login inline */}
+        {/* ---- LOGIN ---- */}
         {showLogin && (
           <div id="login-panel" className="max-w-md mx-auto">
             <form onSubmit={handleLogin} className="space-y-4">
@@ -422,7 +470,7 @@ export default function HomePage() {
           </div>
         )}
 
-        {/* Signup inline */}
+        {/* ---- SIGNUP ---- */}
         {showSignup && (
           <div id="signup-panel" className="max-w-md mx-auto">
             <form onSubmit={handleSignup} className="space-y-4">
@@ -465,7 +513,9 @@ export default function HomePage() {
                   />
                   <button
                     type="button"
-                    onClick={() => setShowPasswordSignup(!showPasswordSignup)}
+                    onClick={() =>
+                      setShowPasswordSignup(!showPasswordSignup)
+                    }
                     className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-500 hover:text-gray-700"
                     tabIndex={-1}
                     aria-label={
@@ -474,7 +524,11 @@ export default function HomePage() {
                         : t("common.password.show")
                     }
                   >
-                    {showPasswordSignup ? <EyeOff size={20} /> : <Eye size={20} />}
+                    {showPasswordSignup ? (
+                      <EyeOff size={20} />
+                    ) : (
+                      <Eye size={20} />
+                    )}
                   </button>
                 </div>
               </div>
@@ -507,3 +561,4 @@ export default function HomePage() {
     </main>
   );
 }
+
