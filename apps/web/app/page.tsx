@@ -4,20 +4,23 @@
 import { useEffect, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { getSupabase } from "../lib/supabaseClient";
-import { useLanguage } from "@/components/LanguageProvider"; // ✅
-
+import { useLanguage } from "@/components/LanguageProvider";
 
 // --- helper cookie (lisible serveur + client) ---
 function setAppEmailCookie(val: string) {
   try {
-    const isHttps = typeof window !== "undefined" && window.location.protocol === "https:";
+    const isHttps =
+      typeof window !== "undefined" &&
+      window.location.protocol === "https:";
     document.cookie = [
       `app_email=${encodeURIComponent(val)}`,
       "Path=/",
       "SameSite=Lax",
       isHttps ? "Secure" : "",
-      "Max-Age=31536000" // 365 jours
-    ].filter(Boolean).join("; ");
+      "Max-Age=31536000",
+    ]
+      .filter(Boolean)
+      .join("; ");
   } catch {}
 }
 
@@ -30,7 +33,6 @@ async function notifyAuthEvent(type: "login" | "signup", userEmail: string) {
       body: JSON.stringify({ type, userEmail }),
     });
   } catch (err) {
-    // on ne casse pas le flow utilisateur si l'email échoue
     console.error("notifyAuthEvent error:", err);
   }
 }
@@ -46,6 +48,7 @@ export default function HomePage() {
   // Auth (login)
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+
   // Auth (signup)
   const [emailSu, setEmailSu] = useState("");
   const [passwordSu, setPasswordSu] = useState("");
@@ -54,31 +57,33 @@ export default function HomePage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const { t, lang, setLang } = useLanguage(); // ✅ on récupère aussi lang & setLang
+  const { t } = useLanguage();
 
   useEffect(() => {
     const tmo = setTimeout(() => {
       setInputsReady(true);
       if (typeof document !== "undefined") {
-        document.activeElement instanceof HTMLElement && document.activeElement.blur();
+        document.activeElement instanceof HTMLElement &&
+          document.activeElement.blur();
       }
     }, 300);
     return () => clearTimeout(tmo);
   }, []);
 
-  // (facultatif) si déjà connecté, synchronise le cookie au mount
   useEffect(() => {
     (async () => {
       try {
         const supabase = getSupabase();
-        const { data: { user } } = await supabase.auth.getUser();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
         const currentEmail = user?.email?.trim().toLowerCase();
         if (currentEmail) setAppEmailCookie(currentEmail);
       } catch {}
     })();
   }, []);
 
-  // --- NOUVEAU : track vue de page (landing) ---
+  // --- tracking landing page ---
   async function trackPageView(emailValue?: string) {
     try {
       await fetch("/api/track-page-view", {
@@ -97,13 +102,10 @@ export default function HomePage() {
     }
   }
 
-  // appelle trackPageView au chargement de la page
   useEffect(() => {
     trackPageView();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // --- track vue de la "page" de connexion (ouverture du panneau login) ---
   async function trackLoginPageView(emailValue?: string) {
     try {
       await fetch("/api/track-login-view", {
@@ -127,13 +129,13 @@ export default function HomePage() {
       const next = !v;
       if (next) {
         setShowSignup(false);
-        // 🔔 on enregistre la vue de la "page" de connexion
         const emailTrim = email.trim().toLowerCase();
         trackLoginPageView(emailTrim || undefined);
       }
       return next;
     });
-    setMessage(null); setError(null);
+    setMessage(null);
+    setError(null);
   }
 
   function openSignup() {
@@ -142,14 +144,19 @@ export default function HomePage() {
       if (next) setShowLogin(false);
       return next;
     });
-    setMessage(null); setError(null);
+    setMessage(null);
+    setError(null);
   }
 
+  /* ============================================================
+     LOGIN — AVEC DETECTION EMAIL NON CONFIRMÉ
+  ============================================================ */
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setMessage(null);
     setError(null);
+
     try {
       const supabase = getSupabase();
       const emailTrim = email.trim().toLowerCase();
@@ -158,22 +165,35 @@ export default function HomePage() {
         email: emailTrim,
         password: password.trim(),
       });
+
       if (signInError) throw signInError;
 
-      const { data: { user } } = await supabase.auth.getUser();
-      const sessionEmail = (user?.email || emailTrim).trim().toLowerCase();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      const sessionEmail = (user?.email || emailTrim)
+        .trim()
+        .toLowerCase();
+
       if (sessionEmail) {
         setAppEmailCookie(sessionEmail);
-        // 🔔 NOTIF LOGIN
         await notifyAuthEvent("login", sessionEmail);
       }
 
       setMessage(t("home.login.success"));
       window.location.href = "/dashboard";
     } catch (err: any) {
-      const msg = String(err?.message || "");
+      const msg = String(err?.message || "").toLowerCase();
+
+      // 🔥 **Détection email non confirmé**
+      if (msg.includes("email not confirmed") || msg.includes("email_not_confirmed")) {
+        setError("Veuillez confirmer votre adresse email avant de vous connecter. 📩");
+        return;
+      }
+
       setError(
-        msg.toLowerCase().includes("invalid login credentials")
+        msg.includes("invalid login credentials")
           ? t("home.login.error.invalidCredentials")
           : msg || t("home.login.error.generic")
       );
@@ -182,25 +202,28 @@ export default function HomePage() {
     }
   }
 
+  /* ============================================================
+     SIGNUP — INCHANGE
+  ============================================================ */
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setMessage(null);
     setError(null);
+
     try {
       const supabase = getSupabase();
       const emailTrim = emailSu.trim().toLowerCase();
       const pwd = passwordSu.trim();
 
-      // 1) Créer le compte → envoie l’e-mail de confirmation
       const { data, error: signUpError } = await supabase.auth.signUp({
         email: emailTrim,
         password: pwd,
         options: {
-          // redirection après clic sur le lien de confirmation
           emailRedirectTo: `${window.location.origin}/callback?source=confirm`,
         },
       });
+
       if (signUpError) throw signUpError;
 
       if (emailTrim) setAppEmailCookie(emailTrim);
@@ -209,16 +232,15 @@ export default function HomePage() {
         await supabase.auth.signOut();
       }
 
-      // 🔔 NOTIF SIGNUP (compte créé)
       await notifyAuthEvent("signup", emailTrim);
 
-      // 3) Message clair et on bascule vers le panneau de connexion
       setMessage(t("home.signup.success"));
       setShowSignup(false);
       setShowLogin(true);
       setEmail(emailTrim);
     } catch (err: any) {
       const msg = String(err?.message || "");
+
       setError(
         /email|courriel/i.test(msg)
           ? t("home.signup.error.invalidEmail")
@@ -240,9 +262,12 @@ export default function HomePage() {
     setError(null);
     try {
       const supabase = getSupabase();
-      const { error } = await supabase.auth.resetPasswordForEmail(emailTrim, {
-        redirectTo: `${window.location.origin}/reset-password`,
-      });
+      const { error } = await supabase.auth.resetPasswordForEmail(
+        emailTrim,
+        {
+          redirectTo: `${window.location.origin}/reset-password`,
+        }
+      );
       if (error) throw error;
       setMessage(t("home.forgotPassword.success"));
     } catch (err: any) {
@@ -252,11 +277,10 @@ export default function HomePage() {
     }
   }
 
-  /** Style "pill" compact et cohérent */
+  /** Style "pill" */
   const pillClass =
-    "inline-flex items-center justify-center font-semibold shadow " +
-    "px-3 py-1.5 select-none active:translate-y-px focus:outline-none " +
-    "focus-visible:ring-2 focus-visible:ring-emerald-500/30 leading-none";
+    "inline-flex items-center justify-center font-semibold shadow px-3 py-1.5 select-none active:translate-y-px focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/30 leading-none";
+
   const pillStyle: React.CSSProperties = {
     background: "linear-gradient(90deg,#22c55e,#16a34a)",
     color: "#fff",
@@ -270,40 +294,16 @@ export default function HomePage() {
     <main className="hide-topbar-menu pt-10 sm:pt-12 pb-12">
       <div className="container max-w-screen-lg mx-auto px-4">
         {/* Titre */}
-        <header className="mb-0 flex items-start justify-between gap-4">
+        <header className="mb-0">
           <h1
             className="font-bold leading-tight not-prose
                        [font-size:theme(fontSize.3xl)!important]
                        sm:[font-size:theme(fontSize.5xl)!important]"
           >
-            {t("home.hero.titleLine1")}<br />{t("home.hero.titleLine2")}
+            {t("home.hero.titleLine1")}
+            <br />
+            {t("home.hero.titleLine2")}
           </h1>
-
-          {/* ✅ Switch FR / EN minimal */}
-          <div className="flex gap-1 text-xs sm:text-sm items-center">
-            <button
-              type="button"
-              onClick={() => setLang("fr")}
-              className={`px-2.5 py-1 rounded-full border text-xs sm:text-sm ${
-                lang === "fr"
-                  ? "bg-emerald-600 text-white border-emerald-600"
-                  : "bg-white text-gray-700 border-gray-300"
-              }`}
-            >
-              FR
-            </button>
-            <button
-              type="button"
-              onClick={() => setLang("en")}
-              className={`px-2.5 py-1 rounded-full border text-xs sm:text-sm ${
-                lang === "en"
-                  ? "bg-emerald-600 text-white border-emerald-600"
-                  : "bg-white text-gray-700 border-gray-300"
-              }`}
-            >
-              EN
-            </button>
-          </div>
         </header>
 
         <div className="mt-10 sm:mt-12" aria-hidden="true" />
@@ -322,7 +322,10 @@ export default function HomePage() {
 
         {/* CTA */}
         <section className="w-full grid grid-rows-[1fr_auto]">
-          <div aria-hidden="true" className="bg-white invisible h-[45vh] sm:h-[55vh]" />
+          <div
+            aria-hidden="true"
+            className="bg-white invisible h-[45vh] sm:h-[55vh]"
+          />
           <div className="justify-self-center flex flex-col sm:flex-row items-center gap-3 mb-10">
             <button
               type="button"
@@ -333,7 +336,8 @@ export default function HomePage() {
               style={{
                 ...pillStyle,
                 background: "#16a34a",
-                boxShadow: "0 10px 22px rgba(22,163,74,.35)",
+                boxShadow:
+                  "0 10px 22px rgba(22,163,74,.35)",
                 padding: "12px 22px",
               }}
             >
@@ -349,7 +353,8 @@ export default function HomePage() {
               style={{
                 ...pillStyle,
                 background: "#16a34a",
-                boxShadow: "0 10px 22px rgba(22,163,74,.35)",
+                boxShadow:
+                  "0 10px 22px rgba(22,163,74,.35)",
                 padding: "12px 22px",
               }}
             >
@@ -358,26 +363,29 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* Login inline */}
+        {/* LOGIN PANEL */}
         {showLogin && (
           <div id="login-panel" className="max-w-md mx-auto">
-            <form onSubmit={handleLogin} className="space-y-4">
+            <form
+              onSubmit={handleLogin}
+              className="space-y-4"
+            >
               <div>
                 <label className="block text-sm font-medium mb-1">
                   {t("home.login.emailLabel")}
                 </label>
                 <input
                   type="email"
-                  inputMode="email"
-                  autoComplete="email"
-                  autoCapitalize="none"
-                  spellCheck={false}
                   required
                   disabled={!inputsReady}
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) =>
+                    setEmail(e.target.value)
+                  }
+                  placeholder={t(
+                    "home.login.emailPlaceholder"
+                  )}
                   className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-gray-100"
-                  placeholder={t("home.login.emailPlaceholder")}
                 />
               </div>
 
@@ -385,23 +393,33 @@ export default function HomePage() {
                 <label className="block text-sm font-medium mb-1">
                   {t("home.login.passwordLabel")}
                 </label>
+
                 <div className="relative">
                   <input
-                    type={showPassword ? "text" : "password"}
-                    inputMode="text"
-                    autoComplete="current-password"
-                    autoCapitalize="none"
-                    spellCheck={false}
+                    type={
+                      showPassword
+                        ? "text"
+                        : "password"
+                    }
                     required
                     disabled={!inputsReady}
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(e) =>
+                      setPassword(e.target.value)
+                    }
+                    placeholder={t(
+                      "home.login.passwordPlaceholder"
+                    )}
                     className="w-full border rounded-lg px-3 py-2 pr-12 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-gray-100"
-                    placeholder={t("home.login.passwordPlaceholder")}
                   />
+
                   <button
                     type="button"
-                    onClick={() => setShowPassword(!showPassword)}
+                    onClick={() =>
+                      setShowPassword(
+                        !showPassword
+                      )
+                    }
                     className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-500 hover:text-gray-700"
                     tabIndex={-1}
                     aria-label={
@@ -410,27 +428,36 @@ export default function HomePage() {
                         : t("common.password.show")
                     }
                   >
-                    {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                    {showPassword ? (
+                      <EyeOff size={20} />
+                    ) : (
+                      <Eye size={20} />
+                    )}
                   </button>
                 </div>
               </div>
 
               <button
                 type="submit"
-                className={pillClass + " w-full"}
-                style={{ ...pillStyle, whiteSpace: "normal" }}
                 disabled={loading || !inputsReady}
+                className={`${pillClass} w-full`}
+                style={{
+                  ...pillStyle,
+                  whiteSpace: "normal",
+                }}
               >
                 {loading
-                  ? t("home.login.submitLoading")
+                  ? t(
+                      "home.login.submitLoading"
+                    )
                   : t("home.login.submitIdle")}
               </button>
 
               <button
                 type="button"
                 onClick={handleForgotPassword}
-                className="block w-full text-center text-sm text-gray-600 hover:underline"
                 disabled={!inputsReady}
+                className="block w-full text-center text-sm text-gray-600 hover:underline"
               >
                 {t("home.login.forgotPassword")}
               </button>
@@ -449,26 +476,29 @@ export default function HomePage() {
           </div>
         )}
 
-        {/* Signup inline */}
+        {/* SIGNUP PANEL */}
         {showSignup && (
           <div id="signup-panel" className="max-w-md mx-auto">
-            <form onSubmit={handleSignup} className="space-y-4">
+            <form
+              onSubmit={handleSignup}
+              className="space-y-4"
+            >
               <div>
                 <label className="block text-sm font-medium mb-1">
                   {t("home.signup.emailLabel")}
                 </label>
                 <input
                   type="email"
-                  inputMode="email"
-                  autoComplete="email"
-                  autoCapitalize="none"
-                  spellCheck={false}
                   required
                   disabled={!inputsReady}
                   value={emailSu}
-                  onChange={(e) => setEmailSu(e.target.value)}
+                  onChange={(e) =>
+                    setEmailSu(e.target.value)
+                  }
+                  placeholder={t(
+                    "home.signup.emailPlaceholder"
+                  )}
                   className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-gray-100"
-                  placeholder={t("home.signup.emailPlaceholder")}
                 />
               </div>
 
@@ -476,44 +506,69 @@ export default function HomePage() {
                 <label className="block text-sm font-medium mb-1">
                   {t("home.signup.passwordLabel")}
                 </label>
+
                 <div className="relative">
                   <input
-                    type={showPasswordSignup ? "text" : "password"}
-                    inputMode="text"
-                    autoComplete="new-password"
-                    autoCapitalize="none"
-                    spellCheck={false}
+                    type={
+                      showPasswordSignup
+                        ? "text"
+                        : "password"
+                    }
                     required
                     disabled={!inputsReady}
                     value={passwordSu}
-                    onChange={(e) => setPasswordSu(e.target.value)}
+                    onChange={(e) =>
+                      setPasswordSu(
+                        e.target.value
+                      )
+                    }
+                    placeholder={t(
+                      "home.signup.passwordPlaceholder"
+                    )}
                     className="w-full border rounded-lg px-3 py-2 pr-12 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-gray-100"
-                    placeholder={t("home.signup.passwordPlaceholder")}
                   />
+
                   <button
                     type="button"
-                    onClick={() => setShowPasswordSignup(!showPasswordSignup)}
+                    onClick={() =>
+                      setShowPasswordSignup(
+                        !showPasswordSignup
+                      )
+                    }
                     className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-500 hover:text-gray-700"
                     tabIndex={-1}
                     aria-label={
                       showPasswordSignup
-                        ? t("common.password.hide")
-                        : t("common.password.show")
+                        ? t(
+                            "common.password.hide"
+                          )
+                        : t(
+                            "common.password.show"
+                          )
                     }
                   >
-                    {showPasswordSignup ? <EyeOff size={20} /> : <Eye size={20} />}
+                    {showPasswordSignup ? (
+                      <EyeOff size={20} />
+                    ) : (
+                      <Eye size={20} />
+                    )}
                   </button>
                 </div>
               </div>
 
               <button
                 type="submit"
-                className={pillClass + " w-full"}
-                style={{ ...pillStyle, whiteSpace: "normal" }}
                 disabled={loading || !inputsReady}
+                className={`${pillClass} w-full`}
+                style={{
+                  ...pillStyle,
+                  whiteSpace: "normal",
+                }}
               >
                 {loading
-                  ? t("home.signup.submitLoading")
+                  ? t(
+                      "home.signup.submitLoading"
+                    )
                   : t("home.signup.submitIdle")}
               </button>
 
