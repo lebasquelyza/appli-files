@@ -279,28 +279,24 @@ export default function HomePage() {
             {t("home.hero.titleLine1")}<br />{t("home.hero.titleLine2")}
           </h1>
 
-          {/* ✅ Switch FR / EN plus petit, en noir */}
-          <div className="flex items-center gap-1 text-[0.65rem] sm:text-xs">
+          {/* 🔥 Switch FR / EN plus petit, en noir */}
+          <div className="flex items-center gap-1 text-[0.6rem] sm:text-[0.7rem]">
             <button
               type="button"
               onClick={() => setLang("fr")}
-              className={`px-1.5 py-0.5 rounded-full transition-colors ${
-                lang === "fr"
-                  ? "font-semibold text-black bg-black/5"
-                  : "text-black"
-              }`}
+              className={`px-1 transition ${
+                lang === "fr" ? "font-bold underline" : "font-normal"
+              } text-black`}
             >
               FR
             </button>
-            <span className="text-black/60 text-[0.6rem]">/</span>
+            <span className="text-black/70 text-[0.55rem]">/</span>
             <button
               type="button"
               onClick={() => setLang("en")}
-              className={`px-1.5 py-0.5 rounded-full transition-colors ${
-                lang === "en"
-                  ? "font-semibold text-black bg-black/5"
-                  : "text-black"
-              }`}
+              className={`px-1 transition ${
+                lang === "en" ? "font-bold underline" : "font-normal"
+              } text-black`}
             >
               EN
             </button>
@@ -322,7 +318,7 @@ export default function HomePage() {
         </section>
 
         {/* CTA */}
-        <section className="w-full grid grid-rows-[1fr_auto]">
+        <section className="w-full grid grid-rows-[1fr:auto]">
           <div aria-hidden="true" className="bg-white invisible h-[45vh] sm:h-[55vh]" />
           <div className="justify-self-center flex flex-col sm:flex-row items-center gap-3 mb-10">
             <button
