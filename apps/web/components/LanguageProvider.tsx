@@ -1,5 +1,5 @@
 //apps/web/components/LanguageProvider.tsx
-  "use client";
+"use client";
 
 import React, {
   createContext,
@@ -29,19 +29,24 @@ function getFromPath(obj: any, path: string): string {
   return path.split(".").reduce((acc, key) => acc?.[key], obj) ?? path;
 }
 
-// lit fc-lang côté client
+// 🔑 nouveau nom de cookie pour repartir propre
+const COOKIE_KEY = "fc-lang-v2";
+
+// lit fc-lang-v2 côté client
 function readCookieLang(): Lang | null {
   if (typeof document === "undefined") return null;
-  const match = document.cookie.match(/(?:^|;\s*)fc-lang=(fr|en)/);
+  const match = document.cookie.match(
+    new RegExp("(?:^|;\\s*)" + COOKIE_KEY + "=(fr|en)")
+  );
   const val = match?.[1];
   return val === "fr" || val === "en" ? val : null;
 }
 
-// écrit fc-lang côté client
+// écrit fc-lang-v2 côté client
 function writeCookieLang(lang: Lang) {
   if (typeof document === "undefined") return;
   document.cookie = [
-    `fc-lang=${lang}`,
+    `${COOKIE_KEY}=${lang}`,
     "Path=/",
     "SameSite=Lax",
     "Max-Age=31536000", // 1 an
@@ -51,7 +56,7 @@ function writeCookieLang(lang: Lang) {
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Lang>("fr");
 
-  // ⚡ init : cookie > FR par défaut (on NE regarde PAS le téléphone)
+  // ⚡ init : cookie v2 > FR par défaut
   useEffect(() => {
     const fromCookie = readCookieLang();
     if (fromCookie) {
