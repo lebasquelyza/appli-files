@@ -1095,6 +1095,12 @@ export const translations = {
         delete: "Supprimer",
       },
     },
+    "home": {
+  "signup": {
+    "success": "Compte créé ✅ Vérifie ta boîte mail et clique sur « Confirmer mon e-mail » pour activer ton compte, puis tu pourras te connecter."
+  }
+}
+
 
     /* ==================== RECIPES PAGE ==================== */
     recipes: {
@@ -2429,6 +2435,12 @@ export const translations = {
         back: "← Back",
       },
     },
+    "home": {
+  "signup": {
+    "success": "Compte créé ✅ Vérifie ta boîte mail et clique sur « Confirmer mon e-mail » pour activer ton compte, puis tu pourras te connecter."
+  }
+}
+
 
     dashboard: {
       header: {
