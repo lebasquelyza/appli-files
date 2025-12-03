@@ -1017,7 +1017,7 @@ export const translations = {
         totalLabel: "Total mensuel : {{amount}} €",
         back: "Retour à l’abonnement",
       },
-    }
+  
 
     /* ==================== PROGRESS ==================== */
     progress: {
