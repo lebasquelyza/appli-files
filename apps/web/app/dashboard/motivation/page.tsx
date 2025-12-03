@@ -14,10 +14,10 @@ function getFromPath(obj: any, path: string): any {
 
 function getLangClient(): Lang {
   if (typeof document === "undefined") return "fr";
-  const match = document.cookie.match(/(?:^|; )fc-lang=([^;]+)/);
-  const val = match?.[1];
-  if (val === "en") return "en";
-  return "fr";
+  // 🔁 on lit le nouveau cookie fc-lang-v2
+  const match = document.cookie.match(/(?:^|; )fc-lang-v2=(fr|en)/);
+  const val = match?.[1] as Lang | undefined;
+  return val === "en" ? "en" : "fr";
 }
 
 function useT() {
@@ -76,9 +76,8 @@ export default function MotivationPage() {
   const [notifications, setNotifications] = useState<CoachingNotification[]>([]);
   const [filter, setFilter] = useState<"all" | "unread">("all");
   const [sending, setSending] = useState(false);
-  const [loadingFromApi, setLoadingFromApi] = useState(true);
 
-  // Préférences d’envoi (toujours côté client pour le moment)
+  // Préférences d’envoi (toujours côté client)
   const [activeDays, setActiveDays] = useState<DayKey[]>([
     "mon",
     "tue",
@@ -88,71 +87,36 @@ export default function MotivationPage() {
   ]);
   const [prefTime, setPrefTime] = useState("09:00");
 
-  /* -------- 1) Charger les vraies notifications depuis l’API -------- */
-
+  // 🔹 Notifs en dur (mock) au chargement
   useEffect(() => {
-    // pas de session → on peut éventuellement garder les mocks
-    if (!session?.user?.email) {
-      setLoadingFromApi(false);
-      return;
-    }
-
-    const load = async () => {
-      try {
-        const res = await fetch("/api/motivation/notifications", {
-          method: "GET",
-        });
-        if (!res.ok) throw new Error("Erreur API");
-        const data = (await res.json()) as CoachingNotification[];
-        setNotifications(data);
-      } catch (err) {
-        console.error("Erreur fetch notifications:", err);
-        // fallback : rien, ou on pourrait mettre un message
-      } finally {
-        setLoadingFromApi(false);
-      }
-    };
-
-    load();
-  }, [session?.user?.email]);
-
-  /* -------- 2) (Optionnel) Mocks si pas connecté / dev -------- */
-
-  useEffect(() => {
-    // Si on a déjà chargé depuis l’API, on ne met PAS les mocks
-    if (!loadingFromApi || notifications.length > 0) return;
-
-    // Si pas de session (ou en dev), on garde ton comportement actuel
-    if (!session?.user?.email) {
-      setNotifications([
-        {
-          id: "1",
-          title: t("motivation.mock.first.title", "Tu progresses 💪"),
-          message: t(
-            "motivation.mock.first.message",
-            "Super séance hier ! Continue sur cette lancée, la régularité fait toute la différence."
-          ),
-          createdAt: new Date(Date.now() - 1000 * 60 * 60).toISOString(),
-          read: false,
-          source: t("motivation.mock.source", "Files Coaching"),
-        },
-        {
-          id: "2",
-          title: t("motivation.mock.second.title", "Rappel douceur"),
-          message: t(
-            "motivation.mock.second.message",
-            "Même une petite séance vaut mieux que rien. 10 minutes aujourd’hui, c’est déjà gagné."
-          ),
-          createdAt: new Date(Date.now() - 1000 * 60 * 60 * 6).toISOString(),
-          read: true,
-          source: t("motivation.mock.source", "Files Coaching"),
-          rating: 4,
-        },
-      ]);
-      setLoadingFromApi(false);
-    }
+    setNotifications([
+      {
+        id: "1",
+        title: t("motivation.mock.first.title", "Tu progresses 💪"),
+        message: t(
+          "motivation.mock.first.message",
+          "Super séance hier ! Continue sur cette lancée, la régularité fait toute la différence."
+        ),
+        createdAt: new Date(Date.now() - 1000 * 60 * 60).toISOString(),
+        read: false,
+        source: t("motivation.mock.source", "Files Coaching"),
+      },
+      {
+        id: "2",
+        title: t("motivation.mock.second.title", "Rappel douceur"),
+        message: t(
+          "motivation.mock.second.message",
+          "Même une petite séance vaut mieux que rien. 10 minutes aujourd’hui, c’est déjà gagné."
+        ),
+        createdAt: new Date(Date.now() - 1000 * 60 * 60 * 6).toISOString(),
+        read: true,
+        source: t("motivation.mock.source", "Files Coaching"),
+        rating: 4,
+      },
+    ]);
+    // on ne veut pas relancer à chaque changement de t
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadingFromApi, session?.user?.email]);
+  }, []);
 
   const visibleNotifications = useMemo(
     () =>
@@ -167,54 +131,24 @@ export default function MotivationPage() {
     [notifications]
   );
 
-  const markAsRead = async (id: string) => {
+  const markAsRead = (id: string) => {
     setNotifications((prev) =>
       prev.map((n) => (n.id === id ? { ...n, read: true } : n))
     );
-
-    // on notifie le backend (best effort)
-    try {
-      await fetch(`/api/motivation/notifications/${id}/read`, {
-        method: "POST",
-      });
-    } catch (e) {
-      console.error("markAsRead API error:", e);
-    }
   };
 
-  const markAllAsRead = async () => {
-    const ids = notifications.filter((n) => !n.read).map((n) => n.id);
+  const markAllAsRead = () => {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-
-    try {
-      await fetch(`/api/motivation/notifications/mark-all-read`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids }),
-      });
-    } catch (e) {
-      console.error("markAllAsRead API error:", e);
-    }
   };
 
-  // ⭐ Noter une notification
-  const setRating = async (id: string, rating: number) => {
+  // ⭐ Noter une notification (100% côté client)
+  const setRating = (id: string, rating: number) => {
     setNotifications((prev) =>
       prev.map((n) => (n.id === id ? { ...n, rating } : n))
     );
-
-    try {
-      await fetch(`/api/motivation/notifications/${id}/rating`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rating }),
-      });
-    } catch (e) {
-      console.error("setRating API error:", e);
-    }
   };
 
-  // Toggle jour actif / inactif (toujours local pour l’instant)
+  // Toggle jour actif / inactif (toujours local)
   const toggleDay = (day: DayKey) => {
     setActiveDays((prev) =>
       prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
@@ -235,25 +169,86 @@ export default function MotivationPage() {
       }[day]
     );
 
-  // 👉 Envoyer une vraie notif de test via le backend
+  // 🔔 Notification de test générée directement par l'appli (pas de backend)
   const sendTestNotification = async () => {
     if (sending) return;
     setSending(true);
 
-    try {
-      const res = await fetch("/api/motivation/notifications/test", {
-        method: "POST",
-      });
-      if (!res.ok) throw new Error("Erreur envoi test");
-      const created = (await res.json()) as CoachingNotification;
+    const samples: Array<{ title: string; message: string }> = [
+      {
+        title: t("motivation.samples.onLacheRien.title", "On lâche rien 🔥"),
+        message: t(
+          "motivation.samples.onLacheRien.message",
+          "Tu es plus proche de ton objectif aujourd’hui qu’hier. Une action de plus, même petite."
+        ),
+      },
+      {
+        title: t("motivation.samples.respireEtAvance.title", "Respire & avance"),
+        message: t(
+          "motivation.samples.respireEtAvance.message",
+          "Ne cherche pas la perfection. Cherche la progression. Un pas après l’autre."
+        ),
+      },
+      {
+        title: t("motivation.samples.tuPeuxLeFaire.title", "Tu peux le faire ✨"),
+        message: t(
+          "motivation.samples.tuPeuxLeFaire.message",
+          "Rappelle-toi pourquoi tu as commencé. Tu as déjà traversé plus dur que ça."
+        ),
+      },
+      {
+        title: t("motivation.samples.tonFuturToi.title", "Ton futur toi te remercie"),
+        message: t(
+          "motivation.samples.tonFuturToi.message",
+          "Chaque décision d’aujourd’hui construit la personne que tu seras dans 3 mois."
+        ),
+      },
+      {
+        title: t("motivation.samples.miniSeance.title", "Mini séance, maxi impact"),
+        message: t(
+          "motivation.samples.miniSeance.message",
+          "Si tu n’as pas le temps pour 30 minutes, fais-en 5. Ce qui compte, c’est le mouvement."
+        ),
+      },
+      {
+        title: t("motivation.samples.recommence.title", "Recommence autant que nécessaire"),
+        message: t(
+          "motivation.samples.recommence.message",
+          "Tomber fait partie du jeu. Ce qui compte, c’est à quelle vitesse tu te relèves."
+        ),
+      },
+      {
+        title: t("motivation.samples.tuNESPasSeul.title", "Tu n’es pas seul·e"),
+        message: t(
+          "motivation.samples.tuNESPasSeul.message",
+          "Demander de l’aide, c’est aussi une forme de force. Tu fais ça pour TOI."
+        ),
+      },
+      {
+        title: t("motivation.samples.cestTonMoment.title", "C’est ton moment"),
+        message: t(
+          "motivation.samples.cestTonMoment.message",
+          "Bloque 10 minutes rien que pour toi maintenant. Ton corps et ta tête te diront merci."
+        ),
+      },
+    ];
 
-      // on ajoute en tête de liste
-      setNotifications((prev) => [created, ...prev]);
-    } catch (e) {
-      console.error("sendTestNotification error:", e);
-    } finally {
-      setSending(false);
-    }
+    const sample = samples[Math.floor(Math.random() * samples.length)];
+    const nowIso = new Date().toISOString();
+
+    setNotifications((prev) => [
+      {
+        id: nowIso,
+        title: sample.title,
+        message: sample.message,
+        createdAt: nowIso,
+        read: false,
+        source: t("motivation.mock.sourceTest", "Files Coaching (test)"),
+      },
+      ...prev,
+    ]);
+
+    setTimeout(() => setSending(false), 400);
   };
 
   if (status === "loading") {
@@ -330,10 +325,7 @@ export default function MotivationPage() {
               alignSelf: "flex-start",
             }}
           >
-            {t(
-              "motivation.header.connectedAs",
-              "Connecté en tant que"
-            )}{" "}
+            {t("motivation.header.connectedAs", "Connecté en tant que")}{" "}
             {session.user?.email ??
               t("motivation.header.clientFallback", "client")}
           </div>
@@ -341,12 +333,419 @@ export default function MotivationPage() {
       </div>
 
       {/* Carte préférences jour/heure */}
-      {/* ... (toute la partie préférences & liste reste identique à ton code) ... */}
-      {/* Je n’ai changé que la source des données, pas l’UI. */}
-      {/* 👉 Tu peux garder tout le reste tel quel à partir d’ici, c’est compatible. */}
+      <div
+        className="card"
+        style={{
+          padding: 10,
+          marginBottom: 10,
+          border: "1px solid #e5e7eb",
+          background: "#ffffff",
+          borderRadius: 12,
+          display: "grid",
+          gap: 8,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 8,
+            alignItems: "center",
+          }}
+        >
+          <div>
+            <div
+              style={{
+                fontSize: 14,
+                fontWeight: 700,
+                color: "#111827",
+              }}
+            >
+              {t(
+                "motivation.preferences.title",
+                "Préférences de notification"
+              )}
+            </div>
+            <div
+              style={{
+                fontSize: 12,
+                color: "#6b7280",
+                marginTop: 2,
+              }}
+            >
+              {t(
+                "motivation.preferences.subtitle",
+                "Choisis les jours et l’heure à laquelle tu souhaites recevoir tes messages de motivation."
+              )}
+            </div>
+          </div>
+        </div>
 
-      {/* (je raccourcis ici pour ne pas tout réécrire, mais ton code après ce point reste le même) */}
-      {/* Colle juste la partie modifiée au-dessus (state + fetch + sendTestNotification) */}
+        {/* Jours */}
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 6,
+            marginTop: 4,
+          }}
+        >
+          {ALL_DAYS.map((day) => {
+            const active = activeDays.includes(day);
+            return (
+              <button
+                key={day}
+                type="button"
+                onClick={() => toggleDay(day)}
+                style={{
+                  padding: "4px 10px",
+                  borderRadius: 999,
+                  border: "1px solid #e5e7eb",
+                  fontSize: 12,
+                  cursor: "pointer",
+                  background: active ? "#111827" : "#ffffff",
+                  color: active ? "#ffffff" : "#374151",
+                }}
+              >
+                {getDayLabel(day)}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Heure */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            marginTop: 4,
+            flexWrap: "wrap",
+          }}
+        >
+          <label
+            style={{
+              fontSize: 12,
+              color: "#374151",
+            }}
+          >
+            {t(
+              "motivation.preferences.timeLabel",
+              "Heure préférée :"
+            )}
+          </label>
+          <input
+            type="time"
+            value={prefTime}
+            onChange={(e) => setPrefTime(e.target.value)}
+            style={{
+              fontSize: 12,
+              padding: "4px 8px",
+              borderRadius: 8,
+              border: "1px solid #e5e7eb",
+            }}
+          />
+          <span
+            style={{
+              fontSize: 11,
+              color: "#6b7280",
+            }}
+          >
+            {t(
+              "motivation.preferences.timeNote",
+              "(Ces réglages sont pour l’instant stockés uniquement ici, côté client.)"
+            )}
+          </span>
+        </div>
+      </div>
+
+      {/* Barre d’actions & infos */}
+      <div
+        className="card"
+        style={{
+          padding: 10,
+          marginBottom: 10,
+          border: "1px solid #e5e7eb",
+          background: "#ffffff",
+          borderRadius: 12,
+          display: "flex",
+          flexWrap: "wrap",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 8,
+        }}
+      >
+        <div style={{ fontSize: 13, color: "#374151" }}>
+          <strong>{unreadCount}</strong>{" "}
+          {t(
+            "motivation.bar.unreadSuffix",
+            "notification(s) non lue(s)."
+          )}
+          <br />
+          <span style={{ fontSize: 11, color: "#6b7280" }}>
+            {t("motivation.bar.youChose", "Tu as choisi :")}{" "}
+            {activeDays.length === 0
+              ? t("motivation.bar.noDays", "aucun jour")
+              : activeDays.map((d) => getDayLabel(d)).join(", ")}{" "}
+            {t("motivation.bar.at", "à")} {prefTime}.
+          </span>
+        </div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "inline-flex",
+              borderRadius: 999,
+              border: "1px solid #e5e7eb",
+              overflow: "hidden",
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setFilter("all")}
+              style={{
+                fontSize: 12,
+                padding: "4px 10px",
+                border: "none",
+                background:
+                  filter === "all" ? "#111827" : "transparent",
+                color: filter === "all" ? "#ffffff" : "#6b7280",
+                cursor: "pointer",
+              }}
+            >
+              {t("motivation.bar.filterAll", "Tout")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilter("unread")}
+              style={{
+                fontSize: 12,
+                padding: "4px 10px",
+                border: "none",
+                background:
+                  filter === "unread" ? "#111827" : "transparent",
+                color: filter === "unread" ? "#ffffff" : "#6b7280",
+                cursor: "pointer",
+              }}
+            >
+              {t("motivation.bar.filterUnread", "Non lues")}
+            </button>
+          </div>
+
+          <button
+            type="button"
+            className="btn btn-dash"
+            style={{ fontSize: 12 }}
+            onClick={markAllAsRead}
+            disabled={unreadCount === 0}
+          >
+            {t(
+              "motivation.bar.markAllRead",
+              "Tout marquer comme lu"
+            )}
+          </button>
+
+          <button
+            type="button"
+            className="btn"
+            style={{
+              fontSize: 12,
+              background: "#111827",
+              color: "#ffffff",
+              borderRadius: 999,
+              padding: "6px 10px",
+            }}
+            onClick={sendTestNotification}
+            disabled={sending}
+          >
+            {sending
+              ? t("motivation.bar.sending", "Envoi...")
+              : t(
+                  "motivation.bar.sendTest",
+                  "Envoyer une notif de test"
+                )}
+          </button>
+        </div>
+      </div>
+
+      {/* Liste des notifications */}
+      <div className="grid gap-3">
+        {visibleNotifications.length === 0 ? (
+          <div
+            className="card"
+            style={{
+              padding: 12,
+              borderRadius: 12,
+              border: "1px dashed #e5e7eb",
+              background: "#f9fafb",
+              fontSize: 13,
+              color: "#6b7280",
+            }}
+          >
+            {t(
+              "motivation.empty.title",
+              "Aucune notification à afficher pour le moment."
+            )}
+            <br />
+            {t(
+              "motivation.empty.hint",
+              'Utilise le bouton “Envoyer une notif de test” pour tester l’affichage.'
+            )}
+          </div>
+        ) : (
+          visibleNotifications.map((n) => (
+            <article
+              key={n.id}
+              className="card"
+              style={{
+                padding: 12,
+                borderRadius: 12,
+                border: "1px solid #e5e7eb",
+                background: n.read ? "#ffffff" : "#ecfdf3",
+                display: "grid",
+                gap: 4,
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 8,
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 14,
+                    fontWeight: 700,
+                    color: "#111827",
+                  }}
+                >
+                  {n.title}
+                  {!n.read && (
+                    <span
+                      style={{
+                        marginLeft: 6,
+                        fontSize: 10,
+                        textTransform: "uppercase",
+                        letterSpacing: ".08em",
+                        padding: "2px 6px",
+                        borderRadius: 999,
+                        background: "#16a34a",
+                        color: "#f9fafb",
+                      }}
+                    >
+                      {t("motivation.card.badgeNew", "Nouveau")}
+                    </span>
+                  )}
+                </div>
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: "#6b7280",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {formatTime(n.createdAt)}
+                </div>
+              </div>
+              {n.source && (
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: "#6b7280",
+                  }}
+                >
+                  {t("motivation.card.sourcePrefix", "Source :")}{" "}
+                  {n.source}
+                </div>
+              )}
+              <p
+                style={{
+                  fontSize: 13,
+                  color: "#374151",
+                  marginTop: 2,
+                  marginBottom: 4,
+                }}
+              >
+                {n.message}
+              </p>
+
+              {/* ⭐ Notation */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  marginTop: 4,
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 11,
+                    color: "#6b7280",
+                    marginRight: 2,
+                  }}
+                >
+                  {t("motivation.card.ratingLabel", "Ta note :")}
+                </span>
+                <div>
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      onClick={() => setRating(n.id, star)}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        padding: 0,
+                        margin: "0 1px",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: 16,
+                          color:
+                            star <= (n.rating ?? 0)
+                              ? "#facc15" // jaune
+                              : "#d1d5db", // gris
+                        }}
+                      >
+                        ★
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                {typeof n.rating === "number" && (
+                  <span
+                    style={{
+                      fontSize: 11,
+                      color: "#6b7280",
+                    }}
+                  >
+                    ({n.rating}/5)
+                  </span>
+                )}
+              </div>
+
+              {!n.read && (
+                <div style={{ marginTop: 4 }}>
+                  <button
+                    type="button"
+                    className="btn btn-dash"
+                    style={{ fontSize: 12, padding: "4px 8px" }}
+                    onClick={() => markAsRead(n.id)}
+                  >
+                    {t(
+                      "motivation.card.markRead",
+                      "Marquer comme lu"
+                    )}
+                  </button>
+                </div>
+              )}
+            </article>
+          ))
+        )}
+      </div>
     </div>
   );
 }
