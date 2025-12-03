@@ -5,6 +5,7 @@ import TopbarGate from "./_components/TopbarGate";
 import "./globals.css";
 import Providers from "@/components/Providers"; // ✅ ton SessionProvider
 import { LanguageProvider } from "@/components/LanguageProvider"; // ✅ ajout
+import { AuthProvider } from "@/components/AuthProvider"; // ✅ NOUVEL IMPORT
 
 export const metadata: Metadata = {
   title: "Files Coaching",
@@ -41,12 +42,14 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body className="bg-white text-gray-900 min-h-dvh">
         <Providers>
           <LanguageProvider>
-            {/* ✅ Topbar incluse dans le provider — elle pourra aussi utiliser useLanguage */}
-            <TopbarGate />
+            <AuthProvider>
+              {/* ✅ Topbar incluse dans les providers */}
+              <TopbarGate />
 
-            <main style={{ paddingTop: "calc(env(safe-area-inset-top) + 40px)" }}>
-              {children}
-            </main>
+              <main style={{ paddingTop: "calc(env(safe-area-inset-top) + 40px)" }}>
+                {children}
+              </main>
+            </AuthProvider>
           </LanguageProvider>
         </Providers>
 
