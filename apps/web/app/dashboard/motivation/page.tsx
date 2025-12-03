@@ -59,7 +59,7 @@ const PAGE_MAX_WIDTH = 740;
 
 const ALL_DAYS: DayKey[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 
-// 🔹 Longueur max pour le message perso
+// Longueur max pour le message perso / amis
 const CUSTOM_MESSAGE_MAX = 240;
 
 function formatTime(dateStr: string) {
@@ -90,12 +90,16 @@ export default function MotivationPage() {
   ]);
   const [prefTime, setPrefTime] = useState("09:00");
 
-  // 🔹 Message perso pour les amis
+  // Message perso (pour lui-même)
+  const [selfMessage, setSelfMessage] = useState("");
+  const [savingSelf, setSavingSelf] = useState(false);
+
+  // Message pour ses amis
   const [customMessage, setCustomMessage] = useState("");
   const [sharingCustom, setSharingCustom] = useState(false);
   const customRemaining = CUSTOM_MESSAGE_MAX - customMessage.length;
 
-  // 🔹 Notifs en dur (mock) au chargement
+  // Notifs en dur (mock) au chargement
   useEffect(() => {
     setNotifications([
       {
@@ -149,7 +153,7 @@ export default function MotivationPage() {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
   };
 
-  // ⭐ Noter une notification (100% côté client)
+  // Noter une notification (100% côté client)
   const setRating = (id: string, rating: number) => {
     setNotifications((prev) =>
       prev.map((n) => (n.id === id ? { ...n, rating } : n))
@@ -177,7 +181,7 @@ export default function MotivationPage() {
       }[day]
     );
 
-  // 🔔 Notification de test générée directement par l'appli (pas de backend)
+  // Notification de test générée directement par l'appli (pas de backend)
   const sendTestNotification = async () => {
     if (sending) return;
     setSending(true);
@@ -259,7 +263,37 @@ export default function MotivationPage() {
     setTimeout(() => setSending(false), 400);
   };
 
-  // 🔹 Partage du message perso (mock : on ajoute une notif locale)
+  // "Programmation" du message perso (mock : on ajoute une notif locale)
+  const saveSelfMessage = () => {
+    const trimmed = selfMessage.trim();
+    if (!trimmed || savingSelf) return;
+
+    setSavingSelf(true);
+    const nowIso = new Date().toISOString();
+
+    setNotifications((prev) => [
+      {
+        id: `self-${nowIso}`,
+        title: t(
+          "motivation.selfNotification.title",
+          "Message programmé pour toi ✅"
+        ),
+        message: trimmed,
+        createdAt: nowIso,
+        read: true,
+        source: t(
+          "motivation.selfNotification.source",
+          "Rappel perso (démo)"
+        ),
+      },
+      ...prev,
+    ]);
+
+    setSelfMessage("");
+    setTimeout(() => setSavingSelf(false), 400);
+  };
+
+  // Partage du message perso pour les amis (mock : notif locale)
   const shareCustomMessage = () => {
     const trimmed = customMessage.trim();
     if (!trimmed || sharingCustom) return;
@@ -605,7 +639,115 @@ export default function MotivationPage() {
         </div>
       </div>
 
-      {/* 🔹 Zone : créer un message motivant pour ses amis */}
+      {/* Message motivant pour lui-même */}
+      <div
+        className="card"
+        style={{
+          padding: 10,
+          marginBottom: 10,
+          border: "1px solid #e5e7eb",
+          background: "#ffffff",
+          borderRadius: 12,
+          display: "grid",
+          gap: 6,
+        }}
+      >
+        <div
+          style={{
+            fontSize: 14,
+            fontWeight: 700,
+            color: "#111827",
+          }}
+        >
+          {t(
+            "motivation.selfMessage.title",
+            "Ton message pour toi"
+          )}
+        </div>
+        <div
+          style={{
+            fontSize: 12,
+            color: "#6b7280",
+          }}
+        >
+          {t(
+            "motivation.selfMessage.subtitle",
+            "Écris un message que tu recevras en rappel motivant, selon les jours et l’heure choisis plus haut."
+          )}
+        </div>
+
+        <textarea
+          value={selfMessage}
+          onChange={(e) => setSelfMessage(e.target.value)}
+          rows={3}
+          placeholder={t(
+            "motivation.selfMessage.placeholder",
+            "Ex : « Même 10 minutes aujourd’hui, c’est déjà une victoire. »"
+          )}
+          style={{
+            marginTop: 4,
+            width: "100%",
+            fontSize: 13,
+            padding: 8,
+            borderRadius: 8,
+            border: "1px solid #e5e7eb",
+            resize: "vertical",
+          }}
+        />
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 8,
+            marginTop: 2,
+            flexWrap: "wrap",
+          }}
+        >
+          <span
+            style={{
+              fontSize: 11,
+              color: "#6b7280",
+            }}
+          >
+            {t(
+              "motivation.selfMessage.info",
+              "Dans une prochaine version, ce message sera réellement envoyé en notif aux jours/horaires définis."
+            )}
+          </span>
+          <button
+            type="button"
+            className="btn"
+            onClick={saveSelfMessage}
+            disabled={!selfMessage.trim() || savingSelf}
+            style={{
+              fontSize: 12,
+              background: "#111827",
+              color: "#ffffff",
+              borderRadius: 999,
+              padding: "6px 10px",
+              opacity: !selfMessage.trim() || savingSelf ? 0.6 : 1,
+              cursor:
+                !selfMessage.trim() || savingSelf
+                  ? "not-allowed"
+                  : "pointer",
+            }}
+          >
+            {savingSelf
+              ? t(
+                  "motivation.selfMessage.saving",
+                  "Programmation en cours..."
+                )
+              : t(
+                  "motivation.selfMessage.saveButton",
+                  "Programmer ce message"
+                )}
+          </button>
+        </div>
+      </div>
+
+      {/* Message motivant pour ses amis */}
       <div
         className="card"
         style={{
@@ -638,7 +780,7 @@ export default function MotivationPage() {
         >
           {t(
             "motivation.customMessage.subtitle",
-            "Écris un petit mot d’encouragement qui sera partagé à tes amis qui utilisent l’appli (démo locale)."
+            "Écris un mot d’encouragement qui sera partagé à tes amis qui utilisent l’appli (dans une future version connectée)."
           )}
         </div>
 
@@ -653,7 +795,7 @@ export default function MotivationPage() {
           rows={3}
           placeholder={t(
             "motivation.customMessage.placeholder",
-            "Ex : « On se motive pour une séance cette semaine ? 💪 »"
+            "Ex : « On se bloque une séance ensemble cette semaine ? 💪 »"
           )}
           style={{
             marginTop: 4,
@@ -684,7 +826,7 @@ export default function MotivationPage() {
           >
             {t(
               "motivation.customMessage.info",
-              "Dans une version future, ce message sera envoyé directement à tes amis via l’appli."
+              "Dans une version future, ce message sera envoyé comme notif à tes amis."
             )}
           </span>
           <div
@@ -840,7 +982,7 @@ export default function MotivationPage() {
                 {n.message}
               </p>
 
-              {/* ⭐ Notation */}
+              {/* Notation */}
               <div
                 style={{
                   display: "flex",
@@ -877,8 +1019,8 @@ export default function MotivationPage() {
                           fontSize: 16,
                           color:
                             star <= (n.rating ?? 0)
-                              ? "#facc15" // jaune
-                              : "#d1d5db", // gris
+                              ? "#facc15"
+                              : "#d1d5db",
                         }}
                       >
                         ★
