@@ -316,7 +316,16 @@ async function loadProfile(
 }
 
 /* Loader — Programme IA côté serveur (liste) */
-async function loadInitialSessions(email: string, equipParam?: string) {
+/**
+ * forceNew = true  → on force une nouvelle génération via l'IA
+ * forceNew = false → on essaie d'abord de reprendre le dernier programme
+ *                    depuis programme_insights. Si rien n'existe, on génère.
+ */
+async function loadInitialSessions(
+  email: string,
+  equipParam?: string,
+  forceNew?: boolean
+) {
   if (!email) return [];
   const equip: "full" | "none" =
     String(equipParam || "").toLowerCase() === "none" ? "none" : "full";
@@ -328,9 +337,11 @@ async function loadInitialSessions(email: string, equipParam?: string) {
   try {
     let baseSessions: AiSessionT[] = [];
 
-    // 1) On tente d'abord de récupérer le DERNIER programme déjà généré
     const supabaseAdmin = await getSupabaseAdmin();
-    if (supabaseAdmin) {
+
+    // 1) On tente d'abord de récupérer le DERNIER programme déjà généré,
+    //    sauf si on force explicitement une nouvelle génération.
+    if (supabaseAdmin && !forceNew) {
       const normalizedEmail = (email || "").trim().toLowerCase();
       try {
         const { data, error } = await supabaseAdmin
@@ -349,7 +360,7 @@ async function loadInitialSessions(email: string, equipParam?: string) {
       }
     }
 
-    // 2) Si aucun programme trouvé, on génère via l'IA (avec la langue) puis on log
+    // 2) Si aucun programme trouvé, ou si forceNew = true, on génère via l’IA
     if (!baseSessions.length) {
       const { sessions } = await planProgrammeFromEmail(email, { lang });
       baseSessions = sessions || [];
@@ -409,15 +420,24 @@ export default async function Page({
   const { emailForDisplay, profile, debugInfo, forceBlank } =
     await loadProfile(searchParams);
 
-  const hasGenerate =
+  // flag dans l'URL : ?generate=1 → on force une nouvelle génération
+  const generateParam =
     String(searchParams?.generate || "").toLowerCase() === "1";
 
   const equipParam = String(searchParams?.equip || "").toLowerCase();
   const equipMode: "full" | "none" = equipParam === "none" ? "none" : "full";
 
-  const initialSessions = hasGenerate
-    ? await loadInitialSessions(emailForDisplay, equipMode)
-    : [];
+  // On charge TOUJOURS les séances :
+  // - si generateParam = true → on force une nouvelle génération
+  // - sinon → on essaie d'abord de reprendre le dernier programme existant
+  const initialSessions = await loadInitialSessions(
+    emailForDisplay,
+    equipMode,
+    generateParam
+  );
+
+  // hasGenerate = est-ce qu'on a un programme à afficher ?
+  const hasGenerate = initialSessions.length > 0;
 
   const savedSet = parseIdList(searchParams?.saved);
   const laterSet = parseIdList(searchParams?.later);
