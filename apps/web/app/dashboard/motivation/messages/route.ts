@@ -10,6 +10,10 @@ function daysArrayToString(days: DayKey[]): string {
   return days.join(",");
 }
 
+/**
+ * POST /api/motivation/messages
+ * Crée un message programmé pour l'utilisateur (pour lui ou pour ses amis)
+ */
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
 
@@ -83,4 +87,31 @@ export async function POST(req: NextRequest) {
   });
 
   return NextResponse.json(msg, { status: 201 });
+}
+
+/**
+ * GET /api/motivation/messages
+ * Liste les messages programmés de l'utilisateur connecté
+ */
+export async function GET(req: NextRequest) {
+  const session = await getServerSession(authOptions);
+
+  if (!session?.user?.id) {
+    return NextResponse.json(
+      { error: "Unauthorized" },
+      { status: 401 }
+    );
+  }
+
+  const messages = await prisma.motivationMessage.findMany({
+    where: {
+      userId: session.user.id as string,
+      active: true,
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+  });
+
+  return NextResponse.json(messages);
 }
