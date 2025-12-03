@@ -2437,9 +2437,10 @@ export const translations = {
     },
     "home": {
   "signup": {
-    "success": "Compte créé ✅ Vérifie ta boîte mail et clique sur « Confirmer mon e-mail » pour activer ton compte, puis tu pourras te connecter."
+    "success": "Account created ✅ Please check your inbox and click “Confirm my email” to activate your account, then you can log in."
   }
 }
+
 
 
     dashboard: {
