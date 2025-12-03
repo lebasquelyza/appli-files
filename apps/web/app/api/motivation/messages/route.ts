@@ -1,8 +1,7 @@
 // apps/web/app/api/motivation/messages/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-// ⬇️ on importe authOptions depuis la route NextAuth existante
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/lib/auth"; // ⬅️ même source que ton fichier NextAuth
 import { prisma } from "@/lib/prisma";
 
 type DayKey = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
