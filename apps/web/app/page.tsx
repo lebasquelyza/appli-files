@@ -78,7 +78,7 @@ export default function HomePage() {
     })();
   }, []);
 
-  // --- NOUVEAU : track vue de page (landing) ---
+  // --- track vue de page (landing) ---
   async function trackPageView(emailValue?: string) {
     try {
       await fetch("/api/track-page-view", {
@@ -279,36 +279,31 @@ export default function HomePage() {
             {t("home.hero.titleLine1")}<br />{t("home.hero.titleLine2")}
           </h1>
 
-          {/* ✅ Switch FR / EN dans le même style que le reste (discret, typé texte) */}
-          <div className="flex flex-col items-end gap-1 text-xs sm:text-sm text-gray-500">
-            <span className="uppercase tracking-wide text-[0.65rem] sm:text-[0.7rem] text-gray-400">
-              Langue
-            </span>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setLang("fr")}
-                className={`px-1 transition-colors ${
-                  lang === "fr"
-                    ? "font-semibold text-gray-900 underline underline-offset-4"
-                    : "text-gray-500 hover:text-gray-800"
-                }`}
-              >
-                FR
-              </button>
-              <span className="text-gray-400">/</span>
-              <button
-                type="button"
-                onClick={() => setLang("en")}
-                className={`px-1 transition-colors ${
-                  lang === "en"
-                    ? "font-semibold text-gray-900 underline underline-offset-4"
-                    : "text-gray-500 hover:text-gray-800"
-                }`}
-              >
-                EN
-              </button>
-            </div>
+          {/* ✅ Switch FR / EN plus petit, en noir */}
+          <div className="flex items-center gap-1 text-[0.65rem] sm:text-xs">
+            <button
+              type="button"
+              onClick={() => setLang("fr")}
+              className={`px-1.5 py-0.5 rounded-full transition-colors ${
+                lang === "fr"
+                  ? "font-semibold text-black bg-black/5"
+                  : "text-black"
+              }`}
+            >
+              FR
+            </button>
+            <span className="text-black/60 text-[0.6rem]">/</span>
+            <button
+              type="button"
+              onClick={() => setLang("en")}
+              className={`px-1.5 py-0.5 rounded-full transition-colors ${
+                lang === "en"
+                  ? "font-semibold text-black bg-black/5"
+                  : "text-black"
+              }`}
+            >
+              EN
+            </button>
           </div>
         </header>
 
