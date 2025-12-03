@@ -263,64 +263,106 @@ export default function MotivationPage() {
     setTimeout(() => setSending(false), 400);
   };
 
-  // "Programmation" du message perso (mock : on ajoute une notif locale)
-  const saveSelfMessage = () => {
+  // "Programmation" du message perso : appel API + feedback visuel
+  const saveSelfMessage = async () => {
     const trimmed = selfMessage.trim();
     if (!trimmed || savingSelf) return;
 
     setSavingSelf(true);
-    const nowIso = new Date().toISOString();
 
-    setNotifications((prev) => [
-      {
-        id: `self-${nowIso}`,
-        title: t(
-          "motivation.selfNotification.title",
-          "Message programmé pour toi ✅"
-        ),
-        message: trimmed,
-        createdAt: nowIso,
-        read: true,
-        source: t(
-          "motivation.selfNotification.source",
-          "Rappel perso (démo)"
-        ),
-      },
-      ...prev,
-    ]);
+    try {
+      const res = await fetch("/api/motivation/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          target: "ME",
+          content: trimmed,
+          days: activeDays,
+          time: prefTime,
+        }),
+      });
 
-    setSelfMessage("");
-    setTimeout(() => setSavingSelf(false), 400);
+      if (!res.ok) {
+        console.error("Error saving self message", await res.json());
+      } else {
+        const msg = await res.json();
+        setNotifications((prev) => [
+          {
+            id: msg.id ?? `self-${Date.now()}`,
+            title: t(
+              "motivation.selfNotification.title",
+              "Message programmé pour toi ✅"
+            ),
+            message: trimmed,
+            createdAt: msg.createdAt ?? new Date().toISOString(),
+            read: true,
+            source: t(
+              "motivation.selfNotification.source",
+              "Rappel perso"
+            ),
+          },
+          ...prev,
+        ]);
+        setSelfMessage("");
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSavingSelf(false);
+    }
   };
 
-  // Partage du message perso pour les amis (mock : notif locale)
-  const shareCustomMessage = () => {
+  // Message pour les amis : appel API + feedback visuel
+  const shareCustomMessage = async () => {
     const trimmed = customMessage.trim();
     if (!trimmed || sharingCustom) return;
 
     setSharingCustom(true);
-    const nowIso = new Date().toISOString();
 
-    setNotifications((prev) => [
-      {
-        id: `custom-${nowIso}`,
-        title: t(
-          "motivation.customNotification.title",
-          "Message envoyé à tes amis 💌"
-        ),
-        message: trimmed,
-        createdAt: nowIso,
-        read: true,
-        source: t(
-          "motivation.customNotification.source",
-          "Toi → tes amis (démo)"
-        ),
-      },
-      ...prev,
-    ]);
+    try {
+      const res = await fetch("/api/motivation/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          target: "FRIENDS",
+          content: trimmed,
+          days: activeDays,
+          time: prefTime,
+        }),
+      });
 
-    setCustomMessage("");
-    setTimeout(() => setSharingCustom(false), 400);
+      if (!res.ok) {
+        console.error("Error saving friends message", await res.json());
+      } else {
+        const msg = await res.json();
+        setNotifications((prev) => [
+          {
+            id: msg.id ?? `custom-${Date.now()}`,
+            title: t(
+              "motivation.customNotification.title",
+              "Message envoyé à tes amis 💌"
+            ),
+            message: trimmed,
+            createdAt: msg.createdAt ?? new Date().toISOString(),
+            read: true,
+            source: t(
+              "motivation.customNotification.source",
+              "Toi → tes amis"
+            ),
+          },
+          ...prev,
+        ]);
+        setCustomMessage("");
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSharingCustom(false);
+    }
   };
 
   if (status === "loading") {
