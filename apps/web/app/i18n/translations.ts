@@ -1,5 +1,5 @@
 // apps/web/app/i18n/translations.ts
-export const translations: { [lang: string]: any } = {
+export const translations = {
   fr: {
     home: {
       hero: {
@@ -1001,6 +1001,7 @@ export const translations: { [lang: string]: any } = {
         real8: "Pack 8 séances réelles/mois (+240 €)",
       },
     },
+
     abonnementSuccess: {
       noSession: {
         title: "Paiement",
@@ -1018,7 +1019,7 @@ export const translations: { [lang: string]: any } = {
         totalLabel: "Total mensuel : {{amount}} €",
         back: "Retour à l’abonnement",
       },
-  
+    },
 
     /* ==================== PROGRESS ==================== */
     progress: {
@@ -1094,12 +1095,6 @@ export const translations: { [lang: string]: any } = {
         delete: "Supprimer",
       },
     },
-    "home": {
-  "signup": {
-    "success": "Compte créé ✅ Vérifie ta boîte mail et clique sur « Confirmer mon e-mail » pour activer ton compte, puis tu pourras te connecter."
-  }
-},
-
 
     /* ==================== RECIPES PAGE ==================== */
     recipes: {
@@ -2435,13 +2430,6 @@ export const translations: { [lang: string]: any } = {
       },
     },
 
-    "home": {
-      "signup": {
-        "success": "Account created ✅ Please check your inbox and click \"Confirm my email\" to activate your account, then you can log in."
-      }
-    },
-
-    /* ==================== DASHBOARD ==================== */
     dashboard: {
       header: {
         title: "Welcome 👋",
@@ -2469,6 +2457,4 @@ export const translations: { [lang: string]: any } = {
       },
     },
   },
-
-  }
-}
+} as const;
