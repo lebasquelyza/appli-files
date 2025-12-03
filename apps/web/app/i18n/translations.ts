@@ -2433,12 +2433,15 @@ export const translations = {
         back: "← Back",
       },
     },
+
     "home": {
-  "signup": {
-    "success": "Account created ✅ Please check your inbox and click “Confirm my email” to activate your account, then you can log in."
-  }
-}
-dashboard: {
+      "signup": {
+        "success": "Account created ✅ Please check your inbox and click \"Confirm my email\" to activate your account, then you can log in."
+      }
+    },
+
+    /* ==================== DASHBOARD ==================== */
+    dashboard: {
       header: {
         title: "Welcome 👋",
         subtitle:
