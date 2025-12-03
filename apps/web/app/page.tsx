@@ -279,30 +279,36 @@ export default function HomePage() {
             {t("home.hero.titleLine1")}<br />{t("home.hero.titleLine2")}
           </h1>
 
-          {/* ✅ Switch FR / EN minimal */}
-          <div className="flex gap-1 text-xs sm:text-sm items-center">
-            <button
-              type="button"
-              onClick={() => setLang("fr")}
-              className={`px-2.5 py-1 rounded-full border text-xs sm:text-sm ${
-                lang === "fr"
-                  ? "bg-emerald-600 text-white border-emerald-600"
-                  : "bg-white text-gray-700 border-gray-300"
-              }`}
-            >
-              FR
-            </button>
-            <button
-              type="button"
-              onClick={() => setLang("en")}
-              className={`px-2.5 py-1 rounded-full border text-xs sm:text-sm ${
-                lang === "en"
-                  ? "bg-emerald-600 text-white border-emerald-600"
-                  : "bg-white text-gray-700 border-gray-300"
-              }`}
-            >
-              EN
-            </button>
+          {/* ✅ Switch FR / EN dans le même style que le reste (discret, typé texte) */}
+          <div className="flex flex-col items-end gap-1 text-xs sm:text-sm text-gray-500">
+            <span className="uppercase tracking-wide text-[0.65rem] sm:text-[0.7rem] text-gray-400">
+              Langue
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setLang("fr")}
+                className={`px-1 transition-colors ${
+                  lang === "fr"
+                    ? "font-semibold text-gray-900 underline underline-offset-4"
+                    : "text-gray-500 hover:text-gray-800"
+                }`}
+              >
+                FR
+              </button>
+              <span className="text-gray-400">/</span>
+              <button
+                type="button"
+                onClick={() => setLang("en")}
+                className={`px-1 transition-colors ${
+                  lang === "en"
+                    ? "font-semibold text-gray-900 underline underline-offset-4"
+                    : "text-gray-500 hover:text-gray-800"
+                }`}
+              >
+                EN
+              </button>
+            </div>
           </div>
         </header>
 
