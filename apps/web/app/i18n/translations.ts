@@ -1,5 +1,5 @@
 // apps/web/app/i18n/translations.ts
-export const translations = {
+export const translations: { [lang: string]: any } = {
   fr: {
     home: {
       hero: {
