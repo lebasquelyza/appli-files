@@ -106,7 +106,6 @@ export default function ProfileClient(props: Props) {
 
   // Conserver saved/later quand on change de mode
   const qsKeep = [
-    hasGenerate ? "generate=1" : undefined,
     savedIdSet.size ? `saved=${[...savedIdSet].join(",")}` : undefined,
     laterIdSet.size ? `later=${[...laterIdSet].join(",")}` : undefined,
   ]
@@ -127,7 +126,6 @@ export default function ProfileClient(props: Props) {
   // Base de query pour les liens vers les détails de séance
   const baseLinkQuery = [
     equipMode === "none" ? "equip=none" : undefined,
-    "generate=1",
     savedIdSet.size ? `saved=${[...savedIdSet].join(",")}` : undefined,
     laterIdSet.size ? `later=${[...laterIdSet].join(",")}` : undefined,
   ]
@@ -142,6 +140,7 @@ export default function ProfileClient(props: Props) {
     .map((s, i) => ({ s, idx: i, key: sessionKey(s, i) }))
     .filter(({ key }) => laterIdSet.has(key));
 
+  // Ce lien sert uniquement à forcer une nouvelle génération du programme
   const hrefGenerate = `/dashboard/profile?generate=1${
     equipMode === "none" ? "&equip=none" : ""
   }${qsKeep ? `&${qsKeep}` : ""}`;
@@ -406,7 +405,7 @@ export default function ProfileClient(props: Props) {
           )}
         </div>
 
-        {/* 🟡 ÉTAT AVANT CLIC SUR GÉNÉRER */}
+        {/* 🟡 ÉTAT AVANT CLIC SUR GÉNÉRER (si jamais aucun programme n'a encore été généré) */}
         {!hasGenerate && (
           <div
             className="card"
@@ -491,7 +490,6 @@ export default function ProfileClient(props: Props) {
                     (k) => k !== key
                   );
                   const removeQuery = [
-                    "generate=1",
                     equipMode === "none" ? "equip=none" : undefined,
                     newSavedKeys.length
                       ? `saved=${newSavedKeys.join(",")}`
@@ -587,7 +585,6 @@ export default function ProfileClient(props: Props) {
                     (k) => k !== key
                   );
                   const removeQuery = [
-                    "generate=1",
                     equipMode === "none" ? "equip=none" : undefined,
                     savedIdSet.size
                       ? `saved=${[...savedIdSet].join(",")}`
