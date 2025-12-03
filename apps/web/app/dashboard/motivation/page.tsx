@@ -59,6 +59,9 @@ const PAGE_MAX_WIDTH = 740;
 
 const ALL_DAYS: DayKey[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 
+// 🔹 Longueur max pour le message perso
+const CUSTOM_MESSAGE_MAX = 240;
+
 function formatTime(dateStr: string) {
   const d = new Date(dateStr);
   return d.toLocaleString("fr-FR", {
@@ -86,6 +89,11 @@ export default function MotivationPage() {
     "fri",
   ]);
   const [prefTime, setPrefTime] = useState("09:00");
+
+  // 🔹 Message perso pour les amis
+  const [customMessage, setCustomMessage] = useState("");
+  const [sharingCustom, setSharingCustom] = useState(false);
+  const customRemaining = CUSTOM_MESSAGE_MAX - customMessage.length;
 
   // 🔹 Notifs en dur (mock) au chargement
   useEffect(() => {
@@ -249,6 +257,36 @@ export default function MotivationPage() {
     ]);
 
     setTimeout(() => setSending(false), 400);
+  };
+
+  // 🔹 Partage du message perso (mock : on ajoute une notif locale)
+  const shareCustomMessage = () => {
+    const trimmed = customMessage.trim();
+    if (!trimmed || sharingCustom) return;
+
+    setSharingCustom(true);
+    const nowIso = new Date().toISOString();
+
+    setNotifications((prev) => [
+      {
+        id: `custom-${nowIso}`,
+        title: t(
+          "motivation.customNotification.title",
+          "Message envoyé à tes amis 💌"
+        ),
+        message: trimmed,
+        createdAt: nowIso,
+        read: true,
+        source: t(
+          "motivation.customNotification.source",
+          "Toi → tes amis (démo)"
+        ),
+      },
+      ...prev,
+    ]);
+
+    setCustomMessage("");
+    setTimeout(() => setSharingCustom(false), 400);
   };
 
   if (status === "loading") {
@@ -564,6 +602,139 @@ export default function MotivationPage() {
                   "Envoyer une notif de test"
                 )}
           </button>
+        </div>
+      </div>
+
+      {/* 🔹 Zone : créer un message motivant pour ses amis */}
+      <div
+        className="card"
+        style={{
+          padding: 10,
+          marginBottom: 10,
+          border: "1px solid #e5e7eb",
+          background: "#ffffff",
+          borderRadius: 12,
+          display: "grid",
+          gap: 6,
+        }}
+      >
+        <div
+          style={{
+            fontSize: 14,
+            fontWeight: 700,
+            color: "#111827",
+          }}
+        >
+          {t(
+            "motivation.customMessage.title",
+            "Ton message pour motiver tes amis"
+          )}
+        </div>
+        <div
+          style={{
+            fontSize: 12,
+            color: "#6b7280",
+          }}
+        >
+          {t(
+            "motivation.customMessage.subtitle",
+            "Écris un petit mot d’encouragement qui sera partagé à tes amis qui utilisent l’appli (démo locale)."
+          )}
+        </div>
+
+        <textarea
+          value={customMessage}
+          onChange={(e) => {
+            const value = e.target.value;
+            if (value.length <= CUSTOM_MESSAGE_MAX) {
+              setCustomMessage(value);
+            }
+          }}
+          rows={3}
+          placeholder={t(
+            "motivation.customMessage.placeholder",
+            "Ex : « On se motive pour une séance cette semaine ? 💪 »"
+          )}
+          style={{
+            marginTop: 4,
+            width: "100%",
+            fontSize: 13,
+            padding: 8,
+            borderRadius: 8,
+            border: "1px solid #e5e7eb",
+            resize: "vertical",
+          }}
+        />
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 8,
+            marginTop: 2,
+            flexWrap: "wrap",
+          }}
+        >
+          <span
+            style={{
+              fontSize: 11,
+              color: "#6b7280",
+            }}
+          >
+            {t(
+              "motivation.customMessage.info",
+              "Dans une version future, ce message sera envoyé directement à tes amis via l’appli."
+            )}
+          </span>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
+            <span
+              style={{
+                fontSize: 11,
+                color: customRemaining < 0 ? "#b91c1c" : "#6b7280",
+              }}
+            >
+              {customRemaining}{" "}
+              {t(
+                "motivation.customMessage.remaining",
+                "caractères restants"
+              )}
+            </span>
+            <button
+              type="button"
+              className="btn"
+              onClick={shareCustomMessage}
+              disabled={!customMessage.trim() || sharingCustom}
+              style={{
+                fontSize: 12,
+                background: "#111827",
+                color: "#ffffff",
+                borderRadius: 999,
+                padding: "6px 10px",
+                opacity: !customMessage.trim() || sharingCustom ? 0.6 : 1,
+                cursor:
+                  !customMessage.trim() || sharingCustom
+                    ? "not-allowed"
+                    : "pointer",
+              }}
+            >
+              {sharingCustom
+                ? t(
+                    "motivation.customMessage.sending",
+                    "Partage en cours..."
+                  )
+                : t(
+                    "motivation.customMessage.sendButton",
+                    "Partager à mes amis"
+                  )}
+            </button>
+          </div>
         </div>
       </div>
 
