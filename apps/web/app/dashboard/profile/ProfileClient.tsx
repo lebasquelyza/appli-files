@@ -369,7 +369,7 @@ export default function ProfileClient(props: Props) {
             >
               <a
                 href={hrefFull}
-                className{
+                className={
                   equipMode === "full"
                     ? "inline-flex items-center rounded-md border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-sm font-semibold text-white"
                     : "inline-flex items-center rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-semibold text-neutral-900"
@@ -386,7 +386,7 @@ export default function ProfileClient(props: Props) {
               </a>
               <a
                 href={hrefNone}
-                className{
+                className={
                   equipMode === "none"
                     ? "inline-flex items-center rounded-md border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-sm font-semibold text-white"
                     : "inline-flex items-center rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-semibold text-neutral-900"
@@ -405,7 +405,7 @@ export default function ProfileClient(props: Props) {
           )}
         </div>
 
-        {/* 🟡 ÉTAT AVANT CLIC SUR GÉNÉRER (si jamais aucun programme n'a encore été généré) */}
+      {/* 🟡 ÉTAT AVANT CLIC SUR GÉNÉRER (si jamais aucun programme n'a encore été généré) */}
         {!hasGenerate && (
           <div
             className="card"
