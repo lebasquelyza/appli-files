@@ -2440,10 +2440,7 @@ export const translations = {
     "success": "Account created ✅ Please check your inbox and click “Confirm my email” to activate your account, then you can log in."
   }
 }
-
-
-
-    dashboard: {
+dashboard: {
       header: {
         title: "Welcome 👋",
         subtitle:
