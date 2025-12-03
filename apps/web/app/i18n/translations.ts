@@ -1001,8 +1001,7 @@ export const translations = {
         real8: "Pack 8 séances réelles/mois (+240 €)",
       },
     },
-
-    abonnementSuccess: {
+abonnementSuccess: {
       noSession: {
         title: "Paiement",
         text: "Session Stripe introuvable.",
