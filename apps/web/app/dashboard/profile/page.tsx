@@ -175,7 +175,7 @@ function ensureAtLeast4(
   return uniqByName(out).slice(0, 4);
 }
 
-/* ===== Helpers Supabase admin → programme_insights ===== */
+/* ===== Helpers Supabase admin → programme_insights & programme_lists ===== */
 async function getSupabaseAdmin() {
   const url =
     process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
@@ -255,6 +255,66 @@ async function logProgrammeInsightToSupabase(
     });
   } catch (e) {
     console.error("[logProgrammeInsightToSupabase] error:", e);
+  }
+}
+
+/* ===== Helpers Supabase → programme_lists (listes faite / plus tard) ===== */
+
+type ProgrammeLists = {
+  savedIds: string[];
+  laterIds: string[];
+};
+
+async function loadListsFromSupabase(email: string): Promise<ProgrammeLists> {
+  try {
+    const supabaseAdmin = await getSupabaseAdmin();
+    const normalizedEmail = (email || "").trim().toLowerCase();
+    if (!supabaseAdmin || !normalizedEmail) {
+      return { savedIds: [], laterIds: [] };
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from("programme_lists")
+      .select("saved_ids,later_ids")
+      .eq("email", normalizedEmail)
+      .single();
+
+    if (error || !data) {
+      return { savedIds: [], laterIds: [] };
+    }
+
+    return {
+      savedIds: (data.saved_ids as string[] | null) || [],
+      laterIds: (data.later_ids as string[] | null) || [],
+    };
+  } catch (e) {
+    console.error("[loadListsFromSupabase] error:", e);
+    return { savedIds: [], laterIds: [] };
+  }
+}
+
+async function saveListsToSupabase(
+  email: string,
+  savedIds: string[],
+  laterIds: string[]
+) {
+  try {
+    const supabaseAdmin = await getSupabaseAdmin();
+    const normalizedEmail = (email || "").trim().toLowerCase();
+    if (!supabaseAdmin || !normalizedEmail) return;
+
+    await supabaseAdmin
+      .from("programme_lists")
+      .upsert(
+        {
+          email: normalizedEmail,
+          saved_ids: savedIds,
+          later_ids: laterIds,
+        },
+        { onConflict: "email" }
+      );
+  } catch (e) {
+    console.error("[saveListsToSupabase] error:", e);
   }
 }
 
@@ -439,11 +499,28 @@ export default async function Page({
   // hasGenerate = est-ce qu'on a un programme à afficher ?
   const hasGenerate = initialSessions.length > 0;
 
-  const savedSet = parseIdList(searchParams?.saved);
-  const laterSet = parseIdList(searchParams?.later);
+  // 🔁 Listes "faite / plus tard"
+  // 1) On charge ce qui est déjà en BDD
+  const dbLists = await loadListsFromSupabase(emailForDisplay);
 
-  const savedIds = [...savedSet];
-  const laterIds = [...laterSet];
+  // 2) On regarde si l'URL fournit une version à jour (clic sur 🗑️ / ajout)
+  const querySavedSet = parseIdList(searchParams?.saved);
+  const queryLaterSet = parseIdList(searchParams?.later);
+
+  const hasSavedParam = typeof searchParams?.saved !== "undefined";
+  const hasLaterParam = typeof searchParams?.later !== "undefined";
+
+  // 3) Si des paramètres sont présents, ils sont la source de vérité,
+  //    sinon on tombe back sur ce qu'il y a en BDD.
+  const savedIds = hasSavedParam
+    ? [...querySavedSet]
+    : dbLists.savedIds || [];
+  const laterIds = hasLaterParam
+    ? [...queryLaterSet]
+    : dbLists.laterIds || [];
+
+  // 4) On persiste la version finale en BDD (email + listes)
+  await saveListsToSupabase(emailForDisplay, savedIds, laterIds);
 
   const displayedError = searchParams?.error || "";
   const displayedSuccess = searchParams?.success || "";
@@ -482,3 +559,4 @@ export default async function Page({
     />
   );
 }
+
