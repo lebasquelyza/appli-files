@@ -279,24 +279,36 @@ export default function HomePage() {
             {t("home.hero.titleLine1")}<br />{t("home.hero.titleLine2")}
           </h1>
 
-          {/* 🔥 Switch FR / EN plus petit, en noir */}
-          <div className="flex items-center gap-1 text-[0.6rem] sm:text-[0.7rem]">
+          {/* 🔥 Switch FR / EN encore plus forcé : style inline, petit, noir */}
+          <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: "0.7rem" }}>
             <button
               type="button"
               onClick={() => setLang("fr")}
-              className={`px-1 transition ${
-                lang === "fr" ? "font-bold underline" : "font-normal"
-              } text-black`}
+              style={{
+                padding: "0 4px",
+                fontSize: "0.7rem",
+                color: "#000",
+                background: "transparent",
+                border: "none",
+                fontWeight: lang === "fr" ? 700 : 400,
+                textDecoration: lang === "fr" ? "underline" : "none",
+              }}
             >
               FR
             </button>
-            <span className="text-black/70 text-[0.55rem]">/</span>
+            <span style={{ fontSize: "0.65rem", color: "rgba(0,0,0,0.7)" }}>/</span>
             <button
               type="button"
               onClick={() => setLang("en")}
-              className={`px-1 transition ${
-                lang === "en" ? "font-bold underline" : "font-normal"
-              } text-black`}
+              style={{
+                padding: "0 4px",
+                fontSize: "0.7rem",
+                color: "#000",
+                background: "transparent",
+                border: "none",
+                fontWeight: lang === "en" ? 700 : 400,
+                textDecoration: lang === "en" ? "underline" : "none",
+              }}
             >
               EN
             </button>
@@ -531,3 +543,4 @@ export default function HomePage() {
     </main>
   );
 }
+
