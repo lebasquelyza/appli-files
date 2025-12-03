@@ -46,9 +46,9 @@ export const authOptions: NextAuthOptions = {
             "streaming",
             "user-modify-playback-state",
             "user-read-playback-state",
-            "user-library-read", // ⬅️ accès aux titres likés
+            "user-library-read", // accès aux titres likés
           ].join(" "),
-          show_dialog: true, // ⬅️ force le nouvel écran de consentement (tu pourras le remettre en commentaire après)
+          show_dialog: true,
         },
       },
     }),
@@ -96,9 +96,16 @@ export const authOptions: NextAuthOptions = {
     },
 
     async session({ session, token }) {
+      // on met l'accessToken dans la session (comme tu le faisais déjà)
       (session as any).accessToken = (token as any).accessToken;
+
+      // 🔴 AJOUT IMPORTANT : exposer un user.id dans la session
+      // NextAuth met en général l'id dans token.sub (id Spotify ici)
+      if (session.user && token.sub) {
+        (session.user as any).id = token.sub;
+      }
+
       return session;
     },
   },
 };
-
