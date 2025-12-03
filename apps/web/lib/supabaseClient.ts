@@ -30,6 +30,14 @@ export function getSupabase(): SupabaseClient {
     );
   }
 
-  client = createClient(url, anon);
+  // 🔥 Seule vraie modification : options auth pour persistance & refresh auto
+  client = createClient(url, anon, {
+    auth: {
+      persistSession: true,   // garde la session dans le navigateur
+      autoRefreshToken: true, // rafraîchit automatiquement le token
+      detectSessionInUrl: true,
+    },
+  });
+
   return client;
 }
