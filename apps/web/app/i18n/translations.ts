@@ -1000,7 +1000,7 @@ export const translations = {
         real4: "Pack 4 séances réelles/mois (+140 €)",
         real8: "Pack 8 séances réelles/mois (+240 €)",
       },
-    },
+    
 abonnementSuccess: {
       noSession: {
         title: "Paiement",
