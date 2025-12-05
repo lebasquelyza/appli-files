@@ -1,0 +1,81 @@
+import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+/**
+ * POST /api/notify-auth
+ * body: { type: "login" | "signup", userEmail: string }
+ */
+export async function POST(req: Request) {
+  try {
+    const { type, userEmail } = await req.json();
+
+    const typeStr = String(type || "").trim();
+    const emailTrim = String(userEmail || "").trim().toLowerCase();
+
+    if (!typeStr || !emailTrim) {
+      return NextResponse.json(
+        { error: "Type et email requis" },
+        { status: 400 }
+      );
+    }
+
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    // ⚠️ On NE crée le client qu'ici, pas en haut du fichier
+    if (!supabaseUrl || !serviceRoleKey) {
+      console.error("[notify-auth] SUPABASE_URL ou SERVICE_ROLE_KEY manquants");
+      return NextResponse.json(
+        { error: "Supabase env vars missing" },
+        { status: 500 }
+      );
+    }
+
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+
+    const isLogin = typeStr === "login";
+    const isSignup = typeStr === "signup";
+
+    const eventName = isLogin
+      ? "LOGIN"
+      : isSignup
+      ? "SIGN_UP"
+      : typeStr.toUpperCase();
+
+    const { data: inserted, error: insertError } = await supabaseAdmin
+      .from("auth_events")
+      .insert({
+        event_name: eventName,
+        email: emailTrim,
+        metadata: {
+          source: "notify-auth-minimal",
+          raw_type: typeStr,
+        },
+      })
+      .select("id, event_name, email, created_at")
+      .single();
+
+    if (insertError) {
+      console.error("[notify-auth] insert error:", insertError);
+      return NextResponse.json(
+        { error: "DB insert error", details: insertError.message },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json(
+      { ok: true, inserted },
+      { status: 200 }
+    );
+  } catch (e: any) {
+    console.error("[notify-auth] fatal:", e);
+    return NextResponse.json(
+      { ok: false, message: "Erreur interne.", details: e?.message },
+      { status: 500 }
+    );
+  }
+}
+

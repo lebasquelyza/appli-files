@@ -1,0 +1,33 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Modèle pour stocker les messages de motivation
+model MotivationMessage {
+  id        String   @id @default(cuid())
+
+  // id de l'utilisateur (par ex. id Spotify via NextAuth)
+  userId    String
+
+  // "ME" ou "FRIENDS" (on gère ça en TypeScript / code)
+  target    String
+
+  content   String   // texte du message
+
+  // jours de la semaine, stockés sous forme "mon,tue,wed"
+  days      String
+
+  // Heure au format "HH:mm"
+  time      String
+
+  active    Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+

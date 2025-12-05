@@ -1,0 +1,40 @@
+{
+  "name": "web",
+  "private": true,
+  "scripts": {
+    "prebuild": "node -e \"for (const m of ['@radix-ui/react-separator','@radix-ui/react-dialog']){try{require.resolve(m);console.log(m+' OK')}catch(e){console.error(m+' MISSING');process.exit(1)}}\"",
+    "dev": "next dev -p 3000",
+    "build": "next build",
+    "start": "next start -p 3000"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.19.1",
+    "@radix-ui/react-dialog": "^1.0.5",
+    "@radix-ui/react-separator": "^1.1.7",
+    "@react-three/drei": "9.105.6",
+    "@react-three/fiber": "8.15.19",
+    "@supabase/ssr": "^0.5.0",
+    "@supabase/supabase-js": "^2.0.0",
+    "axios": "^1.7.2",
+    "clsx": "^2.1.0",
+    "fast-xml-parser": "^4.3.2",
+    "jszip": "^3.10.1",
+    "lucide-react": "^0.452.0",
+    "next": "14.2.5",
+    "next-auth": "^4.24.7",
+    "openai": "^4.58.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "stripe": "^16.0.0",
+    "three": "0.159.0",
+    "web-push": "^3.6.7",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.1",
+    "@types/react": "^19.1.12",
+    "@types/web-push": "^3.6.4",
+    "prisma": "^5.19.1",
+    "typescript": "^5.9.2"
+  }
+}

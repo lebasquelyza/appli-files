@@ -1,0 +1,52 @@
+import { NextResponse, type NextRequest } from "next/server";
+import { createServerClient } from "@supabase/ssr";
+
+export async function middleware(req: NextRequest) {
+  // On prépare la réponse (pass-through)
+  const res = NextResponse.next();
+
+  try {
+    // Lire la session Supabase depuis les cookies sb-...
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get: (name: string) => req.cookies.get(name)?.value,
+          set: (name: string, value: string, options: any) => {
+            // Ecrit un cookie dans la réponse
+            res.cookies.set({ name, value, ...options });
+          },
+          remove: (name: string, options: any) => {
+            res.cookies.set({ name, value: "", ...options, maxAge: 0 });
+          },
+        },
+      }
+    );
+
+    const { data, error } = await supabase.auth.getUser();
+    const email = data?.user?.email?.trim().toLowerCase();
+
+    // Si on a un email, on le copie dans le cookie lu par /dashboard/profile
+    if (!error && email) {
+      res.cookies.set({
+        name: "app_email",
+        value: email,
+        path: "/",
+        httpOnly: true,
+        sameSite: "lax",
+        secure: true,
+        maxAge: 60 * 60 * 24 * 365, // 1 an
+      });
+    }
+  } catch {
+    // silencieux: on ne bloque pas la requête
+  }
+
+  return res;
+}
+
+// Active le middleware sur toutes les pages Dashboard
+export const config = {
+  matcher: ["/dashboard/:path*"],
+};
