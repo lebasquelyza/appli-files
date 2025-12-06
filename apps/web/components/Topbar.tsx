@@ -2,11 +2,14 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { useLanguage } from "@/components/LanguageProvider";
 
 export default function Topbar({ hideMenu = false }: { hideMenu?: boolean }) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
   const firstBtnRef = useRef<HTMLButtonElement | null>(null);
+
+  const { lang, setLang } = useLanguage();
 
   const go = (href: string) => {
     setOpen(false);
@@ -19,21 +22,6 @@ export default function Topbar({ hideMenu = false }: { hideMenu?: boolean }) {
       return () => clearTimeout(t);
     }
   }, [open]);
-
-  // change la langue via cookie + reload
-  const changeLang = (lang: "fr" | "en") => {
-    try {
-      document.cookie = [
-        `fc-lang=${lang}`,
-        "Path=/",
-        "SameSite=Lax",
-        "Max-Age=31536000", // 1 an
-      ].join("; ");
-      window.location.reload();
-    } catch {
-      // au pire, rien
-    }
-  };
 
   return (
     <>
@@ -55,19 +43,29 @@ export default function Topbar({ hideMenu = false }: { hideMenu?: boolean }) {
             </button>
           )}
 
-          {/* 🔤 Boutons FR / EN juste à côté */}
+          {/* 🔤 Boutons FR / EN synchronisés avec LanguageProvider */}
           <div className="flex items-center gap-1">
             <button
               type="button"
-              onClick={() => changeLang("fr")}
-              className="px-3 py-1 rounded-full text-xs border border-emerald-600 bg-emerald-600 text-white"
+              onClick={() => setLang("fr")}
+              className={
+                "px-3 py-1 rounded-full text-xs border " +
+                (lang === "fr"
+                  ? "border-emerald-600 bg-emerald-600 text-white"
+                  : "border-gray-300 bg-white text-gray-900")
+              }
             >
               🇫🇷 FR
             </button>
             <button
               type="button"
-              onClick={() => changeLang("en")}
-              className="px-3 py-1 rounded-full text-xs border border-gray-300 bg-white text-gray-900"
+              onClick={() => setLang("en")}
+              className={
+                "px-3 py-1 rounded-full text-xs border " +
+                (lang === "en"
+                  ? "border-emerald-600 bg-emerald-600 text-white"
+                  : "border-gray-300 bg-white text-gray-900")
+              }
             >
               🇬🇧 EN
             </button>
