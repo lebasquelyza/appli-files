@@ -10,7 +10,7 @@ export default function TopbarGate({ hideMenu = false }: { hideMenu?: boolean })
   const router = useRouter();
   const firstBtnRef = useRef<HTMLButtonElement | null>(null);
 
-  const { lang, setLang } = useLanguage(); // 👈 même logique que sur la landing
+  const { lang, setLang, t } = useLanguage(); // 👈 on récupère lang + setLang + t
 
   const go = (href: string) => {
     setOpen(false);
@@ -32,7 +32,7 @@ export default function TopbarGate({ hideMenu = false }: { hideMenu?: boolean })
           <div className="flex items-center gap-2">
             {!hideMenu && (
               <button
-                aria-label="Ouvrir/Fermer le menu"
+                aria-label={t("topbar.menu.toggleAria") || "Ouvrir/Fermer le menu"}
                 onClick={() => setOpen((v) => !v)}
                 className="js-topbar-menu inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-[.99] transition"
               >
@@ -41,6 +41,7 @@ export default function TopbarGate({ hideMenu = false }: { hideMenu?: boolean })
                   <span className="absolute inset-x-0 top-1.5 h-[2px] bg-white" />
                   <span className="absolute inset-x-0 bottom-0 h-[2px] bg-white" />
                 </span>
+                {/* Pas de clé dédiée → on garde le texte neutre */}
                 FILES-Menu
               </button>
             )}
@@ -74,9 +75,9 @@ export default function TopbarGate({ hideMenu = false }: { hideMenu?: boolean })
             </div>
           </div>
 
-          {/* centre inchangé */}
+          {/* centre */}
           <div />
-          {/* droite inchangée */}
+          {/* droite */}
           <div className="w-[42px]" />
         </div>
       </header>
@@ -93,14 +94,15 @@ export default function TopbarGate({ hideMenu = false }: { hideMenu?: boolean })
             <nav className="max-w-screen-md mx-auto w-full p-2 pt-[calc(env(safe-area-inset-top)+2px)]">
               <ul className="divide-y">
                 {[
-                  { href: "/dashboard", label: "Accueil" },
-                  { href: "/dashboard/calories", label: "Calories" },
-                  { href: "/dashboard/corrector", label: "Correcteur IA" },
-                  { href: "/dashboard/profile", label: "Profil" },
-                  { href: "/dashboard/abonnement", label: "Abonnement" },
-                  { href: "/dashboard/recipes", label: "Recettes" },
-                  { href: "/dashboard/progress", label: "Progression" },
-                  { href: "/dashboard/settings", label: "Réglages" },
+                  // On réutilise tes clés existantes dans translations.ts
+                  { href: "/dashboard", label: t("dashboard.header.title") },          // "Bienvenue 👋" / "Welcome 👋"
+                  { href: "/dashboard/calories", label: t("calories.page.title") },    // "Calories"
+                  { href: "/dashboard/corrector", label: t("videoCoach.page.title") }, // Import / Enregistrement
+                  { href: "/dashboard/profile", label: t("profile.title") },           // Mon profil / My profile
+                  { href: "/dashboard/abonnement", label: t("abonnement.page.title") },
+                  { href: "/dashboard/recipes", label: t("recipes.pageTitle") },
+                  { href: "/dashboard/progress", label: t("progress.pageTitle") },
+                  { href: "/dashboard/settings", label: t("settings.pageTitle") },
                 ].map((item, i) => (
                   <li key={item.href}>
                     <button
@@ -121,3 +123,4 @@ export default function TopbarGate({ hideMenu = false }: { hideMenu?: boolean })
     </>
   );
 }
+
