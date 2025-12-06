@@ -2,7 +2,8 @@
   "name": "files-coaching",
   "version": "1.0.0",
   "private": true,
-  "type": "module",
+  "@prisma/client": "5.19.1",
+ "type": "module",
   "dependencies": {
     "resend": "^4.0.0"
   }
