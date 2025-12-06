@@ -1,4 +1,4 @@
-//apps/web/components/LanguageProvider.tsx
+// apps/web/components/LanguageProvider.tsx
 "use client";
 
 import React, {
@@ -29,7 +29,7 @@ function getFromPath(obj: any, path: string): string {
   return path.split(".").reduce((acc, key) => acc?.[key], obj) ?? path;
 }
 
-// 🔑 nouveau nom de cookie pour repartir propre
+// 🔑 Cookie unique pour la langue
 const COOKIE_KEY = "fc-lang-v2";
 
 // lit fc-lang-v2 côté client
@@ -54,6 +54,7 @@ function writeCookieLang(lang: Lang) {
 }
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
+  // FR par défaut (avant lecture du cookie)
   const [lang, setLangState] = useState<Lang>("fr");
 
   // ⚡ init : cookie v2 > FR par défaut
