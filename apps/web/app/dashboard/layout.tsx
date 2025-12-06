@@ -24,7 +24,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
         <section>{children}</section>
 
-        <footer className="mt-10 py-4 text-center text-sm text-gray-500">
+        {/* ⬇️ ICI : on force le centrage avec style textAlign:"center" */}
+        <footer
+          className="mt-10 py-4 text-sm text-gray-500"
+          style={{ textAlign: "center" }}
+        >
           Files Coaching 2025
         </footer>
       </div>
