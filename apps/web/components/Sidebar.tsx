@@ -28,7 +28,7 @@ type NavItem = {
 
 const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", labelKey: "dashboard.header.title", icon: Home },
-  { href: "/dashboard/profile", labelKey: "profile.title", icon: User2 },
+  { href: "/dashboard/profile", labelKey: "profile.title", icon: User2 }, // 👈 ICI
   { href: "/dashboard/progress", labelKey: "progress.pageTitle", icon: LineChart },
   { href: "/dashboard/corrector", labelKey: "videoCoach.page.title", icon: Wand2 },
   { href: "/dashboard/recipes", labelKey: "recipes.pageTitle", icon: BookOpen },
