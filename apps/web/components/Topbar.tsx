@@ -1,3 +1,4 @@
+// apps/web/components/Topbar.tsx
 "use client";
 
 import { useRouter } from "next/navigation";
@@ -9,7 +10,7 @@ export default function Topbar({ hideMenu = false }: { hideMenu?: boolean }) {
   const router = useRouter();
   const firstBtnRef = useRef<HTMLButtonElement | null>(null);
 
-  const { lang, setLang } = useLanguage(); // 👈 même source que page.tsx
+  const { lang, setLang } = useLanguage();
 
   const go = (href: string) => {
     setOpen(false);
@@ -43,7 +44,7 @@ export default function Topbar({ hideMenu = false }: { hideMenu?: boolean }) {
             </button>
           )}
 
-          {/* 🔤 Boutons FR / EN liés à `lang` */}
+          {/* 🔤 Boutons FR / EN synchronisés avec LanguageProvider */}
           <div className="flex items-center gap-1">
             <button
               type="button"
@@ -113,4 +114,3 @@ export default function Topbar({ hideMenu = false }: { hideMenu?: boolean }) {
     </>
   );
 }
-
