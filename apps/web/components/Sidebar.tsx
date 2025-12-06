@@ -22,7 +22,7 @@ import { useLanguage } from "@/components/LanguageProvider";
 
 type NavItem = {
   href: string;
-  labelKey: string; // 👈 on stocke la clé de traduction
+  labelKey: string;
   icon?: React.ComponentType<{ size?: number }>;
 };
 
@@ -37,26 +37,26 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard/bmi", labelKey: "bmi.page.title", icon: ClipboardList },
   { href: "/dashboard/motivation", labelKey: "motivation.pageTitle", icon: MessageCircle },
   { href: "/dashboard/music", labelKey: "music.pageTitle", icon: Music2 },
-  { href: "/dashboard/avis", labelKey: "avis.page.pageTitle", icon: MessageCircle },
+  { href: "/dashboard/avis", labelKey: "avis.page.title", icon: MessageCircle },
   { href: "/dashboard/settings", labelKey: "settings.pageTitle", icon: Settings },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const { lang, setLang, t } = useLanguage(); // 👈 on utilise le provider global
+  const { lang, setLang, t } = useLanguage();
 
   // Replier le menu à chaque changement de route
   useEffect(() => setOpen(false), [pathname]);
 
-  // Fermer APRÈS que le clic ait été géré par <Link>
+  // Fermer APRÈS le clic sur le lien
   const closeAfterClick = () => {
     requestAnimationFrame(() => setOpen(false));
   };
 
   return (
     <nav aria-label="Dashboard" style={{ paddingLeft: 10, paddingRight: 10 }}>
-      {/* ===== Entête sticky collée en haut avec safe-area ===== */}
+      {/* Entête sticky */}
       <div
         style={{
           position: "sticky",
@@ -88,7 +88,6 @@ export default function Sidebar() {
               cursor: "pointer",
             }}
           >
-            {/* Pastille verte (non interactive) */}
             <span
               aria-hidden
               style={{
@@ -114,7 +113,7 @@ export default function Sidebar() {
             />
           </button>
 
-          {/* 🔤 Switch langue juste à côté de Files-Menu */}
+          {/* 🔤 Switch FR / EN */}
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
             <button
               type="button"
@@ -150,7 +149,7 @@ export default function Sidebar() {
         </div>
       </div>
 
-      {/* ===== Liste des onglets — masquée par défaut ===== */}
+      {/* Liste des onglets */}
       <ul
         id="sidebar-links"
         style={{
