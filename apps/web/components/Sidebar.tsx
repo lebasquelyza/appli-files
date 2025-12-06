@@ -18,64 +18,40 @@ import {
   Music2,
   Settings,
 } from "lucide-react";
+import { useLanguage } from "@/components/LanguageProvider";
 
 type NavItem = {
   href: string;
-  label: string;
+  labelKey: string; // 👈 on stocke la clé de traduction
   icon?: React.ComponentType<{ size?: number }>;
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { href: "/dashboard", label: "Accueil", icon: Home },
-  { href: "/dashboard/profile", label: "Mon profil", icon: User2 },
-  { href: "/dashboard/progress", label: "Mes progrès", icon: LineChart },
-  { href: "/dashboard/corrector", label: "Files te corrige", icon: Wand2 },
-  { href: "/dashboard/recipes", label: "Recettes", icon: BookOpen },
-  { href: "/dashboard/calories", label: "Calories", icon: Flame },
-  { href: "/dashboard/connect", label: "Connecte tes données", icon: Plug2 },
-  { href: "/dashboard/bmi", label: "IMC", icon: ClipboardList },
-  { href: "/dashboard/motivation", label: "Motivation", icon: MessageCircle },
-  { href: "/dashboard/music", label: "Musique", icon: Music2 },
-  { href: "/dashboard/avis", label: "Votre avis", icon: MessageCircle },
-  { href: "/dashboard/settings", label: "Réglages", icon: Settings },
+  { href: "/dashboard", labelKey: "dashboard.header.title", icon: Home },
+  { href: "/dashboard/profile", labelKey: "profile.title", icon: User2 },
+  { href: "/dashboard/progress", labelKey: "progress.pageTitle", icon: LineChart },
+  { href: "/dashboard/corrector", labelKey: "videoCoach.page.title", icon: Wand2 },
+  { href: "/dashboard/recipes", labelKey: "recipes.pageTitle", icon: BookOpen },
+  { href: "/dashboard/calories", labelKey: "calories.page.title", icon: Flame },
+  { href: "/dashboard/connect", labelKey: "connect.page.title", icon: Plug2 },
+  { href: "/dashboard/bmi", labelKey: "bmi.page.title", icon: ClipboardList },
+  { href: "/dashboard/motivation", labelKey: "motivation.pageTitle", icon: MessageCircle },
+  { href: "/dashboard/music", labelKey: "music.pageTitle", icon: Music2 },
+  { href: "/dashboard/avis", labelKey: "avis.page.pageTitle", icon: MessageCircle },
+  { href: "/dashboard/settings", labelKey: "settings.pageTitle", icon: Settings },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const [lang, setLang] = useState<"fr" | "en">("fr");
+  const { lang, setLang, t } = useLanguage(); // 👈 on utilise le provider global
 
   // Replier le menu à chaque changement de route
   useEffect(() => setOpen(false), [pathname]);
 
-  // Lire la langue actuelle depuis le cookie (pour mettre le bouton actif)
-  useEffect(() => {
-    if (typeof document === "undefined") return;
-    const match = document.cookie.match(/(?:^|;\s*)fc-lang=(fr|en)/);
-    if (match) {
-      setLang(match[1] as "fr" | "en");
-    }
-  }, []);
-
   // Fermer APRÈS que le clic ait été géré par <Link>
   const closeAfterClick = () => {
     requestAnimationFrame(() => setOpen(false));
-  };
-
-  // Change la langue via cookie + reload
-  const changeLang = (newLang: "fr" | "en") => {
-    try {
-      document.cookie = [
-        `fc-lang=${newLang}`,
-        "Path=/",
-        "SameSite=Lax",
-        "Max-Age=31536000", // 1 an
-      ].join("; ");
-      setLang(newLang);
-      window.location.reload();
-    } catch {
-      // on ignore si ça plante
-    }
   };
 
   return (
@@ -142,7 +118,7 @@ export default function Sidebar() {
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
             <button
               type="button"
-              onClick={() => changeLang("fr")}
+              onClick={() => setLang("fr")}
               style={{
                 padding: "3px 8px",
                 borderRadius: 999,
@@ -157,7 +133,7 @@ export default function Sidebar() {
             </button>
             <button
               type="button"
-              onClick={() => changeLang("en")}
+              onClick={() => setLang("en")}
               style={{
                 padding: "3px 8px",
                 borderRadius: 999,
@@ -186,8 +162,10 @@ export default function Sidebar() {
           overflowY: "auto",
         }}
       >
-        {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+        {NAV_ITEMS.map(({ href, labelKey, icon: Icon }) => {
           const active = pathname === href || pathname.startsWith(href + "/");
+          const label = t(labelKey) || labelKey;
+
           return (
             <li key={href}>
               <Link
