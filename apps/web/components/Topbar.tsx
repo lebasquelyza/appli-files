@@ -10,7 +10,7 @@ export default function Topbar({ hideMenu = false }: { hideMenu?: boolean }) {
   const router = useRouter();
   const firstBtnRef = useRef<HTMLButtonElement | null>(null);
 
-  const { lang, setLang } = useLanguage();
+  const { lang, setLang, t } = useLanguage();
 
   const go = (href: string) => {
     setOpen(false);
@@ -31,7 +31,7 @@ export default function Topbar({ hideMenu = false }: { hideMenu?: boolean }) {
           {/* FILES-Menu */}
           {!hideMenu && (
             <button
-              aria-label="Ouvrir/Fermer le menu"
+              aria-label={t("topbar.menu.toggleAria") || "Ouvrir/Fermer le menu"}
               onClick={() => setOpen((v) => !v)}
               className="js-topbar-menu inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-[.99] transition"
             >
@@ -44,8 +44,8 @@ export default function Topbar({ hideMenu = false }: { hideMenu?: boolean }) {
             </button>
           )}
 
-          {/* 🔤 Boutons FR / EN synchronisés avec LanguageProvider */}
-          <div className="flex items-center gap-1">
+          {/* 🔤 FR / EN aligné à droite */}
+          <div className="flex items-center gap-1 ml-auto">
             <button
               type="button"
               onClick={() => setLang("fr")}
@@ -86,14 +86,14 @@ export default function Topbar({ hideMenu = false }: { hideMenu?: boolean }) {
             <nav className="max-w-screen-md mx-auto w-full p-2 pt-[calc(env(safe-area-inset-top)+2px)]">
               <ul className="divide-y">
                 {[
-                  { href: "/dashboard", label: "Accueil" },
-                  { href: "/dashboard/calories", label: "Calories" },
-                  { href: "/dashboard/corrector", label: "Correcteur IA" },
-                  { href: "/dashboard/profile", label: "Profil" },
-                  { href: "/dashboard/abonnement", label: "Abonnement" },
-                  { href: "/dashboard/recipes", label: "Recettes" },
-                  { href: "/dashboard/progress", label: "Progression" },
-                  { href: "/dashboard/settings", label: "Réglages" },
+                  { href: "/dashboard", label: t("dashboard.header.title") },
+                  { href: "/dashboard/calories", label: t("calories.page.title") },
+                  { href: "/dashboard/corrector", label: t("videoCoach.page.title") },
+                  { href: "/dashboard/profile", label: t("profile.title") },
+                  { href: "/dashboard/abonnement", label: t("abonnement.page.title") },
+                  { href: "/dashboard/recipes", label: t("recipes.pageTitle") },
+                  { href: "/dashboard/progress", label: t("progress.pageTitle") },
+                  { href: "/dashboard/settings", label: t("settings.pageTitle") },
                 ].map((item, i) => (
                   <li key={item.href}>
                     <button
