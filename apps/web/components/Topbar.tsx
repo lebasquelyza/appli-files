@@ -9,7 +9,7 @@ export default function Topbar({ hideMenu = false }: { hideMenu?: boolean }) {
   const router = useRouter();
   const firstBtnRef = useRef<HTMLButtonElement | null>(null);
 
-  const { lang, setLang } = useLanguage(); // 👈 même logique que page.tsx
+  const { lang, setLang } = useLanguage(); // 👈 même source que page.tsx
 
   const go = (href: string) => {
     setOpen(false);
@@ -43,7 +43,7 @@ export default function Topbar({ hideMenu = false }: { hideMenu?: boolean }) {
             </button>
           )}
 
-          {/* 🔤 Boutons FR / EN avec la même logique que page.tsx */}
+          {/* 🔤 Boutons FR / EN liés à `lang` */}
           <div className="flex items-center gap-1">
             <button
               type="button"
@@ -113,3 +113,4 @@ export default function Topbar({ hideMenu = false }: { hideMenu?: boolean }) {
     </>
   );
 }
+
