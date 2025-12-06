@@ -18,13 +18,14 @@ export default function MobileTabbar() {
       }}
     >
       <div
-        className="w-full h-14 flex items-center justify-start px-4"
+        className="w-full h-14 flex items-center justify-center"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
-        <p className="text-xs font-semibold text-gray-900 text-left">
+        <p className="text-xs font-semibold text-gray-900 text-center">
           Files Coaching 2025
         </p>
       </div>
     </footer>
   );
 }
+
