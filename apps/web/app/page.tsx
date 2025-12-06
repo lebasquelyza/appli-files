@@ -287,7 +287,7 @@ export default function HomePage() {
             {t("home.hero.titleLine2")}
           </h1>
 
-          {/* Switch FR / EN */}
+        {/* Switch FR / EN */}
           <div
             style={{
               display: "flex",
@@ -394,7 +394,7 @@ export default function HomePage() {
           <div id="login-panel" className="max-w-md mx-auto">
             <form onSubmit={handleLogin} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-1">
+                <label className="block text-sm sm:text-base font-medium mb-1">
                   {t("home.login.emailLabel")}
                 </label>
                 <input
@@ -413,7 +413,7 @@ export default function HomePage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">
+                <label className="block text-sm sm:text-base font-medium mb-1">
                   {t("home.login.passwordLabel")}
                 </label>
                 <div className="relative">
@@ -485,7 +485,7 @@ export default function HomePage() {
           <div id="signup-panel" className="max-w-md mx-auto">
             <form onSubmit={handleSignup} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-1">
+                <label className="block text-sm sm:text-base font-medium mb-1">
                   {t("home.signup.emailLabel")}
                 </label>
                 <input
@@ -504,7 +504,7 @@ export default function HomePage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">
+                <label className="block text-sm sm:text-base font-medium mb-1">
                   {t("home.signup.passwordLabel")}
                 </label>
                 <div className="relative">
