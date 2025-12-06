@@ -1,13 +1,16 @@
-// apps/web/app/dashboard/_components/ClientTopbar.tsx
+// apps/web/app/dashboard/_components/TopbarGate.tsx
 "use client";
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { useLanguage } from "@/components/LanguageProvider";
 
-export default function ClientTopbar({ hideMenu = false }: { hideMenu?: boolean }) {
+export default function TopbarGate({ hideMenu = false }: { hideMenu?: boolean }) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
   const firstBtnRef = useRef<HTMLButtonElement | null>(null);
+
+  const { lang, setLang } = useLanguage(); // 👈 même logique que sur la landing
 
   const go = (href: string) => {
     setOpen(false);
@@ -20,21 +23,6 @@ export default function ClientTopbar({ hideMenu = false }: { hideMenu?: boolean 
       return () => clearTimeout(t);
     }
   }, [open]);
-
-  // change la langue via cookie + reload
-  const changeLang = (lang: "fr" | "en") => {
-    try {
-      document.cookie = [
-        `fc-lang=${lang}`,
-        "Path=/",
-        "SameSite=Lax",
-        "Max-Age=31536000", // 1 an
-      ].join("; ");
-      window.location.reload();
-    } catch {
-      // ignore
-    }
-  };
 
   return (
     <>
@@ -57,19 +45,29 @@ export default function ClientTopbar({ hideMenu = false }: { hideMenu?: boolean 
               </button>
             )}
 
-            {/* 🔤 Boutons FR / EN juste à côté */}
+            {/* 🔤 Boutons FR / EN synchronisés avec LanguageProvider */}
             <div className="flex items-center gap-1">
               <button
                 type="button"
-                onClick={() => changeLang("fr")}
-                className="px-2 py-0.5 rounded-full text-[11px] border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                onClick={() => setLang("fr")}
+                className={
+                  "px-2 py-0.5 rounded-full text-[11px] border " +
+                  (lang === "fr"
+                    ? "border-emerald-600 bg-emerald-600 text-white"
+                    : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50")
+                }
               >
                 FR
               </button>
               <button
                 type="button"
-                onClick={() => changeLang("en")}
-                className="px-2 py-0.5 rounded-full text-[11px] border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                onClick={() => setLang("en")}
+                className={
+                  "px-2 py-0.5 rounded-full text-[11px] border " +
+                  (lang === "en"
+                    ? "border-emerald-600 bg-emerald-600 text-white"
+                    : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50")
+                }
               >
                 EN
               </button>
