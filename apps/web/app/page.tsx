@@ -413,7 +413,7 @@ export default function HomePage() {
               </div>
 
               <div>
-                <label className="block text.sm font-medium mb-1">
+                <label className="block text-sm font-medium mb-1">
                   {t("home.login.passwordLabel")}
                 </label>
                 <div className="relative">
@@ -571,4 +571,3 @@ export default function HomePage() {
     </main>
   );
 }
-
