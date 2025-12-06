@@ -10,7 +10,7 @@ export default function TopbarGate({ hideMenu = false }: { hideMenu?: boolean })
   const router = useRouter();
   const firstBtnRef = useRef<HTMLButtonElement | null>(null);
 
-  const { lang, setLang, t } = useLanguage(); // 👈 on récupère lang + setLang + t
+  const { lang, setLang, t } = useLanguage();
 
   const go = (href: string) => {
     setOpen(false);
@@ -41,12 +41,11 @@ export default function TopbarGate({ hideMenu = false }: { hideMenu?: boolean })
                   <span className="absolute inset-x-0 top-1.5 h-[2px] bg-white" />
                   <span className="absolute inset-x-0 bottom-0 h-[2px] bg-white" />
                 </span>
-                {/* Pas de clé dédiée → on garde le texte neutre */}
                 FILES-Menu
               </button>
             )}
 
-            {/* 🔤 Boutons FR / EN synchronisés avec LanguageProvider */}
+            {/* 🔤 Boutons FR / EN */}
             <div className="flex items-center gap-1">
               <button
                 type="button"
@@ -75,9 +74,8 @@ export default function TopbarGate({ hideMenu = false }: { hideMenu?: boolean })
             </div>
           </div>
 
-          {/* centre */}
+          {/* centre & droite vides (layout stable) */}
           <div />
-          {/* droite */}
           <div className="w-[42px]" />
         </div>
       </header>
@@ -94,11 +92,10 @@ export default function TopbarGate({ hideMenu = false }: { hideMenu?: boolean })
             <nav className="max-w-screen-md mx-auto w-full p-2 pt-[calc(env(safe-area-inset-top)+2px)]">
               <ul className="divide-y">
                 {[
-                  // On réutilise tes clés existantes dans translations.ts
-                  { href: "/dashboard", label: t("dashboard.header.title") },          // "Bienvenue 👋" / "Welcome 👋"
-                  { href: "/dashboard/calories", label: t("calories.page.title") },    // "Calories"
-                  { href: "/dashboard/corrector", label: t("videoCoach.page.title") }, // Import / Enregistrement
-                  { href: "/dashboard/profile", label: t("profile.title") },           // Mon profil / My profile
+                  { href: "/dashboard", label: t("dashboard.header.title") },
+                  { href: "/dashboard/calories", label: t("calories.page.title") },
+                  { href: "/dashboard/corrector", label: t("videoCoach.page.title") },
+                  { href: "/dashboard/profile", label: t("profile.title") },
                   { href: "/dashboard/abonnement", label: t("abonnement.page.title") },
                   { href: "/dashboard/recipes", label: t("recipes.pageTitle") },
                   { href: "/dashboard/progress", label: t("progress.pageTitle") },
@@ -123,4 +120,3 @@ export default function TopbarGate({ hideMenu = false }: { hideMenu?: boolean })
     </>
   );
 }
-
