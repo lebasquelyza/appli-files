@@ -54,6 +54,18 @@ type CoachingNotification = {
 
 type DayKey = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 
+type MotivationMessageApi = {
+  id: string;
+  userId: string;
+  target: string; // "ME" | "FRIENDS"
+  content: string;
+  days: string; // "mon,tue,wed"
+  time: string; // "HH:mm"
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
 const SIDE_PADDING = 16;
 const PAGE_MAX_WIDTH = 740;
 
@@ -118,9 +130,71 @@ export default function MotivationPage() {
         rating: 4,
       },
     ]);
-    // on ne veut pas relancer à chaque changement de t
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Charger les messages déjà programmés depuis l'API (backend Prisma)
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadMessages() {
+      try {
+        const res = await fetch("/api/motivation/messages");
+        if (!res.ok) return;
+        const data: MotivationMessageApi[] = await res.json();
+
+        if (cancelled || !Array.isArray(data)) return;
+
+        setNotifications((prev) => {
+          // on évite de dupliquer si on re-fetch (par id)
+          const existingIds = new Set(prev.map((n) => n.id));
+          const extra: CoachingNotification[] = data
+            .filter((msg) => !existingIds.has(msg.id))
+            .map((msg) => {
+              const isMe = msg.target === "ME";
+              const daysLabel = msg.days
+                .split(",")
+                .filter(Boolean)
+                .join(", ");
+              return {
+                id: msg.id,
+                title: isMe
+                  ? t(
+                      "motivation.selfNotification.title",
+                      "Message programmé pour toi ✅"
+                    )
+                  : t(
+                      "motivation.customNotification.title",
+                      "Message programmé pour tes amis 💌"
+                    ),
+                message: msg.content,
+                createdAt: msg.createdAt,
+                read: true,
+                source: isMe
+                  ? t(
+                      "motivation.selfNotification.source",
+                      `Rappel perso – ${daysLabel} à ${msg.time}`
+                    )
+                  : t(
+                      "motivation.customNotification.source",
+                      `Toi → tes amis – ${daysLabel} à ${msg.time}`
+                    ),
+              };
+            });
+
+          return [...extra, ...prev];
+        });
+      } catch (e) {
+        console.error("Error loading motivation messages", e);
+      }
+    }
+
+    loadMessages();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [t]);
 
   const visibleNotifications = useMemo(
     () =>
@@ -262,7 +336,6 @@ export default function MotivationPage() {
     setScheduleDays((prev) =>
       prev.length > 0 ? prev : ["mon", "tue", "wed", "thu", "fri"]
     );
-    // on garde la dernière heure choisie dans scheduleTime
   };
 
   const cancelSchedule = () => {
@@ -300,8 +373,13 @@ export default function MotivationPage() {
       if (!res.ok) {
         console.error("Error saving message", await res.json());
       } else {
-        const msg = await res.json();
-        const isMe = target === "ME";
+        const msg: MotivationMessageApi = await res.json();
+        const isMe = msg.target === "ME";
+
+        const daysLabel = msg.days
+          .split(",")
+          .filter(Boolean)
+          .join(", ");
 
         setNotifications((prev) => [
           {
@@ -313,7 +391,7 @@ export default function MotivationPage() {
                 )
               : t(
                   "motivation.customNotification.title",
-                  "Message envoyé à tes amis 💌"
+                  "Message programmé pour tes amis 💌"
                 ),
             message: trimmed,
             createdAt: msg.createdAt ?? new Date().toISOString(),
@@ -321,11 +399,15 @@ export default function MotivationPage() {
             source: isMe
               ? t(
                   "motivation.selfNotification.source",
-                  "Rappel perso programmé"
+                  `Rappel perso – ${daysLabel || scheduleDays
+                    .map((d) => getDayLabel(d))
+                    .join(", ")} à ${msg.time || scheduleTime}`
                 )
               : t(
                   "motivation.customNotification.source",
-                  "Toi → tes amis (programmé)"
+                  `Toi → tes amis – ${daysLabel || scheduleDays
+                    .map((d) => getDayLabel(d))
+                    .join(", ")} à ${msg.time || scheduleTime}`
                 ),
           },
           ...prev,
@@ -424,7 +506,7 @@ export default function MotivationPage() {
         )}
       </div>
 
-      {/* Barre d’actions & infos (sans préférences globales) */}
+      {/* Barre d’actions & filtres */}
       <div
         className="card"
         style={{
@@ -450,7 +532,7 @@ export default function MotivationPage() {
           <span style={{ fontSize: 11, color: "#6b7280" }}>
             {t(
               "motivation.bar.info",
-              "Tu peux programmer des messages pour toi ou pour tes amis, ils apparaîtront ici."
+              "Les messages que tu programmes ou envoies s’affichent ici."
             )}
           </span>
         </div>
@@ -697,7 +779,7 @@ export default function MotivationPage() {
             >
               {t(
                 "motivation.schedule.subtitle",
-                "Ce message sera utilisé pour envoyer des notifications aux jours et à l’heure choisis."
+                "Ce message sera enregistré et utilisé pour envoyer des notifications aux jours et à l’heure choisis."
               )}
             </div>
 
@@ -793,7 +875,7 @@ export default function MotivationPage() {
                 disabled={
                   scheduleDays.length === 0 ||
                   !scheduleTime ||
-                  (!message.trim()) ||
+                  !message.trim() ||
                   savingSelf ||
                   sharingCustom
                 }
@@ -857,7 +939,7 @@ export default function MotivationPage() {
             <br />
             {t(
               "motivation.empty.hint",
-              'Utilise le bouton “Envoyer une notif de test” ou programme un message pour le voir ici.'
+              'Programme un message ou utilise le bouton “Envoyer une notif de test” pour voir le rendu.'
             )}
           </div>
         ) : (
@@ -1018,4 +1100,3 @@ export default function MotivationPage() {
     </div>
   );
 }
-
