@@ -1,23 +1,26 @@
-//apps/web/app/page.tsx
+// apps/web/app/page.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { getSupabase } from "../lib/supabaseClient";
-import { useLanguage } from "@/components/LanguageProvider"; // ✅
-
+import { useLanguage } from "@/components/LanguageProvider";
 
 // --- helper cookie (lisible serveur + client) ---
 function setAppEmailCookie(val: string) {
   try {
-    const isHttps = typeof window !== "undefined" && window.location.protocol === "https:";
+    const isHttps =
+      typeof window !== "undefined" &&
+      window.location.protocol === "https:";
     document.cookie = [
       `app_email=${encodeURIComponent(val)}`,
       "Path=/",
       "SameSite=Lax",
       isHttps ? "Secure" : "",
-      "Max-Age=31536000" // 365 jours
-    ].filter(Boolean).join("; ");
+      "Max-Age=31536000", // 365 jours
+    ]
+      .filter(Boolean)
+      .join("; ");
   } catch {}
 }
 
@@ -54,13 +57,14 @@ export default function HomePage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const { t, lang, setLang } = useLanguage(); // ✅ on récupère aussi lang & setLang
+  const { t, lang, setLang } = useLanguage();
 
   useEffect(() => {
     const tmo = setTimeout(() => {
       setInputsReady(true);
       if (typeof document !== "undefined") {
-        document.activeElement instanceof HTMLElement && document.activeElement.blur();
+        document.activeElement instanceof HTMLElement &&
+          document.activeElement.blur();
       }
     }, 300);
     return () => clearTimeout(tmo);
@@ -71,7 +75,9 @@ export default function HomePage() {
     (async () => {
       try {
         const supabase = getSupabase();
-        const { data: { user } } = await supabase.auth.getUser();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
         const currentEmail = user?.email?.trim().toLowerCase();
         if (currentEmail) setAppEmailCookie(currentEmail);
       } catch {}
@@ -86,9 +92,7 @@ export default function HomePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           path:
-            typeof window !== "undefined"
-              ? window.location.pathname
-              : "/",
+            typeof window !== "undefined" ? window.location.pathname : "/",
           email: emailValue || null,
         }),
       });
@@ -111,9 +115,7 @@ export default function HomePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           path:
-            typeof window !== "undefined"
-              ? window.location.pathname
-              : "/",
+            typeof window !== "undefined" ? window.location.pathname : "/",
           email: emailValue || null,
         }),
       });
@@ -133,7 +135,8 @@ export default function HomePage() {
       }
       return next;
     });
-    setMessage(null); setError(null);
+    setMessage(null);
+    setError(null);
   }
 
   function openSignup() {
@@ -142,7 +145,8 @@ export default function HomePage() {
       if (next) setShowLogin(false);
       return next;
     });
-    setMessage(null); setError(null);
+    setMessage(null);
+    setError(null);
   }
 
   async function handleLogin(e: React.FormEvent) {
@@ -160,7 +164,9 @@ export default function HomePage() {
       });
       if (signInError) throw signInError;
 
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       const sessionEmail = (user?.email || emailTrim).trim().toLowerCase();
       if (sessionEmail) {
         setAppEmailCookie(sessionEmail);
@@ -276,11 +282,20 @@ export default function HomePage() {
                        [font-size:theme(fontSize.3xl)!important]
                        sm:[font-size:theme(fontSize.5xl)!important]"
           >
-            {t("home.hero.titleLine1")}<br />{t("home.hero.titleLine2")}
+            {t("home.hero.titleLine1")}
+            <br />
+            {t("home.hero.titleLine2")}
           </h1>
 
-          {/* 🔥 Switch FR / EN encore plus forcé : style inline, petit, noir */}
-          <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: "0.7rem" }}>
+          {/* Switch FR / EN */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+              fontSize: "0.7rem",
+            }}
+          >
             <button
               type="button"
               onClick={() => setLang("fr")}
@@ -296,7 +311,11 @@ export default function HomePage() {
             >
               FR
             </button>
-            <span style={{ fontSize: "0.65rem", color: "rgba(0,0,0,0.7)" }}>/</span>
+            <span
+              style={{ fontSize: "0.65rem", color: "rgba(0,0,0,0.7)" }}
+            >
+              /
+            </span>
             <button
               type="button"
               onClick={() => setLang("en")}
@@ -331,7 +350,10 @@ export default function HomePage() {
 
         {/* CTA */}
         <section className="w-full grid grid-rows-[1fr:auto]">
-          <div aria-hidden="true" className="bg-white invisible h-[45vh] sm:h-[55vh]" />
+          <div
+            aria-hidden="true"
+            className="bg-white invisible h-[45vh] sm:h-[55vh]"
+          />
           <div className="justify-self-center flex flex-col sm:flex-row items-center gap-3 mb-10">
             <button
               type="button"
@@ -391,7 +413,7 @@ export default function HomePage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">
+                <label className="block text.sm font-medium mb-1">
                   {t("home.login.passwordLabel")}
                 </label>
                 <div className="relative">
@@ -501,7 +523,9 @@ export default function HomePage() {
                   />
                   <button
                     type="button"
-                    onClick={() => setShowPasswordSignup(!showPasswordSignup)}
+                    onClick={() =>
+                      setShowPasswordSignup(!showPasswordSignup)
+                    }
                     className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-500 hover:text-gray-700"
                     tabIndex={-1}
                     aria-label={
@@ -510,7 +534,11 @@ export default function HomePage() {
                         : t("common.password.show")
                     }
                   >
-                    {showPasswordSignup ? <EyeOff size={20} /> : <Eye size={20} />}
+                    {showPasswordSignup ? (
+                      <EyeOff size={20} />
+                    ) : (
+                      <Eye size={20} />
+                    )}
                   </button>
                 </div>
               </div>
