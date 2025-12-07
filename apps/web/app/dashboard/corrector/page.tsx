@@ -1,4 +1,4 @@
-// apps/web/app/dashboard/coach/page.tsx (ou ton chemin réel)
+// apps/web/app/dashboard/corrector/page.tsx (ou ton chemin réel)
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
