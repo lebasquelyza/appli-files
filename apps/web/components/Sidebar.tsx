@@ -22,52 +22,37 @@ import { useLanguage } from "@/components/LanguageProvider";
 
 type NavItem = {
   href: string;
-  labelKey: string;
+  label: {
+    fr: string;
+    en: string;
+  };
   icon?: React.ComponentType<{ size?: number }>;
 };
 
 const NAV_ITEMS: NavItem[] = [
-  // Accueil → on réutilise le titre de dashboard
-  { href: "/dashboard", labelKey: "dashboard.header.title", icon: Home },
-
-  // Mon profil
-  { href: "/dashboard/profile", labelKey: "profile.title", icon: User2 },
-
-  // Mes progrès
-  { href: "/dashboard/progress", labelKey: "progress.pageTitle", icon: LineChart },
-
-  // Files te corrige (page vidéo coach)
-  { href: "/dashboard/corrector", labelKey: "videoCoach.page.title", icon: Wand2 },
-
-  // Recettes
-  { href: "/dashboard/recipes", labelKey: "recipes.pageTitle", icon: BookOpen },
-
-  // Calories
-  { href: "/dashboard/calories", labelKey: "calories.page.title", icon: Flame },
-
-  // Connecte tes données
-  { href: "/dashboard/connect", labelKey: "connect.page.title", icon: Plug2 },
-
-  // IMC
-  { href: "/dashboard/bmi", labelKey: "bmi.page.title", icon: ClipboardList },
-
-  // Motivation
-  { href: "/dashboard/motivation", labelKey: "motivation.pageTitle", icon: MessageCircle },
-
-  // Musique
-  { href: "/dashboard/music", labelKey: "music.pageTitle", icon: Music2 },
-
-  // Votre avis
-  { href: "/dashboard/avis", labelKey: "avis.page.title", icon: MessageCircle },
-
-  // Réglages
-  { href: "/dashboard/settings", labelKey: "settings.pageTitle", icon: Settings },
+  { href: "/dashboard", label: { fr: "Accueil",       en: "Home" },           icon: Home },
+  { href: "/dashboard/profile", label: { fr: "Mon profil",   en: "My profile" },     icon: User2 },
+  { href: "/dashboard/progress", label: { fr: "Mes progrès",  en: "My progress" },    icon: LineChart },
+  { href: "/dashboard/corrector", label: { fr: "Files te corrige", en: "Form check" }, icon: Wand2 },
+  { href: "/dashboard/recipes", label: { fr: "Recettes",     en: "Recipes" },       icon: BookOpen },
+  { href: "/dashboard/calories", label: { fr: "Calories",     en: "Calories" },      icon: Flame },
+  {
+    href: "/dashboard/connect",
+    label: { fr: "Connecte tes données", en: "Connect your data" },
+    icon: Plug2,
+  },
+  { href: "/dashboard/bmi", label: { fr: "IMC",          en: "BMI" },           icon: ClipboardList },
+  { href: "/dashboard/motivation", label: { fr: "Motivation",   en: "Motivation" },    icon: MessageCircle },
+  { href: "/dashboard/music", label: { fr: "Musique",      en: "Music" },         icon: Music2 },
+  { href: "/dashboard/avis", label: { fr: "Votre avis",   en: "Feedback" },      icon: MessageCircle },
+  { href: "/dashboard/settings", label: { fr: "Réglages",    en: "Settings" },     icon: Settings },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const { lang, setLang, t } = useLanguage();
+
+  const { lang, setLang } = useLanguage(); // on garde ton provider pour savoir FR/EN
 
   // Replier le menu à chaque changement de route
   useEffect(() => setOpen(false), [pathname]);
@@ -185,9 +170,9 @@ export default function Sidebar() {
           overflowY: "auto",
         }}
       >
-        {NAV_ITEMS.map(({ href, labelKey, icon: Icon }) => {
+        {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
           const active = pathname === href || pathname.startsWith(href + "/");
-          const label = t(labelKey) || labelKey; // 🧠 récupère la traduction
+          const text = lang === "fr" ? label.fr : label.en;
 
           return (
             <li key={href}>
@@ -215,7 +200,7 @@ export default function Sidebar() {
                   }}
                 >
                   {Icon ? <Icon size={18} /> : null}
-                  <span>{label}</span>
+                  <span>{text}</span>
                 </div>
               </Link>
             </li>
