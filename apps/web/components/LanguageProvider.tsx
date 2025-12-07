@@ -25,47 +25,54 @@ const LanguageContext = createContext<LanguageContextType | undefined>(
   undefined
 );
 
+const COOKIE_KEY = "fc-lang-v2";
+
 function getFromPath(obj: any, path: string): string {
   return path.split(".").reduce((acc, key) => acc?.[key], obj) ?? path;
 }
 
-// 🔑 Cookie unique pour la langue
-const COOKIE_KEY = "fc-lang-v2";
+// lit fc-lang-v2 ou, à défaut, l’ancien fc-lang
+function readInitialLang(): Lang {
+  if (typeof document === "undefined") return "fr";
 
-// lit fc-lang-v2 côté client
-function readCookieLang(): Lang | null {
-  if (typeof document === "undefined") return null;
-  const match = document.cookie.match(
+  // 1) nouveau cookie
+  const matchV2 = document.cookie.match(
     new RegExp("(?:^|;\\s*)" + COOKIE_KEY + "=(fr|en)")
   );
-  const val = match?.[1];
-  return val === "fr" || val === "en" ? val : null;
+  const v2 = matchV2?.[1] as Lang | undefined;
+  if (v2 === "fr" || v2 === "en") return v2;
+
+  // 2) ancien cookie
+  const matchOld = document.cookie.match(/(?:^|;\s*)fc-lang=(fr|en)/);
+  const old = matchOld?.[1] as Lang | undefined;
+  if (old === "fr" || old === "en") return old;
+
+  return "fr";
 }
 
-// écrit fc-lang-v2 côté client
 function writeCookieLang(lang: Lang) {
   if (typeof document === "undefined") return;
+
+  // nouveau cookie
   document.cookie = [
     `${COOKIE_KEY}=${lang}`,
     "Path=/",
     "SameSite=Lax",
-    "Max-Age=31536000", // 1 an
+    "Max-Age=31536000",
   ].join("; ");
+
+  // optionnel : on “supprime” l’ancien pour éviter les conflits
+  document.cookie = "fc-lang=; Path=/; Max-Age=0";
 }
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  // FR par défaut (avant lecture du cookie)
   const [lang, setLangState] = useState<Lang>("fr");
 
-  // ⚡ init : cookie v2 > FR par défaut
+  // init depuis les cookies
   useEffect(() => {
-    const fromCookie = readCookieLang();
-    if (fromCookie) {
-      setLangState(fromCookie);
-    } else {
-      setLangState("fr");
-      writeCookieLang("fr");
-    }
+    const initial = readInitialLang();
+    setLangState(initial);
+    writeCookieLang(initial);
   }, []);
 
   const setLang = (l: Lang) => {
