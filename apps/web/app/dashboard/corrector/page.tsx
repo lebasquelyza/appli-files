@@ -1,12 +1,27 @@
-// apps/web/app/dashboard/corrector/page.tsx (ou ton chemin réel)
+// apps/web/app/dashboard/corrector/page.tsx
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  useCallback,
+  type CSSProperties,
+} from "react";
 import { translations } from "@/app/i18n/translations";
 
 /* ===================== Types ===================== */
-interface AnalysisPoint { time: number; label: string; detail?: string; }
-interface Fault { issue: string; severity: "faible"|"moyenne"|"élevée"; evidence?: string; correction?: string; }
+interface AnalysisPoint {
+  time: number;
+  label: string;
+  detail?: string;
+}
+interface Fault {
+  issue: string;
+  severity: "faible" | "moyenne" | "élevée";
+  evidence?: string;
+  correction?: string;
+}
 interface AIAnalysis {
   exercise: string;
   overall: string;
@@ -19,18 +34,19 @@ interface AIAnalysis {
   movement_pattern?: string;
   rawText?: string;
   skeleton_cues?: Array<{
-    phase?: "setup"|"descente"|"bas"|"montée"|"lockout";
+    phase?: "setup" | "descente" | "bas" | "montée" | "lockout";
     spine?: { neutral?: boolean; tilt_deg?: number };
-    knees?: { valgus_level?: 0|1|2; should_bend?: boolean };
+    knees?: { valgus_level?: 0 | 1 | 2; should_bend?: boolean };
     head?: { chin_tuck?: boolean };
-    feet?: { anchor?: "talons"|"milieu"|"avant"; unstable?: boolean };
+    feet?: { anchor?: "talons" | "milieu" | "avant"; unstable?: boolean };
     notes?: string;
   }>;
 }
 
 /* ===================== Constantes ===================== */
 const CLIENT_PROXY_MAX_BYTES =
-  typeof process !== "undefined" && process.env.NEXT_PUBLIC_PROXY_UPLOAD_MAX_BYTES
+  typeof process !== "undefined" &&
+  process.env.NEXT_PUBLIC_PROXY_UPLOAD_MAX_BYTES
     ? Number(process.env.NEXT_PUBLIC_PROXY_UPLOAD_MAX_BYTES)
     : 5 * 1024 * 1024; // 5MB
 
@@ -45,7 +61,14 @@ function Spinner({ className = "" }: { className?: string }) {
 }
 function ProgressBar({ value }: { value: number }) {
   return (
-    <div style={{ height: 8, width: "100%", background: "#e5e7eb", borderRadius: 999 }}>
+    <div
+      style={{
+        height: 8,
+        width: "100%",
+        background: "#e5e7eb",
+        borderRadius: 999,
+      }}
+    >
       <div
         style={{
           height: 8,
@@ -69,7 +92,7 @@ function displayStatus(s: string) {
     "Préparation des images…",
     "Analyse IA…",
   ];
-  if (toMask.some(p => s.startsWith(p))) return "( Files examine... )";
+  if (toMask.some((p) => s.startsWith(p))) return "( Files examine... )";
   return s;
 }
 
@@ -111,47 +134,197 @@ function useT() {
 /* ===================== Vocabulaire & Variations ===================== */
 function randInt(max: number) {
   if (typeof crypto !== "undefined" && "getRandomValues" in crypto) {
-    const a = new Uint32Array(1); crypto.getRandomValues(a); return a[0] % max;
+    const a = new Uint32Array(1);
+    crypto.getRandomValues(a);
+    return a[0] % max;
   }
   return Math.floor(Math.random() * max);
 }
-function pick<T>(arr: T[]): T { return arr[randInt(arr.length)]; }
+function pick<T>(arr: T[]): T {
+  return arr[randInt(arr.length)];
+}
 
 const LEX = {
-  core: ["gainage", "sangle abdominale", "ceinture abdominale"],
-  braceVerb: ["gaine", "serre", "verrouille", "contracte"],
-  neutralSpine: ["rachis neutre", "dos plat", "alignement lombaire neutre"],
+  core: ["gainage", "sangle abdominale", "ceinture abdominale", "tronc"],
+  braceVerb: ["gaine", "serre", "verrouille", "contracte", "stabilise"],
+  neutralSpine: [
+    "rachis neutre",
+    "dos plat",
+    "alignement lombaire neutre",
+    "colonne bien alignée",
+  ],
   chestUp: ["poitrine fière", "sternum haut", "buste ouvert"],
-  shoulderPack: ["épaules abaissées/serrées", "omoplates basses/rétractées", "pack scapulaire"],
-  avoidMomentum: ["évite l’élan", "pas d’à-coups", "contrôle le mouvement"],
-  controlCue: ["amplitude contrôlée", "mouvement maîtrisé", "contrôle sur toute l’amplitude"],
+  shoulderPack: [
+    "épaules abaissées/serrées",
+    "omoplates basses/rétractées",
+    "pack scapulaire",
+  ],
+  avoidMomentum: [
+    "évite l’élan",
+    "pas d’à-coups",
+    "contrôle le mouvement",
+  ],
+  controlCue: [
+    "amplitude contrôlée",
+    "mouvement maîtrisé",
+    "contrôle sur toute l’amplitude",
+  ],
   rangeCue: ["amplitude utile", "range complet sans douleur", "aller-retour propre"],
   tempoIntro: ["Tempo", "Cadence", "Rythme"],
   tempo201: ["2–0–1", "2-0-1", "2s-0-1s"],
   tempo311: ["3–1–1", "3-1-1", "3s-1-1s"],
-  breathe: ["souffle sur l’effort", "expire à la phase concentrique", "inspire au retour"],
-  footTripod: ["appuis trépied (talon + base gros/petit orteil)", "ancre tes pieds"],
-  kneeTrack: ["genoux dans l’axe", "genoux suivent la pointe de pieds", "pas de valgus"],
-  hipBack: ["hanche en arrière", "charnière franche", "pense fesses loin derrière"],
+  breathe: [
+    "souffle sur l’effort",
+    "expire à la phase concentrique",
+    "inspire au retour",
+  ],
+  footTripod: [
+    "appuis trépied (talon + base gros/petit orteil)",
+    "ancre tes pieds",
+  ],
+  kneeTrack: [
+    "genoux dans l’axe",
+    "genoux suivent la pointe de pieds",
+    "pas de valgus",
+  ],
+  hipBack: [
+    "hanche en arrière",
+    "charnière franche",
+    "pense fesses loin derrière",
+  ],
   gluteCue: ["pousse le talon", "chasse le talon", "guide le talon"],
-  holdTop: ["marque 1 s en contraction", "pause 1 s en pic de contraction", "garde 1 s en haut"],
+  holdTop: [
+    "marque 1 s en contraction",
+    "pause 1 s en pic de contraction",
+    "garde 1 s en haut",
+  ],
   grip: ["prise ferme", "serre la barre", "poignées verrouillées"],
-  elbowPathPush: ["coudes ~45° du buste", "coudes sous la barre", "coudes ni trop ouverts ni collés"],
-  elbowPathPull: ["coudes près du buste", "coudes vers la hanche", "coudes sous la ligne d’épaule"],
-  latDepress: ["abaisse les épaules", "déprime les scapulas", "descends les omoplates"],
-  scapRetract: ["rétracte les omoplates", "serre les omoplates", "omoplates tirées en arrière"],
-  wristNeutral: ["poignets neutres", "poignets alignés", "pas cassés"],
-  headNeutral: ["regard neutre", "nuque longue", "évite l’hyperextension cervicale"],
+  elbowPathPush: [
+    "coudes ~45° du buste",
+    "coudes sous la barre",
+    "coudes ni trop ouverts ni collés",
+  ],
+  elbowPathPull: [
+    "coudes près du buste",
+    "coudes vers la hanche",
+    "coudes sous la ligne d’épaule",
+  ],
+  latDepress: [
+    "abaisse les épaules",
+    "déprime les scapulas",
+    "descends les omoplates",
+  ],
+  scapRetract: [
+    "rétracte les omoplates",
+    "serre les omoplates",
+    "omoplates tirées en arrière",
+  ],
+  wristNeutral: [
+    "poignets neutres",
+    "poignets alignés",
+    "poignets pas cassés",
+  ],
+  headNeutral: [
+    "regard neutre",
+    "nuque longue",
+    "évite l’hyperextension cervicale",
+  ],
 };
 
+/* ===== Ajout : phrases style coach ===== */
+const COACH_OPENERS = [
+  "Sur ta prochaine série, pense à",
+  "Globalement c’est pas mal, mais essaie de",
+  "Pour rendre ton mouvement plus propre, essaie de",
+  "Petit ajustement technique :",
+  "Un point à surveiller :",
+  "Si tu veux optimiser le geste, garde en tête que tu dois",
+];
+
+const COACH_ENDERS = [
+  "— ça va vraiment sécuriser ton mouvement.",
+  "pour protéger tes articulations et gagner en force.",
+  "et tu vas sentir la différence tout de suite.",
+  "pour que le geste soit plus fluide et efficace.",
+  "et tu seras plus stable sur les prochaines séries.",
+  "tout en gardant une bonne marge de sécurité.",
+];
+
+function coachifyCue(raw: string) {
+  const cue = raw.trim().replace(/^[–\-•\s]+/, "");
+  if (!cue) return "";
+
+  // 1 fois sur 3 on laisse brut pour ne pas trop sur-styliser
+  if (randInt(3) === 0) return cue;
+
+  const opener = pick(COACH_OPENERS);
+  const ender = randInt(2) === 0 ? "" : " " + pick(COACH_ENDERS);
+
+  return `${opener} ${cue.toLowerCase()}${ender}`.replace(/\s+/g, " ").trim();
+}
+
+function styleOverall(base: string, faultCount: number) {
+  const clean = base.trim();
+  if (!clean) return "";
+
+  const introOptions =
+    faultCount > 0
+      ? [
+          "Globalement, ton mouvement est intéressant.",
+          "Beau boulot sur l’effort, on affine maintenant les détails.",
+          "Tu as déjà de bonnes bases, on va améliorer deux-trois points.",
+        ]
+      : [
+          "Très bon mouvement dans l’ensemble 👌",
+          "Franchement, c’est propre techniquement.",
+          "Bonne exécution, on reste quand même attentif à la suite.",
+        ];
+
+  const outroOptions = [
+    "Continue de te filmer, ça aide énormément à progresser.",
+    "Garde ces points en tête sur les prochaines séries.",
+    "On garde cette qualité sur la suite de ta séance.",
+  ];
+
+  const intro = pick(introOptions);
+  const outro = pick(outroOptions);
+
+  // 50% du temps on garde la phrase plus simple
+  if (randInt(2) === 0) return varyTerms(clean);
+
+  return `${intro} ${varyTerms(clean)} ${outro}`
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 type Category =
-  | "squat" | "lunge" | "hinge" | "hipthrust" | "legpress"
-  | "quad_iso" | "ham_iso" | "calf"
-  | "pull_vertical" | "pull_horizontal" | "row_chest" | "face_pull"
-  | "push_horizontal" | "push_vertical" | "dip" | "pushup" | "fly" | "lateral_raise" | "front_raise" | "rear_delt"
-  | "biceps" | "triceps"
-  | "core_plank" | "core_anti_rotation" | "core_flexion"
-  | "carry" | "sled"
+  | "squat"
+  | "lunge"
+  | "hinge"
+  | "hipthrust"
+  | "legpress"
+  | "quad_iso"
+  | "ham_iso"
+  | "calf"
+  | "pull_vertical"
+  | "pull_horizontal"
+  | "row_chest"
+  | "face_pull"
+  | "push_horizontal"
+  | "push_vertical"
+  | "dip"
+  | "pushup"
+  | "fly"
+  | "lateral_raise"
+  | "front_raise"
+  | "rear_delt"
+  | "biceps"
+  | "triceps"
+  | "core_plank"
+  | "core_anti_rotation"
+  | "core_flexion"
+  | "carry"
+  | "sled"
   | "unknown";
 
 const EXO_ALIASES: Array<{ rx: RegExp; cat: Category }> = [
@@ -199,9 +372,19 @@ function varyTerms(s: string) {
   return out;
 }
 function uniqueShuffle(arr: string[]) {
-  const seen = new Set<string>(); const out: string[] = [];
-  for (const s of arr) { const k = s.toLowerCase().trim(); if (!seen.has(k)) { seen.add(k); out.push(s); } }
-  for (let i = out.length - 1; i > 0; i--) { const j = randInt(i + 1); [out[i], out[j]] = [out[j], out[i]]; }
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const s of arr) {
+    const k = s.toLowerCase().trim();
+    if (!seen.has(k)) {
+      seen.add(k);
+      out.push(s);
+    }
+  }
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = randInt(i + 1);
+    [out[i], out[j]] = [out[j], out[i]];
+  }
   return out;
 }
 function makeCorrections(exo: string) {
@@ -217,27 +400,77 @@ function makeCorrections(exo: string) {
 
   switch (cat) {
     case "squat":
-      tips.push(`${pick(LEX.kneeTrack)}.`, `${pick(LEX.footTripod)}.`, `${pick(LEX.chestUp)}; ${pick(LEX.controlCue)}.`, `${pick(LEX.tempoIntro)} ${pick(LEX.tempo311)}.`);
+      tips.push(
+        `${pick(LEX.kneeTrack)}.`,
+        `${pick(LEX.footTripod)}.`,
+        `${pick(LEX.chestUp)}; ${pick(LEX.controlCue)}.`,
+        `${pick(LEX.tempoIntro)} ${pick(LEX.tempo311)}.`
+      );
       break;
     case "hinge":
-      tips.push(`${pick(LEX.hipBack)}; genoux souples.`, `${pick(LEX.neutralSpine)}; ${pick(LEX.scapRetract)}.`, `${pick(LEX.tempoIntro)} ${pick(LEX.tempo311)}.`);
+      tips.push(
+        `${pick(LEX.hipBack)}; genoux souples.`,
+        `${pick(LEX.neutralSpine)}; ${pick(LEX.scapRetract)}.`,
+        `${pick(LEX.tempoIntro)} ${pick(LEX.tempo311)}.`
+      );
       break;
     case "push_vertical":
-      tips.push(`${pick(LEX.elbowPathPush)}.`, `${pick(LEX.core)[0]} solide; fessiers contractés.`, `${pick(LEX.controlCue)}.`);
+      tips.push(
+        `${pick(LEX.elbowPathPush)}.`,
+        `${pick(LEX.core)[0]} solide; fessiers contractés.`,
+        `${pick(LEX.controlCue)}.`
+      );
       break;
     default:
-      tips.push(`Contrôle l’amplitude et garde un ${pick(LEX.neutralSpine)}.`, `${pick(LEX.braceVerb)} ta ${pick(LEX.core)}.`, `${pick(LEX.avoidMomentum)}.`);
+      tips.push(
+        `Contrôle l’amplitude et garde un ${pick(LEX.neutralSpine)}.`,
+        `${pick(LEX.braceVerb)} ta ${pick(LEX.core)}.`,
+        `${pick(LEX.avoidMomentum)}.`
+      );
       break;
   }
 
-  if (["pull_vertical","pull_horizontal","row_chest","face_pull","push_horizontal","push_vertical","dip","pushup","fly","lateral_raise","front_raise","rear_delt","biceps","triceps"].includes(cat)) {
+  if (
+    [
+      "pull_vertical",
+      "pull_horizontal",
+      "row_chest",
+      "face_pull",
+      "push_horizontal",
+      "push_vertical",
+      "dip",
+      "pushup",
+      "fly",
+      "lateral_raise",
+      "front_raise",
+      "rear_delt",
+      "biceps",
+      "triceps",
+    ].includes(cat)
+  ) {
     tips.push(pick(upperStab));
-  } else if (["squat","lunge","hinge","hipthrust","legpress","quad_iso","ham_iso","calf"].includes(cat)) {
+  } else if (
+    [
+      "squat",
+      "lunge",
+      "hinge",
+      "hipthrust",
+      "legpress",
+      "quad_iso",
+      "ham_iso",
+      "calf",
+    ].includes(cat)
+  ) {
     tips.push(pick(lowerStab));
   } else {
     tips.push(pick(universal));
   }
-  if (randInt(2) === 0) tips.push(`${pick(LEX.tempoIntro)} ${pick(randInt(2) ? LEX.tempo201 : LEX.tempo311)}.`);
+  if (randInt(2) === 0)
+    tips.push(
+      `${pick(LEX.tempoIntro)} ${
+        randInt(2) ? pick(LEX.tempo201) : pick(LEX.tempo311)
+      }.`
+    );
   return uniqueShuffle(tips);
 }
 
@@ -253,15 +486,27 @@ export default function Page() {
         paddingBottom: 32,
         fontSize: "var(--settings-fs, 12px)",
         maxWidth: 1200,
-        margin: "0 auto"
+        margin: "0 auto",
       }}
     >
       <div className="page-header">
         <div>
-          <h1 className="h1" style={{ fontSize: "clamp(20px, 2.2vw, 24px)", lineHeight: 1.15 }}>
+          <h1
+            className="h1"
+            style={{
+              fontSize: "clamp(20px, 2.2vw, 24px)",
+              lineHeight: 1.15,
+            }}
+          >
             {t("videoCoach.page.title", "Import / Enregistrement")}
           </h1>
-          <p className="lead" style={{ fontSize: "clamp(12px, 1.6vw, 14px)", lineHeight: 1.35 }}>
+          <p
+            className="lead"
+            style={{
+              fontSize: "clamp(12px, 1.6vw, 14px)",
+              lineHeight: 1.35,
+            }}
+          >
             {t(
               "videoCoach.page.subtitle",
               "Filme ou importe ta vidéo, ajoute ton ressenti puis lance l’analyse IA."
@@ -274,7 +519,6 @@ export default function Page() {
     </div>
   );
 }
-
 
 /* ===================== Composant principal ===================== */
 function CoachAnalyzer() {
@@ -290,16 +534,23 @@ function CoachAnalyzer() {
   const [status, setStatus] = useState<string>("");
   const [errorMsg, setErrorMsg] = useState<string>("");
 
-  const [predictedExercise, setPredictedExercise] = useState<string | null>(null);
+  const [predictedExercise, setPredictedExercise] = useState<string | null>(
+    null
+  );
   const [showChoiceGate, setShowChoiceGate] = useState(false);
   const [overrideOpen, setOverrideOpen] = useState(false);
   const [overrideName, setOverrideName] = useState("");
-  const [confirmedExercise, setConfirmedExercise] = useState<string | null>(null);
+  const [confirmedExercise, setConfirmedExercise] = useState<string | null>(
+    null
+  );
 
   const [cooldown, setCooldown] = useState<number>(0);
   useEffect(() => {
     if (cooldown <= 0) return;
-    const id = setInterval(() => setCooldown((c) => (c > 0 ? c - 1 : 0)), 1000);
+    const id = setInterval(
+      () => setCooldown((c) => (c > 0 ? c - 1 : 0)),
+      1000
+    );
     return () => clearInterval(id);
   }, [cooldown]);
 
@@ -323,11 +574,18 @@ function CoachAnalyzer() {
     fd.append("file", f);
     fd.append("filename", f.name);
     fd.append("contentType", f.type || "application/octet-stream");
-    const res = await fetch("/api/videos/proxy-upload", { method: "POST", body: fd });
+    const res = await fetch("/api/videos/proxy-upload", {
+      method: "POST",
+      body: fd,
+    });
     if (!res.ok) {
       const txt = await res.text().catch(() => "");
       let detail = "";
-      try { detail = JSON.parse(txt)?.error || txt; } catch { detail = txt; }
+      try {
+        detail = JSON.parse(txt)?.error || txt;
+      } catch {
+        detail = txt;
+      }
       const err = new Error(`proxy-upload: HTTP ${res.status} ${detail}`);
       (err as any).status = res.status;
       throw err;
@@ -336,7 +594,9 @@ function CoachAnalyzer() {
     return json.url as string;
   }
 
-  async function uploadWithSignedUrl(f: File): Promise<{ path: string; readUrl: string }> {
+  async function uploadWithSignedUrl(
+    f: File
+  ): Promise<{ path: string; readUrl: string }> {
     const r = await fetch("/api/videos/sign-upload", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -353,14 +613,18 @@ function CoachAnalyzer() {
       },
       body: f,
     });
-    if (!put.ok) throw new Error(`upload PUT failed: ${put.status} ${await put.text()}`);
+    if (!put.ok)
+      throw new Error(
+        `upload PUT failed: ${put.status} ${await put.text()}`
+      );
 
     const r2 = await fetch("/api/storage/sign-read", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ path, expiresIn: 60 * 60 }),
     });
-    if (!r2.ok) throw new Error(`sign-read: HTTP ${r2.status} ${await r2.text()}`);
+    if (!r2.ok)
+      throw new Error(`sign-read: HTTP ${r2.status} ${await r2.text()}`);
     const { url } = await r2.json();
     return { path, readUrl: url as string };
   }
@@ -376,13 +640,28 @@ function CoachAnalyzer() {
     try {
       // 0) EXTRACTION — RAPIDE
       const { frames, timestamps } = await extractFramesFromFile(file, 8);
-      if (!frames.length) throw new Error("Impossible d’extraire des images de la vidéo.");
+      if (!frames.length)
+        throw new Error("Impossible d’extraire des images de la vidéo.");
       setProgress(12);
 
       // MOSAÏQUES légères
       const half = Math.ceil(frames.length / 2);
-      const mosaic1 = await makeMosaic(frames.slice(0, half), 3, 2, 960, 540, 0.5);
-      const mosaic2 = await makeMosaic(frames.slice(half), 3, 2, 960, 540, 0.5);
+      const mosaic1 = await makeMosaic(
+        frames.slice(0, half),
+        3,
+        2,
+        960,
+        540,
+        0.5
+      );
+      const mosaic2 = await makeMosaic(
+        frames.slice(half),
+        3,
+        2,
+        960,
+        540,
+        0.5
+      );
       const mosaics = [mosaic1, mosaic2];
       const midTime = timestamps[Math.floor(timestamps.length / 2)] || 0;
 
@@ -415,8 +694,17 @@ function CoachAnalyzer() {
 
       const baseHints =
         `Tu reçois des mosaïques issues d’une VIDEO (pas une photo). ` +
-        `Identifie l'exercice et détecte les ERREURS TECHNIQUES. Réponds en FRANÇAIS.`;
-      const overrideHint = userExercise ? `Exercice exécuté indiqué par l'utilisateur : "${userExercise}".` : "";
+        `Identifie l'exercice et détecte les ERREURS TECHNIQUES. ` +
+        `Réponds en FRANÇAIS avec le ton d’un coach sportif bienveillant. ` +
+        `Structure ta réponse ainsi : ` +
+        `1) Un court retour global (1–3 phrases, mélange positif + points à corriger). ` +
+        `2) Une liste de 3 à 6 défauts techniques concrets (champ "faults"). ` +
+        `3) Pour chaque défaut, donne une correction courte, très actionnable. ` +
+        `Varie ton vocabulaire et évite de répéter les mêmes formulations.`;
+
+      const overrideHint = userExercise
+        ? `Exercice exécuté indiqué par l'utilisateur : "${userExercise}".`
+        : "";
 
       const res = await fetch("/api/analyze", {
         method: "POST",
@@ -448,36 +736,59 @@ function CoachAnalyzer() {
       }
 
       const data: Partial<AIAnalysis> = await res.json();
+      const rawFaults: Fault[] = Array.isArray((data as any).faults)
+        ? ((data as any).faults as Fault[])
+        : [];
 
       const safe: AIAnalysis = {
         exercise: String(data.exercise || "exercice_inconnu"),
         overall:
           (data.overall && data.overall.trim()) ||
           "Analyse effectuée mais je manque d’indices visuels. Réessaie avec un angle plus net / cadrage entier.",
-        muscles: Array.isArray(data.muscles) && data.muscles.length ? data.muscles.slice(0, 8) : [],
-        corrections: Array.isArray((data as any).corrections) ? (data as any).corrections : [],
-        faults: Array.isArray((data as any).faults) ? (data as any).faults : [],
-        extras: Array.isArray(data.extras) ? data.extras : [],
-        timeline:
-          Array.isArray(data.timeline)
-            ? data.timeline.filter(v => typeof v?.time === "number" && typeof v?.label === "string")
+        muscles:
+          Array.isArray(data.muscles) && data.muscles.length
+            ? data.muscles.slice(0, 8)
             : [],
-        objects: Array.isArray((data as any)?.objects) ? (data as any).objects : [],
-        movement_pattern: typeof (data as any)?.movement_pattern === "string" ? (data as any).movement_pattern : undefined,
-        skeleton_cues: Array.isArray((data as any)?.skeleton_cues) ? (data as any).skeleton_cues : [],
+        corrections: Array.isArray((data as any).corrections)
+          ? ((data as any).corrections as string[])
+          : [],
+        faults: rawFaults,
+        extras: Array.isArray(data.extras) ? data.extras : [],
+        timeline: Array.isArray(data.timeline)
+          ? data.timeline.filter(
+              (v) =>
+                typeof v?.time === "number" && typeof v?.label === "string"
+            )
+          : [],
+        objects: Array.isArray((data as any)?.objects)
+          ? ((data as any).objects as string[])
+          : [],
+        movement_pattern:
+          typeof (data as any)?.movement_pattern === "string"
+            ? (data as any).movement_pattern
+            : undefined,
+        skeleton_cues: Array.isArray((data as any)?.skeleton_cues)
+          ? ((data as any).skeleton_cues as AIAnalysis["skeleton_cues"])
+          : [],
       };
 
       // Post-traitement “coach”
-      safe.overall = varyTerms(safe.overall);
+      safe.overall = styleOverall(safe.overall, rawFaults.length || 0);
       safe.faults = (safe.faults || []).map((f) => ({
         ...f,
         issue: varyTerms(f.issue || ""),
         correction: varyTerms(f.correction || ""),
       }));
-      safe.corrections = uniqueShuffle([
+
+      const combinedCues = [
         ...makeCorrections(safe.exercise || ""),
-        ...(safe.corrections || []).map(varyTerms),
-      ]).slice(0, 5);
+        ...(safe.corrections || []),
+      ].map(varyTerms);
+
+      safe.corrections = uniqueShuffle(
+        combinedCues.map(coachifyCue).filter(Boolean)
+      ).slice(0, 5);
+
       safe.muscles = (safe.muscles || []).map(varyTerms);
 
       // Gate de confirmation
@@ -491,19 +802,32 @@ function CoachAnalyzer() {
       }
       setOverrideOpen(false);
       setProgress(100);
-      setStatus(t("videoCoach.status.done", "Analyse terminée — confirme l’exercice"));
+      setStatus(
+        t(
+          "videoCoach.status.done",
+          "Analyse terminée — confirme l’exercice"
+        )
+      );
     } catch (e: any) {
       console.error(e);
       const msg = e?.message || String(e);
       setErrorMsg(msg);
       setStatus("");
-      alert(`${t("videoCoach.error.prefix", "Erreur pendant l'analyse")}: ${msg}`);
+      alert(
+        `${t(
+          "videoCoach.error.prefix",
+          "Erreur pendant l'analyse"
+        )}: ${msg}`
+      );
     } finally {
       setIsAnalyzing(false);
     }
   };
 
-  const confirmPredicted = () => { setConfirmedExercise(predictedExercise || null); setShowChoiceGate(false); };
+  const confirmPredicted = () => {
+    setConfirmedExercise(predictedExercise || null);
+    setShowChoiceGate(false);
+  };
   const submitOverride = async () => {
     if (!overrideName.trim()) return;
     setConfirmedExercise(overrideName.trim());
@@ -513,11 +837,18 @@ function CoachAnalyzer() {
   };
   const reset = () => {
     if (blobUrl) URL.revokeObjectURL(blobUrl);
-    setBlobUrl(null); setFile(null);
-    setAnalysis(null); setFeeling(""); setProgress(0); setStatus("");
-    setErrorMsg(""); setCooldown(0);
-    setPredictedExercise(null); setShowChoiceGate(false);
-    setOverrideOpen(false); setOverrideName("");
+    setBlobUrl(null);
+    setFile(null);
+    setAnalysis(null);
+    setFeeling("");
+    setProgress(0);
+    setStatus("");
+    setErrorMsg("");
+    setCooldown(0);
+    setPredictedExercise(null);
+    setShowChoiceGate(false);
+    setOverrideOpen(false);
+    setOverrideName("");
     setConfirmedExercise(null);
   };
 
@@ -525,17 +856,21 @@ function CoachAnalyzer() {
   const [muscleOpen, setMuscleOpen] = useState<string | null>(null);
 
   /* ====== LAYOUT : 3 cartes alignées, même taille ====== */
-  const gridStyle: React.CSSProperties = {
+  const gridStyle: CSSProperties = {
     display: "grid",
     gap: 16,
     gridTemplateColumns: "1fr",
     alignItems: "stretch",
   };
-  if (typeof window !== "undefined" && window.matchMedia && window.matchMedia("(min-width: 1024px)").matches) {
+  if (
+    typeof window !== "undefined" &&
+    window.matchMedia &&
+    window.matchMedia("(min-width: 1024px)").matches
+  ) {
     (gridStyle as any).gridTemplateColumns = "repeat(3, 1fr)";
   }
 
-  const cardStyle: React.CSSProperties = {
+  const cardStyle: CSSProperties = {
     height: "100%",
     display: "flex",
     flexDirection: "column",
@@ -560,7 +895,7 @@ function CoachAnalyzer() {
                 background: tab === "record" ? "#16a34a" : "#ffffff",
                 color: tab === "record" ? "#ffffff" : "#111827",
                 border: "1px solid #d1d5db",
-                fontWeight: 500
+                fontWeight: 500,
               }}
             >
               {t("videoCoach.card.import.tabRecord", "Filmer")}
@@ -574,7 +909,7 @@ function CoachAnalyzer() {
                 background: tab === "upload" ? "#16a34a" : "#ffffff",
                 color: tab === "upload" ? "#ffffff" : "#111827",
                 border: "1px solid #d1d5db",
-                fontWeight: 500
+                fontWeight: 500,
               }}
             >
               {t("videoCoach.card.import.tabUpload", "Importer")}
@@ -592,7 +927,10 @@ function CoachAnalyzer() {
           {blobUrl && (
             <div className="text-sm" style={{ marginTop: 12 }}>
               <label className="label" style={{ marginBottom: 6 }}>
-                {t("videoCoach.card.import.fileLabel", "Fichier téléchargé")}
+                {t(
+                  "videoCoach.card.import.fileLabel",
+                  "Fichier téléchargé"
+                )}
               </label>
 
               <div
@@ -601,12 +939,28 @@ function CoachAnalyzer() {
                   padding: 8,
                   display: "flex",
                   alignItems: "center",
-                  gap: 8
+                  gap: 8,
                 }}
               >
-                <div style={{ minWidth: 0, flex: 1, display: "flex", alignItems: "center" }}>
-                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {t("videoCoach.card.import.fileName", "🎞️ Vidéo importée")}
+                <div
+                  style={{
+                    minWidth: 0,
+                    flex: 1,
+                    display: "flex",
+                    alignItems: "center",
+                  }}
+                >
+                  <span
+                    style={{
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {t(
+                      "videoCoach.card.import.fileName",
+                      "🎞️ Vidéo importée"
+                    )}
                   </span>
                 </div>
 
@@ -619,7 +973,7 @@ function CoachAnalyzer() {
                     background: "#ffffff",
                     color: "#111827",
                     border: "1px solid #d1d5db",
-                    fontWeight: 500
+                    fontWeight: 500,
                   }}
                 >
                   {t("videoCoach.common.reset", "↺ Réinitialiser")}
@@ -656,10 +1010,19 @@ function CoachAnalyzer() {
             >
               {isAnalyzing ? <Spinner className="mr-2" /> : "✨"}{" "}
               {isAnalyzing
-                ? t("videoCoach.card.feeling.btnAnalyzing", "Analyse en cours")
+                ? t(
+                    "videoCoach.card.feeling.btnAnalyzing",
+                    "Analyse en cours"
+                  )
                 : cooldown > 0
-                ? t("videoCoach.card.feeling.btnCooldown", "Patiente ") + `${cooldown}s`
-                : t("videoCoach.card.feeling.btnLaunch", "Lancer l'analyse IA")}
+                ? t(
+                    "videoCoach.card.feeling.btnCooldown",
+                    "Patiente "
+                  ) + `${cooldown}s`
+                : t(
+                    "videoCoach.card.feeling.btnLaunch",
+                    "Lancer l'analyse IA"
+                  )}
             </button>
 
             <button
@@ -670,7 +1033,7 @@ function CoachAnalyzer() {
                 background: "#ffffff",
                 color: "#111827",
                 border: "1px solid #d1d5db",
-                fontWeight: 500
+                fontWeight: 500,
               }}
               disabled={isAnalyzing}
             >
@@ -682,12 +1045,18 @@ function CoachAnalyzer() {
             <div style={{ marginTop: 12 }}>
               <ProgressBar value={progress} />
               {status && (
-                <p className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>
+                <p
+                  className="text-xs"
+                  style={{ color: "#6b7280", marginTop: 6 }}
+                >
                   {displayStatus(status)}
                 </p>
               )}
               {errorMsg && (
-                <p className="text-xs" style={{ color: "#dc2626", marginTop: 6 }}>
+                <p
+                  className="text-xs"
+                  style={{ color: "#dc2626", marginTop: 6 }}
+                >
                   {t("videoCoach.error.label", "Erreur")} : {errorMsg}
                 </p>
               )}
@@ -714,10 +1083,19 @@ function CoachAnalyzer() {
           {analysis && showChoiceGate && (
             <div style={{ display: "grid", gap: 8 }}>
               <div className="text-sm">
-                {t("videoCoach.card.summary.gate.propose", "L’IA propose")} :{" "}
-                <strong>{predictedExercise || "exercice_inconnu"}</strong>
+                {t(
+                  "videoCoach.card.summary.gate.propose",
+                  "L’IA propose"
+                )}{" "}
+                : <strong>{predictedExercise || "exercice_inconnu"}</strong>
               </div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 8,
+                  flexWrap: "wrap",
+                }}
+              >
                 <button
                   className="btn btn-dash"
                   onClick={confirmPredicted}
@@ -735,18 +1113,35 @@ function CoachAnalyzer() {
                   onClick={() => setOverrideOpen(true)}
                   disabled={isAnalyzing}
                   type="button"
-                  style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
+                  style={{
+                    background: "#ffffff",
+                    color: "#111827",
+                    border: "1px solid #d1d5db",
+                    fontWeight: 500,
+                  }}
                 >
-                  {t("videoCoach.card.summary.gate.other", "Autre")}
+                  {t(
+                    "videoCoach.card.summary.gate.other",
+                    "Autre"
+                  )}
                 </button>
               </div>
 
               {overrideOpen && (
                 <div className="card" style={{ padding: 12 }}>
                   <label className="label">
-                    {t("videoCoach.card.summary.override.label", "Quel exercice fais-tu ?")}
+                    {t(
+                      "videoCoach.card.summary.override.label",
+                      "Quel exercice fais-tu ?"
+                    )}
                   </label>
-                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 8,
+                      alignItems: "center",
+                    }}
+                  >
                     <input
                       className="input"
                       placeholder={t(
@@ -761,12 +1156,23 @@ function CoachAnalyzer() {
                       onClick={submitOverride}
                       disabled={isAnalyzing || !overrideName.trim()}
                       type="button"
-                      style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
+                      style={{
+                        background: "#ffffff",
+                        color: "#111827",
+                        border: "1px solid #d1d5db",
+                        fontWeight: 500,
+                      }}
                     >
-                      {t("videoCoach.card.summary.override.reanalyze", "Ré-analyser")}
+                      {t(
+                        "videoCoach.card.summary.override.reanalyze",
+                        "Ré-analyser"
+                      )}
                     </button>
                   </div>
-                  <p className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>
+                  <p
+                    className="text-xs"
+                    style={{ color: "#6b7280", marginTop: 6 }}
+                  >
                     {t(
                       "videoCoach.card.summary.override.help",
                       "L’IA tiendra compte de ce nom pour corriger plus précisément."
@@ -782,17 +1188,30 @@ function CoachAnalyzer() {
             <div style={{ display: "grid", gap: 12 }}>
               <div className="text-sm">
                 <span style={{ color: "#6b7280" }}>
-                  {t("videoCoach.card.summary.exerciseLabel", "Exercice")} :
+                  {t(
+                    "videoCoach.card.summary.exerciseLabel",
+                    "Exercice"
+                  )}{" "}
+                  :
                 </span>{" "}
-                <strong>{confirmedExercise || analysis.exercise || t("videoCoach.common.unknown", "inconnu")}</strong>
+                <strong>
+                  {confirmedExercise ||
+                    analysis.exercise ||
+                    t("videoCoach.common.unknown", "inconnu")}
+                </strong>
               </div>
 
               {analysis.overall?.trim() && (
-                <p className="text-sm" style={{ lineHeight: 1.6 }}>{analysis.overall.trim()}</p>
+                <p className="text-sm" style={{ lineHeight: 1.6 }}>
+                  {analysis.overall.trim()}
+                </p>
               )}
 
               <div>
-                <h4 className="h4" style={{ fontSize: 14, margin: "8px 0 4px" }}>
+                <h4
+                  className="h4"
+                  style={{ fontSize: 14, margin: "8px 0 4px" }}
+                >
                   {t(
                     "videoCoach.card.summary.musclesTitle",
                     "Muscles principalement sollicités"
@@ -800,7 +1219,13 @@ function CoachAnalyzer() {
                 </h4>
 
                 {analysis.muscles?.length ? (
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 6,
+                      flexWrap: "wrap",
+                    }}
+                  >
                     {analysis.muscles.map((m, i) => (
                       <button
                         key={i}
@@ -817,7 +1242,7 @@ function CoachAnalyzer() {
                           border: "1px solid #d1d5db",
                           background: "#ffffff",
                           color: "#111827",
-                          cursor: "pointer"
+                          cursor: "pointer",
                         }}
                       >
                         {m}
@@ -825,8 +1250,14 @@ function CoachAnalyzer() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-xs" style={{ color: "#6b7280" }}>
-                    {t("videoCoach.card.summary.musclesEmpty", "— non détecté —")}
+                  <p
+                    className="text-xs"
+                    style={{ color: "#6b7280" }}
+                  >
+                    {t(
+                      "videoCoach.card.summary.musclesEmpty",
+                      "— non détecté —"
+                    )}
                   </p>
                 )}
               </div>
@@ -835,13 +1266,25 @@ function CoachAnalyzer() {
                 <div style={{ display: "grid", gap: 4 }}>
                   {issuesLine && (
                     <p className="text-sm">
-                      <strong>{t("videoCoach.card.summary.issuesLabel", "Erreur détectée")} :</strong>{" "}
+                      <strong>
+                        {t(
+                          "videoCoach.card.summary.issuesLabel",
+                          "Erreur détectée"
+                        )}{" "}
+                        :
+                      </strong>{" "}
                       {issuesLine}
                     </p>
                   )}
                   {correctionsLine && (
                     <p className="text-sm">
-                      <strong>{t("videoCoach.card.summary.correctionsLabel", "Corrections")} :</strong>{" "}
+                      <strong>
+                        {t(
+                          "videoCoach.card.summary.correctionsLabel",
+                          "Corrections"
+                        )}{" "}
+                        :
+                      </strong>{" "}
                       {correctionsLine}
                     </p>
                   )}
@@ -856,9 +1299,15 @@ function CoachAnalyzer() {
                       "Points complémentaires"
                     )}
                   </summary>
-                  <ul style={{ paddingLeft: 18, marginTop: 6 }} className="text-sm">
+                  <ul
+                    style={{ paddingLeft: 18, marginTop: 6 }}
+                    className="text-sm"
+                  >
                     {analysis.extras.map((x, i) => (
-                      <li key={i} style={{ listStyle: "disc" }}>
+                      <li
+                        key={i}
+                        style={{ listStyle: "disc" }}
+                      >
                         {x}
                       </li>
                     ))}
@@ -872,7 +1321,10 @@ function CoachAnalyzer() {
 
       {/* Panneau Muscle Viewer */}
       {muscleOpen && (
-        <MuscleViewer muscleName={muscleOpen} onClose={() => setMuscleOpen(null)} />
+        <MuscleViewer
+          muscleName={muscleOpen}
+          onClose={() => setMuscleOpen(null)}
+        />
       )}
     </>
   );
@@ -882,13 +1334,15 @@ function CoachAnalyzer() {
 function UploadDrop({ onFile }: { onFile: (file: File) => void }) {
   const t = useT();
   const galleryRef = useRef<HTMLInputElement | null>(null);
-  const filesRef   = useRef<HTMLInputElement | null>(null);
+  const filesRef = useRef<HTMLInputElement | null>(null);
 
   const isIOS = () => {
     if (typeof navigator === "undefined") return false;
     const ua = navigator.userAgent || "";
     const isIThing = /iPad|iPhone|iPod/i.test(ua);
-    const isTouchMac = (navigator.platform === "MacIntel" && (navigator as any).maxTouchPoints > 1);
+    const isTouchMac =
+      navigator.platform === "MacIntel" &&
+      (navigator as any).maxTouchPoints > 1;
     return isIThing || isTouchMac;
   };
 
@@ -903,7 +1357,14 @@ function UploadDrop({ onFile }: { onFile: (file: File) => void }) {
         const [handle] = await anyWindow.showOpenFilePicker({
           multiple: false,
           excludeAcceptAllOption: false,
-          types: [{ description: "Vidéos", accept: { "video/*": [".mp4", ".mov", ".webm", ".mkv", ".avi"] } }],
+          types: [
+            {
+              description: "Vidéos",
+              accept: {
+                "video/*": [".mp4", ".mov", ".webm", ".mkv", ".avi"],
+              },
+            },
+          ],
           startIn: "videos",
         });
         if (handle) {
@@ -912,19 +1373,29 @@ function UploadDrop({ onFile }: { onFile: (file: File) => void }) {
           return;
         }
       }
-    } catch { /* annulé → fallback */ }
+    } catch {
+      /* annulé → fallback */
+    }
     filesRef.current?.click();
   };
 
   return (
-    <div className="card" style={{ padding: 16, display: "grid", gap: 10 }}>
+    <div
+      className="card"
+      style={{ padding: 16, display: "grid", gap: 10 }}
+    >
       {isIOS() ? (
         <div className="grid gap-2 sm:flex sm:gap-3">
           <button
             type="button"
             className="btn"
             onClick={openGalerie}
-            style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
+            style={{
+              background: "#ffffff",
+              color: "#111827",
+              border: "1px solid #d1d5db",
+              fontWeight: 500,
+            }}
           >
             {t("videoCoach.upload.import", "📥 Importer")}
           </button>
@@ -935,7 +1406,12 @@ function UploadDrop({ onFile }: { onFile: (file: File) => void }) {
             type="button"
             className="btn"
             onClick={openGalerie}
-            style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
+            style={{
+              background: "#ffffff",
+              color: "#111827",
+              border: "1px solid #d1d5db",
+              fontWeight: 500,
+            }}
           >
             {t("videoCoach.upload.gallery", "📸 Galerie")}
           </button>
@@ -943,7 +1419,12 @@ function UploadDrop({ onFile }: { onFile: (file: File) => void }) {
             type="button"
             className="btn"
             onClick={openFichiers}
-            style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
+            style={{
+              background: "#ffffff",
+              color: "#111827",
+              border: "1px solid #d1d5db",
+              fontWeight: 500,
+            }}
           >
             {t("videoCoach.upload.files", "🗂️ Fichiers")}
           </button>
@@ -954,18 +1435,28 @@ function UploadDrop({ onFile }: { onFile: (file: File) => void }) {
       <input
         ref={galleryRef}
         type="file"
-        accept="image/*,video/*"
-        aria-hidden tabIndex={-1}
+        accept="video/*"
+        aria-hidden
+        tabIndex={-1}
         style={{ display: "none" }}
-        onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); e.currentTarget.value = ""; }}
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f && f.type.startsWith("video/")) onFile(f);
+          e.currentTarget.value = "";
+        }}
       />
       <input
         ref={filesRef}
         type="file"
         accept="video/*"
-        aria-hidden tabIndex={-1}
+        aria-hidden
+        tabIndex={-1}
         style={{ display: "none" }}
-        onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); e.currentTarget.value = ""; }}
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) onFile(f);
+          e.currentTarget.value = "";
+        }}
       />
     </div>
   );
@@ -988,28 +1479,42 @@ function VideoRecorder({ onRecorded }: { onRecorded: (file: File) => void }) {
 
   const start = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: true,
+      });
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         await (videoRef.current as HTMLVideoElement).play();
         setHasStream(true);
       }
-      const mr = new MediaRecorder(stream, { mimeType: getBestMimeType(), videoBitsPerSecond: 350_000 });
+      const mr = new MediaRecorder(stream, {
+        mimeType: getBestMimeType(),
+        videoBitsPerSecond: 350_000,
+      });
       mediaRecorderRef.current = mr;
       chunksRef.current = [];
-      mr.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunksRef.current.push(e.data); };
+      mr.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
+      };
       mr.onstop = async () => {
         const blob = new Blob(chunksRef.current, { type: mr.mimeType });
-        const file = new File([blob], `enregistrement-${Date.now()}.webm`, { type: blob.type });
+        const file = new File(
+          [blob],
+          `enregistrement-${Date.now()}.webm`,
+          { type: blob.type }
+        );
         onRecorded(file);
       };
       mr.start();
       setIsRecording(true);
     } catch (err) {
-      alert(t(
-        "videoCoach.videoRecorder.error.camera",
-        "Impossible d'accéder à la caméra/micro. Vérifie les permissions."
-      ));
+      alert(
+        t(
+          "videoCoach.videoRecorder.error.camera",
+          "Impossible d'accéder à la caméra/micro. Vérifie les permissions."
+        )
+      );
       console.error(err);
     }
   };
@@ -1026,7 +1531,12 @@ function VideoRecorder({ onRecorded }: { onRecorded: (file: File) => void }) {
   return (
     <div className="space-y-3">
       <div className="relative">
-        <video ref={videoRef} className="w-full rounded-2xl border" muted playsInline />
+        <video
+          ref={videoRef}
+          className="w-full rounded-2xl border"
+          muted
+          playsInline
+        />
         {!hasStream && (
           <div className="absolute inset-0 grid place-items-center text-xs text-muted-foreground">
             {t(
@@ -1038,7 +1548,11 @@ function VideoRecorder({ onRecorded }: { onRecorded: (file: File) => void }) {
       </div>
       <div className="flex items-center gap-2">
         {!isRecording ? (
-          <button className="btn btn-dash" onClick={start} type="button">
+          <button
+            className="btn btn-dash"
+            onClick={start}
+            type="button"
+          >
             {t("videoCoach.videoRecorder.start", "▶️ Démarrer")}
           </button>
         ) : (
@@ -1046,7 +1560,12 @@ function VideoRecorder({ onRecorded }: { onRecorded: (file: File) => void }) {
             className="btn"
             onClick={stop}
             type="button"
-            style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
+            style={{
+              background: "#ffffff",
+              color: "#111827",
+              border: "1px solid #d1d5db",
+              fontWeight: 500,
+            }}
           >
             {t("videoCoach.videoRecorder.stop", "⏸️ Arrêter")}
           </button>
@@ -1058,14 +1577,28 @@ function VideoRecorder({ onRecorded }: { onRecorded: (file: File) => void }) {
 
 /* ===== Helpers vidéo / images (optimisés) ===== */
 function getBestMimeType() {
-  const candidates = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm", "video/mp4"];
+  const candidates = [
+    "video/webm;codecs=vp9,opus",
+    "video/webm;codecs=vp8,opus",
+    "video/webm",
+    "video/mp4",
+  ];
   for (const c of candidates) {
     // @ts-ignore
-    if (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(c)) return c;
+    if (
+      typeof MediaRecorder !== "undefined" &&
+      MediaRecorder.isTypeSupported &&
+      MediaRecorder.isTypeSupported(c)
+    )
+      return c;
   }
   return "video/webm";
 }
-async function fakeProgress(setter: (v: number) => void, from: number, to: number) {
+async function fakeProgress(
+  setter: (v: number) => void,
+  from: number,
+  to: number
+) {
   let i = from;
   while (i < to) {
     await new Promise((r) => setTimeout(r, 220));
@@ -1090,7 +1623,8 @@ async function extractFramesFromFile(
   try {
     await new Promise<void>((resolve, reject) => {
       video.onloadedmetadata = () => resolve();
-      video.onerror = () => reject(new Error("Impossible de lire la vidéo côté client."));
+      video.onerror = () =>
+        reject(new Error("Impossible de lire la vidéo côté client."));
     });
 
     const duration = Math.max(0.001, (video as any).duration || 0);
@@ -1119,18 +1653,23 @@ async function extractFramesFromFile(
       frames.push(canvas.toDataURL("image/jpeg", JPEG_Q));
     };
 
-    const hasRVFC = typeof (video as any).requestVideoFrameCallback === "function";
+    const hasRVFC =
+      typeof (video as any).requestVideoFrameCallback === "function";
 
     for (const t of times) {
       if (hasRVFC) {
-        (video as any).currentTime = Math.min(Math.max(0, t), (video as any).duration || t);
+        (video as any).currentTime = Math.min(
+          Math.max(0, t),
+          (video as any).duration || t
+        );
         await new Promise<void>((resolve) => {
           (video as any).requestVideoFrameCallback(async () => {
             await drawFrame();
             timestamps.push(Math.round(t));
             resolve();
           });
-          setTimeout(async () => { // garde-fou
+          setTimeout(async () => {
+            // garde-fou
             await drawFrame();
             timestamps.push(Math.round(t));
             resolve();
@@ -1150,15 +1689,26 @@ async function extractFramesFromFile(
 }
 function seek(video: HTMLVideoElement, time: number) {
   return new Promise<void>((resolve, reject) => {
-    const onSeeked = () => { cleanup(); resolve(); };
-    const onError = () => { cleanup(); reject(new Error("Échec du seek vidéo.")); };
+    const onSeeked = () => {
+      cleanup();
+      resolve();
+    };
+    const onError = () => {
+      cleanup();
+      reject(new Error("Échec du seek vidéo."));
+    };
     const cleanup = () => {
       video.removeEventListener("seeked", onSeeked);
       video.removeEventListener("error", onError);
     };
     video.addEventListener("seeked", onSeeked);
     video.addEventListener("error", onError);
-    try { (video as any).currentTime = Math.min(Math.max(0, time), (video as any).duration || time); } catch {}
+    try {
+      (video as any).currentTime = Math.min(
+        Math.max(0, time),
+        (video as any).duration || time
+      );
+    } catch {}
   });
 }
 function bestFit(w: number, h: number, maxW: number, maxH: number) {
@@ -1166,11 +1716,20 @@ function bestFit(w: number, h: number, maxW: number, maxH: number) {
   const r = Math.min(maxW / w, maxH / h);
   return { width: Math.round(w * r), height: Math.round(h * r) };
 }
-async function makeMosaic(images: string[], gridW = 3, gridH = 2, outW = 960, outH = 540, quality = 0.5): Promise<string> {
+async function makeMosaic(
+  images: string[],
+  gridW = 3,
+  gridH = 2,
+  outW = 960,
+  outH = 540,
+  quality = 0.5
+): Promise<string> {
   const cvs = document.createElement("canvas");
   const ctx = cvs.getContext("2d")!;
-  cvs.width = outW; cvs.height = outH;
-  ctx.fillStyle = "#000"; ctx.fillRect(0, 0, outW, outH);
+  cvs.width = outW;
+  cvs.height = outH;
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, outW, outH);
   const cellW = Math.floor(outW / gridW);
   const cellH = Math.floor(outH / gridH);
   for (let i = 0; i < Math.min(images.length, gridW * gridH); i++) {
@@ -1194,10 +1753,16 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 }
 function faultsToLines(a: AIAnalysis | null) {
   if (!a) return { issuesLine: "", correctionsLine: "" };
-  const issues = (a?.faults || []).map(f => (f?.issue || "").trim()).filter(Boolean);
-  const faultCorrections = (a?.faults || []).map(f => (f?.correction || "").trim()).filter(Boolean);
+  const issues = (a?.faults || [])
+    .map((f) => (f?.issue || "").trim())
+    .filter(Boolean);
+  const faultCorrections = (a?.faults || [])
+    .map((f) => (f?.correction || "").trim())
+    .filter(Boolean);
   const issuesLine = issues.join(" - ");
-  const correctionsBase = faultCorrections.length ? faultCorrections : (a?.corrections || []);
+  const correctionsBase = faultCorrections.length
+    ? faultCorrections
+    : (a?.corrections || []);
   const correctionsLine = (correctionsBase || []).join(" - ");
   return { issuesLine, correctionsLine };
 }
@@ -1206,17 +1771,18 @@ function faultsToLines(a: AIAnalysis | null) {
 function normMuscle(s: string) {
   return (s || "")
     .toLowerCase()
-    .normalize("NFD").replace(/\p{Diacritic}/gu, "")
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
     .replace(/[\s\-’'".,]/g, "")
     .replace(/(le|la|les|du|de|des)/g, "")
-    .replace(/muscle(s)?$/,"")
-    .replace(/s$/,"");
+    .replace(/muscle(s)?$/, "")
+    .replace(/s$/, "");
 }
 const MUSCLE_MAP: Record<string, string[]> = {
-  epaule: ["deltoid_l_f","deltoid_r_f","deltoid_l_b","deltoid_r_b"],
-  epaules: ["deltoid_l_f","deltoid_r_f","deltoid_l_b","deltoid_r_b"],
-  deltoide: ["deltoid_l_f","deltoid_r_f","deltoid_l_b","deltoid_r_b"],
-  deltoid: ["deltoid_l_f","deltoid_r_f","deltoid_l_b","deltoid_r_b"],
+  epaule: ["deltoid_l_f", "deltoid_r_f", "deltoid_l_b", "deltoid_r_b"],
+  epaules: ["deltoid_l_f", "deltoid_r_f", "deltoid_l_b", "deltoid_r_b"],
+  deltoide: ["deltoid_l_f", "deltoid_r_f", "deltoid_l_b", "deltoid_r_b"],
+  deltoid: ["deltoid_l_f", "deltoid_r_f", "deltoid_l_b", "deltoid_r_b"],
 
   dorsal: ["lats_b"],
   dorsaux: ["lats_b"],
@@ -1230,33 +1796,39 @@ const MUSCLE_MAP: Record<string, string[]> = {
   pectoraux: ["pecs_f"],
   chest: ["pecs_f"],
 
-  biceps: ["biceps_l_f","biceps_r_f"],
-  triceps: ["triceps_l_b","triceps_r_b"],
-  avantbras: ["forearm_l_f","forearm_r_f"],
-  forearm: ["forearm_l_f","forearm_r_f"],
+  biceps: ["biceps_l_f", "biceps_r_f"],
+  triceps: ["triceps_l_b", "triceps_r_b"],
+  avantbras: ["forearm_l_f", "forearm_r_f"],
+  forearm: ["forearm_l_f", "forearm_r_f"],
 
   abdominaux: ["abs_f"],
   abdos: ["abs_f"],
-  oblique: ["obliques_l_f","obliques_r_f"],
-  obliques: ["obliques_l_f","obliques_r_f"],
+  oblique: ["obliques_l_f", "obliques_r_f"],
+  obliques: ["obliques_l_f", "obliques_r_f"],
 
   fessier: ["glutes_b"],
   fessiers: ["glutes_b"],
   glute: ["glutes_b"],
 
-  quadriceps: ["quads_l_f","quads_r_f"],
-  quadri: ["quads_l_f","quads_r_f"],
+  quadriceps: ["quads_l_f", "quads_r_f"],
+  quadri: ["quads_l_f", "quads_r_f"],
 
-  ischio: ["hams_l_b","hams_r_b"],
-  ischiojambier: ["hams_l_b","hams_r_b"],
-  hamstring: ["hams_l_b","hams_r_b"],
+  ischio: ["hams_l_b", "hams_r_b"],
+  ischiojambier: ["hams_l_b", "hams_r_b"],
+  hamstring: ["hams_l_b", "hams_r_b"],
 
-  mollet: ["calf_l_b","calf_r_b","calf_l_f","calf_r_f"],
-  mollets: ["calf_l_b","calf_r_b","calf_l_f","calf_r_f"],
-  calves: ["calf_l_b","calf_r_b","calf_l_f","calf_r_f"],
+  mollet: ["calf_l_b", "calf_r_b", "calf_l_f", "calf_r_f"],
+  mollets: ["calf_l_b", "calf_r_b", "calf_l_f", "calf_r_f"],
+  calves: ["calf_l_b", "calf_r_b", "calf_l_f", "calf_r_f"],
 };
 
-function MuscleViewer({ muscleName, onClose }: { muscleName: string; onClose: () => void }) {
+function MuscleViewer({
+  muscleName,
+  onClose,
+}: {
+  muscleName: string;
+  onClose: () => void;
+}) {
   const t = useT();
   const keys = MUSCLE_MAP[normMuscle(muscleName)] || [];
   return (
@@ -1272,18 +1844,33 @@ function MuscleViewer({ muscleName, onClose }: { muscleName: string; onClose: ()
         style={{ maxWidth: 900, width: "100%", background: "#fff" }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
           <h3 style={{ margin: 0 }}>📍 {muscleName}</h3>
           <button
             className="btn"
             onClick={onClose}
-            style={{ background: "#ffffff", color: "#111827", border: "1px solid #d1d5db", fontWeight: 500 }}
+            style={{
+              background: "#ffffff",
+              color: "#111827",
+              border: "1px solid #d1d5db",
+              fontWeight: 500,
+            }}
           >
             {t("videoCoach.muscleViewer.close", "Fermer")}
           </button>
         </div>
 
-        <p className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>
+        <p
+          className="text-xs"
+          style={{ color: "#6b7280", marginTop: 6 }}
+        >
           {t(
             "videoCoach.muscleViewer.subtitle",
             "Silhouette simplifiée — aucune zone cliquable, seules les zones sélectionnées sont mises en surbrillance."
@@ -1302,7 +1889,7 @@ function BodyMapHuman({ highlightKeys }: { highlightKeys: string[] }) {
   const on = (id: string) => H.has(id);
 
   const show = (active: boolean) => ({
-    display: active ? "block" as const : "none" as const,
+    display: active ? ("block" as const) : ("none" as const),
     fill: "#22c55e",
     opacity: 0.9,
     transition: "opacity .15s ease",
@@ -1310,7 +1897,7 @@ function BodyMapHuman({ highlightKeys }: { highlightKeys: string[] }) {
   });
 
   const baseFill = "#d1d5db";
-  const panelStyle: React.CSSProperties = {
+  const panelStyle: CSSProperties = {
     width: "100%",
     height: "auto",
     background: "#f9fafb",
@@ -1322,51 +1909,284 @@ function BodyMapHuman({ highlightKeys }: { highlightKeys: string[] }) {
   };
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 12 }}>
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr",
+        gap: 16,
+        marginTop: 12,
+      }}
+    >
       {/* FACE */}
-      <svg viewBox="0 0 180 360" style={panelStyle} aria-label="silhouette face">
-        <path d="M90 18c-10 0-18 8-18 18v10c0 6 4 11 10 13l-2 6c-2 6-6 10-12 12-10 3-16 12-17 22-2 20-4 56 2 72 4 10 10 15 18 18 6 2 10 6 12 12 5 16 6 38 6 62h24c0-24 1-46 6-62 2-6 6-10 12-12 8-3 14-8 18-18 6-16 4-52 2-72-1-10-7-19-17-22-6-2-10-6-12-12l-2-6c6-2 10-7 10-13V36c0-10-8-18-18-18Z" fill={baseFill}/>
-        <path d="M66 270c-4 30-4 52-4 72h28v-50c0-8-4-16-10-22-4-4-10-0-14 0z" fill={baseFill}/>
-        <path d="M114 270c4 30 4 52 4 72H90v-50c0-8 4-16 10-22 4-4 10-0 14 0z" fill={baseFill}/>
-        <path d="M32 140c-2 26 2 44 10 54 6 8 14 12 22 14l6-20c-8-2-14-6-18-12-6-8-10-20-10-36l-10 0z" fill={baseFill}/>
-        <path d="M148 140c2 26-2 44-10 54-6 8-14 12-22 14l-6-20c8-2 14-6 18-12 6-8 10-20 10-36l10 0z" fill={baseFill}/>
+      <svg
+        viewBox="0 0 180 360"
+        style={panelStyle}
+        aria-label="silhouette face"
+      >
+        <path
+          d="M90 18c-10 0-18 8-18 18v10c0 6 4 11 10 13l-2 6c-2 6-6 10-12 12-10 3-16 12-17 22-2 20-4 56 2 72 4 10 10 15 18 18 6 2 10 6 12 12 5 16 6 38 6 62h24c0-24 1-46 6-62 2-6 6-10 12-12 8-3 14-8 18-18 6-16 4-52 2-72-1-10-7-19-17-22-6-2-10-6-12-12l-2-6c6-2 10-7 10-13V36c0-10-8-18-18-18Z"
+          fill={baseFill}
+        />
+        <path
+          d="M66 270c-4 30-4 52-4 72h28v-50c0-8-4-16-10-22-4-4-10-0-14 0z"
+          fill={baseFill}
+        />
+        <path
+          d="M114 270c4 30 4 52 4 72H90v-50c0-8 4-16 10-22 4-4 10-0 14 0z"
+          fill={baseFill}
+        />
+        <path
+          d="M32 140c-2 26 2 44 10 54 6 8 14 12 22 14l6-20c-8-2-14-6-18-12-6-8-10-20-10-36l-10 0z"
+          fill={baseFill}
+        />
+        <path
+          d="M148 140c2 26-2 44-10 54-6 8-14 12-22 14l-6-20c8-2 14-6 18-12 6-8 10-20 10-36l10 0z"
+          fill={baseFill}
+        />
 
         {/* SURBRILLANCE */}
-        <rect id="pecs_f" x="58" y="64" width="64" height="22" rx="8" style={show(on("pecs_f"))} />
-        <circle id="deltoid_l_f" cx="46" cy="72" r="14" style={show(on("deltoid_l_f"))} />
-        <circle id="deltoid_r_f" cx="134" cy="72" r="14" style={show(on("deltoid_r_f"))} />
-        <rect id="biceps_l_f" x="28" y="94" width="16" height="38" rx="8" style={show(on("biceps_l_f"))} />
-        <rect id="biceps_r_f" x="136" y="94" width="16" height="38" rx="8" style={show(on("biceps_r_f"))} />
-        <rect id="forearm_l_f" x="28" y="134" width="16" height="36" rx="8" style={show(on("forearm_l_f"))} />
-        <rect id="forearm_r_f" x="136" y="134" width="16" height="36" rx="8" style={show(on("forearm_r_f"))} />
-        <rect id="abs_f" x="70" y="92" width="40" height="40" rx="8" style={show(on("abs_f"))} />
-        <rect id="obliques_l_f" x="60" y="96" width="12" height="36" rx="6" style={show(on("obliques_l_f"))} />
-        <rect id="obliques_r_f" x="108" y="96" width="12" height="36" rx="6" style={show(on("obliques_r_f"))} />
-        <rect id="quads_l_f" x="64" y="152" width="18" height="52" rx="9" style={show(on("quads_l_f"))} />
-        <rect id="quads_r_f" x="98" y="152" width="18" height="52" rx="9" style={show(on("quads_r_f"))} />
-        <rect id="calf_l_f" x="64" y="214" width="18" height="42" rx="9" style={show(on("calf_l_f"))} />
-        <rect id="calf_r_f" x="98" y="214" width="18" height="42" rx="9" style={show(on("calf_r_f"))} />
+        <rect
+          id="pecs_f"
+          x="58"
+          y="64"
+          width="64"
+          height="22"
+          rx="8"
+          style={show(on("pecs_f"))}
+        />
+        <circle
+          id="deltoid_l_f"
+          cx="46"
+          cy="72"
+          r="14"
+          style={show(on("deltoid_l_f"))}
+        />
+        <circle
+          id="deltoid_r_f"
+          cx="134"
+          cy="72"
+          r="14"
+          style={show(on("deltoid_r_f"))}
+        />
+        <rect
+          id="biceps_l_f"
+          x="28"
+          y="94"
+          width="16"
+          height="38"
+          rx="8"
+          style={show(on("biceps_l_f"))}
+        />
+        <rect
+          id="biceps_r_f"
+          x="136"
+          y="94"
+          width="16"
+          height="38"
+          rx="8"
+          style={show(on("biceps_r_f"))}
+        />
+        <rect
+          id="forearm_l_f"
+          x="28"
+          y="134"
+          width="16"
+          height="36"
+          rx="8"
+          style={show(on("forearm_l_f"))}
+        />
+        <rect
+          id="forearm_r_f"
+          x="136"
+          y="134"
+          width="16"
+          height="36"
+          rx="8"
+          style={show(on("forearm_r_f"))}
+        />
+        <rect
+          id="abs_f"
+          x="70"
+          y="92"
+          width="40"
+          height="40"
+          rx="8"
+          style={show(on("abs_f"))}
+        />
+        <rect
+          id="obliques_l_f"
+          x="60"
+          y="96"
+          width="12"
+          height="36"
+          rx="6"
+          style={show(on("obliques_l_f"))}
+        />
+        <rect
+          id="obliques_r_f"
+          x="108"
+          y="96"
+          width="12"
+          height="36"
+          rx="6"
+          style={show(on("obliques_r_f"))}
+        />
+        <rect
+          id="quads_l_f"
+          x="64"
+          y="152"
+          width="18"
+          height="52"
+          rx="9"
+          style={show(on("quads_l_f"))}
+        />
+        <rect
+          id="quads_r_f"
+          x="98"
+          y="152"
+          width="18"
+          height="52"
+          rx="9"
+          style={show(on("quads_r_f"))}
+        />
+        <rect
+          id="calf_l_f"
+          x="64"
+          y="214"
+          width="18"
+          height="42"
+          rx="9"
+          style={show(on("calf_l_f"))}
+        />
+        <rect
+          id="calf_r_f"
+          x="98"
+          y="214"
+          width="18"
+          height="42"
+          rx="9"
+          style={show(on("calf_r_f"))}
+        />
       </svg>
 
       {/* DOS */}
-      <svg viewBox="0 0 180 360" style={panelStyle} aria-label="silhouette dos">
-        <path d="M90 18c-10 0-18 8-18 18v10c0 6 4 11 10 13l-1 5c-2 8-7 13-13 16-10 3-16 12-17 22-2 18-4 54 2 70 4 10 10 15 18 18 6 2 10 6 12 12 5 16 6 38 6 62h24c0-24 1-46 6-62 2-6 6-10 12-12 8-3 14-8 18-18 6-16 4-52 2-70-1-10-7-19-17-22-6-2-11-8-13-16l-1-5c6-2 10-7 10-13V36c0-10-8-18-18-18Z" fill={baseFill}/>
-        <path d="M66 270c-4 30-4 52-4 72h28v-50c0-8-4-16-10-22-4-4-10-0-14 0z" fill={baseFill}/>
-        <path d="M114 270c4 30 4 52 4 72H90v-50c0-8 4-16 10-22 4-4 10-0 14 0z" fill={baseFill}/>
-        <path d="M32 140c-2 26 2 44 10 54 6 8 14 12 22 14l6-20c-8-2-14-6-18-12-6-8-10-20-10-36l-10 0z" fill={baseFill}/>
-        <path d="M148 140c2 26-2 44-10 54-6 8-14 12-22 14l-6-20c8-2 14-6 18-12 6-8 10-20 10-36l10 0z" fill={baseFill}/>
+      <svg
+        viewBox="0 0 180 360"
+        style={panelStyle}
+        aria-label="silhouette dos"
+      >
+        <path
+          d="M90 18c-10 0-18 8-18 18v10c0 6 4 11 10 13l-1 5c-2 8-7 13-13 16-10 3-16 12-17 22-2 18-4 54 2 70 4 10 10 15 18 18 6 2 10 6 12 12 5 16 6 38 6 62h24c0-24 1-46 6-62 2-6 6-10 12-12 8-3 14-8 18-18 6-16 4-52 2-70-1-10-7-19-17-22-6-2-11-8-13-16l-1-5c6-2 10-7 10-13V36c0-10-8-18-18-18Z"
+          fill={baseFill}
+        />
+        <path
+          d="M66 270c-4 30-4 52-4 72h28v-50c0-8-4-16-10-22-4-4-10-0-14 0z"
+          fill={baseFill}
+        />
+        <path
+          d="M114 270c4 30 4 52 4 72H90v-50c0-8 4-16 10-22 4-4 10-0 14 0z"
+          fill={baseFill}
+        />
+        <path
+          d="M32 140c-2 26 2 44 10 54 6 8 14 12 22 14l6-20c-8-2-14-6-18-12-6-8-10-20-10-36l-10 0z"
+          fill={baseFill}
+        />
+        <path
+          d="M148 140c2 26-2 44-10 54-6 8-14 12-22 14l-6-20c8-2 14-6 18-12 6-8 10-20 10-36l10 0z"
+          fill={baseFill}
+        />
 
-        <polygon id="traps_b" points="90,46 60,66 120,66" style={show(on("traps_b"))} />
-        <rect id="lats_b" x="56" y="70" width="68" height="30" rx="10" style={show(on("lats_b"))} />
-        <circle id="deltoid_l_b" cx="46" cy="72" r="14" style={show(on("deltoid_l_b"))} />
-        <circle id="deltoid_r_b" cx="134" cy="72" r="14" style={show(on("deltoid_r_b"))} />
-        <rect id="triceps_l_b" x="28" y="94" width="16" height="38" rx="8" style={show(on("triceps_l_b"))} />
-        <rect id="triceps_r_b" x="136" y="94" width="16" height="38" rx="8" style={show(on("triceps_r_b"))} />
-        <rect id="glutes_b" x="66" y="122" width="48" height="28" rx="10" style={show(on("glutes_b"))} />
-        <rect id="hams_l_b" x="64" y="152" width="18" height="52" rx="9" style={show(on("hams_l_b"))} />
-        <rect id="hams_r_b" x="98" y="152" width="18" height="52" rx="9" style={show(on("hams_r_b"))} />
-        <rect id="calf_l_b" x="64" y="214" width="18" height="42" rx="9" style={show(on("calf_l_b"))} />
-        <rect id="calf_r_b" x="98" y="214" width="18" height="42" rx="9" style={show(on("calf_r_b"))} />
+        <polygon
+          id="traps_b"
+          points="90,46 60,66 120,66"
+          style={show(on("traps_b"))}
+        />
+        <rect
+          id="lats_b"
+          x="56"
+          y="70"
+          width="68"
+          height="30"
+          rx="10"
+          style={show(on("lats_b"))}
+        />
+        <circle
+          id="deltoid_l_b"
+          cx="46"
+          cy="72"
+          r="14"
+          style={show(on("deltoid_l_b"))}
+        />
+        <circle
+          id="deltoid_r_b"
+          cx="134"
+          cy="72"
+          r="14"
+          style={show(on("deltoid_r_b"))}
+        />
+        <rect
+          id="triceps_l_b"
+          x="28"
+          y="94"
+          width="16"
+          height="38"
+          rx="8"
+          style={show(on("triceps_l_b"))}
+        />
+        <rect
+          id="triceps_r_b"
+          x="136"
+          y="94"
+          width="16"
+          height="38"
+          rx="8"
+          style={show(on("triceps_r_b"))}
+        />
+        <rect
+          id="glutes_b"
+          x="66"
+          y="122"
+          width="48"
+          height="28"
+          rx="10"
+          style={show(on("glutes_b"))}
+        />
+        <rect
+          id="hams_l_b"
+          x="64"
+          y="152"
+          width="18"
+          height="52"
+          rx="9"
+          style={show(on("hams_l_b"))}
+        />
+        <rect
+          id="hams_r_b"
+          x="98"
+          y="152"
+          width="18"
+          height="52"
+          rx="9"
+          style={show(on("hams_r_b"))}
+        />
+        <rect
+          id="calf_l_b"
+          x="64"
+          y="214"
+          width="18"
+          height="42"
+          rx="9"
+          style={show(on("calf_l_b"))}
+        />
+        <rect
+          id="calf_r_b"
+          x="98"
+          y="214"
+          width="18"
+          height="42"
+          rx="9"
+          style={show(on("calf_r_b"))}
+        />
       </svg>
     </div>
   );
