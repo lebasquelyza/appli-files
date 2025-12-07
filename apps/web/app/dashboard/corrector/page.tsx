@@ -1,4 +1,3 @@
-// apps/web/app/dashboard/corrector/page.tsx
 "use client";
 
 import {
@@ -231,7 +230,7 @@ const LEX = {
   ],
 };
 
-/* ===== Ajout : phrases style coach ===== */
+/* ===== Ajout : phrases style coach (FR uniquement) ===== */
 const COACH_OPENERS = [
   "Sur ta prochaine série, pense à",
   "Globalement c’est pas mal, mais essaie de",
@@ -250,9 +249,21 @@ const COACH_ENDERS = [
   "tout en gardant une bonne marge de sécurité.",
 ];
 
-function coachifyCue(raw: string) {
+function varyTerms(s: string, lang: Lang = "fr") {
+  if (!s) return s;
+  if (lang !== "fr") return s; // en anglais : ne pas modifier le texte
+
+  let out = s;
+  out = out.replace(/\bcore\b/gi, pick(LEX.core));
+  out = out.replace(/\bdos (plat|droit)\b/gi, pick(LEX.neutralSpine));
+  return out;
+}
+
+function coachifyCue(raw: string, lang: Lang = "fr") {
   const cue = raw.trim().replace(/^[–\-•\s]+/, "");
   if (!cue) return "";
+
+  if (lang !== "fr") return cue; // en anglais : on laisse la phrase brute
 
   // 1 fois sur 3 on laisse brut pour ne pas trop sur-styliser
   if (randInt(3) === 0) return cue;
@@ -263,9 +274,14 @@ function coachifyCue(raw: string) {
   return `${opener} ${cue.toLowerCase()}${ender}`.replace(/\s+/g, " ").trim();
 }
 
-function styleOverall(base: string, faultCount: number) {
+function styleOverall(base: string, faultCount: number, lang: Lang = "fr") {
   const clean = base.trim();
   if (!clean) return "";
+
+  if (lang !== "fr") {
+    // en anglais : on ne rajoute pas de texte FR autour
+    return clean;
+  }
 
   const introOptions =
     faultCount > 0
@@ -289,10 +305,9 @@ function styleOverall(base: string, faultCount: number) {
   const intro = pick(introOptions);
   const outro = pick(outroOptions);
 
-  // 50% du temps on garde la phrase plus simple
-  if (randInt(2) === 0) return varyTerms(clean);
+  if (randInt(2) === 0) return varyTerms(clean, lang);
 
-  return `${intro} ${varyTerms(clean)} ${outro}`
+  return `${intro} ${varyTerms(clean, lang)} ${outro}`
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -362,14 +377,6 @@ function getCategory(exo: string): Category {
   const s = (exo || "").toLowerCase();
   for (const { rx, cat } of EXO_ALIASES) if (rx.test(s)) return cat;
   return "unknown";
-}
-
-function varyTerms(s: string) {
-  if (!s) return s;
-  let out = s;
-  out = out.replace(/\bcore\b/gi, pick(LEX.core));
-  out = out.replace(/\bdos (plat|droit)\b/gi, pick(LEX.neutralSpine));
-  return out;
 }
 function uniqueShuffle(arr: string[]) {
   const seen = new Set<string>();
@@ -637,6 +644,8 @@ function CoachAnalyzer() {
     setStatus("Préparation des images…");
     setErrorMsg("");
 
+    const lang = getLangClient(); // FR ou EN au moment du clic
+
     try {
       // 0) EXTRACTION — RAPIDE
       const { frames, timestamps } = await extractFramesFromFile(file, 8);
@@ -693,18 +702,30 @@ function CoachAnalyzer() {
       setStatus("Analyse IA…");
 
       const baseHints =
-        `Tu reçois des mosaïques issues d’une VIDEO (pas une photo). ` +
-        `Identifie l'exercice et détecte les ERREURS TECHNIQUES. ` +
-        `Réponds en FRANÇAIS avec le ton d’un coach sportif bienveillant. ` +
-        `Structure ta réponse ainsi : ` +
-        `1) Un court retour global (1–3 phrases, mélange positif + points à corriger). ` +
-        `2) Une liste de 3 à 6 défauts techniques concrets (champ "faults"). ` +
-        `3) Pour chaque défaut, donne une correction courte, très actionnable. ` +
-        `Varie ton vocabulaire et évite de répéter les mêmes formulations.`;
+        lang === "fr"
+          ? `Tu reçois des mosaïques issues d’une VIDEO (pas une photo). ` +
+            `Identifie l'exercice et détecte les ERREURS TECHNIQUES. ` +
+            `Réponds en FRANÇAIS avec le ton d’un coach sportif bienveillant. ` +
+            `Structure ta réponse ainsi : ` +
+            `1) Un court retour global (1–3 phrases, mélange positif + points à corriger). ` +
+            `2) Une liste de 3 à 6 défauts techniques concrets (champ "faults"). ` +
+            `3) Pour chaque défaut, donne une correction courte, très actionnable. ` +
+            `Varie ton vocabulaire et évite de répéter les mêmes formulations.`
+          : `You receive mosaics extracted from a VIDEO (not a photo). ` +
+            `Identify the exercise and detect TECHNICAL ERRORS. ` +
+            `Reply in ENGLISH with the tone of a supportive strength coach. ` +
+            `Structure your answer as: ` +
+            `1) A short global feedback (1–3 sentences, mixing positives and corrections). ` +
+            `2) A list of 3–6 concrete technical faults (field "faults"). ` +
+            `3) For each fault, give a short, very actionable correction. ` +
+            `Vary your wording and avoid repeating the same phrases.`;
 
-      const overrideHint = userExercise
-        ? `Exercice exécuté indiqué par l'utilisateur : "${userExercise}".`
-        : "";
+      const overrideHint =
+        userExercise && lang === "fr"
+          ? `Exercice exécuté indiqué par l'utilisateur : "${userExercise}".`
+          : userExercise && lang === "en"
+          ? `Exercise performed as indicated by the user: "${userExercise}".`
+          : "";
 
       const res = await fetch("/api/analyze", {
         method: "POST",
@@ -744,7 +765,9 @@ function CoachAnalyzer() {
         exercise: String(data.exercise || "exercice_inconnu"),
         overall:
           (data.overall && data.overall.trim()) ||
-          "Analyse effectuée mais je manque d’indices visuels. Réessaie avec un angle plus net / cadrage entier.",
+          (lang === "fr"
+            ? "Analyse effectuée mais je manque d’indices visuels. Réessaie avec un angle plus net / cadrage entier."
+            : "Analysis completed but I’m missing clear visual cues. Try again with a clearer angle and full body in the frame."),
         muscles:
           Array.isArray(data.muscles) && data.muscles.length
             ? data.muscles.slice(0, 8)
@@ -772,24 +795,24 @@ function CoachAnalyzer() {
           : [],
       };
 
-      // Post-traitement “coach”
-      safe.overall = styleOverall(safe.overall, rawFaults.length || 0);
+      // Post-traitement “coach” (FR uniquement)
+      safe.overall = styleOverall(safe.overall, rawFaults.length || 0, lang);
       safe.faults = (safe.faults || []).map((f) => ({
         ...f,
-        issue: varyTerms(f.issue || ""),
-        correction: varyTerms(f.correction || ""),
+        issue: varyTerms(f.issue || "", lang),
+        correction: varyTerms(f.correction || "", lang),
       }));
 
       const combinedCues = [
-        ...makeCorrections(safe.exercise || ""),
+        ...(lang === "fr" ? makeCorrections(safe.exercise || "") : []), // EN : pas de tips FR
         ...(safe.corrections || []),
-      ].map(varyTerms);
+      ].map((c) => varyTerms(c, lang));
 
       safe.corrections = uniqueShuffle(
-        combinedCues.map(coachifyCue).filter(Boolean)
+        combinedCues.map((c) => coachifyCue(c, lang)).filter(Boolean)
       ).slice(0, 5);
 
-      safe.muscles = (safe.muscles || []).map(varyTerms);
+      safe.muscles = (safe.muscles || []).map((m) => varyTerms(m, lang));
 
       // Gate de confirmation
       setAnalysis(safe);
@@ -1546,7 +1569,7 @@ function VideoRecorder({ onRecorded }: { onRecorded: (file: File) => void }) {
           </div>
         )}
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap: 2">
         {!isRecording ? (
           <button
             className="btn btn-dash"
@@ -2191,4 +2214,3 @@ function BodyMapHuman({ highlightKeys }: { highlightKeys: string[] }) {
     </div>
   );
 }
-
