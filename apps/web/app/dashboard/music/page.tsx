@@ -1,3 +1,4 @@
+//apps/web/app/dashboard/music/page.tsx
 "use client";
 
 import { useSession, signIn, signOut } from "next-auth/react";
