@@ -35,14 +35,12 @@ function getFromPath(obj: any, path: string): string {
 function readInitialLang(): Lang {
   if (typeof document === "undefined") return "fr";
 
-  // 1) nouveau cookie
   const matchV2 = document.cookie.match(
     new RegExp("(?:^|;\\s*)" + COOKIE_KEY + "=(fr|en)")
   );
   const v2 = matchV2?.[1] as Lang | undefined;
   if (v2 === "fr" || v2 === "en") return v2;
 
-  // 2) ancien cookie
   const matchOld = document.cookie.match(/(?:^|;\s*)fc-lang=(fr|en)/);
   const old = matchOld?.[1] as Lang | undefined;
   if (old === "fr" || old === "en") return old;
@@ -53,7 +51,6 @@ function readInitialLang(): Lang {
 function writeCookieLang(lang: Lang) {
   if (typeof document === "undefined") return;
 
-  // nouveau cookie
   document.cookie = [
     `${COOKIE_KEY}=${lang}`,
     "Path=/",
@@ -61,14 +58,13 @@ function writeCookieLang(lang: Lang) {
     "Max-Age=31536000",
   ].join("; ");
 
-  // optionnel : on “supprime” l’ancien pour éviter les conflits
+  // on “supprime” l’ancien pour éviter les conflits
   document.cookie = "fc-lang=; Path=/; Max-Age=0";
 }
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Lang>("fr");
 
-  // init depuis les cookies
   useEffect(() => {
     const initial = readInitialLang();
     setLangState(initial);
