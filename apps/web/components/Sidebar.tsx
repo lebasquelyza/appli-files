@@ -22,32 +22,52 @@ import { useLanguage } from "@/components/LanguageProvider";
 
 type NavItem = {
   href: string;
-  label: string;
+  labelKey: string;
   icon?: React.ComponentType<{ size?: number }>;
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { href: "/dashboard", label: "Accueil", icon: Home },
-  { href: "/dashboard/profile", label: "Mon profil", icon: User2 },
-  { href: "/dashboard/progress", label: "Mes progrès", icon: LineChart },
-  { href: "/dashboard/corrector", label: "Files te corrige", icon: Wand2 },
-  { href: "/dashboard/recipes", label: "Recettes", icon: BookOpen },
-  { href: "/dashboard/calories", label: "Calories", icon: Flame },
-  { href: "/dashboard/connect", label: "Connecte tes données", icon: Plug2 },
-  { href: "/dashboard/bmi", label: "IMC", icon: ClipboardList },
-  { href: "/dashboard/motivation", label: "Motivation", icon: MessageCircle },
-  { href: "/dashboard/music", label: "Musique", icon: Music2 },
-  { href: "/dashboard/avis", label: "Votre avis", icon: MessageCircle },
-  { href: "/dashboard/settings", label: "Réglages", icon: Settings },
+  // Accueil → on réutilise le titre de dashboard
+  { href: "/dashboard", labelKey: "dashboard.header.title", icon: Home },
+
+  // Mon profil
+  { href: "/dashboard/profile", labelKey: "profile.title", icon: User2 },
+
+  // Mes progrès
+  { href: "/dashboard/progress", labelKey: "progress.pageTitle", icon: LineChart },
+
+  // Files te corrige (page vidéo coach)
+  { href: "/dashboard/corrector", labelKey: "videoCoach.page.title", icon: Wand2 },
+
+  // Recettes
+  { href: "/dashboard/recipes", labelKey: "recipes.pageTitle", icon: BookOpen },
+
+  // Calories
+  { href: "/dashboard/calories", labelKey: "calories.page.title", icon: Flame },
+
+  // Connecte tes données
+  { href: "/dashboard/connect", labelKey: "connect.page.title", icon: Plug2 },
+
+  // IMC
+  { href: "/dashboard/bmi", labelKey: "bmi.page.title", icon: ClipboardList },
+
+  // Motivation
+  { href: "/dashboard/motivation", labelKey: "motivation.pageTitle", icon: MessageCircle },
+
+  // Musique
+  { href: "/dashboard/music", labelKey: "music.pageTitle", icon: Music2 },
+
+  // Votre avis
+  { href: "/dashboard/avis", labelKey: "avis.page.title", icon: MessageCircle },
+
+  // Réglages
+  { href: "/dashboard/settings", labelKey: "settings.pageTitle", icon: Settings },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-
-  // 🔗 on utilise le LanguageProvider juste pour savoir quelle langue est active
-  // et pour permettre au user de changer FR/EN
-  const { lang, setLang } = useLanguage();
+  const { lang, setLang, t } = useLanguage();
 
   // Replier le menu à chaque changement de route
   useEffect(() => setOpen(false), [pathname]);
@@ -165,8 +185,10 @@ export default function Sidebar() {
           overflowY: "auto",
         }}
       >
-        {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+        {NAV_ITEMS.map(({ href, labelKey, icon: Icon }) => {
           const active = pathname === href || pathname.startsWith(href + "/");
+          const label = t(labelKey) || labelKey; // 🧠 récupère la traduction
+
           return (
             <li key={href}>
               <Link
