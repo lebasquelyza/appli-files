@@ -10,7 +10,7 @@ export default function ClientTopbar({ hideMenu = false }: { hideMenu?: boolean 
   const router = useRouter();
   const firstBtnRef = useRef<HTMLButtonElement | null>(null);
 
-  const { lang, setLang } = useLanguage(); // 👈 même logique que page.tsx / autres topbars
+  const { lang, setLang } = useLanguage();
 
   const go = (href: string) => {
     setOpen(false);
@@ -45,29 +45,27 @@ export default function ClientTopbar({ hideMenu = false }: { hideMenu?: boolean 
               </button>
             )}
 
-            {/* 🔤 Boutons FR / EN juste à côté, synchronisés avec LanguageProvider */}
+            {/* 🔤 Boutons FR / EN juste à côté */}
             <div className="flex items-center gap-1">
               <button
                 type="button"
                 onClick={() => setLang("fr")}
-                className={
-                  "px-2 py-0.5 rounded-full text-[11px] border " +
-                  (lang === "fr"
+                className={`px-2 py-0.5 rounded-full text-[11px] border ${
+                  lang === "fr"
                     ? "border-emerald-600 bg-emerald-600 text-white"
-                    : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50")
-                }
+                    : "border-gray-300 bg-white text-gray-700"
+                }`}
               >
                 FR
               </button>
               <button
                 type="button"
                 onClick={() => setLang("en")}
-                className={
-                  "px-2 py-0.5 rounded-full text-[11px] border " +
-                  (lang === "en"
+                className={`px-2 py-0.5 rounded-full text-[11px] border ${
+                  lang === "en"
                     ? "border-emerald-600 bg-emerald-600 text-white"
-                    : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50")
-                }
+                    : "border-gray-300 bg-white text-gray-700"
+                }`}
               >
                 EN
               </button>
