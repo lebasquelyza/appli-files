@@ -21,9 +21,16 @@ function tServer(lang: Lang, path: string, fallback?: string): string {
   return fallback ?? path;
 }
 
+// ✅ nouvelle version : lit fc-lang-v2 d'abord, puis l'ancien fc-lang
 function getLang(): Lang {
-  const cookieLang = cookies().get("fc-lang")?.value;
-  if (cookieLang === "en") return "en";
+  const cookieStore = cookies();
+
+  const v2 = cookieStore.get("fc-lang-v2")?.value;
+  if (v2 === "en" || v2 === "fr") return v2 as Lang;
+
+  const old = cookieStore.get("fc-lang")?.value;
+  if (old === "en" || old === "fr") return old as Lang;
+
   return "fr";
 }
 
