@@ -22,41 +22,44 @@ import { useLanguage } from "@/components/LanguageProvider";
 
 type NavItem = {
   href: string;
-  labelKey: string;
+  label: string;
   icon?: React.ComponentType<{ size?: number }>;
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { href: "/dashboard", labelKey: "dashboard.header.title", icon: Home },
-  { href: "/dashboard/profile", labelKey: "profile.title", icon: User2 }, // 👈 ICI
-  { href: "/dashboard/progress", labelKey: "progress.pageTitle", icon: LineChart },
-  { href: "/dashboard/corrector", labelKey: "videoCoach.page.title", icon: Wand2 },
-  { href: "/dashboard/recipes", labelKey: "recipes.pageTitle", icon: BookOpen },
-  { href: "/dashboard/calories", labelKey: "calories.page.title", icon: Flame },
-  { href: "/dashboard/connect", labelKey: "connect.page.title", icon: Plug2 },
-  { href: "/dashboard/bmi", labelKey: "bmi.page.title", icon: ClipboardList },
-  { href: "/dashboard/motivation", labelKey: "motivation.pageTitle", icon: MessageCircle },
-  { href: "/dashboard/music", labelKey: "music.pageTitle", icon: Music2 },
-  { href: "/dashboard/avis", labelKey: "avis.page.title", icon: MessageCircle },
-  { href: "/dashboard/settings", labelKey: "settings.pageTitle", icon: Settings },
+  { href: "/dashboard", label: "Accueil", icon: Home },
+  { href: "/dashboard/profile", label: "Mon profil", icon: User2 },
+  { href: "/dashboard/progress", label: "Mes progrès", icon: LineChart },
+  { href: "/dashboard/corrector", label: "Files te corrige", icon: Wand2 },
+  { href: "/dashboard/recipes", label: "Recettes", icon: BookOpen },
+  { href: "/dashboard/calories", label: "Calories", icon: Flame },
+  { href: "/dashboard/connect", label: "Connecte tes données", icon: Plug2 },
+  { href: "/dashboard/bmi", label: "IMC", icon: ClipboardList },
+  { href: "/dashboard/motivation", label: "Motivation", icon: MessageCircle },
+  { href: "/dashboard/music", label: "Musique", icon: Music2 },
+  { href: "/dashboard/avis", label: "Votre avis", icon: MessageCircle },
+  { href: "/dashboard/settings", label: "Réglages", icon: Settings },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const { lang, setLang, t } = useLanguage();
+
+  // 🔗 on utilise le LanguageProvider juste pour savoir quelle langue est active
+  // et pour permettre au user de changer FR/EN
+  const { lang, setLang } = useLanguage();
 
   // Replier le menu à chaque changement de route
   useEffect(() => setOpen(false), [pathname]);
 
-  // Fermer APRÈS le clic sur le lien
+  // Fermer APRÈS que le clic ait été géré par <Link>
   const closeAfterClick = () => {
     requestAnimationFrame(() => setOpen(false));
   };
 
   return (
     <nav aria-label="Dashboard" style={{ paddingLeft: 10, paddingRight: 10 }}>
-      {/* Entête sticky */}
+      {/* ===== Entête sticky collée en haut avec safe-area ===== */}
       <div
         style={{
           position: "sticky",
@@ -88,6 +91,7 @@ export default function Sidebar() {
               cursor: "pointer",
             }}
           >
+            {/* Pastille verte (non interactive) */}
             <span
               aria-hidden
               style={{
@@ -113,7 +117,7 @@ export default function Sidebar() {
             />
           </button>
 
-          {/* 🔤 Switch FR / EN */}
+          {/* 🔤 Switch langue juste à côté de Files-Menu */}
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
             <button
               type="button"
@@ -149,7 +153,7 @@ export default function Sidebar() {
         </div>
       </div>
 
-      {/* Liste des onglets */}
+      {/* ===== Liste des onglets — masquée par défaut ===== */}
       <ul
         id="sidebar-links"
         style={{
@@ -161,10 +165,8 @@ export default function Sidebar() {
           overflowY: "auto",
         }}
       >
-        {NAV_ITEMS.map(({ href, labelKey, icon: Icon }) => {
+        {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
           const active = pathname === href || pathname.startsWith(href + "/");
-          const label = t(labelKey) || labelKey;
-
           return (
             <li key={href}>
               <Link
