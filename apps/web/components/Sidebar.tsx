@@ -33,7 +33,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: { fr: "Accueil",       en: "Home" },           icon: Home },
   { href: "/dashboard/profile", label: { fr: "Mon profil",   en: "My profile" },     icon: User2 },
   { href: "/dashboard/progress", label: { fr: "Mes progrès",  en: "My progress" },    icon: LineChart },
-  { href: "/dashboard/corrector", label: { fr: "Files te corrige", en: "Form check" }, icon: Wand2 },
+  { href: "/dashboard/corrector", label: { fr: "Files te corrige", en: "Files corrects you" }, icon: Wand2 },
   { href: "/dashboard/recipes", label: { fr: "Recettes",     en: "Recipes" },       icon: BookOpen },
   { href: "/dashboard/calories", label: { fr: "Calories",     en: "Calories" },      icon: Flame },
   {
