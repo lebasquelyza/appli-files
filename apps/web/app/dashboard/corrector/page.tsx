@@ -143,104 +143,76 @@ function pick<T>(arr: T[]): T {
   return arr[randInt(arr.length)];
 }
 
-const LEX = {
+/* ===== Lexiques FR / EN ===== */
+const LEX_FR = {
   core: ["gainage", "sangle abdominale", "ceinture abdominale", "tronc"],
   braceVerb: ["gaine", "serre", "verrouille", "contracte", "stabilise"],
-  neutralSpine: [
-    "rachis neutre",
-    "dos plat",
-    "alignement lombaire neutre",
-    "colonne bien alignée",
-  ],
+  neutralSpine: ["rachis neutre", "dos plat", "alignement lombaire neutre"],
   chestUp: ["poitrine fière", "sternum haut", "buste ouvert"],
-  shoulderPack: [
-    "épaules abaissées/serrées",
-    "omoplates basses/rétractées",
-    "pack scapulaire",
-  ],
-  avoidMomentum: [
-    "évite l’élan",
-    "pas d’à-coups",
-    "contrôle le mouvement",
-  ],
-  controlCue: [
-    "amplitude contrôlée",
-    "mouvement maîtrisé",
-    "contrôle sur toute l’amplitude",
-  ],
+  shoulderPack: ["épaules abaissées/serrées", "omoplates basses/rétractées", "pack scapulaire"],
+  avoidMomentum: ["évite l’élan", "pas d’à-coups", "contrôle le mouvement"],
+  controlCue: ["amplitude contrôlée", "mouvement maîtrisé", "contrôle sur toute l’amplitude"],
   rangeCue: ["amplitude utile", "range complet sans douleur", "aller-retour propre"],
   tempoIntro: ["Tempo", "Cadence", "Rythme"],
   tempo201: ["2–0–1", "2-0-1", "2s-0-1s"],
   tempo311: ["3–1–1", "3-1-1", "3s-1-1s"],
-  breathe: [
-    "souffle sur l’effort",
-    "expire à la phase concentrique",
-    "inspire au retour",
-  ],
-  footTripod: [
-    "appuis trépied (talon + base gros/petit orteil)",
-    "ancre tes pieds",
-  ],
-  kneeTrack: [
-    "genoux dans l’axe",
-    "genoux suivent la pointe de pieds",
-    "pas de valgus",
-  ],
-  hipBack: [
-    "hanche en arrière",
-    "charnière franche",
-    "pense fesses loin derrière",
-  ],
+  breathe: ["souffle sur l’effort", "expire à la phase concentrique", "inspire au retour"],
+  footTripod: ["appuis trépied (talon + base gros/petit orteil)", "ancre tes pieds"],
+  kneeTrack: ["genoux dans l’axe", "genoux suivent la pointe de pieds", "pas de valgus"],
+  hipBack: ["hanche en arrière", "charnière franche", "pense fesses loin derrière"],
   gluteCue: ["pousse le talon", "chasse le talon", "guide le talon"],
-  holdTop: [
-    "marque 1 s en contraction",
-    "pause 1 s en pic de contraction",
-    "garde 1 s en haut",
-  ],
+  holdTop: ["marque 1 s en contraction", "pause 1 s en pic de contraction", "garde 1 s en haut"],
   grip: ["prise ferme", "serre la barre", "poignées verrouillées"],
-  elbowPathPush: [
-    "coudes ~45° du buste",
-    "coudes sous la barre",
-    "coudes ni trop ouverts ni collés",
-  ],
-  elbowPathPull: [
-    "coudes près du buste",
-    "coudes vers la hanche",
-    "coudes sous la ligne d’épaule",
-  ],
-  latDepress: [
-    "abaisse les épaules",
-    "déprime les scapulas",
-    "descends les omoplates",
-  ],
-  scapRetract: [
-    "rétracte les omoplates",
-    "serre les omoplates",
-    "omoplates tirées en arrière",
-  ],
-  wristNeutral: [
-    "poignets neutres",
-    "poignets alignés",
-    "poignets pas cassés",
-  ],
-  headNeutral: [
-    "regard neutre",
-    "nuque longue",
-    "évite l’hyperextension cervicale",
-  ],
+  elbowPathPush: ["coudes ~45° du buste", "coudes sous la barre", "coudes ni trop ouverts ni collés"],
+  elbowPathPull: ["coudes près du buste", "coudes vers la hanche", "coudes sous la ligne d’épaule"],
+  latDepress: ["abaisse les épaules", "déprime les scapulas", "descends les omoplates"],
+  scapRetract: ["rétracte les omoplates", "serre les omoplates", "omoplates tirées en arrière"],
+  wristNeutral: ["poignets neutres", "poignets alignés", "poignets pas cassés"],
+  headNeutral: ["regard neutre", "nuque longue", "évite l’hyperextension cervicale"],
 };
 
-/* ===== Ajout : phrases style coach (FR uniquement) ===== */
-const COACH_OPENERS = [
+const LEX_EN = {
+  core: ["core", "midline", "trunk"],
+  braceVerb: ["brace", "lock", "tighten", "engage", "stabilize"],
+  neutralSpine: ["neutral spine", "flat back", "neutral lumbar alignment"],
+  chestUp: ["proud chest", "sternum up", "open chest"],
+  shoulderPack: ["pack your shoulders", "scapulae down and back", "set your shoulder blades"],
+  avoidMomentum: ["avoid momentum", "no jerking", "stay smooth"],
+  controlCue: ["controlled range", "own the movement", "smooth, steady reps"],
+  rangeCue: ["useful range", "full pain-free range", "clean reps"],
+  tempoIntro: ["Tempo", "Cadence", "Rhythm"],
+  tempo201: ["2-0-1", "2s-0-1s"],
+  tempo311: ["3-1-1", "3s-1-1s"],
+  breathe: ["exhale on the effort", "breathe out on the concentric", "inhale on the way down"],
+  footTripod: ["tripod foot (heel + big/small toe)", "anchor your feet"],
+  kneeTrack: ["knees track over toes", "keep knees in line", "avoid valgus"],
+  hipBack: ["hips back", "strong hinge", "push your hips behind you"],
+  gluteCue: ["drive through the heel", "push the heel", "lead with the heel"],
+  holdTop: ["pause 1s at the top", "1s peak squeeze", "hold the contraction"],
+  grip: ["firm grip", "squeeze the bar", "locked wrists"],
+  elbowPathPush: ["elbows ~45°", "elbows under the bar", "avoid excessive flare"],
+  elbowPathPull: ["elbows close", "drive elbows to the hips", "stay under shoulder line"],
+  latDepress: ["depress the shoulders", "set the lats", "pull shoulders down"],
+  scapRetract: ["retract the shoulder blades", "squeeze the scapulae", "shoulders back"],
+  wristNeutral: ["neutral wrists", "stacked wrists", "no wrist break"],
+  headNeutral: ["neutral gaze", "long neck", "avoid neck hyperextension"],
+};
+
+function getLex(lang: Lang) {
+  return lang === "en" ? LEX_EN : LEX_FR;
+}
+
+/* ===== Phrases style coach FR & EN ===== */
+const COACH_OPENERS_FR = [
   "Sur ta prochaine série, pense à",
   "Globalement c’est pas mal, mais essaie de",
   "Pour rendre ton mouvement plus propre, essaie de",
   "Petit ajustement technique :",
   "Un point à surveiller :",
-  "Si tu veux optimiser le geste, garde en tête que tu dois",
+  "Si tu veux optimiser le geste, garde en tête de",
 ];
 
-const COACH_ENDERS = [
+const COACH_ENDERS_FR = [
   "— ça va vraiment sécuriser ton mouvement.",
   "pour protéger tes articulations et gagner en force.",
   "et tu vas sentir la différence tout de suite.",
@@ -249,13 +221,37 @@ const COACH_ENDERS = [
   "tout en gardant une bonne marge de sécurité.",
 ];
 
+const COACH_OPENERS_EN = [
+  "On your next set, focus on",
+  "Solid effort — now try to",
+  "To clean up the rep, aim to",
+  "Quick technical tweak:",
+  "One point to watch:",
+  "If you want a stronger, safer rep, remember to",
+];
+
+const COACH_ENDERS_EN = [
+  "— this will make you feel much more stable.",
+  "to protect your joints and build strength.",
+  "and you’ll notice the difference right away.",
+  "for a smoother, more efficient rep.",
+  "so you can stay tight through the whole range.",
+  "while keeping a strong safety margin.",
+];
+
+/* ===== Helpers “coach” ===== */
 function varyTerms(s: string, lang: Lang = "fr") {
   if (!s) return s;
-  if (lang !== "fr") return s; // en anglais : ne pas modifier le texte
 
+  const lex = getLex(lang);
   let out = s;
-  out = out.replace(/\bcore\b/gi, pick(LEX.core));
-  out = out.replace(/\bdos (plat|droit)\b/gi, pick(LEX.neutralSpine));
+
+  // mini-variations FR + EN sans dénaturer le sens
+  out = out.replace(/\bcore\b/gi, pick(lex.core));
+  out = out.replace(/\btronc\b/gi, pick(LEX_FR.core));
+  out = out.replace(/\bdos (plat|droit)\b/gi, pick(LEX_FR.neutralSpine));
+  out = out.replace(/\bneutral spine\b/gi, pick(LEX_EN.neutralSpine));
+
   return out;
 }
 
@@ -263,27 +259,25 @@ function coachifyCue(raw: string, lang: Lang = "fr") {
   const cue = raw.trim().replace(/^[–\-•\s]+/, "");
   if (!cue) return "";
 
-  if (lang !== "fr") return cue; // en anglais : on laisse la phrase brute
+  const openers = lang === "en" ? COACH_OPENERS_EN : COACH_OPENERS_FR;
+  const enders = lang === "en" ? COACH_ENDERS_EN : COACH_ENDERS_FR;
 
-  // 1 fois sur 3 on laisse brut pour ne pas trop sur-styliser
+  // 1 fois sur 3 : on laisse brut pour ne pas over-styliser
   if (randInt(3) === 0) return cue;
 
-  const opener = pick(COACH_OPENERS);
-  const ender = randInt(2) === 0 ? "" : " " + pick(COACH_ENDERS);
+  const opener = pick(openers);
+  const ender = randInt(2) === 0 ? "" : " " + pick(enders);
 
-  return `${opener} ${cue.toLowerCase()}${ender}`.replace(/\s+/g, " ").trim();
+  const body = lang === "fr" ? cue.toLowerCase() : cue; // en EN on garde le casing
+
+  return `${opener} ${body}${ender}`.replace(/\s+/g, " ").trim();
 }
 
 function styleOverall(base: string, faultCount: number, lang: Lang = "fr") {
   const clean = base.trim();
   if (!clean) return "";
 
-  if (lang !== "fr") {
-    // en anglais : on ne rajoute pas de texte FR autour
-    return clean;
-  }
-
-  const introOptions =
+  const introFR =
     faultCount > 0
       ? [
           "Globalement, ton mouvement est intéressant.",
@@ -296,14 +290,33 @@ function styleOverall(base: string, faultCount: number, lang: Lang = "fr") {
           "Bonne exécution, on reste quand même attentif à la suite.",
         ];
 
-  const outroOptions = [
+  const outroFR = [
     "Continue de te filmer, ça aide énormément à progresser.",
     "Garde ces points en tête sur les prochaines séries.",
     "On garde cette qualité sur la suite de ta séance.",
   ];
 
-  const intro = pick(introOptions);
-  const outro = pick(outroOptions);
+  const introEN =
+    faultCount > 0
+      ? [
+          "Overall, this is a solid base.",
+          "Good effort — now we’ll refine the details.",
+          "You’ve got good fundamentals; let’s clean up a few key points.",
+        ]
+      : [
+          "Really clean execution overall 👌",
+          "That looks technically solid.",
+          "Good reps — keep the same standard going forward.",
+        ];
+
+  const outroEN = [
+    "Keep filming your sets — it’s one of the fastest ways to improve.",
+    "Carry these cues into your next few sets.",
+    "Stick with this quality and you’ll progress quickly.",
+  ];
+
+  const intro = pick(lang === "en" ? introEN : introFR);
+  const outro = pick(lang === "en" ? outroEN : outroFR);
 
   if (randInt(2) === 0) return varyTerms(clean, lang);
 
@@ -312,6 +325,7 @@ function styleOverall(base: string, faultCount: number, lang: Lang = "fr") {
     .trim();
 }
 
+/* ===================== Catégories d’exos ===================== */
 type Category =
   | "squat"
   | "lunge"
@@ -378,6 +392,7 @@ function getCategory(exo: string): Category {
   for (const { rx, cat } of EXO_ALIASES) if (rx.test(s)) return cat;
   return "unknown";
 }
+
 function uniqueShuffle(arr: string[]) {
   const seen = new Set<string>();
   const out: string[] = [];
@@ -394,46 +409,105 @@ function uniqueShuffle(arr: string[]) {
   }
   return out;
 }
-function makeCorrections(exo: string) {
+
+function makeCorrections(exo: string, lang: Lang = "fr") {
   const cat = getCategory(exo);
+  const lex = getLex(lang);
   const tips: string[] = [];
-  const universal = [
-    `Garde un ${pick(LEX.neutralSpine)} avec ${pick(LEX.chestUp)}.`,
-    `${pick(LEX.breathe)}.`,
-    `${pick(LEX.wristNeutral)} et ${pick(LEX.headNeutral)}.`,
+
+  const universalEN = [
+    `Keep a ${pick(lex.neutralSpine)} with ${pick(lex.chestUp)}.`,
+    `${pick(lex.breathe)}.`,
+    `${pick(lex.wristNeutral)} and ${pick(lex.headNeutral)}.`,
   ];
-  const upperStab = [`${pick(LEX.shoulderPack)}.`, `${pick(LEX.grip)}.`];
-  const lowerStab = [`${pick(LEX.footTripod)}.`, `${pick(LEX.kneeTrack)}.`];
+
+  const universalFR = [
+    `Garde un ${pick(LEX_FR.neutralSpine)} avec ${pick(LEX_FR.chestUp)}.`,
+    `${pick(LEX_FR.breathe)}.`,
+    `${pick(LEX_FR.wristNeutral)} et ${pick(LEX_FR.headNeutral)}.`,
+  ];
+
+  const upperStab =
+    lang === "en"
+      ? [`${pick(lex.shoulderPack)}.`, `${pick(lex.grip)}.`]
+      : [`${pick(LEX_FR.shoulderPack)}.`, `${pick(LEX_FR.grip)}.`];
+
+  const lowerStab =
+    lang === "en"
+      ? [`${pick(lex.footTripod)}.`, `${pick(lex.kneeTrack)}.`]
+      : [`${pick(LEX_FR.footTripod)}.`, `${pick(LEX_FR.kneeTrack)}.`];
+
+  const addTempo = () => {
+    const intro = pick(lex.tempoIntro);
+    const tempo = randInt(2) ? pick(lex.tempo201) : pick(lex.tempo311);
+    tips.push(`${intro} ${tempo}.`);
+  };
 
   switch (cat) {
     case "squat":
-      tips.push(
-        `${pick(LEX.kneeTrack)}.`,
-        `${pick(LEX.footTripod)}.`,
-        `${pick(LEX.chestUp)}; ${pick(LEX.controlCue)}.`,
-        `${pick(LEX.tempoIntro)} ${pick(LEX.tempo311)}.`
-      );
+      if (lang === "en") {
+        tips.push(
+          `${pick(lex.kneeTrack)}.`,
+          `${pick(lex.footTripod)}.`,
+          `${pick(lex.chestUp)}; ${pick(lex.controlCue)}.`
+        );
+        addTempo();
+      } else {
+        tips.push(
+          `${pick(LEX_FR.kneeTrack)}.`,
+          `${pick(LEX_FR.footTripod)}.`,
+          `${pick(LEX_FR.chestUp)}; ${pick(LEX_FR.controlCue)}.`
+        );
+        tips.push(`${pick(LEX_FR.tempoIntro)} ${pick(LEX_FR.tempo311)}.`);
+      }
       break;
+
     case "hinge":
-      tips.push(
-        `${pick(LEX.hipBack)}; genoux souples.`,
-        `${pick(LEX.neutralSpine)}; ${pick(LEX.scapRetract)}.`,
-        `${pick(LEX.tempoIntro)} ${pick(LEX.tempo311)}.`
-      );
+      if (lang === "en") {
+        tips.push(
+          `${pick(lex.hipBack)}; soft knees.`,
+          `${pick(lex.neutralSpine)}; ${pick(lex.scapRetract)}.`
+        );
+        addTempo();
+      } else {
+        tips.push(
+          `${pick(LEX_FR.hipBack)}; genoux souples.`,
+          `${pick(LEX_FR.neutralSpine)}; ${pick(LEX_FR.scapRetract)}.`,
+          `${pick(LEX_FR.tempoIntro)} ${pick(LEX_FR.tempo311)}.`
+        );
+      }
       break;
+
     case "push_vertical":
-      tips.push(
-        `${pick(LEX.elbowPathPush)}.`,
-        `${pick(LEX.core)[0]} solide; fessiers contractés.`,
-        `${pick(LEX.controlCue)}.`
-      );
+      if (lang === "en") {
+        tips.push(
+          `${pick(lex.elbowPathPush)}.`,
+          `${pick(lex.core)} tight; glutes engaged.`,
+          `${pick(lex.controlCue)}.`
+        );
+      } else {
+        tips.push(
+          `${pick(LEX_FR.elbowPathPush)}.`,
+          `${pick(LEX_FR.core)} solide; fessiers contractés.`,
+          `${pick(LEX_FR.controlCue)}.`
+        );
+      }
       break;
+
     default:
-      tips.push(
-        `Contrôle l’amplitude et garde un ${pick(LEX.neutralSpine)}.`,
-        `${pick(LEX.braceVerb)} ta ${pick(LEX.core)}.`,
-        `${pick(LEX.avoidMomentum)}.`
-      );
+      if (lang === "en") {
+        tips.push(
+          `Control your range and keep a ${pick(lex.neutralSpine)}.`,
+          `${pick(lex.braceVerb)} your ${pick(lex.core)}.`,
+          `${pick(lex.avoidMomentum)}.`
+        );
+      } else {
+        tips.push(
+          `Contrôle l’amplitude et garde un ${pick(LEX_FR.neutralSpine)}.`,
+          `${pick(LEX_FR.braceVerb)} ta ${pick(LEX_FR.core)}.`,
+          `${pick(LEX_FR.avoidMomentum)}.`
+        );
+      }
       break;
   }
 
@@ -457,27 +531,17 @@ function makeCorrections(exo: string) {
   ) {
     tips.push(pick(upperStab));
   } else if (
-    [
-      "squat",
-      "lunge",
-      "hinge",
-      "hipthrust",
-      "legpress",
-      "quad_iso",
-      "ham_iso",
-      "calf",
-    ].includes(cat)
+    ["squat", "lunge", "hinge", "hipthrust", "legpress", "quad_iso", "ham_iso", "calf"].includes(
+      cat
+    )
   ) {
     tips.push(pick(lowerStab));
   } else {
-    tips.push(pick(universal));
+    tips.push(...(lang === "en" ? universalEN : universalFR));
   }
-  if (randInt(2) === 0)
-    tips.push(
-      `${pick(LEX.tempoIntro)} ${
-        randInt(2) ? pick(LEX.tempo201) : pick(LEX.tempo311)
-      }.`
-    );
+
+  if (randInt(2) === 0) addTempo();
+
   return uniqueShuffle(tips);
 }
 
@@ -795,7 +859,7 @@ function CoachAnalyzer() {
           : [],
       };
 
-      // Post-traitement “coach” (FR uniquement)
+      // Post-traitement “coach” bilingue
       safe.overall = styleOverall(safe.overall, rawFaults.length || 0, lang);
       safe.faults = (safe.faults || []).map((f) => ({
         ...f,
@@ -804,7 +868,7 @@ function CoachAnalyzer() {
       }));
 
       const combinedCues = [
-        ...(lang === "fr" ? makeCorrections(safe.exercise || "") : []), // EN : pas de tips FR
+        ...makeCorrections(safe.exercise || "", lang),
         ...(safe.corrections || []),
       ].map((c) => varyTerms(c, lang));
 
@@ -1569,7 +1633,7 @@ function VideoRecorder({ onRecorded }: { onRecorded: (file: File) => void }) {
           </div>
         )}
       </div>
-      <div className="flex items-center gap: 2">
+      <div className="flex items-center gap-2">
         {!isRecording ? (
           <button
             className="btn btn-dash"
