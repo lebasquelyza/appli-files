@@ -3,18 +3,19 @@ import { NextResponse } from "next/server";
 import {
   generateRecipesFromFilters,
   type GenerateRecipesInput,
+  type Plan,
 } from "../../../../lib/recipes/ai";
 
 export const runtime = "nodejs";
-
-type Plan = "BASIC" | "PLUS" | "PREMIUM";
+// Indique à Next que cette route peut durer un peu (utile sur certains hébergeurs)
+export const maxDuration = 60;
 
 export async function POST(req: Request) {
   try {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
       console.error("[recipes/ai] Pas de OPENAI_API_KEY dans l'env");
-      // 100 % IA : pas de fallback, juste erreur
+      // 100 % IA : pas de fallback, juste une erreur
       return NextResponse.json(
         { recipes: [], error: "NO_API_KEY" },
         { status: 200 },
@@ -30,7 +31,7 @@ export async function POST(req: Request) {
       kcalMax,
       allergens = [],
       dislikes = [],
-      count = 8,
+      count = 3,
       kind = "meals",
     } = body as {
       plan?: Plan;
@@ -51,7 +52,7 @@ export async function POST(req: Request) {
       kcalMax,
       allergens,
       dislikes,
-      count: Math.max(1, Math.min(count || 8, 12)), // petit garde-fou
+      count: count ?? 3,
     };
 
     const { recipes } = await generateRecipesFromFilters(input);
