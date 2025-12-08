@@ -137,12 +137,17 @@ export function AIExtraSection({
   return (
     <section className="section" style={{ marginTop: 12 }}>
       <div className="section-head" style={{ marginBottom: 8 }}>
-        <h2>{t("recipes.aiSection.title")}</h2>
+        {/* Titre remplacé par "Suggestion" */}
+        <h2>{t("recipes.aiSection.title", "Suggestion")}</h2>
+        {/* Sous-titre plus petit avec le texte demandé */}
         <p
           className="text-xs"
-          style={{ color: "#6b7280", marginTop: 4 }}
+          style={{ color: "#6b7280", marginTop: 4, fontSize: "10px" }}
         >
-          {t("recipes.aiSection.subtitle")}
+          {t(
+            "recipes.aiSection.subtitle",
+            "générer en direct avec l'IA selon tes filtres",
+          )}
         </p>
       </div>
 
