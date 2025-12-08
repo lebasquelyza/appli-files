@@ -242,8 +242,7 @@ export const translations = {
           dislikesPlaceholder: "brocoli, saumon, tofu...",
           dislikesHelp:
             "L'IA les garde, mais propose une autre façon de les cuisiner.",
-          footerNote:
-            "Les filtres s'appliquent surtout aux suggestions perso IA.",
+          footerNote: "",
           resetButton: "Réinitialiser",
           regenerateButton: "Régénérer",
         },
@@ -267,11 +266,11 @@ export const translations = {
       },
 
       aiSection: {
-        title: "Suggestions perso IA",
-        subtitle: "Générées en direct avec l'IA selon tes filtres.",
+        title: "Suggestion",
+        subtitle: "Généré en direct avec l'IA selon tes filtres.",
         unavailable: "IA indisponible pour le moment.",
         loading: "Génération en cours…",
-        badge: "perso IA",
+        badge: "",
       },
 
       profile: {
@@ -1133,8 +1132,7 @@ export const translations = {
         dislikesPlaceholder: "brocoli, saumon, tofu...",
         dislikesHelp:
           "L'IA les garde, mais propose une autre façon de les cuisiner.",
-        footerNote:
-          "Les filtres s'appliquent surtout aux suggestions perso IA.",
+        footerNote: "",
         resetButton: "Réinitialiser",
         regenerateButton: "Régénérer",
       },
@@ -1156,12 +1154,12 @@ export const translations = {
         save: "Enregistrer",
       },
       aiSection: {
-        title: "Suggestions perso IA",
+        title: "Suggestion",
         subtitle:
-          "Générées en direct avec l'IA selon tes filtres.",
+          "Généré en direct avec l'IA selon tes filtres.",
         unavailable: "IA indisponible pour le moment.",
         loading: "Génération en cours…",
-        badge: "perso IA",
+        badge: "",
       },
       detail: {
         notFound: {
@@ -1481,8 +1479,7 @@ export const translations = {
             "broccoli, salmon, tofu...",
           dislikesHelp:
             "AI keeps them but suggests another way to cook them.",
-          footerNote:
-            "Filters mainly apply to personalised AI suggestions.",
+          footerNote: "",
           resetButton: "Reset",
           regenerateButton: "Regenerate",
         },
@@ -1507,12 +1504,12 @@ export const translations = {
       },
 
       aiSection: {
-        title: "Personalised AI suggestions",
+        title: "Suggestion",
         subtitle:
           "Generated live with AI based on your filters.",
         unavailable: "AI unavailable at the moment.",
         loading: "Generating…",
-        badge: "AI personalised",
+        badge: "",
       },
 
       profile: {
@@ -2376,7 +2373,7 @@ export const translations = {
         dislikesHelp:
           "AI keeps them but suggests another way to cook them.",
         footerNote:
-          "Filters mainly apply to personalised AI suggestions.",
+          "",
         resetButton: "Reset",
         regenerateButton: "Regenerate",
       },
@@ -2399,12 +2396,12 @@ export const translations = {
         save: "Save",
       },
       aiSection: {
-        title: "Personalised AI suggestions",
+        title: "Suggestion",
         subtitle:
           "Generated live with AI based on your filters.",
         unavailable: "AI unavailable at the moment.",
         loading: "Generating…",
-        badge: "AI personalised",
+        badge: "",
       },
       detail: {
         notFound: {
