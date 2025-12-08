@@ -1,11 +1,7 @@
 // apps/web/lib/recipes/ai.ts
 import OpenAI from "openai";
 
-type Plan = "BASIC" | "PLUS" | "PREMIUM";
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+export type Plan = "BASIC" | "PLUS" | "PREMIUM";
 
 export type GenerateRecipesInput = {
   plan: Plan;
@@ -18,7 +14,13 @@ export type GenerateRecipesInput = {
   count: number;
 };
 
-export async function generateRecipesFromFilters(input: GenerateRecipesInput) {
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+export async function generateRecipesFromFilters(
+  input: GenerateRecipesInput,
+) {
   const {
     plan,
     kind,
@@ -31,6 +33,9 @@ export async function generateRecipesFromFilters(input: GenerateRecipesInput) {
   } = input;
 
   const mode: "meals" | "shakes" = kind === "shakes" ? "shakes" : "meals";
+
+  // On limite un peu pour éviter les réponses énormes (et les timeout)
+  const safeCount = Math.max(1, Math.min(count || 3, 6));
 
   const constraints: string[] = [];
 
@@ -47,12 +52,15 @@ export async function generateRecipesFromFilters(input: GenerateRecipesInput) {
     else if (hasMax) constraints.push(`- Maximum ${kcalMax} kcal.`);
   }
 
-  if (allergens.length)
+  if (allergens.length) {
     constraints.push(`- Exclure strictement: ${allergens.join(", ")}.`);
-  if (dislikes.length)
+  }
+
+  if (dislikes.length) {
     constraints.push(
       `- Si un ingrédient non-aimé apparaît, ne pas le supprimer: proposer une section "rework" avec 2-3 façons de le cuisiner autrement.`,
     );
+  }
 
   const typeLine =
     mode === "shakes"
@@ -67,7 +75,7 @@ Utilisateur:
   }
 - Allergènes/Intolérances: ${allergens.join(", ") || "aucun"}
 - Aliments non aimés (à re-travailler): ${dislikes.join(", ") || "aucun"}
-- Nombre de recettes: ${count}
+- Nombre de recettes: ${safeCount}
 
 Contraintes:
 ${typeLine}
@@ -90,6 +98,7 @@ Règles:
 - Pour le mode "shakes": uniquement des boissons à boire, préparation au blender, 5–10 min.
 - Renvoyer {"recipes": Recipe[]}.`;
 
+  console.time("[recipes/ai] openai");
   const response = await openai.chat.completions.create({
     model: "gpt-4o-mini",
     temperature: 0.7,
@@ -102,6 +111,7 @@ Règles:
       { role: "user", content: prompt },
     ],
   });
+  console.timeEnd("[recipes/ai] openai");
 
   let payload: any = {};
   try {
