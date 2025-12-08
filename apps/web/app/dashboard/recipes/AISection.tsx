@@ -134,20 +134,22 @@ export function AIExtraSection({
     };
   }, [kind, kcal, kcalMin, kcalMax, allergensKey, dislikesKey, t]);
 
+  const title = t("recipes.aiSection.title") || "Suggestion";
+  const subtitle =
+    t("recipes.aiSection.subtitle") ||
+    "générer en direct avec l'IA selon tes filtres";
+
   return (
     <section className="section" style={{ marginTop: 12 }}>
       <div className="section-head" style={{ marginBottom: 8 }}>
-        {/* Titre remplacé par "Suggestion" */}
-        <h2>{t("recipes.aiSection.title", "Suggestion")}</h2>
-        {/* Sous-titre plus petit avec le texte demandé */}
+        {/* Titre = "Suggestion" par défaut */}
+        <h2>{title}</h2>
+        {/* Sous-titre plus petit avec ton texte */}
         <p
           className="text-xs"
           style={{ color: "#6b7280", marginTop: 4, fontSize: "10px" }}
         >
-          {t(
-            "recipes.aiSection.subtitle",
-            "générer en direct avec l'IA selon tes filtres",
-          )}
+          {subtitle}
         </p>
       </div>
 
@@ -238,3 +240,4 @@ export function AIExtraSection({
     </section>
   );
 }
+
