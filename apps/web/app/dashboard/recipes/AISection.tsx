@@ -28,6 +28,8 @@ type Props = {
   dislikes: string[];
 };
 
+type SavedItem = { id: string; title: string };
+
 function encodeB64UrlJsonBrowser(data: any): string {
   const json = JSON.stringify(data);
   const bytes = new TextEncoder().encode(json);
@@ -35,6 +37,39 @@ function encodeB64UrlJsonBrowser(data: any): string {
   for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
   const b64 = btoa(bin);
   return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+/** Lecture du cookie "saved_recipes_v1" côté client */
+function readSavedClient(): SavedItem[] {
+  if (typeof document === "undefined") return [];
+  try {
+    const all = document.cookie.split("; ").filter(Boolean);
+    const entry = all.find((c) => c.startsWith("saved_recipes_v1="));
+    if (!entry) return [];
+    const raw = decodeURIComponent(entry.split("=", 2)[1] || "[]");
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr)
+      ? arr.filter(
+          (x) =>
+            x && typeof x.id === "string" && typeof x.title === "string",
+        )
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Écriture du cookie "saved_recipes_v1" côté client */
+function writeSavedClient(list: SavedItem[]) {
+  if (typeof document === "undefined") return;
+  try {
+    const raw = JSON.stringify(list);
+    const encoded = encodeURIComponent(raw);
+    const maxAge = 60 * 60 * 24 * 365; // 1 an
+    document.cookie = `saved_recipes_v1=${encoded}; path=/; max-age=${maxAge}; samesite=lax`;
+  } catch {
+    // silent
+  }
 }
 
 export function AIExtraSection({
@@ -52,8 +87,17 @@ export function AIExtraSection({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // ids des recettes enregistrées (pour l'état du bouton)
+  const [savedIds, setSavedIds] = useState<string[]>([]);
+
   const allergensKey = allergens.join(",");
   const dislikesKey = dislikes.join(",");
+
+  // Initialisation des recettes enregistrées depuis le cookie
+  useEffect(() => {
+    const saved = readSavedClient();
+    setSavedIds(saved.map((s) => s.id));
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -137,17 +181,50 @@ export function AIExtraSection({
   const title = t("recipes.aiSection.title") || "Suggestion";
   const subtitle =
     t("recipes.aiSection.subtitle") ||
-    "générer en direct avec l'IA selon tes filtres";
+    "généré en direct avec l'IA selon tes filtres";
+
+  /** Enregistrer une recette IA dans le cookie (comme les autres) */
+  function handleSave(r: Recipe) {
+    const current = readSavedClient();
+    if (!current.some((x) => x.id === r.id)) {
+      const next = [...current, { id: r.id, title: r.title }];
+      writeSavedClient(next);
+      setSavedIds(next.map((s) => s.id));
+    }
+  }
+
+  /** Retirer une recette IA des favoris */
+  function handleUnsave(r: Recipe) {
+    const current = readSavedClient();
+    const next = current.filter((x) => x.id !== r.id);
+    writeSavedClient(next);
+    setSavedIds(next.map((s) => s.id));
+  }
 
   return (
     <section className="section" style={{ marginTop: 12 }}>
-      <div className="section-head" style={{ marginBottom: 8 }}>
+      <div
+        className="section-head"
+        style={{
+          marginBottom: 8,
+          display: "flex",
+          alignItems: "baseline",
+          justifyContent: "space-between",
+          gap: 8,
+          flexWrap: "wrap",
+        }}
+      >
         {/* Titre = "Suggestion" par défaut */}
-        <h2>{title}</h2>
-        {/* Sous-titre plus petit avec ton texte */}
+        <h2 style={{ margin: 0 }}>{title}</h2>
+        {/* Sous-titre plus petit, aligné à droite */}
         <p
           className="text-xs"
-          style={{ color: "#6b7280", marginTop: 4, fontSize: "10px" }}
+          style={{
+            color: "#6b7280",
+            margin: 0,
+            fontSize: "10px",
+            textAlign: "right",
+          }}
         >
           {subtitle}
         </p>
@@ -174,6 +251,7 @@ export function AIExtraSection({
             const href = `/dashboard/recipes/${r.id}?${baseQS}data=${encodeB64UrlJsonBrowser(
               r,
             )}`;
+            const isSaved = savedIds.includes(r.id);
 
             return (
               <article
@@ -191,7 +269,7 @@ export function AIExtraSection({
                   >
                     {r.title}
                   </h3>
-                  {/* Badge "perso IA" supprimé */}
+                  {/* Badge supprimé */}
                 </div>
 
                 {r.subtitle && (
@@ -231,6 +309,30 @@ export function AIExtraSection({
                   <a className="btn btn-dash" href={href}>
                     {t("recipes.card.viewRecipe")}
                   </a>
+
+                  {/* Bouton Enregistrer / Retirer (client-side, via cookie) */}
+                  {isSaved ? (
+                    <button
+                      type="button"
+                      className="btn btn-outline"
+                      style={{ color: "var(--text, #111)" }}
+                      onClick={() => handleUnsave(r)}
+                    >
+                      {t(
+                        "recipes.card.savedRemove",
+                        "Enregistrée ✓ (Retirer)",
+                      )}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn btn-outline"
+                      style={{ color: "var(--text, #111)" }}
+                      onClick={() => handleSave(r)}
+                    >
+                      {t("recipes.card.save", "Enregistrer")}
+                    </button>
+                  )}
                 </div>
               </article>
             );
