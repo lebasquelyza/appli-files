@@ -1,66 +1,20 @@
 // apps/web/app/api/recipes/ai/route.ts
 import { NextResponse } from "next/server";
+import {
+  generateRecipesFromFilters,
+  type GenerateRecipesInput,
+} from "../../../lib/recipes/ai";
 
 export const runtime = "nodejs";
 
 type Plan = "BASIC" | "PLUS" | "PREMIUM";
-
-const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
-const OPENAI_MODEL = "gpt-4o-mini";
-
-async function callOpenAI(prompt: string, apiKey: string) {
-  try {
-    console.log("[recipes/ai] Appel OpenAI…");
-
-    const res = await fetch(OPENAI_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: OPENAI_MODEL,
-        temperature: 0.7,
-        response_format: { type: "json_object" },
-        messages: [
-          {
-            role: "system",
-            content: "Tu parles français et tu réponds en JSON strict.",
-          },
-          { role: "user", content: prompt },
-        ],
-      }),
-      // IMPORTANT: pas de signal ici, donc pas de AbortController
-    });
-
-    console.log("[recipes/ai] Status OpenAI:", res.status);
-
-    const text = await res.text();
-    console.log("[recipes/ai] Raw OpenAI response:", text);
-
-    if (!res.ok) {
-      console.error("[recipes/ai] OPENAI_HTTP_ERROR", res.status, text);
-      return { ok: false, error: "OPENAI_HTTP_ERROR", detail: text };
-    }
-
-    // On parse ici ce qu'on vient de logguer
-    const data = JSON.parse(text);
-    return { ok: true, data };
-  } catch (e: any) {
-    console.error("[recipes/ai] OPENAI_FETCH_ERROR", e);
-    return {
-      ok: false,
-      error: "OPENAI_FETCH_ERROR",
-      detail: String(e?.message ?? e),
-    };
-  }
-}
 
 export async function POST(req: Request) {
   try {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
       console.error("[recipes/ai] Pas de OPENAI_API_KEY dans l'env");
+      // 100 % IA : pas de fallback, juste erreur
       return NextResponse.json(
         { recipes: [], error: "NO_API_KEY" },
         { status: 200 },
@@ -89,106 +43,26 @@ export async function POST(req: Request) {
       kind?: "meals" | "shakes";
     };
 
-    const mode: "meals" | "shakes" = kind === "shakes" ? "shakes" : "meals";
+    const input: GenerateRecipesInput = {
+      plan,
+      kind: kind === "shakes" ? "shakes" : "meals",
+      kcal,
+      kcalMin,
+      kcalMax,
+      allergens,
+      dislikes,
+      count: Math.max(1, Math.min(count || 8, 12)), // petit garde-fou
+    };
 
-    const constraints: string[] = [];
+    const { recipes } = await generateRecipesFromFilters(input);
 
-    if (typeof kcal === "number" && !isNaN(kcal) && kcal > 0) {
-      constraints.push(`- Viser ~${kcal} kcal par recette (±10%).`);
-    } else {
-      const hasMin =
-        typeof kcalMin === "number" && !isNaN(kcalMin) && kcalMin > 0;
-      const hasMax =
-        typeof kcalMax === "number" && !isNaN(kcalMax) && kcalMax > 0;
-      if (hasMin && hasMax)
-        constraints.push(`- Respecter une plage ${kcalMin}-${kcalMax} kcal.`);
-      else if (hasMin) constraints.push(`- Minimum ${kcalMin} kcal.`);
-      else if (hasMax) constraints.push(`- Maximum ${kcalMax} kcal.`);
-    }
-
-    if (allergens.length)
-      constraints.push(`- Exclure strictement: ${allergens.join(", ")}.`);
-    if (dislikes.length)
-      constraints.push(
-        `- Si un ingrédient non-aimé apparaît, ne pas le supprimer: proposer une section "rework" avec 2-3 façons de le cuisiner autrement.`,
-      );
-
-    const typeLine =
-      mode === "shakes"
-        ? '- Toutes les recettes sont des BOISSONS protéinées (shakes / smoothies) à boire, préparées au blender, prêtes en 5–10 min. Pas de plats solides.'
-        : "- Recettes de repas (petit-déjeuner, déjeuner, dîner, bowls, etc.).";
-
-    const prompt = `Tu es un chef-nutritionniste. Renvoie UNIQUEMENT du JSON valide (pas de texte).
-Utilisateur:
-- Plan: ${plan}
-- Type de recettes: ${
-      mode === "shakes" ? "shakes / smoothies protéinés" : "repas (plats)"
-    }
-- Allergènes/Intolérances: ${allergens.join(", ") || "aucun"}
-- Aliments non aimés (à re-travailler): ${dislikes.join(", ") || "aucun"}
-- Nombre de recettes: ${count}
-
-Contraintes:
-${typeLine}
-${constraints.join("\n")}
-
-Schéma TypeScript (exemple):
-Recipe = {
-  id: string, title: string, subtitle?: string,
-  kcal?: number, timeMin?: number, tags: string[],
-  goals: string[], minPlan: "BASIC" | "PLUS" | "PREMIUM",
-  ingredients: string[], steps: string[],
-  rework?: { ingredient: string, tips: string[] }[]
-}
-
-Règles:
-- minPlan = "${plan}" pour toutes les recettes.
-- Variété: végétarien/vegan/protéiné/rapide/sans-gluten...
-- Ingrédients simples du quotidien.
-- steps = 3–6 étapes courtes.
-- Pour le mode "shakes": uniquement des boissons à boire, préparation au blender, 5–10 min.
-- Renvoyer {"recipes": Recipe[]}.`;
-
-    const result = await callOpenAI(prompt, apiKey);
-
-    if (!result.ok) {
-      console.warn(
-        "[recipes/ai] Erreur OpenAI:",
-        result.error,
-        result.detail,
-      );
-      // Toujours 100 % IA: si erreur, on ne renvoie AUCUNE recette
-      return NextResponse.json(
-        { recipes: [], error: result.error, detail: result.detail },
-        { status: 200 },
-      );
-    }
-
-    const data = result.data as any;
-    let payload: any = {};
-    try {
-      payload = JSON.parse(
-        data?.choices?.[0]?.message?.content ?? "{}",
-      );
-    } catch (e) {
-      console.error("[recipes/ai] PARSE_ERROR", e);
-      return NextResponse.json(
-        { recipes: [], error: "PARSE_ERROR" },
-        { status: 200 },
-      );
-    }
-
-    const arr: any[] = Array.isArray(payload?.recipes)
-      ? payload.recipes
-      : [];
-    console.log("[recipes/ai] OK, recettes générées:", arr.length);
-    return NextResponse.json({ recipes: arr }, { status: 200 });
+    return NextResponse.json({ recipes }, { status: 200 });
   } catch (e: any) {
-    console.error("[recipes/ai] FATAL_ERROR", e);
+    console.error("[recipes/ai] Erreur:", e);
+    const code = e?.message === "PARSE_ERROR" ? "PARSE_ERROR" : "FATAL_ERROR";
     return NextResponse.json(
-      { recipes: [], error: "FATAL_ERROR", detail: String(e?.message ?? e) },
+      { recipes: [], error: code, detail: String(e?.message ?? e) },
       { status: 200 },
     );
   }
 }
-
