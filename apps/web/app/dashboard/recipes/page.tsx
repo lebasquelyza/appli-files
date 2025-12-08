@@ -648,12 +648,12 @@ export default async function Page({
 
   const seed = Number(searchParams?.rnd ?? "0") || 123456789;
 
-  // 🔄 on choisit la base selon la langue
+  // 🔄 on choisit la base selon la langue (plus utilisée pour l'affichage fallback)
   const healthyBase = lang === "en" ? HEALTHY_BASE_EN : HEALTHY_BASE_FR;
   const shakesBase = lang === "en" ? SHAKES_BASE_EN : SHAKES_BASE_FR;
 
-  const healthyPick = pickRandomSeeded(healthyBase, 6, seed);
-  const shakesPick = pickRandomSeeded(shakesBase, 6, seed + 7);
+  // const healthyPick = pickRandomSeeded(healthyBase, 6, seed);
+  // const shakesPick = pickRandomSeeded(shakesBase, 6, seed + 7);
 
   // QS gardés (sans view)
   const qsParts: string[] = [];
@@ -1081,44 +1081,6 @@ export default async function Page({
         {/* =================== CONTENU selon view =================== */}
         {view === "meals" ? (
           <>
-            <section
-              className="section"
-              style={{ marginTop: 12 }}
-            >
-              <div
-                className="section-head"
-                style={{ marginBottom: 8 }}
-              >
-                <h2>
-                  {t("recipes.mealsSection.title", "Recettes")}
-                </h2>
-                <p
-                  className="text-xs"
-                  style={{ color: "#6b7280", marginTop: 4 }}
-                >
-                  {t(
-                    "recipes.mealsSection.subtitle",
-                    "Recettes fixes, stables et testées.",
-                  )}
-                </p>
-              </div>
-              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
-                {healthyPick.map((r) => (
-                  <Card
-                    key={r.id}
-                    r={r}
-                    detailQS={encode(r)}
-                    isSaved={savedSet.has(r.id)}
-                    currentUrl={
-                      currentUrl || "/dashboard/recipes"
-                    }
-                    t={t}
-                  />
-                ))}
-              </div>
-            </section>
-
-            {/* Suggestions IA en plus */}
             <AIExtraSection
               kind="meals"
               baseQS={baseQS}
@@ -1131,47 +1093,6 @@ export default async function Page({
           </>
         ) : (
           <>
-            <section
-              className="section"
-              style={{ marginTop: 12 }}
-            >
-              <div
-                className="section-head"
-                style={{ marginBottom: 8 }}
-              >
-                <h2>
-                  {t(
-                    "recipes.shakesSection.title",
-                    "Boissons protéinées — base",
-                  )}
-                </h2>
-                <p
-                  className="text-xs"
-                  style={{ color: "#6b7280", marginTop: 4 }}
-                >
-                  {t(
-                    "recipes.shakesSection.subtitle",
-                    "Shakes & smoothies rapides.",
-                  )}
-                </p>
-              </div>
-              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
-                {shakesPick.map((r) => (
-                  <Card
-                    key={r.id}
-                    r={r}
-                    detailQS={encode(r)}
-                    isSaved={savedSet.has(r.id)}
-                    currentUrl={
-                      currentUrl || "/dashboard/recipes"
-                    }
-                    t={t}
-                  />
-                ))}
-              </div>
-            </section>
-
-            {/* Suggestions IA en plus */}
             <AIExtraSection
               kind="shakes"
               baseQS={baseQS}
