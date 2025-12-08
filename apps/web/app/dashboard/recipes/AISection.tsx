@@ -74,7 +74,7 @@ export function AIExtraSection({
             kcalMax,
             allergens,
             dislikes,
-            count: 8,
+            count: 3, // ⬅️ on reste léger pour éviter les timeout
           }),
         });
 
@@ -153,33 +153,10 @@ export function AIExtraSection({
         </div>
       )}
 
-      {/* État chargement (si pas d'erreur) */}
+      {/* État chargement */}
       {!error && loading && recipes.length === 0 && (
-        <div className="card">
-          <div className="text-xs" style={{ color: "#6b7280" }}>
-            {t("recipes.aiSection.loading")}
-          </div>
-          {/* Barre de chargement simple */}
-          <div
-            style={{
-              marginTop: 8,
-              width: "100%",
-              height: 4,
-              borderRadius: 9999,
-              background: "#e5e7eb",
-              overflow: "hidden",
-            }}
-          >
-            <div
-              style={{
-                width: "70%",
-                height: "100%",
-                borderRadius: 9999,
-                background: "#111827",
-                transition: "width 0.3s ease",
-              }}
-            />
-          </div>
+        <div className="card text-xs" style={{ color: "#6b7280" }}>
+          {t("recipes.aiSection.loading")}
         </div>
       )}
 
