@@ -985,15 +985,7 @@ export default async function Page({
             </fieldset>
 
             <div className="flex items-center justify-between lg:col-span-2">
-              <div
-                className="text-sm"
-                style={{ color: "#6b7280" }}
-              >
-                {t(
-                  "recipes.constraints.footerNote",
-                  "Les filtres s'appliquent surtout aux suggestions perso IA.",
-                )}
-              </div>
+              {/* Phrase supprimée ici */}
               <div style={{ display: "flex", gap: 10 }}>
                 <a
                   href="/dashboard/recipes"
@@ -1216,3 +1208,4 @@ function Card({
     </article>
   );
 }
+
