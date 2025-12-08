@@ -7,14 +7,8 @@ type Plan = "BASIC" | "PLUS" | "PREMIUM";
 
 const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
 const OPENAI_MODEL = "gpt-4o-mini";
-// ⬇️ Timeout augmenté pour laisser plus de temps à l'IA
-const OPENAI_TIMEOUT_MS = 30000;
 
-// Appel OpenAI générique
 async function callOpenAI(prompt: string, apiKey: string) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), OPENAI_TIMEOUT_MS);
-
   try {
     console.log("[recipes/ai] Appel OpenAI…");
 
@@ -36,35 +30,29 @@ async function callOpenAI(prompt: string, apiKey: string) {
           { role: "user", content: prompt },
         ],
       }),
-      signal: controller.signal,
+      // IMPORTANT: pas de signal ici, donc pas de AbortController
     });
 
+    console.log("[recipes/ai] Status OpenAI:", res.status);
+
+    const text = await res.text();
+    console.log("[recipes/ai] Raw OpenAI response:", text);
+
     if (!res.ok) {
-      const errText = await res.text().catch(() => "");
-      console.error("[recipes/ai] OPENAI_HTTP_ERROR", res.status, errText);
-      return { ok: false, error: "OPENAI_HTTP_ERROR", detail: errText };
+      console.error("[recipes/ai] OPENAI_HTTP_ERROR", res.status, text);
+      return { ok: false, error: "OPENAI_HTTP_ERROR", detail: text };
     }
 
-    const data = await res.json();
+    // On parse ici ce qu'on vient de logguer
+    const data = JSON.parse(text);
     return { ok: true, data };
   } catch (e: any) {
-    if (e?.name === "AbortError") {
-      console.error("[recipes/ai] OPENAI_TIMEOUT");
-      return {
-        ok: false,
-        error: "OPENAI_TIMEOUT",
-        detail: `Timeout après ${OPENAI_TIMEOUT_MS}ms`,
-      };
-    }
-
     console.error("[recipes/ai] OPENAI_FETCH_ERROR", e);
     return {
       ok: false,
       error: "OPENAI_FETCH_ERROR",
       detail: String(e?.message ?? e),
     };
-  } finally {
-    clearTimeout(timer);
   }
 }
 
@@ -73,7 +61,6 @@ export async function POST(req: Request) {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
       console.error("[recipes/ai] Pas de OPENAI_API_KEY dans l'env");
-      // ❌ Pas de fallback, on renvoie juste une erreur
       return NextResponse.json(
         { recipes: [], error: "NO_API_KEY" },
         { status: 200 },
@@ -89,7 +76,7 @@ export async function POST(req: Request) {
       kcalMax,
       allergens = [],
       dislikes = [],
-      count = 8, // valeur par défaut raisonnable
+      count = 8,
       kind = "meals",
     } = body as {
       plan?: Plan;
@@ -165,12 +152,12 @@ Règles:
     const result = await callOpenAI(prompt, apiKey);
 
     if (!result.ok) {
-      // ❌ Toujours 100 % IA : aucune recette fallback
       console.warn(
         "[recipes/ai] Erreur OpenAI:",
         result.error,
         result.detail,
       );
+      // Toujours 100 % IA: si erreur, on ne renvoie AUCUNE recette
       return NextResponse.json(
         { recipes: [], error: result.error, detail: result.detail },
         { status: 200 },
@@ -204,3 +191,4 @@ Règles:
     );
   }
 }
+
