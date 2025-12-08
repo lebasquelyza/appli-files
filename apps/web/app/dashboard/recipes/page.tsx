@@ -974,7 +974,11 @@ export default async function Page({
                 />
                 <div
                   className="text-xs"
-                  style={{ color: "#6b7280", marginTop: 4 }}
+                  style={{
+                    color: "#6b7280",
+                    marginTop: 4,
+                    fontSize: "10px",
+                  }}
                 >
                   {t(
                     "recipes.constraints.dislikesHelp",
@@ -985,7 +989,7 @@ export default async function Page({
             </fieldset>
 
             <div className="flex items-center justify-between lg:col-span-2">
-              {/* Phrase supprimée ici */}
+              {/* Phrase "Les filtres s'appliquent..." supprimée */}
               <div style={{ display: "flex", gap: 10 }}>
                 <a
                   href="/dashboard/recipes"
@@ -1208,4 +1212,3 @@ function Card({
     </article>
   );
 }
-
