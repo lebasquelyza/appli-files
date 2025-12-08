@@ -257,7 +257,7 @@ const HEALTHY_BASE_FR: Recipe[] = [
   },
 ];
 
-/* ---- base healthy EN (mêmes id, valeurs, mais titres traduits) ---- */
+/* ---- base healthy EN ---- */
 const HEALTHY_BASE_EN: Recipe[] = [
   {
     id: "salade-quinoa",
@@ -647,8 +647,9 @@ export default async function Page({
     | "shakes";
 
   const seed = Number(searchParams?.rnd ?? "0") || 123456789;
+  const hasRnd = typeof searchParams?.rnd === "string";
 
-  // 🔄 on choisit la base selon la langue (plus utilisée pour l'affichage fallback)
+  // Bases (non utilisées pour l'affichage mais gardées)
   const healthyBase = lang === "en" ? HEALTHY_BASE_EN : HEALTHY_BASE_FR;
   const shakesBase = lang === "en" ? SHAKES_BASE_EN : SHAKES_BASE_FR;
 
@@ -755,7 +756,7 @@ export default async function Page({
           </div>
         </div>
 
-        {/* =================== Choix rapide (blocs cliquables) =================== */}
+        {/* =================== Choix rapide =================== */}
         <div
           className="grid gap-4 sm:grid-cols-2"
           style={{ marginTop: 12 }}
@@ -843,7 +844,7 @@ export default async function Page({
           </a>
         </div>
 
-        {/* =================== Contraintes & filtres (pour IA) =================== */}
+        {/* =================== Contraintes & filtres =================== */}
         <div className="section" style={{ marginTop: 12 }}>
           <div
             className="section-head"
@@ -873,7 +874,7 @@ export default async function Page({
             action={applyFiltersAction}
             className="grid gap-6 lg:grid-cols-2"
           >
-            {/* On garde la vue actuelle (meals/shakes) */}
+            {/* On garde la vue actuelle */}
             <input type="hidden" name="view" value={view} />
 
             <fieldset style={{ display: "contents" }}>
@@ -1078,9 +1079,9 @@ export default async function Page({
           </section>
         )}
 
-        {/* =================== CONTENU selon view =================== */}
-        {view === "meals" ? (
-          <>
+        {/* =================== CONTENU IA (seulement si rnd présent) =================== */}
+        {hasRnd &&
+          (view === "meals" ? (
             <AIExtraSection
               kind="meals"
               baseQS={baseQS}
@@ -1090,9 +1091,7 @@ export default async function Page({
               allergens={allergens}
               dislikes={dislikes}
             />
-          </>
-        ) : (
-          <>
+          ) : (
             <AIExtraSection
               kind="shakes"
               baseQS={baseQS}
@@ -1102,8 +1101,7 @@ export default async function Page({
               allergens={allergens}
               dislikes={dislikes}
             />
-          </>
-        )}
+          ))}
       </div>
     </>
   );
