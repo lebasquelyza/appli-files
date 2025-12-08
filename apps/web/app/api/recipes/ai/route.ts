@@ -7,8 +7,10 @@ type Plan = "BASIC" | "PLUS" | "PREMIUM";
 
 const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
 const OPENAI_MODEL = "gpt-4o-mini";
-const OPENAI_TIMEOUT_MS = 15000;
+// ⬇️ Timeout augmenté pour laisser plus de temps à l'IA
+const OPENAI_TIMEOUT_MS = 30000;
 
+// Appel OpenAI générique
 async function callOpenAI(prompt: string, apiKey: string) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), OPENAI_TIMEOUT_MS);
@@ -29,8 +31,7 @@ async function callOpenAI(prompt: string, apiKey: string) {
         messages: [
           {
             role: "system",
-            content:
-              "Tu parles français et tu réponds en JSON strict.",
+            content: "Tu parles français et tu réponds en JSON strict.",
           },
           { role: "user", content: prompt },
         ],
@@ -72,7 +73,7 @@ export async function POST(req: Request) {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
       console.error("[recipes/ai] Pas de OPENAI_API_KEY dans l'env");
-      // 100% IA => pas de fallback : on renvoie juste une erreur
+      // ❌ Pas de fallback, on renvoie juste une erreur
       return NextResponse.json(
         { recipes: [], error: "NO_API_KEY" },
         { status: 200 },
@@ -88,7 +89,7 @@ export async function POST(req: Request) {
       kcalMax,
       allergens = [],
       dislikes = [],
-      count = 12,
+      count = 8, // valeur par défaut raisonnable
       kind = "meals",
     } = body as {
       plan?: Plan;
@@ -127,7 +128,7 @@ export async function POST(req: Request) {
 
     const typeLine =
       mode === "shakes"
-        ? "- Toutes les recettes sont des BOISSONS protéinées (shakes / smoothies) à boire, préparées au blender, prêtes en 5–10 min. Pas de plats solides."
+        ? '- Toutes les recettes sont des BOISSONS protéinées (shakes / smoothies) à boire, préparées au blender, prêtes en 5–10 min. Pas de plats solides.'
         : "- Recettes de repas (petit-déjeuner, déjeuner, dîner, bowls, etc.).";
 
     const prompt = `Tu es un chef-nutritionniste. Renvoie UNIQUEMENT du JSON valide (pas de texte).
@@ -164,7 +165,12 @@ Règles:
     const result = await callOpenAI(prompt, apiKey);
 
     if (!result.ok) {
-      // 100% IA => aucune recette écrite à la main, même en cas d'erreur
+      // ❌ Toujours 100 % IA : aucune recette fallback
+      console.warn(
+        "[recipes/ai] Erreur OpenAI:",
+        result.error,
+        result.detail,
+      );
       return NextResponse.json(
         { recipes: [], error: result.error, detail: result.detail },
         { status: 200 },
@@ -174,7 +180,9 @@ Règles:
     const data = result.data as any;
     let payload: any = {};
     try {
-      payload = JSON.parse(data?.choices?.[0]?.message?.content ?? "{}");
+      payload = JSON.parse(
+        data?.choices?.[0]?.message?.content ?? "{}",
+      );
     } catch (e) {
       console.error("[recipes/ai] PARSE_ERROR", e);
       return NextResponse.json(
