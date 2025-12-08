@@ -184,9 +184,7 @@ export function AIExtraSection({
                   >
                     {r.title}
                   </h3>
-                  <span className="badge">
-                    {t("recipes.aiSection.badge")}
-                  </span>
+                  {/* Badge "perso IA" supprimé */}
                 </div>
 
                 {r.subtitle && (
