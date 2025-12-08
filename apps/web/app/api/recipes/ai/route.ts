@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import {
   generateRecipesFromFilters,
   type GenerateRecipesInput,
-} from "../../../lib/recipes/ai";
+} from "../../../../lib/recipes/ai";
 
 export const runtime = "nodejs";
 
