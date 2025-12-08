@@ -84,11 +84,11 @@ export function AIExtraSection({
             "[AIExtraSection] Erreur HTTP /api/recipes/ai:",
             res.status,
             res.statusText,
-            text
+            text,
           );
           if (!cancelled) {
             setError(
-              `${t("aiSection.unavailable")} (HTTP ${res.status})`
+              `${t("recipes.aiSection.unavailable")} (HTTP ${res.status})`,
             );
             setLoading(false);
           }
@@ -101,10 +101,10 @@ export function AIExtraSection({
           console.error(
             "[AIExtraSection] API logical error:",
             data.error,
-            data.detail
+            data.detail,
           );
           setError(
-            `${t("aiSection.unavailable")} (${data.error})`
+            `${t("recipes.aiSection.unavailable")} (${data.error})`,
           );
           setLoading(false);
           return;
@@ -120,7 +120,9 @@ export function AIExtraSection({
       } catch (e) {
         console.error("[AIExtraSection] fetch error /api/recipes/ai:", e);
         if (!cancelled) {
-          setError(`${t("aiSection.unavailable")} (FETCH_ERROR)`);
+          setError(
+            `${t("recipes.aiSection.unavailable")} (FETCH_ERROR)`,
+          );
           setLoading(false);
         }
       }
@@ -135,9 +137,12 @@ export function AIExtraSection({
   return (
     <section className="section" style={{ marginTop: 12 }}>
       <div className="section-head" style={{ marginBottom: 8 }}>
-        <h2>{t("aiSection.title")}</h2>
-        <p className="text-xs" style={{ color: "#6b7280", marginTop: 4 }}>
-          {t("aiSection.subtitle")}
+        <h2>{t("recipes.aiSection.title")}</h2>
+        <p
+          className="text-xs"
+          style={{ color: "#6b7280", marginTop: 4 }}
+        >
+          {t("recipes.aiSection.subtitle")}
         </p>
       </div>
 
@@ -152,7 +157,7 @@ export function AIExtraSection({
       {!error && loading && recipes.length === 0 && (
         <div className="card">
           <div className="text-xs" style={{ color: "#6b7280" }}>
-            {t("aiSection.loading")}
+            {t("recipes.aiSection.loading")}
           </div>
           {/* Barre de chargement simple */}
           <div
@@ -183,7 +188,7 @@ export function AIExtraSection({
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
           {recipes.map((r) => {
             const href = `/dashboard/recipes/${r.id}?${baseQS}data=${encodeB64UrlJsonBrowser(
-              r
+              r,
             )}`;
 
             return (
@@ -193,11 +198,17 @@ export function AIExtraSection({
                 style={{ overflow: "hidden" }}
               >
                 <div className="flex items-center justify-between">
-                  <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>
+                  <h3
+                    style={{
+                      margin: 0,
+                      fontSize: 18,
+                      fontWeight: 800,
+                    }}
+                  >
                     {r.title}
                   </h3>
                   <span className="badge">
-                    {t("aiSection.badge")}
+                    {t("recipes.aiSection.badge")}
                   </span>
                 </div>
 
@@ -236,7 +247,7 @@ export function AIExtraSection({
                   }}
                 >
                   <a className="btn btn-dash" href={href}>
-                    {t("recipes.recipes.card.viewRecipe")}
+                    {t("recipes.card.viewRecipe")}
                   </a>
                 </div>
               </article>
