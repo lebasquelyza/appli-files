@@ -118,7 +118,7 @@ export function AIExtraSection({
             kcalMax,
             allergens,
             dislikes,
-            count: 3, // ⬅️ on reste léger pour éviter les timeout
+            count: 3, // ⬅️ léger pour éviter les timeout
           }),
         });
 
@@ -181,7 +181,7 @@ export function AIExtraSection({
   const title = t("recipes.aiSection.title") || "Suggestion";
   const subtitle =
     t("recipes.aiSection.subtitle") ||
-    "généré en direct avec l'IA selon tes filtres";
+    "Généré en direct avec l'IA selon tes filtres";
 
   /** Enregistrer une recette IA dans le cookie (comme les autres) */
   function handleSave(r: Recipe) {
@@ -214,7 +214,7 @@ export function AIExtraSection({
           flexWrap: "wrap",
         }}
       >
-        {/* Titre = "Suggestion" par défaut */}
+        {/* Titre = "Suggestion" */}
         <h2 style={{ margin: 0 }}>{title}</h2>
         {/* Sous-titre plus petit, aligné à droite */}
         <p
@@ -269,7 +269,7 @@ export function AIExtraSection({
                   >
                     {r.title}
                   </h3>
-                  {/* Badge supprimé */}
+                  {/* Badge IA supprimé */}
                 </div>
 
                 {r.subtitle && (
@@ -318,10 +318,7 @@ export function AIExtraSection({
                       style={{ color: "var(--text, #111)" }}
                       onClick={() => handleUnsave(r)}
                     >
-                      {t(
-                        "recipes.card.savedRemove",
-                        "Enregistrée ✓ (Retirer)",
-                      )}
+                      {t("recipes.card.savedRemove")}
                     </button>
                   ) : (
                     <button
@@ -330,7 +327,7 @@ export function AIExtraSection({
                       style={{ color: "var(--text, #111)" }}
                       onClick={() => handleSave(r)}
                     >
-                      {t("recipes.card.save", "Enregistrer")}
+                      {t("recipes.card.save")}
                     </button>
                   )}
                 </div>
@@ -342,4 +339,3 @@ export function AIExtraSection({
     </section>
   );
 }
-
