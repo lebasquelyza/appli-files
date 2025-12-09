@@ -12,6 +12,8 @@ export type GenerateRecipesInput = {
   allergens: string[];
   dislikes: string[];
   count: number;
+  /** Nombre aléatoire envoyé depuis le front pour varier les recettes (seed) */
+  rnd?: number;
 };
 
 const openai = new OpenAI({
@@ -30,6 +32,7 @@ export async function generateRecipesFromFilters(
     allergens,
     dislikes,
     count,
+    rnd,
   } = input;
 
   const mode: "meals" | "shakes" = kind === "shakes" ? "shakes" : "meals";
@@ -67,6 +70,12 @@ export async function generateRecipesFromFilters(
       ? '- Toutes les recettes sont des BOISSONS protéinées (shakes / smoothies) à boire, préparées au blender, prêtes en 5–10 min. Pas de plats solides.'
       : "- Recettes de repas (petit-déjeuner, déjeuner, dîner, bowls, etc.).";
 
+  // Petit hint pour la variété, basé sur rnd
+  const randomHint =
+    typeof rnd === "number"
+      ? `- Contexte aléatoire (seed numérique): ${rnd}. Utilise ce nombre pour varier les idées de recettes même si les contraintes sont identiques.`
+      : "- Si l'utilisateur ne donne presque aucune contrainte, propose des recettes variées à chaque appel (ne pas toujours renvoyer les mêmes).";
+
   const prompt = `Tu es un chef-nutritionniste. Renvoie UNIQUEMENT du JSON valide (pas de texte).
 Utilisateur:
 - Plan: ${plan}
@@ -80,6 +89,7 @@ Utilisateur:
 Contraintes:
 ${typeLine}
 ${constraints.join("\n")}
+${randomHint}
 
 Schéma TypeScript (exemple):
 Recipe = {
