@@ -71,6 +71,16 @@ function writeSavedClient(list: SavedItem[]) {
   }
 }
 
+/** Clé "stable" pour reconnaître une recette (titre + ingrédients) */
+function makeRecipeKey(r: { title?: string; ingredients?: string[] }): string {
+  const title = (r.title || "").trim().toLowerCase();
+  const ings = Array.isArray(r.ingredients)
+    ? r.ingredients.map((x) => String(x).trim().toLowerCase()).sort()
+    : [];
+  if (!title) return "";
+  return `${title}::${ings.join("|")}`;
+}
+
 export function AIExtraSection({
   kind,
   baseQS,
@@ -108,16 +118,22 @@ export function AIExtraSection({
       setError(null);
       setRecipes([]);
 
-      // 1) On lit les recettes enregistrées depuis le cookie immédiatement
+      // 1) On lit les recettes enregistrées depuis le cookie
       const saved = readSavedClient();
       const savedIdsLocal = saved.map((s) => s.id);
-      const savedTitlesLC = saved
-        .map((s) => s.title)
-        .filter(Boolean)
-        .map((title) => title.trim().toLowerCase());
-
-      // on met à jour l'état pour les boutons "Enregistrer / Retirer"
       setSavedIds(savedIdsLocal);
+
+      // On construit un Set de "clés" de recettes déjà enregistrées
+      const savedKeys = new Set<string>();
+      for (const s of saved) {
+        if (s.aiPayload) {
+          const key = makeRecipeKey(s.aiPayload);
+          if (key) savedKeys.add(key);
+        } else {
+          const key = makeRecipeKey({ title: s.title, ingredients: [] });
+          if (key) savedKeys.add(key);
+        }
+      }
 
       try {
         // 2) Si pas de filtres du tout, on envoie un rnd pour forcer de la variété côté IA
@@ -178,14 +194,13 @@ export function AIExtraSection({
           ? data.recipes
           : [];
 
-        // 3) On filtre les suggestions IA pour NE PAS reproposer les recettes déjà enregistrées
-        //    (on se base sur le titre en minuscules)
+        // 3) On filtre les suggestions IA pour NE PAS reproposer
+        //    les recettes déjà enregistrées (même titre + ingrédients)
         let finalRecipes = arr;
-        if (savedTitlesLC.length > 0) {
-          const savedSet = new Set(savedTitlesLC);
+        if (savedKeys.size > 0) {
           finalRecipes = arr.filter((r) => {
-            const title = (r.title || "").trim().toLowerCase();
-            return title && !savedSet.has(title);
+            const key = makeRecipeKey(r);
+            return key && !savedKeys.has(key);
           });
         }
 
