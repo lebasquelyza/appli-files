@@ -5,7 +5,7 @@ export type Plan = "BASIC" | "PLUS" | "PREMIUM";
 
 export type GenerateRecipesInput = {
   plan: Plan;
-  kind: "meals" | "shakes";
+  kind: "meals" | "shakes" | "breakfast";
   kcal?: number;
   kcalMin?: number;
   kcalMax?: number;
@@ -35,7 +35,8 @@ export async function generateRecipesFromFilters(
     rnd,
   } = input;
 
-  const mode: "meals" | "shakes" = kind === "shakes" ? "shakes" : "meals";
+  const mode: "meals" | "shakes" | "breakfast" =
+    kind === "shakes" ? "shakes" : kind === "breakfast" ? "breakfast" : "meals";
 
   // On limite un peu pour éviter les réponses énormes (et les timeout)
   const safeCount = Math.max(1, Math.min(count || 3, 6));
@@ -68,7 +69,9 @@ export async function generateRecipesFromFilters(
   const typeLine =
     mode === "shakes"
       ? '- Toutes les recettes sont des BOISSONS protéinées (shakes / smoothies) à boire, préparées au blender, prêtes en 5–10 min. Pas de plats solides.'
-      : "- Recettes de repas (petit-déjeuner, déjeuner, dîner, bowls, etc.).";
+      : mode === "breakfast"
+      ? "- Recettes de petit-déjeuner (sucrées ou salées : porridges, tartines, œufs, pancakes, yaourts, etc.). Préparation simple, faisable le matin."
+      : "- Recettes de repas (déjeuner, dîner, bowls, etc.).";
 
   // Est-ce qu'il y a au moins une contrainte ?
   const hasAnyConstraint =
@@ -87,12 +90,17 @@ export async function generateRecipesFromFilters(
       ? `- Contexte aléatoire (seed numérique): ${rnd}. Utilise ce nombre pour varier les idées de recettes même si les contraintes sont identiques.`
       : "- Si l'utilisateur donne peu ou pas de contraintes, propose des recettes variées à chaque appel (ne pas toujours renvoyer les mêmes).";
 
+  const typeLabel =
+    mode === "shakes"
+      ? "shakes / smoothies protéinés"
+      : mode === "breakfast"
+      ? "petits-déjeuners (sucrés ou salés)"
+      : "repas (plats)";
+
   const prompt = `Tu es un chef-nutritionniste. Renvoie UNIQUEMENT du JSON valide (pas de texte).
 Utilisateur:
 - Plan: ${plan}
-- Type de recettes: ${
-    mode === "shakes" ? "shakes / smoothies protéinés" : "repas (plats)"
-  }
+- Type de recettes: ${typeLabel}
 - Allergènes/Intolérances: ${allergens.join(", ") || "aucun"}
 - Aliments non aimés (à re-travailler): ${dislikes.join(", ") || "aucun"}
 - Nombre de recettes: ${safeCount}
@@ -117,6 +125,7 @@ Règles:
 - Ingrédients simples du quotidien.
 - steps = 3–6 étapes courtes.
 - Pour le mode "shakes": uniquement des boissons à boire, préparation au blender, 5–10 min.
+- Pour le mode "breakfast": formats adaptés au petit-déjeuner (sucré ou salé), préparation généralement ≤ 15 min.
 - Renvoyer {"recipes": Recipe[]}.`;
 
   console.time("[recipes/ai] openai");
