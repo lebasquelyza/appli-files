@@ -320,8 +320,8 @@ async function saveListsToSupabase(
 
 /* Loaders — Mes infos */
 /**
- * Ici on veut TOUJOURS les réponses les plus récentes du client
- * → on lit directement le questionnaire (Sheet) avec fresh: true.
+ * ⚠️ Ici on veut TOUJOURS les réponses les plus récentes du questionnaire.
+ * On revient à la logique d'origine : lecture directe du Sheet avec fresh: true.
  */
 async function loadProfile(
   searchParams?: Record<string, string | string[] | undefined>
@@ -361,26 +361,18 @@ async function loadProfile(
   }
 
   try {
-    const normalizedEmail = emailForDisplay.trim().toLowerCase();
-
-    // 🔥 On lit TOUJOURS les réponses les plus récentes depuis le questionnaire
-    const answers = await getAnswersForEmail(normalizedEmail, { fresh: true });
-
+    const answers = await getAnswersForEmail(emailForDisplay, { fresh: true });
     if (answers) {
       const built = buildProfileFromAnswers(answers);
       profile = { ...built, email: built.email || emailForDisplay };
       debugInfo.sheetHit = true;
-      debugInfo.reason =
-        "Profil reconstruit à partir des dernières réponses du questionnaire";
     } else {
       profile = { email: emailForDisplay };
-      debugInfo.reason = "Aucune réponse trouvée dans le questionnaire";
+      debugInfo.reason = "Aucune réponse trouvée dans le Sheet";
     }
   } catch (e: any) {
     profile = { email: emailForDisplay };
-    debugInfo.reason = `Erreur lecture questionnaire: ${String(
-      e?.message || e
-    )}`;
+    debugInfo.reason = `Erreur lecture Sheet: ${String(e?.message || e)}`;
   }
 
   profile.email = emailForDisplay;
@@ -412,10 +404,10 @@ function normalizeAnswersForComparison(raw: any) {
 
 /* Loader — Programme IA côté serveur (liste) */
 /**
- * Comportement :
- * - On essaie toujours de réutiliser le DERNIER programme stocké en BDD.
+ * Comportement pour les séances :
+ * - On réutilise le DERNIER programme en BDD si possible.
  * - Si aucun programme n'existe → on génère.
- * - Si le client clique sur "Régénérer" (forceNew = true) ET que les réponses
+ * - Si ?generate=1 (forceNew = true) ET que les réponses
  *   ont changé par rapport à la dernière génération → on régénère.
  * - Sinon → on garde les mêmes séances (elles ne disparaissent pas).
  */
