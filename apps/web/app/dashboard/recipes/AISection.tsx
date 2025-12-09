@@ -4,6 +4,8 @@
 import { useEffect, useState } from "react";
 import { useLanguage } from "@/components/LanguageProvider";
 
+type ViewKind = "meals" | "shakes" | "breakfast";
+
 type Recipe = {
   id: string;
   title: string;
@@ -19,7 +21,7 @@ type Recipe = {
 };
 
 type Props = {
-  kind: "meals" | "shakes";
+  kind: ViewKind;
   baseQS: string;
   kcal?: number;
   kcalMin?: number;
@@ -28,7 +30,12 @@ type Props = {
   dislikes: string[];
 };
 
-type SavedItem = { id: string; title: string; aiPayload?: Recipe };
+type SavedItem = {
+  id: string;
+  title: string;
+  kind?: ViewKind;
+  aiPayload?: Recipe;
+};
 
 function encodeB64UrlJsonBrowser(data: any): string {
   const json = JSON.stringify(data);
@@ -108,14 +115,17 @@ export function AIExtraSection({
       setError(null);
       setRecipes([]);
 
-      // 1) On lit les recettes enregistrées depuis le cookie
-      const saved = readSavedClient();
-      const savedIdsLocal = saved.map((s) => s.id);
+      // 1) On lit les recettes enregistrées pour CE bloc uniquement
+      const allSaved = readSavedClient();
+      const savedForKind = allSaved.filter(
+        (s) => (s.kind ?? "meals") === kind,
+      );
+      const savedIdsLocal = savedForKind.map((s) => s.id);
       setSavedIds(savedIdsLocal);
 
-      // Set de titres déjà enregistrés (en minuscules)
+      // Set de titres déjà enregistrés (en minuscules) pour ce bloc
       const savedTitleSet = new Set(
-        saved
+        savedForKind
           .map((s) => (s.title || "").trim().toLowerCase())
           .filter(Boolean),
       );
@@ -180,7 +190,8 @@ export function AIExtraSection({
           : [];
 
         // 3) On filtre les suggestions IA:
-        //    si le titre existe déjà dans "Vos recettes enregistrées", on ne le remet pas en suggestion
+        //    si le titre existe déjà dans "Vos recettes enregistrées" de ce bloc,
+        //    on ne le remet pas en suggestion
         const finalRecipes = arr.filter((r) => {
           const titleLC = (r.title || "").trim().toLowerCase();
           if (!titleLC) return false;
@@ -222,7 +233,7 @@ export function AIExtraSection({
     t("recipes.aiSection.subtitle") ||
     "Généré en direct avec l'IA selon tes filtres";
 
-  /** Enregistrer une recette IA dans le cookie (avec la recette complète) */
+  /** Enregistrer une recette IA dans le cookie (avec la recette complète + bloc) */
   function handleSave(r: Recipe) {
     const current = readSavedClient();
     if (!current.some((x) => x.id === r.id)) {
@@ -231,7 +242,8 @@ export function AIExtraSection({
         {
           id: r.id,
           title: r.title,
-          aiPayload: r, // on stocke la recette IA complète
+          kind, // ⬅️ on enregistre à quel bloc appartient cette recette (meals/shakes/breakfast)
+          aiPayload: r,
         },
       ];
       writeSavedClient(next);
