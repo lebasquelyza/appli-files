@@ -1,4 +1,4 @@
-// apps/web/lib/recipes/ai.ts
+// lib/recipes/ai.ts
 import OpenAI from "openai";
 
 export type Plan = "BASIC" | "PLUS" | "PREMIUM";
@@ -70,11 +70,22 @@ export async function generateRecipesFromFilters(
       ? '- Toutes les recettes sont des BOISSONS protéinées (shakes / smoothies) à boire, préparées au blender, prêtes en 5–10 min. Pas de plats solides.'
       : "- Recettes de repas (petit-déjeuner, déjeuner, dîner, bowls, etc.).";
 
+  // Est-ce qu'il y a au moins une contrainte ?
+  const hasAnyConstraint =
+    (typeof kcal === "number" && !isNaN(kcal) && kcal > 0) ||
+    (typeof kcalMin === "number" && !isNaN(kcalMin) && kcalMin > 0) ||
+    (typeof kcalMax === "number" && !isNaN(kcalMax) && kcalMax > 0) ||
+    allergens.length > 0 ||
+    dislikes.length > 0;
+
+  // Si l'utilisateur ne donne aucune contrainte, on met plus de variété
+  const temperature = hasAnyConstraint ? 0.7 : 0.9;
+
   // Petit hint pour la variété, basé sur rnd
   const randomHint =
     typeof rnd === "number"
       ? `- Contexte aléatoire (seed numérique): ${rnd}. Utilise ce nombre pour varier les idées de recettes même si les contraintes sont identiques.`
-      : "- Si l'utilisateur ne donne presque aucune contrainte, propose des recettes variées à chaque appel (ne pas toujours renvoyer les mêmes).";
+      : "- Si l'utilisateur donne peu ou pas de contraintes, propose des recettes variées à chaque appel (ne pas toujours renvoyer les mêmes).";
 
   const prompt = `Tu es un chef-nutritionniste. Renvoie UNIQUEMENT du JSON valide (pas de texte).
 Utilisateur:
@@ -111,7 +122,7 @@ Règles:
   console.time("[recipes/ai] openai");
   const response = await openai.chat.completions.create({
     model: "gpt-4o-mini",
-    temperature: 0.7,
+    temperature,
     response_format: { type: "json_object" },
     messages: [
       {
