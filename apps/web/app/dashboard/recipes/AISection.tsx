@@ -231,7 +231,7 @@ export function AIExtraSection({
   const title = t("recipes.aiSection.title") || "Suggestion";
   const subtitle =
     t("recipes.aiSection.subtitle") ||
-    "Généré en direct avec l'IA selon tes filtres";
+    "Généré en direct avec l'IA selon tes filtres et la saison";
 
   /** Enregistrer une recette IA dans le cookie (avec la recette complète + bloc) */
   function handleSave(r: Recipe) {
