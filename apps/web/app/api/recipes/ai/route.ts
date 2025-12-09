@@ -1,4 +1,4 @@
-// apps/web/app/api/recipes/ai/route.ts
+// app/api/recipes/ai/route.ts
 import { NextResponse } from "next/server";
 import {
   generateRecipesFromFilters,
@@ -42,20 +42,24 @@ export async function POST(req: Request) {
       allergens?: string[];
       dislikes?: string[];
       count?: number;
-      kind?: "meals" | "shakes";
-      rnd?: number; // ⬅️ ajouté : nombre pour randomiser
+      kind?: "meals" | "shakes" | "breakfast";
+      rnd?: number;
     };
 
     const input: GenerateRecipesInput = {
       plan,
-      kind: kind === "shakes" ? "shakes" : "meals",
+      kind:
+        kind === "shakes"
+          ? "shakes"
+          : kind === "breakfast"
+          ? "breakfast"
+          : "meals",
       kcal,
       kcalMin,
       kcalMax,
       allergens,
       dislikes,
       count: count ?? 3,
-      // ⬅️ on passe rnd au moteur IA (à toi de l'utiliser dans lib/recipes/ai)
       rnd,
     };
 
@@ -71,4 +75,3 @@ export async function POST(req: Request) {
     );
   }
 }
-
