@@ -379,7 +379,7 @@ async function loadProfile(
 function normalizeAnswersForComparison(raw: any) {
   if (!raw || typeof raw !== "object") return raw;
 
-  // On enlève les champs "meta" qui peuvent changer d'un fetch à l'autre
+  // On enlève quelques champs "meta" qui peuvent changer d'un fetch à l'autre
   const {
     meta,
     metadata,
@@ -401,14 +401,12 @@ function normalizeAnswersForComparison(raw: any) {
 
 /* Loader — Programme IA côté serveur (liste) */
 /**
- * forceNew = true  → le client a cliqué sur "Régénérer"
- *                    → on compare les réponses au questionnaire
- * forceNew = false → on essaie d'abord de reprendre le dernier programme
- *                    depuis programme_insights. Si rien n'existe, on génère.
- *
  * Comportement :
- * - Si les réponses n'ont PAS changé → on REUTILISE les anciennes séances
- * - Si les réponses ONT changé       → on REGÉNÈRE un nouveau programme
+ * - On essaie toujours de réutiliser le DERNIER programme stocké en BDD.
+ * - Si aucun programme n'existe → on génère.
+ * - Si le client clique sur "Régénérer" (forceNew = true) ET que les réponses
+ *   ont changé par rapport à la dernière génération → on régénère.
+ * - Sinon → on garde les mêmes séances (elles ne disparaissent pas).
  */
 async function loadInitialSessions(
   email: string,
@@ -424,23 +422,14 @@ async function loadInitialSessions(
   const lang: "fr" | "en" = locale === "en" ? "en" : "fr";
 
   try {
-    let baseSessions: AiSessionT[] = [];
     const supabaseAdmin = await getSupabaseAdmin();
     const normalizedEmail = (email || "").trim().toLowerCase();
 
-    // ✅ On récupère les réponses ACTUELLES du questionnaire (Sheet)
-    let currentAnswers: any = null;
-    try {
-      currentAnswers = await getAnswersForEmail(email, { fresh: true });
-    } catch {
-      // si erreur, currentAnswers restera null
-    }
+    let baseSessions: AiSessionT[] = [];
+    let lastInsight: { sessions: AiSessionT[]; answers: any } | null = null;
 
-    let mustRegenerate = false;
-
+    // 1) On récupère le dernier programme existant (s'il existe)
     if (supabaseAdmin) {
-      // 🔎 On récupère le DERNIER programme déjà généré + les réponses utilisées
-      let lastInsight: { sessions: AiSessionT[]; answers: any } | null = null;
       try {
         const { data, error } = await supabaseAdmin
           .from("programme_insights")
@@ -452,50 +441,68 @@ async function loadInitialSessions(
 
         if (!error && data && data.length) {
           lastInsight = data[0] as any;
+          baseSessions = (lastInsight.sessions || []) as AiSessionT[];
         }
       } catch {
-        // si erreur, on régénèrera plus bas
+        // si erreur, on tentera une génération
+      }
+    }
+
+    // 2) Décider si on doit régénérer
+    let mustRegenerate = false;
+
+    if (!lastInsight) {
+      // Aucun programme existant → on doit générer au moins une fois
+      mustRegenerate = true;
+    }
+
+    // On ne va comparer les réponses que si l'utilisateur a explicitement
+    // cliqué sur "Régénérer" (forceNew = true).
+    let currentAnswers: any = null;
+    if (forceNew) {
+      try {
+        currentAnswers = await getAnswersForEmail(email, { fresh: true });
+      } catch {
+        currentAnswers = null;
       }
 
-      if (!lastInsight) {
-        // 🧱 Aucun programme existant → on doit générer
-        mustRegenerate = true;
-      } else {
+      if (lastInsight && currentAnswers) {
         const lastNorm = normalizeAnswersForComparison(lastInsight.answers);
         const currentNorm = normalizeAnswersForComparison(currentAnswers);
 
         const answersChanged =
           JSON.stringify(lastNorm ?? {}) !== JSON.stringify(currentNorm ?? {});
 
-        if (forceNew && answersChanged) {
-          // 👆 Le client a cliqué sur "Régénérer" ET les réponses ont changé
+        if (answersChanged) {
+          // Réponses modifiées + clic sur "Régénérer" → on régénère
           mustRegenerate = true;
-        } else {
-          // ✅ soit pas de clic "Régénérer", soit réponses identiques :
-          // on garde les mêmes séances
-          baseSessions = (lastInsight.sessions || []) as AiSessionT[];
-
-          // Si jamais les anciennes séances sont vides, on forcera une génération
-          if (!baseSessions.length) {
-            mustRegenerate = true;
-          }
         }
       }
-    } else {
-      // Pas de supabase admin → on sera obligé de régénérer
-      mustRegenerate = true;
     }
 
-    // 2) Si aucun programme trouvé OU mustRegenerate = true → génération via IA
-    if (!baseSessions.length || mustRegenerate) {
+    // 3) Génération si nécessaire
+    if (mustRegenerate) {
       const { sessions } = await planProgrammeFromEmail(email, { lang });
       baseSessions = sessions || [];
 
-      // 📝 On logue réponses + séances générées
+      // Si on n'avait pas (ou plus) currentAnswers, on refait une tentative
+      if (!currentAnswers) {
+        try {
+          currentAnswers = await getAnswersForEmail(email, { fresh: true });
+        } catch {
+          currentAnswers = null;
+        }
+      }
+
       await logProgrammeInsightToSupabase(email, currentAnswers, baseSessions);
     }
 
-    // 3) Post-traitement existant (équipement, au moins 4 exos, etc.)
+    // Si malgré tout on n'a rien, on renvoie []
+    if (!baseSessions || !baseSessions.length) {
+      return [];
+    }
+
+    // 4) Post-traitement existant (équipement, au moins 4 exos, etc.)
     const finalSessions = baseSessions.map((s) => {
       const type = (s.type || "muscu") as WorkoutType;
       let exs = (s.exercises || []).slice();
