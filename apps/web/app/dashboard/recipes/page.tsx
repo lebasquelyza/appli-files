@@ -45,6 +45,7 @@ type Recipe = {
   steps: string[];
   rework?: Rework[];
 };
+type ViewKind = "meals" | "shakes" | "breakfast";
 
 /* ===================== Utils ===================== */
 function parseCsv(value?: string | string[]): string[] {
@@ -562,7 +563,12 @@ async function applyFiltersAction(formData: FormData): Promise<void> {
 }
 
 /* ===================== Sauvegarde via Cookie (Server Actions) ===================== */
-type SavedItem = { id: string; title: string; aiPayload?: Recipe };
+type SavedItem = {
+  id: string;
+  title: string;
+  kind?: ViewKind; // ⬅️ plat / shake / petit dej'
+  aiPayload?: Recipe;
+};
 const SAVED_COOKIE = "saved_recipes_v1";
 
 function readSaved(): SavedItem[] {
@@ -598,7 +604,8 @@ async function saveRecipeAction(formData: FormData) {
 
   const cur = readSaved();
   if (!cur.some((x) => x.id === id)) {
-    cur.push({ id, title });
+    // Par défaut, les recettes de base sont associées aux plats "meals"
+    cur.push({ id, title, kind: "meals" });
     writeSaved(cur);
   }
   redirect(returnTo);
@@ -642,9 +649,12 @@ export default async function Page({
   const hasKcalMin = !isNaN(kcalMin) && kcalMin > 0;
   const hasKcalMax = !isNaN(kcalMax) && kcalMax > 0;
 
-  const view = (searchParams?.view === "shakes" ? "shakes" : "meals") as
-    | "meals"
-    | "shakes";
+  const view: ViewKind =
+    searchParams?.view === "shakes"
+      ? "shakes"
+      : searchParams?.view === "breakfast"
+      ? "breakfast"
+      : "meals";
 
   const seed = Number(searchParams?.rnd ?? "0") || 123456789;
   const hasRnd = typeof searchParams?.rnd === "string";
@@ -670,13 +680,18 @@ export default async function Page({
 
   // Lecture des recettes enregistrées (cookie)
   const saved = readSaved();
-  const savedSet = new Set(saved.map((s) => s.id));
   const currentUrlParts = [...qsParts, `view=${view}`];
   const currentUrl = `/dashboard/recipes?${currentUrlParts.join("&")}`;
+
+  // Favoris filtrés par bloc (view)
+  const savedForView = saved.filter(
+    (s) => (s.kind ?? "meals") === view,
+  );
 
   // Liens nav bloc
   const linkMeals = `/dashboard/recipes?${baseQS}view=meals`;
   const linkShakes = `/dashboard/recipes?${baseQS}view=shakes`;
+  const linkBreakfast = `/dashboard/recipes?${baseQS}view=breakfast`;
 
   return (
     <>
@@ -758,9 +773,10 @@ export default async function Page({
 
         {/* =================== Choix rapide =================== */}
         <div
-          className="grid gap-4 sm:grid-cols-2"
+          className="grid gap-4 sm:grid-cols-3"
           style={{ marginTop: 12 }}
         >
+          {/* Plats healthy */}
           <a
             href={linkMeals}
             className="card"
@@ -802,6 +818,7 @@ export default async function Page({
             </div>
           </a>
 
+          {/* Bar à prot' */}
           <a
             href={linkShakes}
             className="card"
@@ -836,6 +853,48 @@ export default async function Page({
                 </div>
               </div>
               {view === "shakes" && (
+                <span className="badge">
+                  {t("recipes.quickSwitch.activeBadge", "Actif")}
+                </span>
+              )}
+            </div>
+          </a>
+
+          {/* Petit dej' */}
+          <a
+            href={linkBreakfast}
+            className="card"
+            style={{
+              textDecoration: "none",
+              color: "inherit",
+              borderColor: view === "breakfast" ? "#111" : undefined,
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <div>
+                <strong>
+                  {t(
+                    "recipes.quickSwitch.breakfast.title",
+                    "Petit dej’ — Sucré ou salé",
+                  )}
+                </strong>
+                <div
+                  className="text-sm"
+                  style={{ color: "#6b7280" }}
+                >
+                  {t(
+                    "recipes.quickSwitch.breakfast.subtitle",
+                    "Porridge, tartines, œufs, pancakes…",
+                  )}
+                </div>
+              </div>
+              {view === "breakfast" && (
                 <span className="badge">
                   {t("recipes.quickSwitch.activeBadge", "Actif")}
                 </span>
@@ -989,7 +1048,6 @@ export default async function Page({
             </fieldset>
 
             <div className="flex items-center justify-between lg:col-span-2">
-              {/* Phrase "Les filtres s'appliquent..." supprimée */}
               <div style={{ display: "flex", gap: 10 }}>
                 <a
                   href="/dashboard/recipes"
@@ -1012,8 +1070,8 @@ export default async function Page({
           </form>
         </div>
 
-        {/* Vos recettes enregistrées */}
-        {saved.length > 0 && (
+        {/* Vos recettes enregistrées — filtrées par bloc courant */}
+        {savedForView.length > 0 && (
           <section
             className="section"
             style={{ marginTop: 12 }}
@@ -1030,11 +1088,9 @@ export default async function Page({
               </h2>
             </div>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-2">
-              {saved.map((s) => {
+              {savedForView.map((s) => {
                 const aiRecipe = (s as any).aiPayload as Recipe | undefined;
 
-                // Si c'est une recette IA sauvegardée avec la payload complète,
-                // on reconstruit l'URL comme pour les cartes IA (avec ?data=...)
                 const href = aiRecipe
                   ? `/dashboard/recipes/${s.id}${encode(aiRecipe)}`
                   : `/dashboard/recipes/${s.id}`;
@@ -1086,28 +1142,17 @@ export default async function Page({
         )}
 
         {/* =================== CONTENU IA (seulement si rnd présent) =================== */}
-        {hasRnd &&
-          (view === "meals" ? (
-            <AIExtraSection
-              kind="meals"
-              baseQS={baseQS}
-              kcal={hasKcalTarget ? kcal : undefined}
-              kcalMin={hasKcalMin ? kcalMin : undefined}
-              kcalMax={hasKcalMax ? kcalMax : undefined}
-              allergens={allergens}
-              dislikes={dislikes}
-            />
-          ) : (
-            <AIExtraSection
-              kind="shakes"
-              baseQS={baseQS}
-              kcal={hasKcalTarget ? kcal : undefined}
-              kcalMin={hasKcalMin ? kcalMin : undefined}
-              kcalMax={hasKcalMax ? kcalMax : undefined}
-              allergens={allergens}
-              dislikes={dislikes}
-            />
-          ))}
+        {hasRnd && (
+          <AIExtraSection
+            kind={view}
+            baseQS={baseQS}
+            kcal={hasKcalTarget ? kcal : undefined}
+            kcalMin={hasKcalMin ? kcalMin : undefined}
+            kcalMax={hasKcalMax ? kcalMax : undefined}
+            allergens={allergens}
+            dislikes={dislikes}
+          />
+        )}
       </div>
     </>
   );
@@ -1222,3 +1267,4 @@ function Card({
     </article>
   );
 }
+
