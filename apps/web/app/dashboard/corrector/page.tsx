@@ -42,12 +42,6 @@ interface AIAnalysis {
   }>;
 }
 
-/* ===================== Google Ads global ===================== */
-declare global {
-  interface Window {
-    adsbygoogle?: any[];
-  }
-}
 
 /* ===================== Constantes ===================== */
 const CLIENT_PROXY_MAX_BYTES =
