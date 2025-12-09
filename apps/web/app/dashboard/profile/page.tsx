@@ -375,6 +375,30 @@ async function loadProfile(
   return { emailForDisplay, profile, debugInfo, forceBlank };
 }
 
+/* ===== Normalisation des réponses pour comparaison ===== */
+function normalizeAnswersForComparison(raw: any) {
+  if (!raw || typeof raw !== "object") return raw;
+
+  // On enlève les champs "meta" qui peuvent changer d'un fetch à l'autre
+  const {
+    meta,
+    metadata,
+    _meta,
+    synced_at,
+    syncedAt,
+    created_at,
+    createdAt,
+    updated_at,
+    updatedAt,
+    fetched_at,
+    fetchedAt,
+    // on garde le reste
+    ...rest
+  } = raw as any;
+
+  return rest;
+}
+
 /* Loader — Programme IA côté serveur (liste) */
 /**
  * forceNew = true  → le client a cliqué sur "Régénérer"
@@ -382,9 +406,9 @@ async function loadProfile(
  * forceNew = false → on essaie d'abord de reprendre le dernier programme
  *                    depuis programme_insights. Si rien n'existe, on génère.
  *
- * Comportement souhaité :
- * - Si les réponses n'ont pas changé → on REUTILISE les anciennes séances
- * - Si les réponses ont changé       → on REGÉNÈRE un nouveau programme
+ * Comportement :
+ * - Si les réponses n'ont PAS changé → on REUTILISE les anciennes séances
+ * - Si les réponses ONT changé       → on REGÉNÈRE un nouveau programme
  */
 async function loadInitialSessions(
   email: string,
@@ -407,7 +431,7 @@ async function loadInitialSessions(
     // ✅ On récupère les réponses ACTUELLES du questionnaire (Sheet)
     let currentAnswers: any = null;
     try {
-      currentAnswers = await getAnswersForEmail(normalizedEmail, { fresh: true });
+      currentAnswers = await getAnswersForEmail(email, { fresh: true });
     } catch {
       // si erreur, currentAnswers restera null
     }
@@ -436,20 +460,26 @@ async function loadInitialSessions(
       if (!lastInsight) {
         // 🧱 Aucun programme existant → on doit générer
         mustRegenerate = true;
-      } else if (forceNew) {
-        // 👆 Le client a cliqué sur "Régénérer" → on compare les réponses
-        const lastAnswersStr = JSON.stringify(lastInsight.answers || {});
-        const currentAnswersStr = JSON.stringify(currentAnswers || {});
-        if (lastAnswersStr !== currentAnswersStr) {
-          // ✨ Réponses du questionnaire modifiées → on régénère
+      } else {
+        const lastNorm = normalizeAnswersForComparison(lastInsight.answers);
+        const currentNorm = normalizeAnswersForComparison(currentAnswers);
+
+        const answersChanged =
+          JSON.stringify(lastNorm ?? {}) !== JSON.stringify(currentNorm ?? {});
+
+        if (forceNew && answersChanged) {
+          // 👆 Le client a cliqué sur "Régénérer" ET les réponses ont changé
           mustRegenerate = true;
         } else {
-          // ✅ Réponses identiques → on garde les mêmes séances
+          // ✅ soit pas de clic "Régénérer", soit réponses identiques :
+          // on garde les mêmes séances
           baseSessions = (lastInsight.sessions || []) as AiSessionT[];
+
+          // Si jamais les anciennes séances sont vides, on forcera une génération
+          if (!baseSessions.length) {
+            mustRegenerate = true;
+          }
         }
-      } else {
-        // 🧊 Pas de clic sur "Régénérer" → on garde le dernier programme
-        baseSessions = (lastInsight.sessions || []) as AiSessionT[];
       }
     } else {
       // Pas de supabase admin → on sera obligé de régénérer
@@ -461,7 +491,7 @@ async function loadInitialSessions(
       const { sessions } = await planProgrammeFromEmail(email, { lang });
       baseSessions = sessions || [];
 
-      // 📝 On logue réponses + séances (et pas answers = null)
+      // 📝 On logue réponses + séances générées
       await logProgrammeInsightToSupabase(email, currentAnswers, baseSessions);
     }
 
@@ -475,9 +505,6 @@ async function loadInitialSessions(
       exs = ensureAtLeast4(exs, type, equip);
       return { ...s, exercises: exs };
     });
-
-    // (optionnel) On logue aussi la version finale post-traitée
-    await logProgrammeInsightToSupabase(email, currentAnswers, finalSessions);
 
     return finalSessions;
   } catch {
