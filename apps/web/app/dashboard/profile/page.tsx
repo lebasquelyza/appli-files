@@ -631,6 +631,9 @@ export default async function Page({
       showDebug={showDebug}
       questionnaireUrl={questionnaireUrl}
       questionnaireBase={QUESTIONNAIRE_BASE}
+      /* 👇 NOUVELLE PROP : permet à ProfileClient de savoir qu'on vient de cliquer sur "Générer" */
+      showAdOnGenerate={generateParam}
     />
   );
 }
+
