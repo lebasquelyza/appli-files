@@ -562,7 +562,7 @@ async function applyFiltersAction(formData: FormData): Promise<void> {
 }
 
 /* ===================== Sauvegarde via Cookie (Server Actions) ===================== */
-type SavedItem = { id: string; title: string };
+type SavedItem = { id: string; title: string; aiPayload?: Recipe };
 const SAVED_COOKIE = "saved_recipes_v1";
 
 function readSaved(): SavedItem[] {
@@ -1030,47 +1030,57 @@ export default async function Page({
               </h2>
             </div>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-2">
-              {saved.map((s) => (
-                <article
-                  key={s.id}
-                  className="card"
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: 12,
-                  }}
-                >
-                  <a
-                    href={`/dashboard/recipes/${s.id}`}
-                    className="font-semibold"
+              {saved.map((s) => {
+                const aiRecipe = (s as any).aiPayload as Recipe | undefined;
+
+                // Si c'est une recette IA sauvegardée avec la payload complète,
+                // on reconstruit l'URL comme pour les cartes IA (avec ?data=...)
+                const href = aiRecipe
+                  ? `/dashboard/recipes/${s.id}${encode(aiRecipe)}`
+                  : `/dashboard/recipes/${s.id}`;
+
+                return (
+                  <article
+                    key={s.id}
+                    className="card"
                     style={{
-                      textDecoration: "none",
-                      color: "var(--text,#111)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 12,
                     }}
                   >
-                    {s.title}
-                  </a>
-                  <form action={removeRecipeAction}>
-                    <input type="hidden" name="id" value={s.id} />
-                    <input
-                      type="hidden"
-                      name="returnTo"
-                      value={currentUrl || "/dashboard/recipes"}
-                    />
-                    <button
-                      type="submit"
-                      className="btn btn-outline"
-                      style={{ color: "var(--text, #111)" }}
+                    <a
+                      href={href}
+                      className="font-semibold"
+                      style={{
+                        textDecoration: "none",
+                        color: "var(--text,#111)",
+                      }}
                     >
-                      {t(
-                        "recipes.saved.removeButton",
-                        "Retirer",
-                      )}
-                    </button>
-                  </form>
-                </article>
-              ))}
+                      {s.title}
+                    </a>
+                    <form action={removeRecipeAction}>
+                      <input type="hidden" name="id" value={s.id} />
+                      <input
+                        type="hidden"
+                        name="returnTo"
+                        value={currentUrl || "/dashboard/recipes"}
+                      />
+                      <button
+                        type="submit"
+                        className="btn btn-outline"
+                        style={{ color: "var(--text, #111)" }}
+                      >
+                        {t(
+                          "recipes.saved.removeButton",
+                          "Retirer",
+                        )}
+                      </button>
+                    </form>
+                  </article>
+                );
+              })}
             </div>
           </section>
         )}
