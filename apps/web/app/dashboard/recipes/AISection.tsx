@@ -71,16 +71,6 @@ function writeSavedClient(list: SavedItem[]) {
   }
 }
 
-/** Clé "stable" pour reconnaître une recette (titre + ingrédients) */
-function makeRecipeKey(r: { title?: string; ingredients?: string[] }): string {
-  const title = (r.title || "").trim().toLowerCase();
-  const ings = Array.isArray(r.ingredients)
-    ? r.ingredients.map((x) => String(x).trim().toLowerCase()).sort()
-    : [];
-  if (!title) return "";
-  return `${title}::${ings.join("|")}`;
-}
-
 export function AIExtraSection({
   kind,
   baseQS,
@@ -123,17 +113,12 @@ export function AIExtraSection({
       const savedIdsLocal = saved.map((s) => s.id);
       setSavedIds(savedIdsLocal);
 
-      // On construit un Set de "clés" de recettes déjà enregistrées
-      const savedKeys = new Set<string>();
-      for (const s of saved) {
-        if (s.aiPayload) {
-          const key = makeRecipeKey(s.aiPayload);
-          if (key) savedKeys.add(key);
-        } else {
-          const key = makeRecipeKey({ title: s.title, ingredients: [] });
-          if (key) savedKeys.add(key);
-        }
-      }
+      // Set de titres déjà enregistrés (en minuscules)
+      const savedTitleSet = new Set(
+        saved
+          .map((s) => (s.title || "").trim().toLowerCase())
+          .filter(Boolean),
+      );
 
       try {
         // 2) Si pas de filtres du tout, on envoie un rnd pour forcer de la variété côté IA
@@ -194,15 +179,13 @@ export function AIExtraSection({
           ? data.recipes
           : [];
 
-        // 3) On filtre les suggestions IA pour NE PAS reproposer
-        //    les recettes déjà enregistrées (même titre + ingrédients)
-        let finalRecipes = arr;
-        if (savedKeys.size > 0) {
-          finalRecipes = arr.filter((r) => {
-            const key = makeRecipeKey(r);
-            return key && !savedKeys.has(key);
-          });
-        }
+        // 3) On filtre les suggestions IA:
+        //    si le titre existe déjà dans "Vos recettes enregistrées", on ne le remet pas en suggestion
+        const finalRecipes = arr.filter((r) => {
+          const titleLC = (r.title || "").trim().toLowerCase();
+          if (!titleLC) return false;
+          return !savedTitleSet.has(titleLC);
+        });
 
         if (!cancelled) {
           setRecipes(finalRecipes);
@@ -277,9 +260,7 @@ export function AIExtraSection({
           flexWrap: "wrap",
         }}
       >
-        {/* Titre = "Suggestion" */}
         <h2 style={{ margin: 0 }}>{title}</h2>
-        {/* Sous-titre plus petit, aligné à droite */}
         <p
           className="text-xs"
           style={{
@@ -293,21 +274,18 @@ export function AIExtraSection({
         </p>
       </div>
 
-      {/* État erreur */}
       {error && (
         <div className="card text-xs" style={{ color: "#6b7280" }}>
           {error}
         </div>
       )}
 
-      {/* État chargement */}
       {!error && loading && recipes.length === 0 && (
         <div className="card text-xs" style={{ color: "#6b7280" }}>
           {t("recipes.aiSection.loading")}
         </div>
       )}
 
-      {/* État avec recettes */}
       {!error && recipes.length > 0 && (
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
           {recipes.map((r) => {
@@ -372,7 +350,6 @@ export function AIExtraSection({
                     {t("recipes.card.viewRecipe")}
                   </a>
 
-                  {/* Bouton Enregistrer / Retirer (client-side, via cookie) */}
                   {isSaved ? (
                     <button
                       type="button"
@@ -401,3 +378,4 @@ export function AIExtraSection({
     </section>
   );
 }
+
