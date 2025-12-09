@@ -1,6 +1,8 @@
 //apps/web/app/layout.tsx
 import type { ReactNode } from "react";
 import type { Metadata, Viewport } from "next";
+import Script from "next/script"; // 👈 AJOUT
+
 import TopbarGate from "./_components/TopbarGate";
 import "./globals.css";
 import Providers from "@/components/Providers"; // ✅ ton SessionProvider
@@ -39,6 +41,16 @@ export const revalidate = 0;
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="fr">
+      <head>
+        {/* 👇 Script Google AdSense */}
+        <Script
+          id="adsense-script"
+          async
+          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6468882840325295"
+          crossOrigin="anonymous"
+          strategy="afterInteractive"
+        />
+      </head>
       <body className="bg-white text-gray-900 min-h-dvh">
         <Providers>
           <LanguageProvider>
