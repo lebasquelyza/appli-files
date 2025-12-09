@@ -1,12 +1,14 @@
+//apps/web/app/dashboard/profile/ProfileClient.tsx
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react"; // 👈 AJOUT useState + useEffect
 import { useLanguage } from "@/components/LanguageProvider";
 import GenerateClient from "./GenerateClient";
 import type {
   Profile as ProfileT,
   AiSession as AiSessionT,
 } from "../../../lib/coach/ai";
+import { AdBanner } from "@/components/AdBanner"; // 👈 AJOUT
 
 type DebugInfo = { email: string; sheetHit: boolean; reason?: string };
 
@@ -26,6 +28,7 @@ type Props = {
   questionnaireUrl: string;
   questionnaireBase: string;
   lang?: "fr" | "en";
+  showAdOnGenerate?: boolean; // 👈 AJOUT : flag venant de ?generate=1
 };
 
 /* Helpers côté client */
@@ -52,9 +55,26 @@ export default function ProfileClient(props: Props) {
     showDebug,
     questionnaireUrl,
     questionnaireBase,
+    showAdOnGenerate, // 👈 récup du flag
   } = props;
 
   const { t } = useLanguage();
+
+  // 👉 état pour l’overlay pub après clic sur "Générer"
+  const [showAdOverlay, setShowAdOverlay] = useState(false);
+
+  useEffect(() => {
+    if (showAdOnGenerate) {
+      setShowAdOverlay(true);
+
+      // On masque automatiquement l’overlay après quelques secondes
+      const timer = setTimeout(() => {
+        setShowAdOverlay(false);
+      }, 5000); // ajuste la durée si tu veux
+
+      return () => clearTimeout(timer);
+    }
+  }, [showAdOnGenerate]);
 
   // helper t avec fallback si la clé n’existe pas
   const tf = (path: string, fallback?: string) => {
@@ -154,6 +174,36 @@ export default function ProfileClient(props: Props) {
         fontSize: "var(--settings-fs, 12px)",
       }}
     >
+      {/* 👇 Overlay pub après clic sur "Générer" */}
+      {showAdOverlay && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-white rounded-xl p-4 max-w-md w-full mx-4 text-center space-y-3">
+            <p className="font-semibold text-gray-900">
+              {tf(
+                "settings.profile.adOverlay.title",
+                "Files prépare ton nouveau programme…"
+              )}
+            </p>
+            <p className="text-sm text-gray-500">
+              {tf(
+                "settings.profile.adOverlay.subtitle",
+                "Petite pause pub pendant que tout se charge 💪"
+              )}
+            </p>
+
+            {/* 👉 Bloc pub AdSense */}
+            <AdBanner slot="REPLACE_WITH_YOUR_SLOT_ID" />
+
+            <p className="text-xs text-gray-400">
+              {tf(
+                "settings.profile.adOverlay.footer",
+                "Ton programme va s’afficher automatiquement."
+              )}
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="page-header">
         <div>
           <h1 className="h1" style={{ fontSize: 22 }}>
@@ -405,7 +455,7 @@ export default function ProfileClient(props: Props) {
           )}
         </div>
 
-      {/* 🟡 ÉTAT AVANT CLIC SUR GÉNÉRER (si jamais aucun programme n'a encore été généré) */}
+        {/* 🟡 ÉTAT AVANT CLIC SUR GÉNÉRER (si jamais aucun programme n'a encore été généré) */}
         {!hasGenerate && (
           <div
             className="card"
