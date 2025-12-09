@@ -1,4 +1,3 @@
-//apps/web/app/dashboard/corrector/page.tsx
 "use client";
 
 import {
@@ -9,7 +8,6 @@ import {
   type CSSProperties,
 } from "react";
 import { translations } from "@/app/i18n/translations";
-import { AdBanner } from "@/components/AdBanner";
 
 /* ===================== Types ===================== */
 interface AnalysisPoint {
@@ -42,6 +40,13 @@ interface AIAnalysis {
     feet?: { anchor?: "talons" | "milieu" | "avant"; unstable?: boolean };
     notes?: string;
   }>;
+}
+
+/* ===================== Google Ads global ===================== */
+declare global {
+  interface Window {
+    adsbygoogle?: any[];
+  }
 }
 
 /* ===================== Constantes ===================== */
@@ -151,26 +156,85 @@ const LEX_FR = {
   braceVerb: ["gaine", "serre", "verrouille", "contracte", "stabilise"],
   neutralSpine: ["rachis neutre", "dos plat", "alignement lombaire neutre"],
   chestUp: ["poitrine fière", "sternum haut", "buste ouvert"],
-  shoulderPack: ["épaules abaissées/serrées", "omoplates basses/rétractées", "pack scapulaire"],
-  avoidMomentum: ["évite l’élan", "pas d’à-coups", "contrôle le mouvement"],
-  controlCue: ["amplitude contrôlée", "mouvement maîtrisé", "contrôle sur toute l’amplitude"],
-  rangeCue: ["amplitude utile", "range complet sans douleur", "aller-retour propre"],
+  shoulderPack: [
+    "épaules abaissées/serrées",
+    "omoplates basses/rétractées",
+    "pack scapulaire",
+  ],
+  avoidMomentum: [
+    "évite l’élan",
+    "pas d’à-coups",
+    "contrôle le mouvement",
+  ],
+  controlCue: [
+    "amplitude contrôlée",
+    "mouvement maîtrisé",
+    "contrôle sur toute l’amplitude",
+  ],
+  rangeCue: [
+    "amplitude utile",
+    "range complet sans douleur",
+    "aller-retour propre",
+  ],
   tempoIntro: ["Tempo", "Cadence", "Rythme"],
   tempo201: ["2–0–1", "2-0-1", "2s-0-1s"],
   tempo311: ["3–1–1", "3-1-1", "3s-1-1s"],
-  breathe: ["souffle sur l’effort", "expire à la phase concentrique", "inspire au retour"],
-  footTripod: ["appuis trépied (talon + base gros/petit orteil)", "ancre tes pieds"],
-  kneeTrack: ["genoux dans l’axe", "genoux suivent la pointe de pieds", "pas de valgus"],
-  hipBack: ["hanche en arrière", "charnière franche", "pense fesses loin derrière"],
+  breathe: [
+    "souffle sur l’effort",
+    "expire à la phase concentrique",
+    "inspire au retour",
+  ],
+  footTripod: [
+    "appuis trépied (talon + base gros/petit orteil)",
+    "ancre tes pieds",
+  ],
+  kneeTrack: [
+    "genoux dans l’axe",
+    "genoux suivent la pointe de pieds",
+    "pas de valgus",
+  ],
+  hipBack: [
+    "hanche en arrière",
+    "charnière franche",
+    "pense fesses loin derrière",
+  ],
   gluteCue: ["pousse le talon", "chasse le talon", "guide le talon"],
-  holdTop: ["marque 1 s en contraction", "pause 1 s en pic de contraction", "garde 1 s en haut"],
+  holdTop: [
+    "marque 1 s en contraction",
+    "pause 1 s en pic de contraction",
+    "garde 1 s en haut",
+  ],
   grip: ["prise ferme", "serre la barre", "poignées verrouillées"],
-  elbowPathPush: ["coudes ~45° du buste", "coudes sous la barre", "coudes ni trop ouverts ni collés"],
-  elbowPathPull: ["coudes près du buste", "coudes vers la hanche", "coudes sous la ligne d’épaule"],
-  latDepress: ["abaisse les épaules", "déprime les scapulas", "descends les omoplates"],
-  scapRetract: ["rétracte les omoplates", "serre les omoplates", "omoplates tirées en arrière"],
-  wristNeutral: ["poignets neutres", "poignets alignés", "poignets pas cassés"],
-  headNeutral: ["regard neutre", "nuque longue", "évite l’hyperextension cervicale"],
+  elbowPathPush: [
+    "coudes ~45° du buste",
+    "coudes sous la barre",
+    "coudes ni trop ouverts ni collés",
+  ],
+  elbowPathPull: [
+    "coudes près du buste",
+    "coudes vers la hanche",
+    "coudes sous la ligne d’épaule",
+  ],
+  latDepress: [
+    "abaisse les épaules",
+    "déprime les scapulas",
+    "descends les omoplates",
+  ],
+  scapRetract: [
+    "rétracte les omoplates",
+    "serre les omoplates",
+    "omoplates tirées en arrière",
+  ],
+  wristNeutral: [
+    "poignets neutres",
+    "poignets alignés",
+    "poignets pas cassés",
+  ],
+  headNeutral: [
+    "regard neutre",
+    "nuque longue",
+    "évite l’hyperextension cervicale",
+  ],
 };
 
 const LEX_EN = {
@@ -178,26 +242,77 @@ const LEX_EN = {
   braceVerb: ["brace", "lock", "tighten", "engage", "stabilize"],
   neutralSpine: ["neutral spine", "flat back", "neutral lumbar alignment"],
   chestUp: ["proud chest", "sternum up", "open chest"],
-  shoulderPack: ["pack your shoulders", "scapulae down and back", "set your shoulder blades"],
+  shoulderPack: [
+    "pack your shoulders",
+    "scapulae down and back",
+    "set your shoulder blades",
+  ],
   avoidMomentum: ["avoid momentum", "no jerking", "stay smooth"],
   controlCue: ["controlled range", "own the movement", "smooth, steady reps"],
   rangeCue: ["useful range", "full pain-free range", "clean reps"],
   tempoIntro: ["Tempo", "Cadence", "Rhythm"],
   tempo201: ["2-0-1", "2s-0-1s"],
   tempo311: ["3-1-1", "3s-1-1s"],
-  breathe: ["exhale on the effort", "breathe out on the concentric", "inhale on the way down"],
-  footTripod: ["tripod foot (heel + big/small toe)", "anchor your feet"],
-  kneeTrack: ["knees track over toes", "keep knees in line", "avoid valgus"],
-  hipBack: ["hips back", "strong hinge", "push your hips behind you"],
-  gluteCue: ["drive through the heel", "push the heel", "lead with the heel"],
-  holdTop: ["pause 1s at the top", "1s peak squeeze", "hold the contraction"],
+  breathe: [
+    "exhale on the effort",
+    "breathe out on the concentric",
+    "inhale on the way down",
+  ],
+  footTripod: [
+    "tripod foot (heel + big/small toe)",
+    "anchor your feet",
+  ],
+  kneeTrack: [
+    "knees track over toes",
+    "keep knees in line",
+    "avoid valgus",
+  ],
+  hipBack: [
+    "hips back",
+    "strong hinge",
+    "push your hips behind you",
+  ],
+  gluteCue: [
+    "drive through the heel",
+    "push the heel",
+    "lead with the heel",
+  ],
+  holdTop: [
+    "pause 1s at the top",
+    "1s peak squeeze",
+    "hold the contraction",
+  ],
   grip: ["firm grip", "squeeze the bar", "locked wrists"],
-  elbowPathPush: ["elbows ~45°", "elbows under the bar", "avoid excessive flare"],
-  elbowPathPull: ["elbows close", "drive elbows to the hips", "stay under shoulder line"],
-  latDepress: ["depress the shoulders", "set the lats", "pull shoulders down"],
-  scapRetract: ["retract the shoulder blades", "squeeze the scapulae", "shoulders back"],
-  wristNeutral: ["neutral wrists", "stacked wrists", "no wrist break"],
-  headNeutral: ["neutral gaze", "long neck", "avoid neck hyperextension"],
+  elbowPathPush: [
+    "elbows ~45°",
+    "elbows under the bar",
+    "avoid excessive flare",
+  ],
+  elbowPathPull: [
+    "elbows close",
+    "drive elbows to the hips",
+    "stay under shoulder line",
+  ],
+  latDepress: [
+    "depress the shoulders",
+    "set the lats",
+    "pull shoulders down",
+  ],
+  scapRetract: [
+    "retract the shoulder blades",
+    "squeeze the scapulae",
+    "shoulders back",
+  ],
+  wristNeutral: [
+    "neutral wrists",
+    "stacked wrists",
+    "no wrist break",
+  ],
+  headNeutral: [
+    "neutral gaze",
+    "long neck",
+    "avoid neck hyperextension",
+  ],
 };
 
 function getLex(lang: Lang) {
@@ -363,28 +478,64 @@ const EXO_ALIASES: Array<{ rx: RegExp; cat: Category }> = [
   { rx: /(lunge|fente|split\s*squat|walking\s*lunge|bulgarian)/i, cat: "lunge" },
   { rx: /(leg\s*press|presse\s*à\s*jambes)/i, cat: "legpress" },
   { rx: /(leg\s*extension|extension\s*quadriceps)/i, cat: "quad_iso" },
-  { rx: /(deadlift|soulev|hinge|rdl|romanian|good\s*morning|hip\s*hinge)/i, cat: "hinge" },
-  { rx: /(hip\s*thrust|pont\s*de\s*hanches|glute\s*bridge)/i, cat: "hipthrust" },
+  {
+    rx: /(deadlift|soulev|hinge|rdl|romanian|good\s*morning|hip\s*hinge)/i,
+    cat: "hinge",
+  },
+  {
+    rx: /(hip\s*thrust|pont\s*de\s*hanches|glute\s*bridge)/i,
+    cat: "hipthrust",
+  },
   { rx: /(leg\s*curl|ischio|hamstring\s*curl)/i, cat: "ham_iso" },
-  { rx: /(calf|mollet|élévation\s*mollets|standing\s*calf|seated\s*calf)/i, cat: "calf" },
+  {
+    rx: /(calf|mollet|élévation\s*mollets|standing\s*calf|seated\s*calf)/i,
+    cat: "calf",
+  },
   { rx: /(pull[-\s]?up|traction)/i, cat: "pull_vertical" },
   { rx: /(lat\s*pulldown|tirage\s*vertical)/i, cat: "pull_vertical" },
-  { rx: /(row|tirage\s*horizontal|barbell\s*row|pendlay|cable\s*row|seated\s*row)/i, cat: "pull_horizontal" },
-  { rx: /(chest\s*supported\s*row|row\s*appui\s*pector)/i, cat: "row_chest" },
+  {
+    rx: /(row|tirage\s*horizontal|barbell\s*row|pendlay|cable\s*row|seated\s*row)/i,
+    cat: "pull_horizontal",
+  },
+  {
+    rx: /(chest\s*supported\s*row|row\s*appui\s*pector)/i,
+    cat: "row_chest",
+  },
   { rx: /(face\s*pull)/i, cat: "face_pull" },
-  { rx: /(bench|développé\s*couché|décliné|incliné)/i, cat: "push_horizontal" },
-  { rx: /(ohp|overhead|militaire|shoulder\s*press|arnold)/i, cat: "push_vertical" },
+  {
+    rx: /(bench|développé\s*couché|décliné|incliné)/i,
+    cat: "push_horizontal",
+  },
+  {
+    rx: /(ohp|overhead|militaire|shoulder\s*press|arnold)/i,
+    cat: "push_vertical",
+  },
   { rx: /(push[-\s]?up|pompe)/i, cat: "pushup" },
   { rx: /(dip|dips)/i, cat: "dip" },
   { rx: /(fly|écarté|pec\s*deck)/i, cat: "fly" },
-  { rx: /(lateral\s*raise|élévation\s*latérale)/i, cat: "lateral_raise" },
-  { rx: /(front\s*raise|élévation\s*frontale)/i, cat: "front_raise" },
+  {
+    rx: /(lateral\s*raise|élévation\s*latérale)/i,
+    cat: "lateral_raise",
+  },
+  {
+    rx: /(front\s*raise|élévation\s*frontale)/i,
+    cat: "front_raise",
+  },
   { rx: /(rear\s*delt|oiseau|reverse\s*fly)/i, cat: "rear_delt" },
   { rx: /(curl|biceps)/i, cat: "biceps" },
-  { rx: /(triceps|pushdown|extension\s*triceps|kickback|overhead\s*extension)/i, cat: "triceps" },
-  { rx: /(plank|planche|side\s*plank|gainage\s*latéral|hollow)/i, cat: "core_plank" },
+  {
+    rx: /(triceps|pushdown|extension\s*triceps|kickback|overhead\s*extension)/i,
+    cat: "triceps",
+  },
+  {
+    rx: /(plank|planche|side\s*plank|gainage\s*latéral|hollow)/i,
+    cat: "core_plank",
+  },
   { rx: /(pallof|anti[-\s]?rotation|carry\s*offset)/i, cat: "core_anti_rotation" },
-  { rx: /(crunch|sit[-\s]?up|leg\s*raise|mountain\s*climber|russian\s*twist)/i, cat: "core_flexion" },
+  {
+    rx: /(crunch|sit[-\s]?up|leg\s*raise|mountain\s*climber|russian\s*twist)/i,
+    cat: "core_flexion",
+  },
   { rx: /(farmer|carry)/i, cat: "carry" },
   { rx: /(sled|prowler|traîneau)/i, cat: "sled" },
 ];
@@ -533,9 +684,16 @@ function makeCorrections(exo: string, lang: Lang = "fr") {
   ) {
     tips.push(pick(upperStab));
   } else if (
-    ["squat", "lunge", "hinge", "hipthrust", "legpress", "quad_iso", "ham_iso", "calf"].includes(
-      cat
-    )
+    [
+      "squat",
+      "lunge",
+      "hinge",
+      "hipthrust",
+      "legpress",
+      "quad_iso",
+      "ham_iso",
+      "calf",
+    ].includes(cat)
   ) {
     tips.push(pick(lowerStab));
   } else {
@@ -602,7 +760,6 @@ function CoachAnalyzer() {
   const [file, setFile] = useState<File | null>(null);
   const [feeling, setFeeling] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [showAdOverlay, setShowAdOverlay] = useState(false);
   const [analysis, setAnalysis] = useState<AIAnalysis | null>(null);
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState<string>("");
@@ -627,16 +784,6 @@ function CoachAnalyzer() {
     );
     return () => clearInterval(id);
   }, [cooldown]);
-
-  // 👉 Affiche la pub plein écran pendant quelques secondes
-  useEffect(() => {
-    if (!isAnalyzing) return;
-    setShowAdOverlay(true);
-    const timer = setTimeout(() => {
-      setShowAdOverlay(false);
-    }, 5000); // durée de la pub (ms)
-    return () => clearTimeout(timer);
-  }, [isAnalyzing]);
 
   const handleUpload = (f: File) => {
     const url = URL.createObjectURL(f);
@@ -686,7 +833,8 @@ function CoachAnalyzer() {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ filename: f.name }),
     });
-    if (!r.ok) throw new Error(`sign-upload: HTTP ${r.status} ${await r.text()}`);
+    if (!r.ok)
+      throw new Error(`sign-upload: HTTP ${r.status} ${await r.text()}`);
     const { signedUrl, path } = await r.json();
 
     const put = await fetch(signedUrl, {
@@ -955,6 +1103,33 @@ function CoachAnalyzer() {
   const { issuesLine, correctionsLine } = faultsToLines(analysis);
   const [muscleOpen, setMuscleOpen] = useState<string | null>(null);
 
+  /* ======= PUB INTERSTITIELLE : état & déclenchement ======= */
+  const [showAd, setShowAd] = useState(false);
+  const pendingExerciseRef = useRef<string | undefined>(undefined);
+
+  // Charger l'annonce quand l'overlay s'affiche
+  useEffect(() => {
+    if (!showAd) return;
+    try {
+      (window.adsbygoogle = window.adsbygoogle || []).push({});
+    } catch (e) {
+      console.warn("Adsense error", e);
+    }
+  }, [showAd]);
+
+  const startAnalyzeWithAd = (userExercise?: string) => {
+    if (!file || isAnalyzing || cooldown > 0) return;
+    pendingExerciseRef.current = userExercise;
+    setShowAd(true);
+  };
+
+  const handleAdClose = async () => {
+    const ex = pendingExerciseRef.current;
+    pendingExerciseRef.current = undefined;
+    setShowAd(false);
+    await onAnalyze(ex);
+  };
+
   /* ====== LAYOUT : 3 cartes alignées, même taille ====== */
   const gridStyle: CSSProperties = {
     display: "grid",
@@ -978,18 +1153,6 @@ function CoachAnalyzer() {
 
   return (
     <>
-      {/* 👇 Overlay pub PLEIN ÉCRAN pendant l’analyse */}
-      {showAdOverlay && (
-        <div className="fixed inset-0 z-50 bg-white flex items-center justify-center">
-          <div className="w-full h-full flex items-center justify-center">
-            <AdBanner
-              slot="REPLACE_WITH_YOUR_SLOT_ID" // 👉 mets ici ton vrai data-ad-slot
-              className="w-full h-full"
-            />
-          </div>
-        </div>
-      )}
-
       <div style={gridStyle}>
         {/* 1. Import / Enregistrement */}
         <article className="card" style={cardStyle}>
@@ -1117,7 +1280,7 @@ function CoachAnalyzer() {
             <button
               className="btn btn-dash"
               disabled={!blobUrl || isAnalyzing || cooldown > 0}
-              onClick={() => onAnalyze()}
+              onClick={() => startAnalyzeWithAd()}
               type="button"
             >
               {isAnalyzing ? <Spinner className="mr-2" /> : "✨"}{" "}
@@ -1127,10 +1290,8 @@ function CoachAnalyzer() {
                     "Analyse en cours"
                   )
                 : cooldown > 0
-                ? t(
-                    "videoCoach.card.feeling.btnCooldown",
-                    "Patiente "
-                  ) + `${cooldown}s`
+                ? t("videoCoach.card.feeling.btnCooldown", "Patiente ") +
+                  `${cooldown}s`
                 : t(
                     "videoCoach.card.feeling.btnLaunch",
                     "Lancer l'analyse IA"
@@ -1232,10 +1393,7 @@ function CoachAnalyzer() {
                     fontWeight: 500,
                   }}
                 >
-                  {t(
-                    "videoCoach.card.summary.gate.other",
-                    "Autre"
-                  )}
+                  {t("videoCoach.card.summary.gate.other", "Autre")}
                 </button>
               </div>
 
@@ -1362,10 +1520,7 @@ function CoachAnalyzer() {
                     ))}
                   </div>
                 ) : (
-                  <p
-                    className="text-xs"
-                    style={{ color: "#6b7280" }}
-                  >
+                  <p className="text-xs" style={{ color: "#6b7280" }}>
                     {t(
                       "videoCoach.card.summary.musclesEmpty",
                       "— non détecté —"
@@ -1416,10 +1571,7 @@ function CoachAnalyzer() {
                     className="text-sm"
                   >
                     {analysis.extras.map((x, i) => (
-                      <li
-                        key={i}
-                        style={{ listStyle: "disc" }}
-                      >
+                      <li key={i} style={{ listStyle: "disc" }}>
                         {x}
                       </li>
                     ))}
@@ -1437,6 +1589,37 @@ function CoachAnalyzer() {
           muscleName={muscleOpen}
           onClose={() => setMuscleOpen(null)}
         />
+      )}
+
+      {/* ✅ OVERLAY PUB PLEIN ÉCRAN */}
+      {showAd && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-[90vw] p-4">
+            <p className="text-sm text-gray-700 mb-3 text-center">
+              Cette analyse est financée par la publicité. Merci pour ton
+              soutien 🙏
+            </p>
+
+            <div className="mb-3">
+              <ins
+                className="adsbygoogle"
+                style={{ display: "block" }}
+                data-ad-client="ca-pub-6468882840325295"
+                data-ad-slot="1234567890" // ⬅️ REMPLACE ICI PAR TON VRAI SLOT
+                data-ad-format="auto"
+                data-full-width-responsive="true"
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={handleAdClose}
+              className="mt-2 w-full rounded-xl border border-neutral-900 bg-neutral-900 px-4 py-2 text-sm font-semibold text-white"
+            >
+              Continuer vers l’analyse
+            </button>
+          </div>
+        </div>
       )}
     </>
   );
@@ -1826,7 +2009,7 @@ function seek(video: HTMLVideoElement, time: number) {
 function bestFit(w: number, h: number, maxW: number, maxH: number) {
   if (!w || !h) return { width: maxW, height: maxH };
   const r = Math.min(maxW / w, maxH / h);
-  return { width: Math.round(w * r), height: Math.round(h * r);
+  return { width: Math.round(w * r), height: Math.round(h * r) };
 }
 async function makeMosaic(
   images: string[],
@@ -1979,10 +2162,7 @@ function MuscleViewer({
           </button>
         </div>
 
-        <p
-          className="text-xs"
-          style={{ color: "#6b7280", marginTop: 6 }}
-        >
+        <p className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>
           {t(
             "videoCoach.muscleViewer.subtitle",
             "Silhouette simplifiée — aucune zone cliquable, seules les zones sélectionnées sont mises en surbrillance."
@@ -2303,4 +2483,3 @@ function BodyMapHuman({ highlightKeys }: { highlightKeys: string[] }) {
     </div>
   );
 }
-
