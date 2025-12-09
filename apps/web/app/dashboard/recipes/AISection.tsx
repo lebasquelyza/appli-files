@@ -46,7 +46,7 @@ function readSavedClient(): SavedItem[] {
     const all = document.cookie.split("; ").filter(Boolean);
     const entry = all.find((c) => c.startsWith("saved_recipes_v1="));
     if (!entry) return [];
-    const raw = entry.split("=", 2)[1] || "[]"; // JSON brut, pas de decodeURIComponent
+    const raw = entry.split("=", 2)[1] || "[]"; // JSON brut
     const arr = JSON.parse(raw);
     return Array.isArray(arr)
       ? arr.filter(
@@ -92,6 +92,14 @@ export function AIExtraSection({
   const allergensKey = allergens.join(",");
   const dislikesKey = dislikes.join(",");
 
+  // Y a-t-il AU MOINS un filtre/contrainte ?
+  const hasFilters =
+    (typeof kcal === "number" && !Number.isNaN(kcal) && kcal > 0) ||
+    (typeof kcalMin === "number" && !Number.isNaN(kcalMin) && kcalMin > 0) ||
+    (typeof kcalMax === "number" && !Number.isNaN(kcalMax) && kcalMax > 0) ||
+    allergens.length > 0 ||
+    dislikes.length > 0;
+
   // Initialisation des recettes enregistrées depuis le cookie
   useEffect(() => {
     const saved = readSavedClient();
@@ -107,18 +115,26 @@ export function AIExtraSection({
       setRecipes([]);
 
       try {
+        // Si pas de filtres du tout, on envoie un rnd pour forcer de la variété côté IA
+        const rnd = hasFilters ? undefined : Date.now();
+
+        const payload: any = {
+          kind,
+          kcal,
+          kcalMin,
+          kcalMax,
+          allergens,
+          dislikes,
+          count: 3, // léger pour éviter les timeout
+        };
+        if (rnd !== undefined) {
+          payload.rnd = rnd;
+        }
+
         const res = await fetch("/api/recipes/ai", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            kind,
-            kcal,
-            kcalMin,
-            kcalMax,
-            allergens,
-            dislikes,
-            count: 3, // ⬅️ léger pour éviter les timeout
-          }),
+          body: JSON.stringify(payload),
         });
 
         if (!res.ok) {
@@ -175,7 +191,16 @@ export function AIExtraSection({
     return () => {
       cancelled = true;
     };
-  }, [kind, kcal, kcalMin, kcalMax, allergensKey, dislikesKey, t]);
+  }, [
+    kind,
+    kcal,
+    kcalMin,
+    kcalMax,
+    allergensKey,
+    dislikesKey,
+    hasFilters,
+    t,
+  ]);
 
   const title = t("recipes.aiSection.title") || "Suggestion";
   const subtitle =
@@ -191,7 +216,7 @@ export function AIExtraSection({
         {
           id: r.id,
           title: r.title,
-          aiPayload: r, // ⬅️ on stocke la recette IA complète
+          aiPayload: r, // on stocke la recette IA complète
         },
       ];
       writeSavedClient(next);
