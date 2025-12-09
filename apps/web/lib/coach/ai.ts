@@ -82,7 +82,7 @@ function parseCSV(text: string): string[][] {
 
   function pushCell() {
     cur.push(cell);
-  cell = "";
+    cell = "";
   }
   function pushRow() {
     pushCell();
@@ -302,44 +302,42 @@ export async function getAnswersForEmail(
     (header[idx.email] || "").toString().toLowerCase() === "adresse email";
   const start = hasHeader ? 1 : 0;
 
-  let latest: { row: string[]; ts: number; i: number } | null = null;
-
-  for (let i = start; i < rows.length; i++) {
+  // 🔥 NOUVELLE LOGIQUE SIMPLIFIÉE :
+  // On parcourt le CSV du bas vers le haut et on prend
+  // la PREMIÈRE ligne qui matche l'email -> donc la DERNIÈRE réponse.
+  let latestRow: string[] | null = null;
+  for (let i = rows.length - 1; i >= start; i--) {
     const row = rows[i];
     if (!row || !row.length) continue;
     const rowMail = String(row[idx.email] || "").trim().toLowerCase();
-    if (rowMail !== emailLc) continue;
-
-    const tsNum = parseTimestampLoose(row[idx.ts]);
-
-    // Règle: timestamp le plus récent, et si égalité → la ligne la plus basse (i le plus grand)
-    if (!latest || tsNum > latest.ts || (tsNum === latest.ts && i > latest.i)) {
-      latest = { row, ts: tsNum, i };
+    if (rowMail === emailLc) {
+      latestRow = row;
+      break;
     }
   }
 
-  if (!latest) return null;
+  if (!latestRow) return null;
 
   const obj: Record<string, any> = {};
   if (hasHeader) {
-    for (let c = 0; c < latest.row.length; c++) {
+    for (let c = 0; c < latestRow.length; c++) {
       const key = String(header[c] || `col_${c}`).trim();
-      obj[key] = latest.row[c];
+      obj[key] = latestRow[c];
     }
   } else {
     // ⚙️ Fallback sans en-têtes : on expose B..K pour nos usages
-    obj["col_B"] = latest.row[1] || ""; // Prenom
-    obj["col_C"] = latest.row[2] || ""; // Age
-    obj["col_D"] = latest.row[3] || ""; // Niveau
-    obj["col_E"] = latest.row[4] || ""; // Matériel (none/limited/full)
-    obj["col_F"] = latest.row[5] || ""; // Durée (min)
-    obj["col_G"] = latest.row[6] || ""; // Objectif (libellé)
-    obj["col_H"] = latest.row[7] || ""; // Dispo (jours / semaine)
-    obj["col_I"] = latest.row[8] || ""; // Ancienne: Jours / semaine
-    obj["col_J"] = latest.row[9] || ""; // Équipements détaillés (liste)
-    obj["col_K"] = latest.row[10] || ""; // Email (si c'est là)
-    obj["email"] = latest.row[idx.email] || emailLc;
-    obj["ts"] = latest.row[idx.ts] || "";
+    obj["col_B"] = latestRow[1] || ""; // Prenom
+    obj["col_C"] = latestRow[2] || ""; // Age
+    obj["col_D"] = latestRow[3] || ""; // Niveau
+    obj["col_E"] = latestRow[4] || ""; // Matériel (none/limited/full)
+    obj["col_F"] = latestRow[5] || ""; // Durée (min)
+    obj["col_G"] = latestRow[6] || ""; // Objectif (libellé)
+    obj["col_H"] = latestRow[7] || ""; // Dispo (jours / semaine)
+    obj["col_I"] = latestRow[8] || ""; // Ancienne: Jours / semaine
+    obj["col_J"] = latestRow[9] || ""; // Équipements détaillés (liste)
+    obj["col_K"] = latestRow[10] || ""; // Email (si c'est là)
+    obj["email"] = latestRow[idx.email] || emailLc;
+    obj["ts"] = latestRow[idx.ts] || "";
   }
 
   obj["email"] = obj["email"] || emailLc;
@@ -645,3 +643,4 @@ export function generateProgrammeFromAnswers(
 export async function getAiSessions(_email: string): Promise<AiSession[]> {
   return [];
 }
+
