@@ -100,12 +100,6 @@ export function AIExtraSection({
     allergens.length > 0 ||
     dislikes.length > 0;
 
-  // Initialisation des recettes enregistrées depuis le cookie
-  useEffect(() => {
-    const saved = readSavedClient();
-    setSavedIds(saved.map((s) => s.id));
-  }, []);
-
   useEffect(() => {
     let cancelled = false;
 
@@ -114,8 +108,19 @@ export function AIExtraSection({
       setError(null);
       setRecipes([]);
 
+      // 1) On lit les recettes enregistrées depuis le cookie immédiatement
+      const saved = readSavedClient();
+      const savedIdsLocal = saved.map((s) => s.id);
+      const savedTitlesLC = saved
+        .map((s) => s.title)
+        .filter(Boolean)
+        .map((title) => title.trim().toLowerCase());
+
+      // on met à jour l'état pour les boutons "Enregistrer / Retirer"
+      setSavedIds(savedIdsLocal);
+
       try {
-        // Si pas de filtres du tout, on envoie un rnd pour forcer de la variété côté IA
+        // 2) Si pas de filtres du tout, on envoie un rnd pour forcer de la variété côté IA
         const rnd = hasFilters ? undefined : Date.now();
 
         const payload: any = {
@@ -172,8 +177,20 @@ export function AIExtraSection({
         const arr: Recipe[] = Array.isArray(data?.recipes)
           ? data.recipes
           : [];
+
+        // 3) On filtre les suggestions IA pour NE PAS reproposer les recettes déjà enregistrées
+        //    (on se base sur le titre en minuscules)
+        let finalRecipes = arr;
+        if (savedTitlesLC.length > 0) {
+          const savedSet = new Set(savedTitlesLC);
+          finalRecipes = arr.filter((r) => {
+            const title = (r.title || "").trim().toLowerCase();
+            return title && !savedSet.has(title);
+          });
+        }
+
         if (!cancelled) {
-          setRecipes(arr);
+          setRecipes(finalRecipes);
           setLoading(false);
         }
       } catch (e) {
