@@ -28,7 +28,7 @@ type Props = {
   dislikes: string[];
 };
 
-type SavedItem = { id: string; title: string };
+type SavedItem = { id: string; title: string; aiPayload?: Recipe };
 
 function encodeB64UrlJsonBrowser(data: any): string {
   const json = JSON.stringify(data);
@@ -46,7 +46,7 @@ function readSavedClient(): SavedItem[] {
     const all = document.cookie.split("; ").filter(Boolean);
     const entry = all.find((c) => c.startsWith("saved_recipes_v1="));
     if (!entry) return [];
-    const raw = decodeURIComponent(entry.split("=", 2)[1] || "[]");
+    const raw = entry.split("=", 2)[1] || "[]"; // JSON brut, pas de decodeURIComponent
     const arr = JSON.parse(raw);
     return Array.isArray(arr)
       ? arr.filter(
@@ -63,10 +63,9 @@ function readSavedClient(): SavedItem[] {
 function writeSavedClient(list: SavedItem[]) {
   if (typeof document === "undefined") return;
   try {
-    const raw = JSON.stringify(list);
-    const encoded = encodeURIComponent(raw);
+    const raw = JSON.stringify(list); // JSON brut, aligné avec le serveur
     const maxAge = 60 * 60 * 24 * 365; // 1 an
-    document.cookie = `saved_recipes_v1=${encoded}; path=/; max-age=${maxAge}; samesite=lax`;
+    document.cookie = `saved_recipes_v1=${raw}; path=/; max-age=${maxAge}; samesite=lax`;
   } catch {
     // silent
   }
@@ -183,11 +182,18 @@ export function AIExtraSection({
     t("recipes.aiSection.subtitle") ||
     "Généré en direct avec l'IA selon tes filtres";
 
-  /** Enregistrer une recette IA dans le cookie (comme les autres) */
+  /** Enregistrer une recette IA dans le cookie (avec la recette complète) */
   function handleSave(r: Recipe) {
     const current = readSavedClient();
     if (!current.some((x) => x.id === r.id)) {
-      const next = [...current, { id: r.id, title: r.title }];
+      const next: SavedItem[] = [
+        ...current,
+        {
+          id: r.id,
+          title: r.title,
+          aiPayload: r, // ⬅️ on stocke la recette IA complète
+        },
+      ];
       writeSavedClient(next);
       setSavedIds(next.map((s) => s.id));
     }
@@ -269,7 +275,6 @@ export function AIExtraSection({
                   >
                     {r.title}
                   </h3>
-                  {/* Badge IA supprimé */}
                 </div>
 
                 {r.subtitle && (
