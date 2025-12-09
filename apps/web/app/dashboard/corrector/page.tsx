@@ -1,3 +1,4 @@
+//apps/web/app/dashboard/corrector/page.tsx
 "use client";
 
 import {
@@ -8,6 +9,7 @@ import {
   type CSSProperties,
 } from "react";
 import { translations } from "@/app/i18n/translations";
+import { AdBanner } from "@/components/AdBanner";
 
 /* ===================== Types ===================== */
 interface AnalysisPoint {
@@ -600,6 +602,7 @@ function CoachAnalyzer() {
   const [file, setFile] = useState<File | null>(null);
   const [feeling, setFeeling] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [showAdOverlay, setShowAdOverlay] = useState(false);
   const [analysis, setAnalysis] = useState<AIAnalysis | null>(null);
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState<string>("");
@@ -624,6 +627,16 @@ function CoachAnalyzer() {
     );
     return () => clearInterval(id);
   }, [cooldown]);
+
+  // 👉 Affiche la pub plein écran pendant quelques secondes
+  useEffect(() => {
+    if (!isAnalyzing) return;
+    setShowAdOverlay(true);
+    const timer = setTimeout(() => {
+      setShowAdOverlay(false);
+    }, 5000); // durée de la pub (ms)
+    return () => clearTimeout(timer);
+  }, [isAnalyzing]);
 
   const handleUpload = (f: File) => {
     const url = URL.createObjectURL(f);
@@ -965,6 +978,18 @@ function CoachAnalyzer() {
 
   return (
     <>
+      {/* 👇 Overlay pub PLEIN ÉCRAN pendant l’analyse */}
+      {showAdOverlay && (
+        <div className="fixed inset-0 z-50 bg-white flex items-center justify-center">
+          <div className="w-full h-full flex items-center justify-center">
+            <AdBanner
+              slot="REPLACE_WITH_YOUR_SLOT_ID" // 👉 mets ici ton vrai data-ad-slot
+              className="w-full h-full"
+            />
+          </div>
+        </div>
+      )}
+
       <div style={gridStyle}>
         {/* 1. Import / Enregistrement */}
         <article className="card" style={cardStyle}>
@@ -1801,7 +1826,7 @@ function seek(video: HTMLVideoElement, time: number) {
 function bestFit(w: number, h: number, maxW: number, maxH: number) {
   if (!w || !h) return { width: maxW, height: maxH };
   const r = Math.min(maxW / w, maxH / h);
-  return { width: Math.round(w * r), height: Math.round(h * r) };
+  return { width: Math.round(w * r), height: Math.round(h * r);
 }
 async function makeMosaic(
   images: string[],
@@ -2278,3 +2303,4 @@ function BodyMapHuman({ highlightKeys }: { highlightKeys: string[] }) {
     </div>
   );
 }
+
