@@ -1,6 +1,7 @@
+// apps/web/app/dashboard/profile/GenerateClient.tsx
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import type { AiSession } from "../../../lib/coach/ai";
 import { useLanguage } from "@/components/LanguageProvider";
@@ -46,10 +47,8 @@ export default function GenerateClient({
     return fallback ?? path;
   };
 
-  // 🔥 ON NE PART JAMAIS DES initialSessions
-  const [sessions, setSessions] = useState<AiSession[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // ✅ On PART des séances calculées côté serveur (persistées en BDD)
+  const sessions = initialSessions || [];
 
   const savedSet = useMemo(
     () => parseSet(searchParams.get("saved")),
@@ -60,44 +59,15 @@ export default function GenerateClient({
     [searchParams]
   );
 
-  /* ======== GÉNÉRATION ======== */
-  async function handleGenerate() {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const res = await fetch(
-        `/api/programme?email=${encodeURIComponent(email)}`,
-        { cache: "no-store" }
-      );
-      const data = await res.json();
-
-      if (!res.ok || !data.sessions) {
-        throw new Error(
-          data.error ||
-            tf(
-              "settings.profile.generate.error.generic",
-              lang === "fr"
-                ? "Erreur de génération du programme."
-                : "Error while generating your program."
-            )
-        );
-      }
-
-      // 🔥 On prend les titres EXACTS de l’IA (FR / EN)
-      setSessions(data.sessions as AiSession[]);
-    } catch (e: any) {
-      setError(
-        e?.message ||
-          tf(
-            "settings.profile.generate.error.unknown",
-            lang === "fr" ? "Erreur inconnue." : "Unknown error."
-          )
-      );
-    } finally {
-      setLoading(false);
-    }
-  }
+  /* ======== GÉNÉRATION (via serveur) ======== */
+  // On ne fait PLUS de fetch /api/programme ici.
+  // On déclenche juste une navigation avec ?generate=1
+  // → c'est page.tsx qui décide de régénérer ou non (selon le questionnaire).
+  const handleGenerate = () => {
+    const sp = new URLSearchParams(searchParams?.toString() || "");
+    sp.set("generate", "1"); // indique au serveur "on veut régénérer"
+    router.push(`${pathname}?${sp.toString()}`);
+  };
 
   /* ----- Mise à jour URL saved/later ----- */
   const navigateWith = (nextSaved: Set<string>, nextLater: Set<string>) => {
@@ -151,10 +121,9 @@ export default function GenerateClient({
           )}
         </h2>
 
-        {/* Bouton Générer */}
+        {/* Bouton Générer / Régénérer (via serveur) */}
         <button
           onClick={handleGenerate}
-          disabled={loading}
           className="btn"
           style={{
             background: "#111827",
@@ -163,78 +132,23 @@ export default function GenerateClient({
             borderRadius: 8,
             fontSize: 12,
             fontWeight: 600,
-            opacity: loading ? 0.7 : 1,
             whiteSpace: "nowrap",
           }}
         >
-          {loading
-            ? tf(
-                "settings.profile.generate.button.generating",
-                lang === "fr" ? "⏳ Génération…" : "⏳ Generating…"
-              )
-            : tf(
-                "settings.profile.generate.button.generate",
-                lang === "fr" ? "⚙️ Générer" : "⚙️ Generate"
-              )}
+          {tf(
+            "settings.profile.generate.button.generate",
+            lang === "fr" ? "⚙️ Régénérer" : "⚙️ Regenerate"
+          )}
         </button>
       </div>
 
-      {/* ERREURS */}
-      {error && (
-        <div
-          style={{
-            background: "rgba(239,68,68,0.08)",
-            border: "1px solid rgba(239,68,68,0.3)",
-            padding: "8px 10px",
-            borderRadius: 6,
-            color: "#b91c1c",
-            marginBottom: 8,
-            fontSize: 13,
-          }}
-        >
-          ⚠️ {error}
-        </div>
-      )}
-
-      {/* MESSAGE AVANT GÉNÉRATION */}
-      {!loading && sessions.length === 0 && (
-        <div
-          className="card"
-          style={{
-            padding: "14px 16px",
-            border: "1px solid #e5e7eb",
-            background: "#f9fafb",
-            borderRadius: 8,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 12,
-            marginTop: 10,
-          }}
-        >
-          <div className="text-sm" style={{ color: "#4b5563" }}>
-            {lang === "fr"
-              ? "🔧 Files doit créer ton programme personnalisé. Clique sur « Générer » pour afficher tes séances."
-              : "🔧 Files needs to create your personalized program. Click “Generate” to display your sessions."}
-          </div>
-
-          <button
-            onClick={handleGenerate}
-            disabled={loading}
-            className="inline-flex items-center rounded-md border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-sm font-semibold text-white"
-          >
-            {lang === "fr" ? "Générer" : "Generate"}
-          </button>
-        </div>
-      )}
-
-      {/* LISTE DES SÉANCES APRÈS GÉNÉRATION */}
+      {/* LISTE DES SÉANCES (toujours celles venant du serveur) */}
       {sessions && sessions.length > 0 && (
         <ul className="space-y-2 list-none pl-0">
           {sessions.map((s, i) => {
             const key = sessionKey(s, i);
             const baseHref = `/dashboard/seance/${encodeURIComponent(
-              s.id
+              s.id || key
             )}`;
             const href = linkQuery ? `${baseHref}?${linkQuery}` : baseHref;
 
@@ -246,19 +160,18 @@ export default function GenerateClient({
                   padding: 12,
                   border: "1px solid #e5e7eb",
                   borderRadius: 8,
-                  opacity: loading ? 0.8 : 1,
                 }}
               >
                 <div className="flex items-center justify-between gap-3">
                   {/* Zone cliquable */}
                   <div
                     onClick={() => router.push(href)}
-                    className={loading ? "cursor-not-allowed" : "cursor-pointer"}
+                    className="cursor-pointer"
                     style={{ minWidth: 0 }}
                   >
                     {/* Titre IA EXACT (FR ou EN) */}
                     <div className="font-medium text-sm truncate">
-                      {s.title}
+                      {s.title || (lang === "fr" ? "Séance" : "Session")}
                     </div>
 
                     <div className="text-xs text-gray-500">
@@ -275,7 +188,6 @@ export default function GenerateClient({
                         e.stopPropagation();
                         markDone(key);
                       }}
-                      disabled={loading}
                     >
                       {lang === "fr" ? "Enregistrer" : "Save"}
                     </button>
@@ -286,6 +198,10 @@ export default function GenerateClient({
           })}
         </ul>
       )}
+
+      {/* (normalement, GenerateClient est rendu seulement si hasGenerate = true,
+          donc sessions.length > 0 ; sinon, la carte "Générer mon programme"
+          est gérée côté ProfileClient.) */}
     </section>
   );
 }
