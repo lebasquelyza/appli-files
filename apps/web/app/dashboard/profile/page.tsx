@@ -377,9 +377,14 @@ async function loadProfile(
 
 /* Loader — Programme IA côté serveur (liste) */
 /**
- * forceNew = true  → on force une nouvelle génération via l'IA
+ * forceNew = true  → le client a cliqué sur "Régénérer"
+ *                    → on compare les réponses au questionnaire
  * forceNew = false → on essaie d'abord de reprendre le dernier programme
  *                    depuis programme_insights. Si rien n'existe, on génère.
+ *
+ * Comportement souhaité :
+ * - Si les réponses n'ont pas changé → on REUTILISE les anciennes séances
+ * - Si les réponses ont changé       → on REGÉNÈRE un nouveau programme
  */
 async function loadInitialSessions(
   email: string,
@@ -396,35 +401,68 @@ async function loadInitialSessions(
 
   try {
     let baseSessions: AiSessionT[] = [];
-
     const supabaseAdmin = await getSupabaseAdmin();
+    const normalizedEmail = (email || "").trim().toLowerCase();
 
-    // 1) On tente d'abord de récupérer le DERNIER programme déjà généré,
-    //    sauf si on force explicitement une nouvelle génération.
-    if (supabaseAdmin && !forceNew) {
-      const normalizedEmail = (email || "").trim().toLowerCase();
+    // ✅ On récupère les réponses ACTUELLES du questionnaire (Sheet)
+    let currentAnswers: any = null;
+    try {
+      currentAnswers = await getAnswersForEmail(normalizedEmail, { fresh: true });
+    } catch {
+      // si erreur, currentAnswers restera null
+    }
+
+    let mustRegenerate = false;
+
+    if (supabaseAdmin) {
+      // 🔎 On récupère le DERNIER programme déjà généré + les réponses utilisées
+      let lastInsight: { sessions: AiSessionT[]; answers: any } | null = null;
       try {
         const { data, error } = await supabaseAdmin
           .from("programme_insights")
-          .select("sessions")
+          .select("sessions, answers")
           .eq("email", normalizedEmail)
           .eq("questionnaire_key", "onboarding_v1")
           .order("created_at", { ascending: false })
           .limit(1);
 
-        if (!error && data && data.length && data[0]?.sessions) {
-          baseSessions = data[0].sessions as AiSessionT[];
+        if (!error && data && data.length) {
+          lastInsight = data[0] as any;
         }
       } catch {
-        // si erreur, on tombera sur la régénération plus bas
+        // si erreur, on régénèrera plus bas
       }
+
+      if (!lastInsight) {
+        // 🧱 Aucun programme existant → on doit générer
+        mustRegenerate = true;
+      } else if (forceNew) {
+        // 👆 Le client a cliqué sur "Régénérer" → on compare les réponses
+        const lastAnswersStr = JSON.stringify(lastInsight.answers || {});
+        const currentAnswersStr = JSON.stringify(currentAnswers || {});
+        if (lastAnswersStr !== currentAnswersStr) {
+          // ✨ Réponses du questionnaire modifiées → on régénère
+          mustRegenerate = true;
+        } else {
+          // ✅ Réponses identiques → on garde les mêmes séances
+          baseSessions = (lastInsight.sessions || []) as AiSessionT[];
+        }
+      } else {
+        // 🧊 Pas de clic sur "Régénérer" → on garde le dernier programme
+        baseSessions = (lastInsight.sessions || []) as AiSessionT[];
+      }
+    } else {
+      // Pas de supabase admin → on sera obligé de régénérer
+      mustRegenerate = true;
     }
 
-    // 2) Si aucun programme trouvé, ou si forceNew = true, on génère via l’IA
-    if (!baseSessions.length) {
+    // 2) Si aucun programme trouvé OU mustRegenerate = true → génération via IA
+    if (!baseSessions.length || mustRegenerate) {
       const { sessions } = await planProgrammeFromEmail(email, { lang });
       baseSessions = sessions || [];
-      await logProgrammeInsightToSupabase(email, null, baseSessions);
+
+      // 📝 On logue réponses + séances (et pas answers = null)
+      await logProgrammeInsightToSupabase(email, currentAnswers, baseSessions);
     }
 
     // 3) Post-traitement existant (équipement, au moins 4 exos, etc.)
@@ -438,8 +476,8 @@ async function loadInitialSessions(
       return { ...s, exercises: exs };
     });
 
-    // log (ça doublonne un peu mais on garde ta logique)
-    await logProgrammeInsightToSupabase(email, null, finalSessions);
+    // (optionnel) On logue aussi la version finale post-traitée
+    await logProgrammeInsightToSupabase(email, currentAnswers, finalSessions);
 
     return finalSessions;
   } catch {
@@ -480,7 +518,7 @@ export default async function Page({
   const { emailForDisplay, profile, debugInfo, forceBlank } =
     await loadProfile(searchParams);
 
-  // flag dans l'URL : ?generate=1 → on force une nouvelle génération
+  // flag dans l'URL : ?generate=1 → le client a cliqué sur "Régénérer"
   const generateParam =
     String(searchParams?.generate || "").toLowerCase() === "1";
 
@@ -488,7 +526,7 @@ export default async function Page({
   const equipMode: "full" | "none" = equipParam === "none" ? "none" : "full";
 
   // On charge TOUJOURS les séances :
-  // - si generateParam = true → on force une nouvelle génération
+  // - si generateParam = true → on décide de régénérer ou non selon les réponses
   // - sinon → on essaie d'abord de reprendre le dernier programme existant
   const initialSessions = await loadInitialSessions(
     emailForDisplay,
@@ -559,4 +597,3 @@ export default async function Page({
     />
   );
 }
-
