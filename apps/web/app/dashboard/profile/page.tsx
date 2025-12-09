@@ -319,6 +319,10 @@ async function saveListsToSupabase(
 }
 
 /* Loaders — Mes infos */
+/**
+ * Ici on veut TOUJOURS les réponses les plus récentes du client
+ * → on lit directement le questionnaire (Sheet) avec fresh: true.
+ */
 async function loadProfile(
   searchParams?: Record<string, string | string[] | undefined>
 ) {
@@ -357,29 +361,36 @@ async function loadProfile(
   }
 
   try {
-    const answers = await getAnswersForEmail(emailForDisplay, { fresh: true });
+    const normalizedEmail = emailForDisplay.trim().toLowerCase();
+
+    // 🔥 On lit TOUJOURS les réponses les plus récentes depuis le questionnaire
+    const answers = await getAnswersForEmail(normalizedEmail, { fresh: true });
+
     if (answers) {
       const built = buildProfileFromAnswers(answers);
       profile = { ...built, email: built.email || emailForDisplay };
       debugInfo.sheetHit = true;
+      debugInfo.reason =
+        "Profil reconstruit à partir des dernières réponses du questionnaire";
     } else {
       profile = { email: emailForDisplay };
-      debugInfo.reason = "Aucune réponse trouvée dans le Sheet";
+      debugInfo.reason = "Aucune réponse trouvée dans le questionnaire";
     }
   } catch (e: any) {
     profile = { email: emailForDisplay };
-    debugInfo.reason = `Erreur lecture Sheet: ${String(e?.message || e)}`;
+    debugInfo.reason = `Erreur lecture questionnaire: ${String(
+      e?.message || e
+    )}`;
   }
 
   profile.email = emailForDisplay;
   return { emailForDisplay, profile, debugInfo, forceBlank };
 }
 
-/* ===== Normalisation des réponses pour comparaison ===== */
+/* ===== Normalisation des réponses pour comparaison (séances) ===== */
 function normalizeAnswersForComparison(raw: any) {
   if (!raw || typeof raw !== "object") return raw;
 
-  // On enlève quelques champs "meta" qui peuvent changer d'un fetch à l'autre
   const {
     meta,
     metadata,
@@ -457,8 +468,7 @@ async function loadInitialSessions(
       mustRegenerate = true;
     }
 
-    // On ne va comparer les réponses que si l'utilisateur a explicitement
-    // cliqué sur "Régénérer" (forceNew = true).
+    // On ne compare les réponses que si l'utilisateur clique sur "Régénérer"
     let currentAnswers: any = null;
     if (forceNew) {
       try {
