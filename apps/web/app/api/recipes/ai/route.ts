@@ -33,6 +33,7 @@ export async function POST(req: Request) {
       dislikes = [],
       count = 3,
       kind = "meals",
+      rnd,
     } = body as {
       plan?: Plan;
       kcal?: number;
@@ -42,6 +43,7 @@ export async function POST(req: Request) {
       dislikes?: string[];
       count?: number;
       kind?: "meals" | "shakes";
+      rnd?: number; // ⬅️ ajouté : nombre pour randomiser
     };
 
     const input: GenerateRecipesInput = {
@@ -53,6 +55,8 @@ export async function POST(req: Request) {
       allergens,
       dislikes,
       count: count ?? 3,
+      // ⬅️ on passe rnd au moteur IA (à toi de l'utiliser dans lib/recipes/ai)
+      rnd,
     };
 
     const { recipes } = await generateRecipesFromFilters(input);
@@ -67,3 +71,4 @@ export async function POST(req: Request) {
     );
   }
 }
+
