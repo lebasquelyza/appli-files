@@ -440,8 +440,9 @@ async function loadInitialSessions(
           .limit(1);
 
         if (!error && data && data.length) {
-          lastInsight = data[0] as any;
-          baseSessions = (lastInsight.sessions || []) as AiSessionT[];
+          const row = data[0] as any;
+          lastInsight = row;
+          baseSessions = (row.sessions || []) as AiSessionT[];
         }
       } catch {
         // si erreur, on tentera une génération
