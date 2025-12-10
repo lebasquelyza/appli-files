@@ -318,7 +318,7 @@ export default function HomePage() {
             {t("home.hero.titleLine2")}
           </h1>
 
-          {/* Switch FR / EN */}
+        {/* Switch FR / EN */}
           <div
             style={{
               display: "flex",
@@ -363,7 +363,7 @@ export default function HomePage() {
               EN
             </button>
           </div>
-        </header">
+        </header>
 
         <div className="mt-10 sm:mt-12" aria-hidden="true" />
 
@@ -487,7 +487,7 @@ export default function HomePage() {
                     onChange={(e) => setRememberMe(e.target.checked)}
                     disabled={!inputsReady}
                   />
-                  <span>{t("home.login.remember.me")}</span>
+                  <span>{t("home.login.rememberMe")}</span>
                 </label>
               </div>
 
@@ -502,11 +502,10 @@ export default function HomePage() {
                   : t("home.login.submitIdle")}
               </button>
 
-              {/* Mot de passe oublié plus petit */}
               <button
                 type="button"
                 onClick={handleForgotPassword}
-                className="mt-2 text-xs text-gray-500 hover:underline"
+                className="block w-full text-center text-sm text-gray-600 hover:underline"
                 disabled={!inputsReady}
               >
                 {t("home.login.forgotPassword")}
