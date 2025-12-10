@@ -1288,7 +1288,7 @@ function CoachAnalyzer() {
               style={{
                 background: "#ffffff",
                 color: "#111827",
-                border: "1px solid "#d1d5db",
+                border: "1px solid #d1d5db",
                 fontWeight: 500,
               }}
               disabled={isAnalyzing}
@@ -2165,17 +2165,11 @@ function MuscleViewer({
 /** Silhouette humaine (face/dos) grise, purement décorative : pointer-events désactivés. */
 function BodyMapHuman({ highlightKeys }: { highlightKeys: string[] }) {
   const H = new Set(highlightKeys);
-  const on = (id: string) => H.has(id);
-
-  const show = (active: boolean) => ({
-    display: active ? ("block" as const) : ("none" as const),
-    fill: "#22c55e",
-    opacity: 0.9,
-    transition: "opacity .15s ease",
-    pointerEvents: "none" as const,
-  });
+  const hasHighlight = H.size > 0;
 
   const baseFill = "#d1d5db";
+  const highlightFill = "#22c55e";
+
   const panelStyle: CSSProperties = {
     width: "100%",
     height: "auto",
@@ -2202,5 +2196,114 @@ function BodyMapHuman({ highlightKeys }: { highlightKeys: string[] }) {
         style={panelStyle}
         aria-label="silhouette face"
       >
-        <path
-          d="M90 18c-10 0-18 8-18 18v10c0 6 4 11 10 13
+        {/* Corps simplifié */}
+        <g fill={baseFill}>
+          <circle cx="90" cy="40" r="24" />
+          <rect x="70" y="64" width="40" height="80" rx="18" />
+          <rect x="55" y="70" width="15" height="70" rx="8" />
+          <rect x="110" y="70" width="15" height="70" rx="8" />
+          <rect x="72" y="144" width="16" height="70" rx="10" />
+          <rect x="92" y="144" width="16" height="70" rx="10" />
+          <rect x="72" y="214" width="16" height="70" rx="10" />
+          <rect x="92" y="214" width="16" height="70" rx="10" />
+        </g>
+
+        {/* Surbrillance si muscles "face" */}
+        {hasHighlight && (
+          <g fill={highlightFill} opacity={0.85}>
+            {/* Pecs / épaules / abdos / quads / mollets front */}
+            {[
+              "deltoid_l_f",
+              "deltoid_r_f",
+              "pecs_f",
+              "abs_f",
+              "obliques_l_f",
+              "obliques_r_f",
+              "biceps_l_f",
+              "biceps_r_f",
+              "forearm_l_f",
+              "forearm_r_f",
+              "quads_l_f",
+              "quads_r_f",
+              "calf_l_f",
+              "calf_r_f",
+            ].some((k) => H.has(k)) && (
+              <>
+                <rect x="70" y="72" width="40" height="28" rx="10" />
+                <rect x="76" y="102" width="28" height="32" rx="10" />
+                <rect x="76" y="144" width="12" height="55" rx="8" />
+                <rect x="92" y="144" width="12" height="55" rx="8" />
+                <rect x="76" y="214" width="12" height="55" rx="8" />
+                <rect x="92" y="214" width="12" height="55" rx="8" />
+              </>
+            )}
+          </g>
+        )}
+      </svg>
+
+      {/* DOS */}
+      <svg
+        viewBox="0 0 180 360"
+        style={panelStyle}
+        aria-label="silhouette dos"
+      >
+        {/* Corps simplifié */}
+        <g fill={baseFill}>
+          <circle cx="90" cy="40" r="24" />
+          <rect x="68" y="64" width="44" height="84" rx="20" />
+          <rect x="52" y="70" width="16" height="70" rx="8" />
+          <rect x="112" y="70" width="16" height="70" rx="8" />
+          <rect x="72" y="148" width="16" height="70" rx="10" />
+          <rect x="92" y="148" width="16" height="70" rx="10" />
+          <rect x="72" y="218" width="16" height="70" rx="10" />
+          <rect x="92" y="218" width="16" height="70" rx="10" />
+        </g>
+
+        {/* Surbrillance si muscles "dos" */}
+        {hasHighlight && (
+          <g fill={highlightFill} opacity={0.85}>
+            {/* traps / lats / triceps / glutes / hams / calves back */}
+            {[
+              "traps_b",
+              "lats_b",
+              "deltoid_l_b",
+              "deltoid_r_b",
+              "triceps_l_b",
+              "triceps_r_b",
+              "glutes_b",
+              "hams_l_b",
+              "hams_r_b",
+              "calf_l_b",
+              "calf_r_b",
+            ].some((k) => H.has(k)) && (
+              <>
+                <rect x="70" y="70" width="40" height="32" rx="10" />
+                <rect x="72" y="104" width="36" height="36" rx="12" />
+                <rect x="74" y="152" width="28" height="40" rx="10" />
+                <rect x="72" y="196" width="36" height="32" rx="12" />
+                <rect x="76" y="230" width="12" height="55" rx="8" />
+                <rect x="92" y="230" width="12" height="55" rx="8" />
+              </>
+            )}
+          </g>
+        )}
+      </svg>
+
+      {hasHighlight && (
+        <div
+          className="text-xs"
+          style={{
+            gridColumn: "1 / -1",
+            marginTop: 4,
+            color: "#6b7280",
+          }}
+        >
+          Zones actuellement mises en surbrillance (interne) :{" "}
+          <span style={{ wordBreak: "break-all" }}>
+            {Array.from(H).join(", ")}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
