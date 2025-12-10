@@ -363,7 +363,7 @@ export default function HomePage() {
               EN
             </button>
           </div>
-        </header>
+        </header">
 
         <div className="mt-10 sm:mt-12" aria-hidden="true" />
 
@@ -406,7 +406,7 @@ export default function HomePage() {
               type="button"
               onClick={openSignup}
               aria-expanded={showSignup}
-              aria.controls="signup-panel"
+              aria-controls="signup-panel"
               className={`${pillClass} transition hover:-translate-y-0.5 active:translate-y-0`}
               style={{
                 ...pillStyle,
