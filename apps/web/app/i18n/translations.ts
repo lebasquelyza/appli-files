@@ -30,6 +30,9 @@ export const translations = {
             "Identifiants invalides. Vérifie l’e-mail/mot de passe, ou confirme ton e-mail.",
           generic: "Impossible de se connecter",
         },
+        remember: {
+          me: "Se souvenir de moi",
+          },
       },
       signup: {
         emailLabel: "Adresse e-mail",
@@ -1252,6 +1255,9 @@ export const translations = {
           invalidCredentials:
             "Invalid credentials. Check your email/password or confirm your email.",
           generic: "Unable to sign in",
+        },
+        remember: {
+          me: "Remember me",
         },
       },
       signup: {
