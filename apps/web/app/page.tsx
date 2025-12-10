@@ -305,7 +305,7 @@ export default function HomePage() {
 
   return (
     <main className="hide-topbar-menu pt-10 sm:pt-12 pb-12">
-      <div className="container max-w-screen-lg mx-auto px-4">
+      <div className="container max-w-screen-lg mx.auto px-4">
         {/* Titre */}
         <header className="mb-0 flex items-start justify-between gap-4">
           <h1
@@ -425,7 +425,7 @@ export default function HomePage() {
           <div id="login-panel" className="max-w-md mx-auto">
             <form onSubmit={handleLogin} className="space-y-4">
               <div>
-                <label className="block text-sm sm:text-base font-medium mb-1">
+                <label className="block text.sm sm:text-base font-medium mb-1">
                   {t("home.login.emailLabel")}
                 </label>
                 <input
@@ -487,7 +487,7 @@ export default function HomePage() {
                     onChange={(e) => setRememberMe(e.target.checked)}
                     disabled={!inputsReady}
                   />
-                  <span>{t("home.login.rememberMe")}</span>
+                  <span>{t("home.login.remember.me")}</span>
                 </label>
               </div>
 
