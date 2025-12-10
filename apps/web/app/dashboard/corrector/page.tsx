@@ -155,11 +155,7 @@ const LEX_FR = {
     "omoplates basses/rétractées",
     "pack scapulaire",
   ],
-  avoidMomentum: [
-    "évite l’élan",
-    "pas d’à-coups",
-    "contrôle le mouvement",
-  ],
+  avoidMomentum: ["évite l’élan", "pas d’à-coups", "contrôle le mouvement"],
   controlCue: [
     "amplitude contrôlée",
     "mouvement maîtrisé",
@@ -219,11 +215,7 @@ const LEX_FR = {
     "serre les omoplates",
     "omoplates tirées en arrière",
   ],
-  wristNeutral: [
-    "poignets neutres",
-    "poignets alignés",
-    "poignets pas cassés",
-  ],
+  wristNeutral: ["poignets neutres", "poignets alignés", "poignets pas cassés"],
   headNeutral: [
     "regard neutre",
     "nuque longue",
@@ -252,25 +244,14 @@ const LEX_EN = {
     "breathe out on the concentric",
     "inhale on the way down",
   ],
-  footTripod: [
-    "tripod foot (heel + big/small toe)",
-    "anchor your feet",
-  ],
+  footTripod: ["tripod foot (heel + big/small toe)", "anchor your feet"],
   kneeTrack: [
     "knees track over toes",
     "keep knees in line",
     "avoid valgus",
   ],
-  hipBack: [
-    "hips back",
-    "strong hinge",
-    "push your hips behind you",
-  ],
-  gluteCue: [
-    "drive through the heel",
-    "push the heel",
-    "lead with the heel",
-  ],
+  hipBack: ["hips back", "strong hinge", "push your hips behind you"],
+  gluteCue: ["drive through the heel", "push the heel", "lead with the heel"],
   holdTop: [
     "pause 1s at the top",
     "1s peak squeeze",
@@ -287,26 +268,14 @@ const LEX_EN = {
     "drive elbows to the hips",
     "stay under shoulder line",
   ],
-  latDepress: [
-    "depress the shoulders",
-    "set the lats",
-    "pull shoulders down",
-  ],
+  latDepress: ["depress the shoulders", "set the lats", "pull shoulders down"],
   scapRetract: [
     "retract the shoulder blades",
     "squeeze the scapulae",
     "shoulders back",
   ],
-  wristNeutral: [
-    "neutral wrists",
-    "stacked wrists",
-    "no wrist break",
-  ],
-  headNeutral: [
-    "neutral gaze",
-    "long neck",
-    "avoid neck hyperextension",
-  ],
+  wristNeutral: ["neutral wrists", "stacked wrists", "no wrist break"],
+  headNeutral: ["neutral gaze", "long neck", "avoid neck hyperextension"],
 };
 
 function getLex(lang: Lang) {
@@ -1106,7 +1075,8 @@ function CoachAnalyzer() {
   useEffect(() => {
     if (!showAd) return;
     try {
-      (window.adsbygoogle = window.adsbygoogle || []).push({});
+      (window as any).adsbygoogle = (window as any).adsbygoogle || [];
+      (window as any).adsbygoogle.push({});
     } catch (e) {
       console.warn("Adsense error", e);
     }
@@ -1218,10 +1188,7 @@ function CoachAnalyzer() {
           {blobUrl && (
             <div className="text-sm" style={{ marginTop: 12 }}>
               <label className="label" style={{ marginBottom: 6 }}>
-                {t(
-                  "videoCoach.card.import.fileLabel",
-                  "Fichier téléchargé"
-                )}
+                {t("videoCoach.card.import.fileLabel", "Fichier téléchargé")}
               </label>
 
               <div
@@ -1321,7 +1288,7 @@ function CoachAnalyzer() {
               style={{
                 background: "#ffffff",
                 color: "#111827",
-                border: "1px solid #d1d5db",
+                border: "1px solid "#d1d5db",
                 fontWeight: 500,
               }}
               disabled={isAnalyzing}
@@ -1566,7 +1533,7 @@ function CoachAnalyzer() {
                           "videoCoach.card.summary.correctionsLabel",
                           "Corrections"
                         )}{" "}
-                      :
+                        :
                       </strong>{" "}
                       {correctionsLine}
                     </p>
@@ -1607,39 +1574,46 @@ function CoachAnalyzer() {
         />
       )}
 
-      {/* ✅ OVERLAY PUB PLEIN ÉCRAN AVEC DÉLAI 5s */}
+      {/* ✅ OVERLAY PUB PLEIN ÉCRAN AVEC FOND GRIS + DÉLAI 5s */}
       {showAd && (
-        <div className="fixed inset-0 z-[9999] bg-black/80">
-          <div className="flex h-full w-full flex-col">
-            {/* Zone pub plein écran */}
-            <div className="flex-1">
-              <ins
-                className="adsbygoogle"
-                style={{ display: "block", width: "100%", height: "100%" }}
-                data-ad-client="ca-pub-6468882840325295"
-                data-ad-slot="1234567890" // ⬅️ REMPLACE AVEC TON VRAI SLOT
-                data-ad-format="auto"
-                data-full-width-responsive="true"
-              />
+        <div className="fixed inset-0 z-[9999] flex flex-col">
+          {/* Zone qui couvre toute la page */}
+          <div className="relative flex-1">
+            {/* Couche grise + loading tant que la pub ne s'affiche pas */}
+            <div className="absolute inset-0 flex items-center justify-center bg-gray-200">
+              <div className="flex flex-col items-center gap-2 text-sm text-gray-600">
+                <Spinner />
+                <span>Chargement de la publicité…</span>
+              </div>
             </div>
 
-            {/* Bouton en bas avec délai */}
-            <div className="p-3">
-              <button
-                type="button"
-                onClick={handleAdClose}
-                disabled={adDelay > 0}
-                className={`w-full rounded-xl border px-4 py-2 text-sm font-semibold ${
-                  adDelay > 0
-                    ? "bg-gray-400 border-gray-400 text-white cursor-not-allowed"
-                    : "bg-neutral-900 border-neutral-900 text-white"
-                }`}
-              >
-                {adDelay > 0
-                  ? `Continuer dans ${adDelay}s`
-                  : "Continuer vers l’analyse"}
-              </button>
-            </div>
+            {/* Vraie pub AdSense */}
+            <ins
+              className="adsbygoogle"
+              style={{ display: "block", width: "100%", height: "100%" }}
+              data-ad-client="ca-pub-6468882840325295"
+              data-ad-slot="1234567890" // ⬅️ remplace par ton vrai slot
+              data-ad-format="auto"
+              data-full-width-responsive="true"
+            />
+          </div>
+
+          {/* Bandeau bas avec bouton et délai */}
+          <div className="bg-white/90 border-t border-gray-200 p-3">
+            <button
+              type="button"
+              onClick={handleAdClose}
+              disabled={adDelay > 0}
+              className={`w-full rounded-xl border px-4 py-2 text-sm font-semibold ${
+                adDelay > 0
+                  ? "bg-gray-400 border-gray-400 text-white cursor-not-allowed"
+                  : "bg-neutral-900 border-neutral-900 text-white"
+              }`}
+            >
+              {adDelay > 0
+                ? `Continuer dans ${adDelay}s`
+                : "Continuer vers l’analyse"}
+            </button>
           </div>
         </div>
       )}
@@ -1697,10 +1671,7 @@ function UploadDrop({ onFile }: { onFile: (file: File) => void }) {
   };
 
   return (
-    <div
-      className="card"
-      style={{ padding: 16, display: "grid", gap: 10 }}
-    >
+    <div className="card" style={{ padding: 16, display: "grid", gap: 10 }}>
       {isIOS() ? (
         <div className="grid gap-2 sm:flex sm:gap-3">
           <button
@@ -1816,11 +1787,9 @@ function VideoRecorder({ onRecorded }: { onRecorded: (file: File) => void }) {
       };
       mr.onstop = async () => {
         const blob = new Blob(chunksRef.current, { type: mr.mimeType });
-        const file = new File(
-          [blob],
-          `enregistrement-${Date.now()}.webm`,
-          { type: blob.type }
-        );
+        const file = new File([blob], `enregistrement-${Date.now()}.webm`, {
+          type: blob.type,
+        });
         onRecorded(file);
       };
       mr.start();
@@ -1865,11 +1834,7 @@ function VideoRecorder({ onRecorded }: { onRecorded: (file: File) => void }) {
       </div>
       <div className="flex items-center gap-2">
         {!isRecording ? (
-          <button
-            className="btn btn-dash"
-            onClick={start}
-            type="button"
-          >
+          <button className="btn btn-dash" onClick={start} type="button">
             {t("videoCoach.videoRecorder.start", "▶️ Démarrer")}
           </button>
         ) : (
@@ -2238,270 +2203,4 @@ function BodyMapHuman({ highlightKeys }: { highlightKeys: string[] }) {
         aria-label="silhouette face"
       >
         <path
-          d="M90 18c-10 0-18 8-18 18v10c0 6 4 11 10 13l-2 6c-2 6-6 10-12 12-10 3-16 12-17 22-2 20-4 56 2 72 4 10 10 15 18 18 6 2 10 6 12 12 5 16 6 38 6 62h24c0-24 1-46 6-62 2-6 6-10 12-12 8-3 14-8 18-18 6-16 4-52 2-72-1-10-7-19-17-22-6-2-10-6-12-12l-2-6c6-2 10-7 10-13V36c0-10-8-18-18-18Z"
-          fill={baseFill}
-        />
-        <path
-          d="M66 270c-4 30-4 52-4 72h28v-50c0-8-4-16-10-22-4-4-10-0-14 0z"
-          fill={baseFill}
-        />
-        <path
-          d="M114 270c4 30 4 52 4 72H90v-50c0-8 4-16 10-22 4-4 10-0 14 0z"
-          fill={baseFill}
-        />
-        <path
-          d="M32 140c-2 26 2 44 10 54 6 8 14 12 22 14l6-20c-8-2-14-6-18-12-6-8-10-20-10-36l-10 0z"
-          fill={baseFill}
-        />
-        <path
-          d="M148 140c2 26-2 44-10 54-6 8-14 12-22 14l-6-20c8-2 14-6 18-12 6-8 10-20 10-36l10 0z"
-          fill={baseFill}
-        />
-
-        {/* SURBRILLANCE */}
-        <rect
-          id="pecs_f"
-          x="58"
-          y="64"
-          width="64"
-          height="22"
-          rx="8"
-          style={show(on("pecs_f"))}
-        />
-        <circle
-          id="deltoid_l_f"
-          cx="46"
-          cy="72"
-          r="14"
-          style={show(on("deltoid_l_f"))}
-        />
-        <circle
-          id="deltoid_r_f"
-          cx="134"
-          cy="72"
-          r="14"
-          style={show(on("deltoid_r_f"))}
-        />
-        <rect
-          id="biceps_l_f"
-          x="28"
-          y="94"
-          width="16"
-          height="38"
-          rx="8"
-          style={show(on("biceps_l_f"))}
-        />
-        <rect
-          id="biceps_r_f"
-          x="136"
-          y="94"
-          width="16"
-          height="38"
-          rx="8"
-          style={show(on("biceps_r_f"))}
-        />
-        <rect
-          id="forearm_l_f"
-          x="28"
-          y="134"
-          width="16"
-          height="36"
-          rx="8"
-          style={show(on("forearm_l_f"))}
-        />
-        <rect
-          id="forearm_r_f"
-          x="136"
-          y="134"
-          width="16"
-          height="36"
-          rx="8"
-          style={show(on("forearm_r_f"))}
-        />
-        <rect
-          id="abs_f"
-          x="70"
-          y="92"
-          width="40"
-          height="40"
-          rx="8"
-          style={show(on("abs_f"))}
-        />
-        <rect
-          id="obliques_l_f"
-          x="60"
-          y="96"
-          width="12"
-          height="36"
-          rx="6"
-          style={show(on("obliques_l_f"))}
-        />
-        <rect
-          id="obliques_r_f"
-          x="108"
-          y="96"
-          width="12"
-          height="36"
-          rx="6"
-          style={show(on("obliques_r_f"))}
-        />
-        <rect
-          id="quads_l_f"
-          x="64"
-          y="152"
-          width="18"
-          height="52"
-          rx="9"
-          style={show(on("quads_l_f"))}
-        />
-        <rect
-          id="quads_r_f"
-          x="98"
-          y="152"
-          width="18"
-          height="52"
-          rx="9"
-          style={show(on("quads_r_f"))}
-        />
-        <rect
-          id="calf_l_f"
-          x="64"
-          y="214"
-          width="18"
-          height="42"
-          rx="9"
-          style={show(on("calf_l_f"))}
-        />
-        <rect
-          id="calf_r_f"
-          x="98"
-          y="214"
-          width="18"
-          height="42"
-          rx="9"
-          style={show(on("calf_r_f"))}
-        />
-      </svg>
-
-      {/* DOS */}
-      <svg
-        viewBox="0 0 180 360"
-        style={panelStyle}
-        aria-label="silhouette dos"
-      >
-        <path
-          d="M90 18c-10 0-18 8-18 18v10c0 6 4 11 10 13l-1 5c-2 8-7 13-13 16-10 3-16 12-17 22-2 18-4 54 2 70 4 10 10 15 18 18 6 2 10 6 12 12 5 16 6 38 6 62h24c0-24 1-46 6-62 2-6 6-10 12-12 8-3 14-8 18-18 6-16 4-52 2-70-1-10-7-19-17-22-6-2-11-8-13-16l-1-5c6-2 10-7 10-13V36c0-10-8-18-18-18Z"
-          fill={baseFill}
-        />
-        <path
-          d="M66 270c-4 30-4 52-4 72h28v-50c0-8-4-16-10-22-4-4-10-0-14 0z"
-          fill={baseFill}
-        />
-        <path
-          d="M114 270c4 30 4 52 4 72H90v-50c0-8 4-16 10-22 4-4 10-0 14 0z"
-          fill={baseFill}
-        />
-        <path
-          d="M32 140c-2 26 2 44 10 54 6 8 14 12 22 14l6-20c-8-2-14-6-18-12-6-8-10-20-10-36l-10 0z"
-          fill={baseFill}
-        />
-        <path
-          d="M148 140c2 26-2 44-10 54-6 8-14 12-22 14l-6-20c8-2 14-6 18-12 6-8 10-20 10-36l10 0z"
-          fill={baseFill}
-        />
-
-        <polygon
-          id="traps_b"
-          points="90,46 60,66 120,66"
-          style={show(on("traps_b"))}
-        />
-        <rect
-          id="lats_b"
-          x="56"
-          y="70"
-          width="68"
-          height="30"
-          rx="10"
-          style={show(on("lats_b"))}
-        />
-        <circle
-          id="deltoid_l_b"
-          cx="46"
-          cy="72"
-          r="14"
-          style={show(on("deltoid_l_b"))}
-        />
-        <circle
-          id="deltoid_r_b"
-          cx="134"
-          cy="72"
-          r="14"
-          style={show(on("deltoid_r_b"))}
-        />
-        <rect
-          id="triceps_l_b"
-          x="28"
-          y="94"
-          width="16"
-          height="38"
-          rx="8"
-          style={show(on("triceps_l_b"))}
-        />
-        <rect
-          id="triceps_r_b"
-          x="136"
-          y="94"
-          width="16"
-          height="38"
-          rx="8"
-          style={show(on("triceps_r_b"))}
-        />
-        <rect
-          id="glutes_b"
-          x="66"
-          y="122"
-          width="48"
-          height="28"
-          rx="10"
-          style={show(on("glutes_b"))}
-        />
-        <rect
-          id="hams_l_b"
-          x="64"
-          y="152"
-          width="18"
-          height="52"
-          rx="9"
-          style={show(on("hams_l_b"))}
-        />
-        <rect
-          id="hams_r_b"
-          x="98"
-          y="152"
-          width="18"
-          height="52"
-          rx="9"
-          style={show(on("hams_r_b"))}
-        />
-        <rect
-          id="calf_l_b"
-          x="64"
-          y="214"
-          width="18"
-          height="42"
-          rx="9"
-          style={show(on("calf_l_b"))}
-        />
-        <rect
-          id="calf_r_b"
-          x="98"
-          y="214"
-          width="18"
-          height="42"
-          rx="9"
-          style={show(on("calf_r_b"))}
-        />
-      </svg>
-    </div>
-  );
-}
+          d="M90 18c-10 0-18 8-18 18v10c0 6 4 11 10 13
