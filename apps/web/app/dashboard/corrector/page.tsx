@@ -1,3 +1,4 @@
+//apps/web/app/dashboard/corrector/page.tsx
 "use client";
 
 import {
@@ -41,7 +42,6 @@ interface AIAnalysis {
     notes?: string;
   }>;
 }
-
 
 /* ===================== Constantes ===================== */
 const CLIENT_PROXY_MAX_BYTES =
@@ -1100,6 +1100,7 @@ function CoachAnalyzer() {
   /* ======= PUB INTERSTITIELLE : état & déclenchement ======= */
   const [showAd, setShowAd] = useState(false);
   const pendingExerciseRef = useRef<string | undefined>(undefined);
+  const [adDelay, setAdDelay] = useState(5); // délai en secondes
 
   // Charger l'annonce quand l'overlay s'affiche
   useEffect(() => {
@@ -1109,6 +1110,27 @@ function CoachAnalyzer() {
     } catch (e) {
       console.warn("Adsense error", e);
     }
+  }, [showAd]);
+
+  // Compte à rebours avant que l'utilisateur puisse fermer la pub
+  useEffect(() => {
+    if (!showAd) {
+      setAdDelay(5);
+      return;
+    }
+
+    setAdDelay(5);
+    const id = setInterval(() => {
+      setAdDelay((prev) => {
+        if (prev <= 1) {
+          clearInterval(id);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(id);
   }, [showAd]);
 
   const startAnalyzeWithAd = (userExercise?: string) => {
@@ -1544,7 +1566,7 @@ function CoachAnalyzer() {
                           "videoCoach.card.summary.correctionsLabel",
                           "Corrections"
                         )}{" "}
-                        :
+                      :
                       </strong>{" "}
                       {correctionsLine}
                     </p>
@@ -1585,33 +1607,39 @@ function CoachAnalyzer() {
         />
       )}
 
-      {/* ✅ OVERLAY PUB PLEIN ÉCRAN */}
+      {/* ✅ OVERLAY PUB PLEIN ÉCRAN AVEC DÉLAI 5s */}
       {showAd && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70">
-          <div className="bg-white rounded-2xl shadow-xl max-w-md w-[90vw] p-4">
-            <p className="text-sm text-gray-700 mb-3 text-center">
-              Cette analyse est financée par la publicité. Merci pour ton
-              soutien 🙏
-            </p>
-
-            <div className="mb-3">
+        <div className="fixed inset-0 z-[9999] bg-black/80">
+          <div className="flex h-full w-full flex-col">
+            {/* Zone pub plein écran */}
+            <div className="flex-1">
               <ins
                 className="adsbygoogle"
-                style={{ display: "block" }}
+                style={{ display: "block", width: "100%", height: "100%" }}
                 data-ad-client="ca-pub-6468882840325295"
-                data-ad-slot="1234567890" // ⬅️ REMPLACE ICI PAR TON VRAI SLOT
+                data-ad-slot="1234567890" // ⬅️ REMPLACE AVEC TON VRAI SLOT
                 data-ad-format="auto"
                 data-full-width-responsive="true"
               />
             </div>
 
-            <button
-              type="button"
-              onClick={handleAdClose}
-              className="mt-2 w-full rounded-xl border border-neutral-900 bg-neutral-900 px-4 py-2 text-sm font-semibold text-white"
-            >
-              Continuer vers l’analyse
-            </button>
+            {/* Bouton en bas avec délai */}
+            <div className="p-3">
+              <button
+                type="button"
+                onClick={handleAdClose}
+                disabled={adDelay > 0}
+                className={`w-full rounded-xl border px-4 py-2 text-sm font-semibold ${
+                  adDelay > 0
+                    ? "bg-gray-400 border-gray-400 text-white cursor-not-allowed"
+                    : "bg-neutral-900 border-neutral-900 text-white"
+                }`}
+              >
+                {adDelay > 0
+                  ? `Continuer dans ${adDelay}s`
+                  : "Continuer vers l’analyse"}
+              </button>
+            </div>
           </div>
         </div>
       )}
