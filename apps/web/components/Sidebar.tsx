@@ -62,7 +62,7 @@ export default function Sidebar() {
     {
       role: "assistant",
       content:
-        "Salut, je suis l’assistant de Files 🏋️‍♂️ ton coach sport, nutrition et motivation. Comment puis-je t’aider aujourd’hui ?",
+        "Salut, je suis l’assistant de Files, ton Coach Sportif 🏋️‍♂️ (nutrition et motivation). Comment puis-je t’aider aujourd’hui ?",
     },
   ]);
 
@@ -352,7 +352,7 @@ export default function Sidebar() {
               <span style={{ fontSize: 11, color: "#6b7280" }}>
                 {lang === "en"
                   ? "Your sport, nutrition and motivation coach."
-                  : "Ton coach sport, nutrition et motivation."}
+                  : "Ton Coach Sportif (nutrition et motivation)."}
               </span>
             </div>
             <button
