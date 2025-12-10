@@ -3,7 +3,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import {
   ChevronDown,
   Home,
@@ -51,9 +51,23 @@ const NAV_ITEMS: NavItem[] = [
 export default function Sidebar() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const [chatOpen, setChatOpen] = useState(false); // 👈 état pour le chabrot
+  const [chatOpen, setChatOpen] = useState(false); // 👈 panneau chabrot ouvert/fermé
 
-  const { lang, setLang } = useLanguage();
+  const { lang, setLang } = useLanguage(); // on garde ton provider pour savoir FR/EN
+
+  // messages du chat (user / assistant)
+  const [messages, setMessages] = useState<
+    { role: "user" | "assistant"; content: string }[]
+  >([
+    {
+      role: "assistant",
+      content:
+        "Salut, je suis Chabrot 🤖 Pose-moi tes questions sur tes objectifs ou ton dashboard.",
+    },
+  ]);
+
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
 
   // Replier le menu à chaque changement de route
   useEffect(() => setOpen(false), [pathname]);
@@ -61,6 +75,68 @@ export default function Sidebar() {
   // Fermer APRÈS que le clic ait été géré par <Link>
   const closeAfterClick = () => {
     requestAnimationFrame(() => setOpen(false));
+  };
+
+  // Soumission du message dans le chat
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!input.trim() || loading) return;
+
+    const userMessage = input.trim();
+
+    // Ajout du message utilisateur en local
+    setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
+    setInput("");
+    setLoading(true);
+
+    try {
+      const res = await fetch("/api/chabrot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [
+            // on envoie tout l'historique + le nouveau message
+            ...messages,
+            { role: "user", content: userMessage },
+          ],
+          lang,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (data?.reply) {
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: data.reply as string },
+        ]);
+      } else {
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content:
+              lang === "en"
+                ? "Oops, I had an issue answering. Try again in a moment."
+                : "Oups, j’ai eu un souci pour répondre. Réessaie dans un instant.",
+          },
+        ]);
+      }
+    } catch (err) {
+      console.error(err);
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content:
+            lang === "en"
+              ? "Network error. Please try again."
+              : "Erreur réseau. Réessaie un peu plus tard.",
+        },
+      ]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -78,7 +154,7 @@ export default function Sidebar() {
             borderBottom: "1px solid rgba(0,0,0,0.06)",
           }}
         >
-          {/* Ligne : Files-Menu + bulle chabrot + FR/EN */}
+          {/* Ligne : Files-Menu + bulle + FR/EN */}
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <button
               type="button"
@@ -147,7 +223,6 @@ export default function Sidebar() {
                 fontSize: 16,
               }}
             >
-              {/* tu peux remplacer par <MessageCircle size={16} /> si tu veux l'icône */}
               💬
             </button>
 
@@ -238,7 +313,7 @@ export default function Sidebar() {
         </ul>
       </nav>
 
-      {/* 🔽 Panneau du chabrot intelligent (placeholder) */}
+      {/* 🔽 Panneau du chabrot intelligent (chat IA) */}
       {chatOpen && (
         <div
           style={{
@@ -257,6 +332,7 @@ export default function Sidebar() {
             overflow: "hidden",
           }}
         >
+          {/* Header */}
           <div
             style={{
               padding: "8px 10px",
@@ -272,7 +348,9 @@ export default function Sidebar() {
                 Chabrot intelligent
               </span>
               <span style={{ fontSize: 11, color: "#6b7280" }}>
-                Bientôt ton assistant IA ici ✨
+                {lang === "en"
+                  ? "Ask me anything about your goals or dashboard."
+                  : "Pose-moi tes questions sur tes objectifs ou ton dashboard."}
               </span>
             </div>
             <button
@@ -296,6 +374,7 @@ export default function Sidebar() {
             </button>
           </div>
 
+          {/* Messages */}
           <div
             style={{
               flex: 1,
@@ -303,39 +382,103 @@ export default function Sidebar() {
               fontSize: 13,
               color: "#374151",
               overflowY: "auto",
+              background: "#f9fafb",
             }}
           >
-            <p style={{ marginBottom: 8 }}>
-              Le chabrot n&apos;est pas encore branché 🤖.<br />
-              Tu pourras plus tard y intégrer ton vrai chatbot :
-            </p>
-            <ul
-              style={{
-                paddingLeft: 16,
-                margin: 0,
-                marginBottom: 12,
-                fontSize: 12,
-                color: "#6b7280",
-              }}
-            >
-              <li>iframe vers un chatbot externe</li>
-              <li>widget tiers (Crisp, Intercom, etc.)</li>
-              <li>ou composant React maison avec l’API OpenAI</li>
-            </ul>
+            {messages.map((m, i) => (
+              <div
+                key={i}
+                style={{
+                  display: "flex",
+                  justifyContent: m.role === "user" ? "flex-end" : "flex-start",
+                  marginBottom: 8,
+                }}
+              >
+                <div
+                  style={{
+                    maxWidth: "80%",
+                    padding: "6px 9px",
+                    borderRadius: 10,
+                    fontSize: 13,
+                    whiteSpace: "pre-wrap",
+                    background:
+                      m.role === "user"
+                        ? "linear-gradient(135deg,var(--brand,#22c55e),var(--brand2,#16a34a))"
+                        : "#fff",
+                    color: m.role === "user" ? "#fff" : "#111827",
+                    boxShadow:
+                      m.role === "user"
+                        ? "0 8px 16px rgba(22,163,74,.35)"
+                        : "0 4px 10px rgba(0,0,0,.06)",
+                  }}
+                >
+                  {m.content}
+                </div>
+              </div>
+            ))}
 
-            <div
+            {loading && (
+              <div style={{ fontSize: 11, color: "#9ca3af" }}>
+                {lang === "en"
+                  ? "Chabrot is thinking..."
+                  : "Chabrot réfléchit..."}
+              </div>
+            )}
+          </div>
+
+          {/* Input */}
+          <form
+            onSubmit={handleSubmit}
+            style={{
+              padding: 8,
+              borderTop: "1px solid #e5e7eb",
+              background: "#fff",
+              display: "flex",
+              gap: 6,
+            }}
+          >
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              rows={1}
+              placeholder={
+                lang === "en"
+                  ? "Ask Chabrot a question..."
+                  : "Pose une question à Chabrot..."
+              }
               style={{
-                marginTop: 8,
-                border: "1px dashed #d1d5db",
+                flex: 1,
+                resize: "none",
                 borderRadius: 10,
-                padding: 10,
-                fontSize: 11,
-                color: "#9ca3af",
+                border: "1px solid #d1d5db",
+                padding: "6px 8px",
+                fontSize: 13,
+                fontFamily: "inherit",
+                outline: "none",
+              }}
+            />
+
+            <button
+              type="submit"
+              disabled(loading || !input.trim())}
+              style={{
+                borderRadius: 999,
+                border: "none",
+                padding: "0 12px",
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: loading ? "default" : "pointer",
+                background: loading ? "#9ca3af" : "#16a34a",
+                color: "#fff",
               }}
             >
-              Zone réservée à ton futur chabrot 🧠
-            </div>
-          </div>
+              {loading
+                ? lang === "en"
+                  ? "Sending..."
+                  : "Envoi..."
+                : "OK"}
+            </button>
+          </form>
         </div>
       )}
     </>
