@@ -1,13 +1,13 @@
-//apps/web/app/layout.tsx
+// apps/web/app/layout.tsx
 import type { ReactNode } from "react";
 import type { Metadata, Viewport } from "next";
-import Script from "next/script"; // 👈 AJOUT
+import Script from "next/script";
 
 import TopbarGate from "./_components/TopbarGate";
 import "./globals.css";
-import Providers from "@/components/Providers"; // ✅ ton SessionProvider
-import { LanguageProvider } from "@/components/LanguageProvider"; // ✅ ajout
-import { AuthProvider } from "@/components/AuthProvider"; // ✅ NOUVEL IMPORT
+import Providers from "@/components/Providers";
+import { LanguageProvider } from "@/components/LanguageProvider";
+import { AuthProvider } from "@/components/AuthProvider";
 
 export const metadata: Metadata = {
   title: "Files Coaching",
@@ -32,7 +32,7 @@ export const viewport: Viewport = {
   themeColor: "#ffffff",
   width: "device-width",
   initialScale: 1,
-  viewportFit: "cover", // 👉 seule ligne ajoutée pour iOS
+  viewportFit: "cover",
 };
 
 export const dynamic = "force-dynamic";
@@ -42,7 +42,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="fr">
       <head>
-        {/* 👇 Script Google AdSense */}
+        {/* Script Google AdSense */}
         <Script
           id="adsense-script"
           async
@@ -51,14 +51,21 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           strategy="afterInteractive"
         />
       </head>
-      <body className="bg-white text-gray-900 min-h-dvh">
+      {/* 👇 ICI : body en plein écran + layout en colonne */}
+      <body className="bg-white text-gray-900 flex flex-col h-dvh">
         <Providers>
           <LanguageProvider>
             <AuthProvider>
-              {/* ✅ Topbar incluse dans les providers */}
+              {/* Topbar */}
               <TopbarGate />
 
-              <main style={{ paddingTop: "calc(env(safe-area-inset-top) + 40px)" }}>
+              {/* Contenu qui prend tout l'espace restant */}
+              <main
+                className="flex-1"
+                style={{
+                  paddingTop: "calc(env(safe-area-inset-top) + 40px)",
+                }}
+              >
                 {children}
               </main>
             </AuthProvider>
