@@ -20,11 +20,20 @@
 
 /* ===== Reset & base ===== */
 *{box-sizing:border-box}
-html{scroll-behavior:smooth}
+html{
+  scroll-behavior:smooth;
+  height:100%;
+}
 body{
-  margin:0; font-family:var(--font-family);
-  background:var(--bg); color:var(--text);
-  line-height:1.6; overflow-y:scroll;
+  margin:0;
+  font-family:var(--font-family);
+  background:var(--bg);
+  color:var(--text);
+  line-height:1.6;
+
+  /* 👉 plein écran + pas de scrollbar forcée */
+  min-height:100dvh;
+  overflow-y:auto;
 }
 a{color:var(--brand);text-decoration:none}
 a:hover{text-decoration:underline}
@@ -338,7 +347,8 @@ body:has(main.hide-topbar-menu) .js-topbar-menu {
 }
 /* ex. global.css */
 button[aria-label="Se déconnecter"] { color:#000 !important; }
- /* ===== Safe area iOS (encoches, bas d'écran, etc.) ===== */
+
+/* ===== Safe area iOS (encoches, bas d'écran, etc.) ===== */
 @supports (padding: max(0px)) {
   /* Header fixe : on lui ajoute la marge liée à l’encoche */
   .site-header {
