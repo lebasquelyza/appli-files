@@ -24,6 +24,18 @@ function setAppEmailCookie(val: string) {
   } catch {}
 }
 
+// --- helper pour lire le cookie côté client ---
+function getAppEmailFromCookie(): string | null {
+  if (typeof document === "undefined") return null;
+  try {
+    const match = document.cookie.match(/(?:^|;\s*)app_email=([^;]+)/);
+    if (!match || !match[1]) return null;
+    return decodeURIComponent(match[1]);
+  } catch {
+    return null;
+  }
+}
+
 // --- helper pour notifier le backend d'un login / signup ---
 async function notifyAuthEvent(type: "login" | "signup", userEmail: string) {
   try {
@@ -49,6 +61,8 @@ export default function HomePage() {
   // Auth (login)
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
+
   // Auth (signup)
   const [emailSu, setEmailSu] = useState("");
   const [passwordSu, setPasswordSu] = useState("");
@@ -68,6 +82,18 @@ export default function HomePage() {
       }
     }, 300);
     return () => clearTimeout(tmo);
+  }, []);
+
+  // Pré-remplir l'email depuis le cookie si présent
+  useEffect(() => {
+    const cookieEmail = getAppEmailFromCookie();
+    if (cookieEmail) {
+      const normalized = cookieEmail.trim().toLowerCase();
+      if (normalized) {
+        setEmail(normalized);
+        setRememberMe(true);
+      }
+    }
   }, []);
 
   // (facultatif) si déjà connecté, synchronise le cookie au mount
@@ -169,7 +195,12 @@ export default function HomePage() {
       } = await supabase.auth.getUser();
       const sessionEmail = (user?.email || emailTrim).trim().toLowerCase();
       if (sessionEmail) {
-        setAppEmailCookie(sessionEmail);
+        if (rememberMe) {
+          setAppEmailCookie(sessionEmail);
+        } else {
+          // on "vide" le cookie pour ne plus se souvenir de l'email
+          setAppEmailCookie("");
+        }
         // 🔔 NOTIF LOGIN
         await notifyAuthEvent("login", sessionEmail);
       }
@@ -444,6 +475,20 @@ export default function HomePage() {
                     {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                   </button>
                 </div>
+              </div>
+
+              {/* Se souvenir de moi */}
+              <div className="flex items-center">
+                <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    className="rounded border-gray-300"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    disabled={!inputsReady}
+                  />
+                  <span>{t("home.login.rememberMe")}</span>
+                </label>
               </div>
 
               <button
