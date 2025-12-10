@@ -51,7 +51,7 @@ const NAV_ITEMS: NavItem[] = [
 export default function Sidebar() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const [chatOpen, setChatOpen] = useState(false); // panneau chabrot
+  const [chatOpen, setChatOpen] = useState(false); // panneau Files (assistant)
 
   const { lang, setLang } = useLanguage(); // FR / EN
 
@@ -62,7 +62,7 @@ export default function Sidebar() {
     {
       role: "assistant",
       content:
-        "Salut, je suis Chabrot 🤖 Pose-moi tes questions sur tes objectifs ou ton dashboard.",
+        "Salut, je suis l’assistant de Files 🏋️‍♂️ ton coach sport, nutrition et motivation. Comment puis-je t’aider aujourd’hui ?",
     },
   ]);
 
@@ -200,14 +200,14 @@ export default function Sidebar() {
               />
             </button>
 
-            {/* 💬 Bulle chabrot juste à droite de Files-Menu */}
+            {/* 💬 Bulle assistant Files juste à droite de Files-Menu */}
             <button
               type="button"
               onClick={() => setChatOpen((v) => !v)}
               aria-label={
                 chatOpen
-                  ? "Fermer le chabrot intelligent"
-                  : "Ouvrir le chabrot intelligent"
+                  ? "Fermer l’assistant Files"
+                  : "Ouvrir l’assistant Files"
               }
               style={{
                 height: 32,
@@ -223,7 +223,7 @@ export default function Sidebar() {
                 fontSize: 16,
               }}
             >
-              💬
+              🏋️‍♂️
             </button>
 
             {/* 🔤 Switch langue juste à côté de Files-Menu */}
@@ -315,7 +315,7 @@ export default function Sidebar() {
         </ul>
       </nav>
 
-      {/* 🔽 Panneau du chabrot intelligent (chat IA) */}
+      {/* 🔽 Panneau Files (assistant IA) */}
       {chatOpen && (
         <div
           style={{
@@ -347,18 +347,18 @@ export default function Sidebar() {
           >
             <div style={{ display: "flex", flexDirection: "column" }}>
               <span style={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>
-                Chabrot intelligent
+                Files
               </span>
               <span style={{ fontSize: 11, color: "#6b7280" }}>
                 {lang === "en"
-                  ? "Ask me anything about your goals or dashboard."
-                  : "Pose-moi tes questions sur tes objectifs ou ton dashboard."}
+                  ? "Your sport, nutrition and motivation coach."
+                  : "Ton coach sport, nutrition et motivation."}
               </span>
             </div>
             <button
               type="button"
               onClick={() => setChatOpen(false)}
-              aria-label="Fermer le chabrot"
+              aria-label="Fermer Files"
               style={{
                 height: 24,
                 width: 24,
@@ -421,7 +421,7 @@ export default function Sidebar() {
 
             {loading && (
               <div style={{ fontSize: 11, color: "#9ca3af" }}>
-                {lang === "en" ? "Chabrot is thinking..." : "Chabrot réfléchit..."}
+                {lang === "en" ? "Files is thinking..." : "Files réfléchit..."}
               </div>
             )}
           </div>
@@ -443,8 +443,8 @@ export default function Sidebar() {
               rows={1}
               placeholder={
                 lang === "en"
-                  ? "Ask Chabrot a question..."
-                  : "Pose une question à Chabrot..."
+                  ? "Ask Files a question..."
+                  : "Pose une question à Files..."
               }
               style={{
                 flex: 1,
