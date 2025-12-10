@@ -305,7 +305,7 @@ export default function HomePage() {
 
   return (
     <main className="hide-topbar-menu pt-10 sm:pt-12 pb-12">
-      <div className="container max-w-screen-lg mx.auto px-4">
+      <div className="container max-w-screen-lg mx-auto px-4">
         {/* Titre */}
         <header className="mb-0 flex items-start justify-between gap-4">
           <h1
@@ -318,7 +318,7 @@ export default function HomePage() {
             {t("home.hero.titleLine2")}
           </h1>
 
-        {/* Switch FR / EN */}
+          {/* Switch FR / EN */}
           <div
             style={{
               display: "flex",
@@ -406,7 +406,7 @@ export default function HomePage() {
               type="button"
               onClick={openSignup}
               aria-expanded={showSignup}
-              aria-controls="signup-panel"
+              aria.controls="signup-panel"
               className={`${pillClass} transition hover:-translate-y-0.5 active:translate-y-0`}
               style={{
                 ...pillStyle,
@@ -425,7 +425,7 @@ export default function HomePage() {
           <div id="login-panel" className="max-w-md mx-auto">
             <form onSubmit={handleLogin} className="space-y-4">
               <div>
-                <label className="block text.sm sm:text-base font-medium mb-1">
+                <label className="block text-sm sm:text-base font-medium mb-1">
                   {t("home.login.emailLabel")}
                 </label>
                 <input
@@ -502,10 +502,11 @@ export default function HomePage() {
                   : t("home.login.submitIdle")}
               </button>
 
+              {/* Mot de passe oublié plus petit */}
               <button
                 type="button"
                 onClick={handleForgotPassword}
-                className="block w-full text-center text-sm text-gray-600 hover:underline"
+                className="mt-2 text-xs text-gray-500 hover:underline"
                 disabled={!inputsReady}
               >
                 {t("home.login.forgotPassword")}
