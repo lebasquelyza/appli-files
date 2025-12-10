@@ -30,30 +30,30 @@ type NavItem = {
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { href: "/dashboard", label: { fr: "Accueil",       en: "Home" },           icon: Home },
-  { href: "/dashboard/profile", label: { fr: "Mon profil",   en: "My profile" },     icon: User2 },
-  { href: "/dashboard/progress", label: { fr: "Mes progrès",  en: "My progress" },    icon: LineChart },
+  { href: "/dashboard", label: { fr: "Accueil", en: "Home" }, icon: Home },
+  { href: "/dashboard/profile", label: { fr: "Mon profil", en: "My profile" }, icon: User2 },
+  { href: "/dashboard/progress", label: { fr: "Mes progrès", en: "My progress" }, icon: LineChart },
   { href: "/dashboard/corrector", label: { fr: "Files te corrige", en: "Files corrects you" }, icon: Wand2 },
-  { href: "/dashboard/recipes", label: { fr: "Recettes",     en: "Recipes" },       icon: BookOpen },
-  { href: "/dashboard/calories", label: { fr: "Calories",     en: "Calories" },      icon: Flame },
+  { href: "/dashboard/recipes", label: { fr: "Recettes", en: "Recipes" }, icon: BookOpen },
+  { href: "/dashboard/calories", label: { fr: "Calories", en: "Calories" }, icon: Flame },
   {
     href: "/dashboard/connect",
     label: { fr: "Connecte tes données", en: "Connect your data" },
     icon: Plug2,
   },
-  { href: "/dashboard/bmi", label: { fr: "IMC",          en: "BMI" },           icon: ClipboardList },
-  { href: "/dashboard/motivation", label: { fr: "Motivation",   en: "Motivation" },    icon: MessageCircle },
-  { href: "/dashboard/music", label: { fr: "Musique",      en: "Music" },         icon: Music2 },
-  { href: "/dashboard/avis", label: { fr: "Votre avis",   en: "Feedback" },      icon: MessageCircle },
-  { href: "/dashboard/settings", label: { fr: "Réglages",    en: "Settings" },     icon: Settings },
+  { href: "/dashboard/bmi", label: { fr: "IMC", en: "BMI" }, icon: ClipboardList },
+  { href: "/dashboard/motivation", label: { fr: "Motivation", en: "Motivation" }, icon: MessageCircle },
+  { href: "/dashboard/music", label: { fr: "Musique", en: "Music" }, icon: Music2 },
+  { href: "/dashboard/avis", label: { fr: "Votre avis", en: "Feedback" }, icon: MessageCircle },
+  { href: "/dashboard/settings", label: { fr: "Réglages", en: "Settings" }, icon: Settings },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const [chatOpen, setChatOpen] = useState(false); // 👈 panneau chabrot ouvert/fermé
+  const [chatOpen, setChatOpen] = useState(false); // panneau chabrot
 
-  const { lang, setLang } = useLanguage(); // on garde ton provider pour savoir FR/EN
+  const { lang, setLang } = useLanguage(); // FR / EN
 
   // messages du chat (user / assistant)
   const [messages, setMessages] = useState<
@@ -296,7 +296,9 @@ export default function Sidebar() {
                       background: active
                         ? "linear-gradient(135deg,var(--brand,#22c55e),var(--brand2,#15803d))"
                         : "transparent",
-                      border: active ? "1px solid rgba(22,163,74,.25)" : "1px solid transparent",
+                      border: active
+                        ? "1px solid rgba(22,163,74,.25)"
+                        : "1px solid transparent",
                       boxShadow: active ? "0 10px 20px rgba(0,0,0,.08)" : "none",
                       color: active ? "#fff" : "var(--text, #111)",
                       fontWeight: 600,
@@ -419,9 +421,7 @@ export default function Sidebar() {
 
             {loading && (
               <div style={{ fontSize: 11, color: "#9ca3af" }}>
-                {lang === "en"
-                  ? "Chabrot is thinking..."
-                  : "Chabrot réfléchit..."}
+                {lang === "en" ? "Chabrot is thinking..." : "Chabrot réfléchit..."}
               </div>
             )}
           </div>
@@ -460,7 +460,7 @@ export default function Sidebar() {
 
             <button
               type="submit"
-              disabled(loading || !input.trim())}
+              disabled={loading || !input.trim()}
               style={{
                 borderRadius: 999,
                 border: "none",
