@@ -223,7 +223,7 @@ export default function Sidebar() {
                 fontSize: 16,
               }}
             >
-              🏋️‍♂️
+              💬
             </button>
 
             {/* 🔤 Switch langue juste à côté de Files-Menu */}
