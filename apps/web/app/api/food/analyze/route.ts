@@ -1,12 +1,10 @@
 // apps/web/app/api/food/analyze/route.ts
 import { NextRequest, NextResponse } from "next/server";
 
-/** Next runtime */
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const revalidate = 0;
 
-/** Utils génériques */
 function jsonError(status: number, msg: string) {
   return new NextResponse(JSON.stringify({ error: msg }), {
     status,
@@ -16,12 +14,10 @@ function jsonError(status: number, msg: string) {
     },
   });
 }
+
 async function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const t = setTimeout(
-      () => reject(Object.assign(new Error("timeout"), { status: 504 })),
-      ms
-    );
+    const t = setTimeout(() => reject(Object.assign(new Error("timeout"), { status: 504 })), ms);
     p.then((v) => {
       clearTimeout(t);
       resolve(v);
@@ -31,53 +27,59 @@ async function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
     });
   });
 }
+
+/** --- Image sanitize --- */
 type SanitizeOk = { ok: true; url: string; kind: "https" | "data" };
-type SanitizeErr = {
-  ok: false;
-  reason: "empty" | "blob_url" | "bad_base64" | "unsupported";
-};
+type SanitizeErr = { ok: false; reason: "empty" | "blob_url" | "bad_base64" | "unsupported" };
 type SanitizeResult = SanitizeOk | SanitizeErr;
+
 function sanitizeImageInput(raw: string): SanitizeResult {
   const s = (raw || "").trim();
   if (!s) return { ok: false, reason: "empty" };
   if (/^blob:/i.test(s)) return { ok: false, reason: "blob_url" };
   if (/^https:\/\/.+/i.test(s)) return { ok: true, url: s, kind: "https" };
-  const m =
-    /^data:image\/(png|jpe?g|webp);base64,([A-Za-z0-9+/=\s]+)$/i.exec(s);
+
+  const m = /^data:image\/(png|jpe?g|webp);base64,([A-Za-z0-9+/=\s]+)$/i.exec(s);
   if (m) {
     const mime = m[1].toLowerCase().replace("jpg", "jpeg");
     const b64 = m[2].replace(/\s+/g, "");
-    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(b64))
-      return { ok: false, reason: "bad_base64" };
-    if (b64.length > 10 * 1024 * 1024)
-      return { ok: false, reason: "unsupported" };
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(b64)) return { ok: false, reason: "bad_base64" };
+    if (b64.length > 10 * 1024 * 1024) return { ok: false, reason: "unsupported" };
     return { ok: true, url: `data:image/${mime};base64,${b64}`, kind: "data" };
   }
+
   if (/^[A-Za-z0-9+/]+={0,2}$/.test(s)) {
     const looksPng = s.startsWith("iVBORw0KGgo");
     const mime = looksPng ? "image/png" : "image/jpeg";
     return { ok: true, url: `data:${mime};base64,${s}`, kind: "data" };
   }
+
   return { ok: false, reason: "unsupported" };
 }
 
-/** Types */
-type FoodItemEstimated = {
-  label: string;
-  grams_estimated: number;
+/** --- Types nutrition /100g --- */
+type NutrPer100 = {
   kcal_per_100g: number;
-  proteins_g_per_100g?: number | null;
-  source?: "OFF" | "IA" | "DICT";
+  proteins_g_per_100g: number | null;
+  carbs_g_per_100g: number | null;
+  fats_g_per_100g: number | null;
+  fibers_g_per_100g: number | null;
+  sugars_g_per_100g: number | null;
+  salt_g_per_100g: number | null;
 };
 
 type Candidate = {
   label: string;
-  kcal_per_100g: number;
-  proteins_g_per_100g: number | null;
   source: "OFF" | "IA" | "DICT";
   details?: string;
   confidence?: number;
-};
+} & NutrPer100;
+
+type PlateItemEstimated = {
+  label: string;
+  grams_estimated: number;
+  source: "OFF" | "IA" | "DICT";
+} & NutrPer100;
 
 type FoodAnalysis =
   | {
@@ -87,84 +89,142 @@ type FoodAnalysis =
       candidates: Candidate[];
       barcode?: string | null;
       net_weight_g?: number | null;
-      portion_estimated_g: number; // valeur proposée (ex: poids net ou 250)
+      portion_estimated_g: number;
       warnings?: string[];
     }
   | {
       kind: "plate";
       needs_user_confirmation: true;
-      items: FoodItemEstimated[];
+      items: PlateItemEstimated[];
       warnings?: string[];
     };
 
-/** Dictionnaire local de secours (valeurs FR moyennes cuites) */
-const DICT: Record<string, { kcal100: number; prot100: number }> = {
-  "riz cuit": { kcal100: 130, prot100: 2.7 },
-  "pâte cuite": { kcal100: 150, prot100: 5 },
-  "poulet cuit": { kcal100: 165, prot100: 31 },
-  "boeuf cuit": { kcal100: 250, prot100: 26 },
-  "saumon cuit": { kcal100: 208, prot100: 20 },
-  "œuf dur": { kcal100: 155, prot100: 13 },
-  pain: { kcal100: 260, prot100: 9 },
-  fromage: { kcal100: 350, prot100: 25 },
-  pomme: { kcal100: 52, prot100: 0.3 },
-  banane: { kcal100: 89, prot100: 1.1 },
+/** --- Mini DICT (secours) --- */
+const DICT: Record<string, NutrPer100> = {
+  "pain complet": {
+    kcal_per_100g: 250,
+    proteins_g_per_100g: 9,
+    carbs_g_per_100g: 45,
+    fats_g_per_100g: 4,
+    fibers_g_per_100g: 7,
+    sugars_g_per_100g: 4,
+    salt_g_per_100g: 1.2,
+  },
+  "riz cuit": {
+    kcal_per_100g: 130,
+    proteins_g_per_100g: 2.7,
+    carbs_g_per_100g: 28,
+    fats_g_per_100g: 0.3,
+    fibers_g_per_100g: 0.4,
+    sugars_g_per_100g: 0.1,
+    salt_g_per_100g: 0,
+  },
+  "jambon": {
+    kcal_per_100g: 145,
+    proteins_g_per_100g: 21,
+    carbs_g_per_100g: 1,
+    fats_g_per_100g: 6,
+    fibers_g_per_100g: 0,
+    sugars_g_per_100g: 1,
+    salt_g_per_100g: 1.8,
+  },
+  "sauce roquefort": {
+    kcal_per_100g: 300,
+    proteins_g_per_100g: 6,
+    carbs_g_per_100g: 6,
+    fats_g_per_100g: 28,
+    fibers_g_per_100g: 0,
+    sugars_g_per_100g: 3,
+    salt_g_per_100g: 1.5,
+  },
 };
 
-/** OpenFoodFacts helpers */
-async function fetchOFFByBarcode(barcode: string) {
-  const url = `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(
-    barcode
-  )}.json`;
+function n(x: any): number | null {
+  const v = Number(x);
+  return Number.isFinite(v) ? v : null;
+}
+
+/** --- OFF helpers --- */
+async function fetchOFFByBarcode(barcode: string): Promise<Candidate | null> {
+  const url = `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json`;
   const r = await fetch(url, { headers: { "user-agent": "files-coaching/1.0" } });
   if (!r.ok) return null;
   const j = await r.json().catch(() => null);
   const p = j?.product;
   if (!p) return null;
-  const kcal100 = p.nutriments?.["energy-kcal_100g"];
-  const prot100 = p.nutriments?.["proteins_100g"];
+
+  const nutr = p.nutriments || {};
   const label = p.product_name || p.generic_name || p.brands || "Produit OFF";
-  if (!kcal100 && !prot100) return null;
+
+  const kcal100 = n(nutr["energy-kcal_100g"]) ?? 0;
+  const prot100 = n(nutr["proteins_100g"]);
+  const carbs100 = n(nutr["carbohydrates_100g"]);
+  const fat100 = n(nutr["fat_100g"]);
+  const fiber100 = n(nutr["fiber_100g"]);
+  const sugar100 = n(nutr["sugars_100g"]);
+  const salt100 =
+    n(nutr["salt_100g"]) ??
+    (n(nutr["sodium_100g"]) != null ? (n(nutr["sodium_100g"]) as number) * 2.5 : null);
+
+  if (!kcal100 && prot100 == null && carbs100 == null && fat100 == null) return null;
+
   return {
     label,
-    kcal_per_100g: Number(kcal100 ?? 0),
-    proteins_g_per_100g: prot100 != null ? Number(prot100) : null,
-    source: "OFF" as const,
+    source: "OFF",
     details: p.brands ? `Marque: ${p.brands}` : undefined,
+    kcal_per_100g: Math.max(0, Math.round(kcal100)),
+    proteins_g_per_100g: prot100,
+    carbs_g_per_100g: carbs100,
+    fats_g_per_100g: fat100,
+    fibers_g_per_100g: fiber100,
+    sugars_g_per_100g: sugar100,
+    salt_g_per_100g: salt100,
   };
 }
 
-async function searchOFFByName(q: string) {
+async function searchOFFByName(q: string): Promise<Candidate[]> {
   const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(
     q
   )}&search_simple=1&action=process&json=1&page_size=5`;
   const r = await fetch(url, { headers: { "user-agent": "files-coaching/1.0" } });
-  if (!r.ok) return [] as Candidate[];
+  if (!r.ok) return [];
   const j = await r.json().catch(() => null);
+
   const out: Candidate[] = [];
   for (const p of j?.products ?? []) {
-    const kcal100 = p.nutriments?.["energy-kcal_100g"];
-    const prot100 = p.nutriments?.["proteins_100g"];
+    const nutr = p.nutriments || {};
+    const kcal100 = n(nutr["energy-kcal_100g"]) ?? 0;
+    const prot100 = n(nutr["proteins_100g"]);
+    const carbs100 = n(nutr["carbohydrates_100g"]);
+    const fat100 = n(nutr["fat_100g"]);
+    const fiber100 = n(nutr["fiber_100g"]);
+    const sugar100 = n(nutr["sugars_100g"]);
+    const salt100 =
+      n(nutr["salt_100g"]) ??
+      (n(nutr["sodium_100g"]) != null ? (n(nutr["sodium_100g"]) as number) * 2.5 : null);
+
     const name =
-      p.product_name ||
-      p.generic_name ||
-      p.brands ||
-      p.categories?.split(",")?.[0] ||
-      q;
-    if (kcal100 || prot100) {
+      p.product_name || p.generic_name || p.brands || p.categories?.split(",")?.[0] || q;
+
+    if (kcal100 || prot100 != null || carbs100 != null || fat100 != null) {
       out.push({
         label: String(name),
-        kcal_per_100g: Number(kcal100 ?? 0),
-        proteins_g_per_100g: prot100 != null ? Number(prot100) : null,
         source: "OFF",
         details: p.brands ? `Marque: ${p.brands}` : undefined,
+        kcal_per_100g: Math.max(0, Math.round(kcal100)),
+        proteins_g_per_100g: prot100,
+        carbs_g_per_100g: carbs100,
+        fats_g_per_100g: fat100,
+        fibers_g_per_100g: fiber100,
+        sugars_g_per_100g: sugar100,
+        salt_g_per_100g: salt100,
       });
     }
   }
   return out;
 }
 
-/** Vision IA: identifie, lit barcode et/ou net weight, bascule produit vs assiette */
+/** --- Vision IA (produit vs assiette) --- */
 async function analyzeWithVision(imageDataUrl: string, apiKey: string) {
   const payload = {
     model: "gpt-4o-mini",
@@ -174,9 +234,12 @@ async function analyzeWithVision(imageDataUrl: string, apiKey: string) {
       {
         role: "system",
         content:
-          "FRANÇAIS UNIQUEMENT. Tâches: (1) dire si c'est une ASSIETTE (plusieurs aliments) ou un PRODUIT unique. " +
-          "(2) Si produit: nom, code-barres (si lisible), poids net (g) s'il apparaît. " +
-          "(3) Si assiette: liste les principaux éléments (libellé + grammes estimés). Pas d'autres textes.",
+          "FRANÇAIS UNIQUEMENT.\n" +
+          "1) Dire si c'est une ASSIETTE (plusieurs aliments) ou un PRODUIT unique.\n" +
+          "2) Si PRODUIT: extraire name, barcode (si lisible), net_weight_g (si visible).\n" +
+          "3) Si ASSIETTE: lister les principaux éléments ET SÉPARER sauces/condiments/huiles.\n" +
+          "4) Si le texte est illisible, NE PAS inventer une marque/nom précis: rester générique (ex: 'pain complet', 'pain', 'riz').\n" +
+          "JSON uniquement.",
       },
       {
         role: "user",
@@ -184,9 +247,10 @@ async function analyzeWithVision(imageDataUrl: string, apiKey: string) {
           {
             type: "text",
             text:
-              "Renvoie STRICTEMENT un JSON UNION: \n" +
-              "CAS_A (produit): { kind:'product', name:string, barcode:string|null, net_weight_g:number|null }\n" +
-              "CAS_B (assiette): { kind:'plate', items:[{ label:string, grams:number }, ...] }",
+              "Renvoie STRICTEMENT un JSON UNION:\n" +
+              "CAS_A: { kind:'product', name:string, barcode:string|null, net_weight_g:number|null }\n" +
+              "CAS_B: { kind:'plate', items:[{ label:string, grams:number }...] }\n" +
+              "Max 8 items, inclure sauces/condiments si présents.",
           },
           { type: "image_url", image_url: { url: imageDataUrl } },
         ],
@@ -196,12 +260,10 @@ async function analyzeWithVision(imageDataUrl: string, apiKey: string) {
 
   const resp = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
-    headers: {
-      "content-type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
+    headers: { "content-type": "application/json", Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify(payload),
   });
+
   const txt = await resp.text().catch(() => "");
   if (!resp.ok) {
     let parsed: any = null;
@@ -213,20 +275,108 @@ async function analyzeWithVision(imageDataUrl: string, apiKey: string) {
     err.status = resp.status;
     throw err;
   }
-  let obj: any;
+
+  let content: any;
   try {
-    obj = JSON.parse(txt)?.choices?.[0]?.message?.content;
+    content = JSON.parse(txt)?.choices?.[0]?.message?.content;
   } catch {}
+
   let out: any;
   try {
-    out = JSON.parse(obj);
+    out = JSON.parse(content);
   } catch {
     throw Object.assign(new Error("non_json"), { status: 502 });
   }
   return out;
 }
 
-/** Handler POST */
+/** --- Densify assiette (macros /100g) --- */
+async function densifyPlateItems(items: Array<{ label: string; grams: number }>, apiKey: string) {
+  const payload = {
+    model: "gpt-4o-mini",
+    temperature: 0,
+    response_format: { type: "json_object" as const },
+    messages: [
+      {
+        role: "system",
+        content:
+          "FRANÇAIS. Pour chaque élément, donner des valeurs réalistes PAR 100g.\n" +
+          "Répond STRICTEMENT: { items:[{ label, kcal_per_100g, proteins_g_per_100g, carbs_g_per_100g, fats_g_per_100g, fibers_g_per_100g, sugars_g_per_100g, salt_g_per_100g }] }.\n" +
+          "Sauces/condiments/huiles: valeurs typiques (souvent plus gras/salé).",
+      },
+      { role: "user", content: [{ type: "text", text: JSON.stringify({ items }, null, 2) }] },
+    ],
+  };
+
+  const resp = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { "content-type": "application/json", Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify(payload),
+  });
+
+  const txt = await resp.text().catch(() => "");
+  let content: any = {};
+  try {
+    content = JSON.parse(txt)?.choices?.[0]?.message?.content;
+  } catch {}
+  try {
+    content = JSON.parse(content);
+  } catch {
+    content = { items: [] };
+  }
+  return content?.items || [];
+}
+
+/** --- Densify produit (fallback) --- */
+async function densifySingleFood(label: string, apiKey: string): Promise<Candidate> {
+  const payload = {
+    model: "gpt-4o-mini",
+    temperature: 0,
+    response_format: { type: "json_object" as const },
+    messages: [
+      {
+        role: "system",
+        content:
+          "FRANÇAIS. Donne une estimation nutritionnelle réaliste PAR 100g.\n" +
+          "Répond STRICTEMENT: { label, kcal_per_100g, proteins_g_per_100g, carbs_g_per_100g, fats_g_per_100g, fibers_g_per_100g, sugars_g_per_100g, salt_g_per_100g }",
+      },
+      { role: "user", content: [{ type: "text", text: label || "aliment" }] },
+    ],
+  };
+
+  const resp = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { "content-type": "application/json", Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify(payload),
+  });
+
+  const txt = await resp.text().catch(() => "");
+  let content: any = {};
+  try {
+    content = JSON.parse(txt)?.choices?.[0]?.message?.content;
+  } catch {}
+  try {
+    content = JSON.parse(content);
+  } catch {
+    content = {};
+  }
+
+  const toN = (x: any) => (x == null ? null : Number(x));
+  return {
+    label: String(content?.label || label || "aliment"),
+    source: "IA",
+    details: "Estimation IA",
+    confidence: 0.6,
+    kcal_per_100g: Math.max(0, Math.round(Number(content?.kcal_per_100g || 0))),
+    proteins_g_per_100g: toN(content?.proteins_g_per_100g) != null ? Math.max(0, Number(content.proteins_g_per_100g)) : null,
+    carbs_g_per_100g: toN(content?.carbs_g_per_100g) != null ? Math.max(0, Number(content.carbs_g_per_100g)) : null,
+    fats_g_per_100g: toN(content?.fats_g_per_100g) != null ? Math.max(0, Number(content.fats_g_per_100g)) : null,
+    fibers_g_per_100g: toN(content?.fibers_g_per_100g) != null ? Math.max(0, Number(content.fibers_g_per_100g)) : null,
+    sugars_g_per_100g: toN(content?.sugars_g_per_100g) != null ? Math.max(0, Number(content.sugars_g_per_100g)) : null,
+    salt_g_per_100g: toN(content?.salt_g_per_100g) != null ? Math.max(0, Number(content.salt_g_per_100g)) : null,
+  };
+}
+
 export async function POST(req: NextRequest) {
   try {
     const apiKey = (process.env.OPENAI_API_KEY || process.env.OPEN_API_KEY || "").trim();
@@ -256,197 +406,135 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 1) Vision: produit vs assiette (+ barcode/poids si possible)
     const vision = await withTimeout(analyzeWithVision(imageDataUrl, apiKey), 25_000);
 
-    // ===== CAS PLATE =====
+    /** ===== PLATE ===== */
     if (vision?.kind === "plate" && Array.isArray(vision.items)) {
-      // 2) “Densify”: kcal/100g + prot/100g
-      const densifyPayload = {
-        model: "gpt-4o-mini",
-        temperature: 0,
-        response_format: { type: "json_object" as const },
-        messages: [
-          {
-            role: "system",
-            content:
-              "FRANÇAIS. Pour chaque élément d’assiette, propose kcal/100g et protéines/100g réalistes (cuit si cuit). " +
-              "Réponds STRICTEMENT: { items:[{ label, kcal_per_100g, proteins_g_per_100g }...] }",
-          },
-          {
-            role: "user",
-            content: [{ type: "text", text: JSON.stringify({ items: vision.items }, null, 2) }],
-          },
-        ],
-      };
-
-      const densResp = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: { "content-type": "application/json", Authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify(densifyPayload),
-      });
-      const densTxt = await densResp.text().catch(() => "");
-      let dens: any = {};
-      try {
-        dens = JSON.parse(densTxt)?.choices?.[0]?.message?.content;
-      } catch {}
-      try {
-        dens = JSON.parse(dens);
-      } catch {
-        dens = { items: [] };
-      }
-
-      const outItems: FoodItemEstimated[] = vision.items
-        .map((it: any) => {
-          const rawLabel = String(it.label || "").trim() || "aliment";
-          const nameLower = rawLabel.toLowerCase();
-
-          const d = Object.entries(DICT).find(([k]) => nameLower.includes(k));
-          const densMatch = (dens?.items || []).find(
-            (x: any) => String(x.label || "").toLowerCase() === nameLower
-          );
-
-          const kcal100 = densMatch?.kcal_per_100g ?? d?.[1]?.kcal100 ?? 0;
-          const prot100 = densMatch?.proteins_g_per_100g ?? d?.[1]?.prot100 ?? null;
-
-          return {
-            label: rawLabel,
-            grams_estimated: Math.max(1, Math.round(Number(it.grams || 0))),
-            kcal_per_100g: Math.max(1, Math.round(Number(kcal100 || 0))),
-            proteins_g_per_100g: prot100 != null ? Math.max(0, Number(prot100)) : null,
-            source: d ? "DICT" : "IA",
-          };
-        })
+      const rawItems = (vision.items as any[])
+        .map((x) => ({ label: String(x?.label || "").trim(), grams: Number(x?.grams || 0) }))
+        .filter((x) => x.label)
         .slice(0, 8);
+
+      const dens = await densifyPlateItems(rawItems, apiKey);
+
+      const outItems: PlateItemEstimated[] = rawItems.map((it) => {
+        const low = it.label.toLowerCase();
+        const dictEntry = Object.entries(DICT).find(([k]) => low.includes(k))?.[1];
+
+        const densMatch = (dens || []).find(
+          (d: any) => String(d?.label || "").toLowerCase() === low
+        );
+
+        const base: NutrPer100 =
+          dictEntry ?? {
+            kcal_per_100g: Number(densMatch?.kcal_per_100g || 0),
+            proteins_g_per_100g: densMatch?.proteins_g_per_100g != null ? Number(densMatch.proteins_g_per_100g) : null,
+            carbs_g_per_100g: densMatch?.carbs_g_per_100g != null ? Number(densMatch.carbs_g_per_100g) : null,
+            fats_g_per_100g: densMatch?.fats_g_per_100g != null ? Number(densMatch.fats_g_per_100g) : null,
+            fibers_g_per_100g: densMatch?.fibers_g_per_100g != null ? Number(densMatch.fibers_g_per_100g) : null,
+            sugars_g_per_100g: densMatch?.sugars_g_per_100g != null ? Number(densMatch.sugars_g_per_100g) : null,
+            salt_g_per_100g: densMatch?.salt_g_per_100g != null ? Number(densMatch.salt_g_per_100g) : null,
+          };
+
+        return {
+          label: it.label,
+          grams_estimated: Math.max(1, Math.round(it.grams || 0)),
+          source: dictEntry ? "DICT" : "IA",
+          kcal_per_100g: Math.max(0, Math.round(Number(base.kcal_per_100g || 0))),
+          proteins_g_per_100g: base.proteins_g_per_100g != null ? Math.max(0, Number(base.proteins_g_per_100g)) : null,
+          carbs_g_per_100g: base.carbs_g_per_100g != null ? Math.max(0, Number(base.carbs_g_per_100g)) : null,
+          fats_g_per_100g: base.fats_g_per_100g != null ? Math.max(0, Number(base.fats_g_per_100g)) : null,
+          fibers_g_per_100g: base.fibers_g_per_100g != null ? Math.max(0, Number(base.fibers_g_per_100g)) : null,
+          sugars_g_per_100g: base.sugars_g_per_100g != null ? Math.max(0, Number(base.sugars_g_per_100g)) : null,
+          salt_g_per_100g: base.salt_g_per_100g != null ? Math.max(0, Number(base.salt_g_per_100g)) : null,
+        };
+      });
 
       const warnings: string[] = [];
       warnings.push("Quantités estimées sur photo : merci de confirmer le grammage.");
       if (outItems.some((x) => /riz|p[âa]tes|poulet|b[œo]uf|saumon/i.test(x.label))) {
         warnings.push("Vérifie cru/cuit : les valeurs changent beaucoup.");
       }
+      if (outItems.some((x) => /sauce|roquefort|huile|mayo|cr[èe]me/i.test(x.label))) {
+        warnings.push("Sauces/huile : souvent sous-estimées, ajuste si besoin.");
+      }
 
       const payload: FoodAnalysis = {
         kind: "plate",
         needs_user_confirmation: true,
-        items: outItems,
+        items: outItems.slice(0, 8),
         warnings,
       };
       return NextResponse.json(payload, { headers: { "Cache-Control": "no-store, no-transform" } });
     }
 
-    // ===== CAS PRODUIT =====
-    const label = String(vision?.name || "").trim() || "aliment";
+    /** ===== PRODUCT ===== */
+    const rawLabel = String(vision?.name || "").trim();
+    const label = rawLabel || "aliment";
     const barcode =
-      vision?.barcode && /^\d{8,14}$/.test(String(vision.barcode))
-        ? String(vision.barcode)
-        : null;
+      vision?.barcode && /^\d{8,14}$/.test(String(vision.barcode)) ? String(vision.barcode) : null;
     const netWeight =
       Number(vision?.net_weight_g || 0) > 0 ? Math.round(Number(vision?.net_weight_g)) : null;
 
-    const candidates: Candidate[] = [];
-
-    // OFF par code-barres
-    if (barcode) {
-      const off = await fetchOFFByBarcode(barcode).catch(() => null);
-      if (off) candidates.push(off);
-    }
-    // OFF par nom
-    if (!candidates.length && label) {
-      const list = await searchOFFByName(label).catch(() => []);
-      candidates.push(...list.slice(0, 3));
-    }
-
-    // Fallback IA densités (si OFF vide)
-    if (!candidates.length) {
-      const densPayload = {
-        model: "gpt-4o-mini",
-        temperature: 0,
-        response_format: { type: "json_object" as const },
-        messages: [
-          {
-            role: "system",
-            content:
-              "FRANÇAIS. Donne une estimation réaliste pour {kcal/100g, protéines/100g} de l'aliment décrit. " +
-              "Réponds STRICTEMENT: { label, kcal_per_100g, proteins_g_per_100g }",
-          },
-          { role: "user", content: [{ type: "text", text: label || "aliment" }] },
-        ],
-      };
-
-      const r = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: { "content-type": "application/json", Authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify(densPayload),
-      });
-      const t = await r.text().catch(() => "");
-      let dens: any = {};
-      try {
-        dens = JSON.parse(t)?.choices?.[0]?.message?.content;
-      } catch {}
-      try {
-        dens = JSON.parse(dens);
-      } catch {
-        dens = {};
-      }
-
-      // Dictionnaire en dernier recours
-      let dictHit: Candidate | null = null;
-      if (!dens?.kcal_per_100g) {
-        const d = Object.entries(DICT).find(([k]) => label.toLowerCase().includes(k));
-        if (d) {
-          dictHit = {
-            label: d[0],
-            kcal_per_100g: d[1].kcal100,
-            proteins_g_per_100g: d[1].prot100,
-            source: "DICT",
-          };
-        }
-      }
-
-      candidates.push(
-        dictHit ?? {
-          label: dens?.label || label,
-          kcal_per_100g: Math.max(0, Math.round(Number(dens?.kcal_per_100g || 0))),
-          proteins_g_per_100g:
-            dens?.proteins_g_per_100g != null
-              ? Math.max(0, Number(dens?.proteins_g_per_100g))
-              : null,
-          source: "IA",
-          details: "Estimation IA",
-          confidence: 0.6,
-        }
-      );
-    }
-
-    const clean = candidates
-      .map((c) => ({
-        ...c,
-        label: String(c.label || label || "aliment"),
-        kcal_per_100g: Math.max(0, Math.round(Number(c.kcal_per_100g || 0))),
-        proteins_g_per_100g:
-          c.proteins_g_per_100g != null ? Math.max(0, Number(c.proteins_g_per_100g)) : null,
-      }))
-      .slice(0, 3);
-
     const warnings: string[] = [];
     warnings.push("Portion estimée : merci de confirmer le grammage avant calcul.");
-    if (!barcode && /poulet|riz|p[âa]tes|viande|poisson/i.test(label)) {
-      warnings.push("Ambigu cru/cuit : ajuste si besoin.");
+
+    // 1) Si barcode => OFF fiable
+    if (barcode) {
+      const off = await fetchOFFByBarcode(barcode).catch(() => null);
+      if (off) {
+        const payload: FoodAnalysis = {
+          kind: "product",
+          needs_user_confirmation: true,
+          top: off,
+          candidates: [off],
+          barcode,
+          net_weight_g: netWeight,
+          portion_estimated_g: netWeight && netWeight > 0 ? netWeight : 250,
+          warnings,
+        };
+        return NextResponse.json(payload, { headers: { "Cache-Control": "no-store, no-transform" } });
+      }
+      warnings.push("Code-barres détecté mais produit introuvable sur OFF.");
     }
 
-    const portion_estimated_g = netWeight && netWeight > 0 ? netWeight : 250;
+    // 2) Sinon: on propose des candidats OFF mais on NE les met PAS en top
+    const offCandidates = label ? await searchOFFByName(label).catch(() => []) : [];
+    const topCandidates = offCandidates.slice(0, 3);
+
+    // 3) top = IA/DICT (générique) pour éviter les faux positifs
+    const dictEntry = Object.entries(DICT).find(([k]) => label.toLowerCase().includes(k))?.[1];
+    const top =
+      dictEntry
+        ? ({
+            label: label,
+            source: "DICT",
+            details: "Dictionnaire local (générique)",
+            confidence: 0.75,
+            ...dictEntry,
+          } as Candidate)
+        : await densifySingleFood(label, apiKey);
+
+    const candidates: Candidate[] = [top, ...topCandidates].slice(0, 3);
+
+    if (topCandidates.length) {
+      warnings.push(
+        "Produit non certain (pas de code-barres) : choisis un candidat ou scanne le code-barres."
+      );
+    } else {
+      warnings.push("Produit non reconnu sur OFF (sans code-barres) : estimation générique.");
+    }
 
     const payload: FoodAnalysis = {
       kind: "product",
       needs_user_confirmation: true,
-      top: clean[0],
-      candidates: clean,
+      top: candidates[0],
+      candidates,
+      barcode: null,
       net_weight_g: netWeight,
-      barcode: barcode || null,
-      portion_estimated_g,
+      portion_estimated_g: netWeight && netWeight > 0 ? netWeight : 250,
       warnings,
     };
-
     return NextResponse.json(payload, { headers: { "Cache-Control": "no-store, no-transform" } });
   } catch (e: any) {
     const status = e?.status ?? e?.response?.status ?? 500;
