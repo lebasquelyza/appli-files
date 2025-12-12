@@ -15,27 +15,63 @@ function jsonError(status: number, msg: string) {
   });
 }
 
+type NutrPer100 = {
+  kcal_per_100g: number;
+  proteins_g_per_100g: number | null;
+  carbs_g_per_100g: number | null;
+  fats_g_per_100g: number | null;
+  fibers_g_per_100g: number | null;
+  sugars_g_per_100g: number | null;
+  salt_g_per_100g: number | null;
+};
+
 type ConfirmPlateBody = {
   kind: "plate";
-  items: Array<{
-    label: string;
-    grams: number;
-    kcal_per_100g: number;
-    proteins_g_per_100g?: number | null;
-  }>;
+  items: Array<{ label: string; grams: number } & NutrPer100>;
 };
 
 type ConfirmProductBody = {
   kind: "product";
   label: string;
-  grams: number; // portion confirmée
-  kcal_per_100g: number;
-  proteins_g_per_100g?: number | null;
-  source?: string;
-  barcode?: string | null;
-};
+  grams: number;
+} & NutrPer100 & { source?: string; barcode?: string | null };
 
 type ConfirmBody = ConfirmPlateBody | ConfirmProductBody;
+
+function sumMacro(items: Array<{ grams: number } & NutrPer100>) {
+  const mul = (g: number, v: number | null) => (v == null ? 0 : (g * v) / 100);
+
+  const totals = {
+    total_kcal: 0,
+    total_proteins_g: 0,
+    total_carbs_g: 0,
+    total_fats_g: 0,
+    total_fibers_g: 0,
+    total_sugars_g: 0,
+    total_salt_g: 0,
+  };
+
+  for (const it of items) {
+    const g = Math.max(0, Number(it.grams || 0));
+    totals.total_kcal += (g * Math.max(0, Number(it.kcal_per_100g || 0))) / 100;
+    totals.total_proteins_g += mul(g, it.proteins_g_per_100g);
+    totals.total_carbs_g += mul(g, it.carbs_g_per_100g);
+    totals.total_fats_g += mul(g, it.fats_g_per_100g);
+    totals.total_fibers_g += mul(g, it.fibers_g_per_100g);
+    totals.total_sugars_g += mul(g, it.sugars_g_per_100g);
+    totals.total_salt_g += mul(g, it.salt_g_per_100g);
+  }
+
+  return {
+    total_kcal: Math.round(totals.total_kcal),
+    total_proteins_g: Math.round(totals.total_proteins_g * 10) / 10,
+    total_carbs_g: Math.round(totals.total_carbs_g * 10) / 10,
+    total_fats_g: Math.round(totals.total_fats_g * 10) / 10,
+    total_fibers_g: Math.round(totals.total_fibers_g * 10) / 10,
+    total_sugars_g: Math.round(totals.total_sugars_g * 10) / 10,
+    total_salt_g: Math.round(totals.total_salt_g * 100) / 100, // sel en g, 2 décimales
+  };
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -43,55 +79,37 @@ export async function POST(req: NextRequest) {
     if (!body) return jsonError(400, "invalid_json");
 
     if (body.kind === "plate") {
-      const items = Array.isArray(body.items) ? body.items : [];
-      if (!items.length) return jsonError(400, "no_items");
-
-      const clean = items
+      const items = (body.items || [])
         .slice(0, 12)
         .map((it) => ({
+          ...it,
           label: String(it.label || "aliment"),
           grams: Math.max(0, Number(it.grams || 0)),
           kcal_per_100g: Math.max(0, Number(it.kcal_per_100g || 0)),
-          proteins_g_per_100g:
-            it.proteins_g_per_100g != null ? Math.max(0, Number(it.proteins_g_per_100g)) : null,
+          proteins_g_per_100g: it.proteins_g_per_100g != null ? Math.max(0, Number(it.proteins_g_per_100g)) : null,
+          carbs_g_per_100g: it.carbs_g_per_100g != null ? Math.max(0, Number(it.carbs_g_per_100g)) : null,
+          fats_g_per_100g: it.fats_g_per_100g != null ? Math.max(0, Number(it.fats_g_per_100g)) : null,
+          fibers_g_per_100g: it.fibers_g_per_100g != null ? Math.max(0, Number(it.fibers_g_per_100g)) : null,
+          sugars_g_per_100g: it.sugars_g_per_100g != null ? Math.max(0, Number(it.sugars_g_per_100g)) : null,
+          salt_g_per_100g: it.salt_g_per_100g != null ? Math.max(0, Number(it.salt_g_per_100g)) : null,
         }))
-        .filter((x) => x.grams > 0 && x.kcal_per_100g >= 0);
+        .filter((x) => x.grams > 0);
 
-      if (!clean.length) return jsonError(400, "no_valid_items");
+      if (!items.length) return jsonError(400, "no_items");
 
-      const total_kcal = Math.round(
-        clean.reduce((s, x) => s + (x.grams * x.kcal_per_100g) / 100, 0)
-      );
-      const protSum = clean.reduce(
-        (s, x) => s + (x.grams * Number(x.proteins_g_per_100g || 0)) / 100,
-        0
-      );
-      const total_proteins_g = Math.round(protSum * 10) / 10;
+      const totals = sumMacro(items);
 
       return NextResponse.json(
-        {
-          kind: "plate",
-          confirmed: true,
-          items: clean,
-          total_kcal,
-          total_proteins_g,
-        },
+        { kind: "plate", confirmed: true, items, ...totals },
         { headers: { "Cache-Control": "no-store, no-transform" } }
       );
     }
 
     // product
     const grams = Math.max(0, Number(body.grams || 0));
-    const kcal100 = Math.max(0, Number(body.kcal_per_100g || 0));
-    const prot100 =
-      body.proteins_g_per_100g != null ? Math.max(0, Number(body.proteins_g_per_100g)) : null;
-
     if (grams <= 0) return jsonError(400, "invalid_grams");
-    if (kcal100 <= 0) return jsonError(400, "invalid_kcal_per_100g");
 
-    const total_kcal = Math.round((grams * kcal100) / 100);
-    const total_proteins_g =
-      prot100 != null ? Math.round(((grams * prot100) / 100) * 10) / 10 : null;
+    const totals = sumMacro([body as any]);
 
     return NextResponse.json(
       {
@@ -99,12 +117,9 @@ export async function POST(req: NextRequest) {
         confirmed: true,
         label: String(body.label || "aliment"),
         grams,
-        kcal_per_100g: kcal100,
-        proteins_g_per_100g: prot100,
-        total_kcal,
-        total_proteins_g,
         source: body.source ?? null,
         barcode: body.barcode ?? null,
+        ...totals,
       },
       { headers: { "Cache-Control": "no-store, no-transform" } }
     );
