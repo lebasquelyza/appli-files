@@ -1,9 +1,9 @@
-// apps/web/app/dashboard/calories/FoodSnap.tsx
 "use client";
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import BarcodeScanner from "./BarcodeScanner";
 import { translations } from "@/app/i18n/translations";
+import type { SaveCaloriesResult } from "./actions";
 
 type Lang = "fr" | "en";
 
@@ -67,6 +67,9 @@ type AnalyzeProductResult = {
   barcode?: string | null;
   portion_estimated_g: number;
   warnings?: string[];
+  // ✅ fields ajoutés côté API (optionnels)
+  food_likelihood?: number;
+  non_food_reason?: string | null;
 };
 
 type AnalyzePlateResult = {
@@ -74,6 +77,9 @@ type AnalyzePlateResult = {
   needs_user_confirmation: true;
   items: PlateItemEstimated[];
   warnings?: string[];
+  // ✅ fields ajoutés côté API (optionnels)
+  food_likelihood?: number;
+  non_food_reason?: string | null;
 };
 
 type AnalyzeResponse = AnalyzeProductResult | AnalyzePlateResult;
@@ -109,10 +115,7 @@ type ConfirmProductResponse = {
 
 type ConfirmResponse = ConfirmPlateResponse | ConfirmProductResponse;
 
-// ✅ onSave retourne maintenant un objet { ok: true } ou { ok:false, error: ... }
-type SaveResult = { ok: true } | { ok: false; error: string };
-
-type Props = { today: string; onSave?: (formData: FormData) => Promise<SaveResult> };
+type Props = { today: string; onSave?: (formData: FormData) => Promise<SaveCaloriesResult> };
 
 function round1(x: number) {
   return Math.round(x * 10) / 10;
@@ -125,22 +128,16 @@ function numOrNull(x: any): number | null {
 export default function FoodSnap({ today, onSave }: Props) {
   const router = useRouter();
 
-  // ---- Fichier / preview
   const [file, setFile] = React.useState<File | null>(null);
   const [preview, setPreview] = React.useState<string | null>(null);
 
-  // ---- États
   const [loading, setLoading] = React.useState(false);
   const [result, setResult] = React.useState<AnalyzeResponse | null>(null);
   const [confirmed, setConfirmed] = React.useState<ConfirmResponse | null>(null);
   const [confirming, setConfirming] = React.useState(false);
+
   const [error, setError] = React.useState<string | null>(null);
 
-  // ✅ auto save (sans redirect)
-  const [autoSaving, setAutoSaving] = React.useState(false);
-  const [saveMsg, setSaveMsg] = React.useState<string | null>(null);
-
-  // ---- Produit (édition)
   const [portion, setPortion] = React.useState<number>(250);
   const [kcal100, setKcal100] = React.useState<string>("");
   const [prot100, setProt100] = React.useState<string>("");
@@ -153,17 +150,20 @@ export default function FoodSnap({ today, onSave }: Props) {
   const [label, setLabel] = React.useState<string>("");
   const [barcode, setBarcode] = React.useState<string | null>(null);
 
-  // ---- Assiette (édition)
   const [items, setItems] = React.useState<PlateItemConfirmed[]>([]);
 
-  // ---- Scanner
   const [showScanner, setShowScanner] = React.useState(false);
 
-  // ---- Recherche manuelle
   const [q, setQ] = React.useState("");
   const [qLoading, setQLoading] = React.useState(false);
   const [qResults, setQResults] = React.useState<Candidate[]>([]);
   const [qErr, setQErr] = React.useState<string | null>(null);
+
+  const [autoSaving, setAutoSaving] = React.useState(false);
+  const [saveMsg, setSaveMsg] = React.useState<string | null>(null);
+
+  // ✅ confirmation explicite si non-food probable
+  const [userFoodConfirmed, setUserFoodConfirmed] = React.useState(false);
 
   const inputRef = React.useRef<HTMLInputElement>(null);
 
@@ -174,9 +174,6 @@ export default function FoodSnap({ today, onSave }: Props) {
     setConfirmed(null);
     setConfirming(false);
     setError(null);
-
-    setAutoSaving(false);
-    setSaveMsg(null);
 
     setPortion(250);
     setKcal100("");
@@ -194,6 +191,10 @@ export default function FoodSnap({ today, onSave }: Props) {
     setQ("");
     setQResults([]);
     setQErr(null);
+
+    setAutoSaving(false);
+    setSaveMsg(null);
+    setUserFoodConfirmed(false);
   }
 
   function onPick() {
@@ -219,6 +220,8 @@ export default function FoodSnap({ today, onSave }: Props) {
     setSalt100(c.salt_g_per_100g != null ? String(c.salt_g_per_100g) : "");
     setConfirmed(null);
     setSaveMsg(null);
+    setAutoSaving(false);
+    setUserFoodConfirmed(false);
   }
 
   async function analyze() {
@@ -227,6 +230,8 @@ export default function FoodSnap({ today, onSave }: Props) {
     setError(null);
     setConfirmed(null);
     setSaveMsg(null);
+    setAutoSaving(false);
+    setUserFoodConfirmed(false);
 
     try {
       const body = new FormData();
@@ -288,6 +293,8 @@ export default function FoodSnap({ today, onSave }: Props) {
           barcode: scan,
           portion_estimated_g: portion || 250,
           warnings: [],
+          food_likelihood: 0.95,
+          non_food_reason: null,
         };
         setResult(prod);
         setConfirmed(null);
@@ -375,8 +382,24 @@ export default function FoodSnap({ today, onSave }: Props) {
     };
   }
 
+  // ✅ garde-fou non-food
+  const foodLikelihood = (result as any)?.food_likelihood;
+  const nonFoodWarning =
+    Array.isArray((result as any)?.warnings) &&
+    (result as any).warnings.some((w: string) => /ne ressemble pas à de la nourriture/i.test(w));
+
+  const mustConfirmFood =
+    (typeof foodLikelihood === "number" && foodLikelihood < 0.6) || nonFoodWarning;
+
   async function confirmAndCompute() {
     if (!result) return;
+
+    // bloque si non-food probable et pas confirmé par l'utilisateur
+    if (mustConfirmFood && !userFoodConfirmed) {
+      setSaveMsg("⚠️ Confirme que c’est bien de la nourriture pour continuer.");
+      return;
+    }
+
     setConfirming(true);
     setError(null);
     setSaveMsg(null);
@@ -426,8 +449,11 @@ export default function FoodSnap({ today, onSave }: Props) {
       const data: ConfirmResponse = await res.json();
       setConfirmed(data);
 
-      // ✅ AUTO: sauvegarde immédiate (sans redirect) + refresh de la page
+      // ✅ auto-save sans redirect
       if (onSave && data.confirmed && data.total_kcal && !autoSaving) {
+        // recheck garde-fou
+        if (mustConfirmFood && !userFoodConfirmed) return;
+
         setAutoSaving(true);
 
         const fd = new FormData();
@@ -440,8 +466,11 @@ export default function FoodSnap({ today, onSave }: Props) {
         if (saveRes?.ok) {
           setSaveMsg("✅ Ajouté aux calories d’aujourd’hui");
           router.refresh();
+
+          // ✅ notifie les autres pages (dashboard) de relire app.kcals
+          window.dispatchEvent(new CustomEvent("app:kcal-updated", { detail: { date: today } }));
         } else {
-          setSaveMsg("❌ Erreur lors de l’enregistrement");
+          setSaveMsg(saveRes?.error === "bad_date" ? "❌ Date invalide" : "❌ Valeur kcal invalide");
           setAutoSaving(false);
         }
       }
@@ -487,11 +516,11 @@ export default function FoodSnap({ today, onSave }: Props) {
   const estPlateTotals = result?.kind === "plate" ? estimateTotalsFromItems(items) : null;
   const estProdTotals = result?.kind === "product" ? estimateTotalsFromProduct() : null;
 
-  const shownTotals = confirmed?.confirmed ? confirmed : result?.kind === "plate" ? estPlateTotals : estProdTotals;
+  const shownTotals =
+    confirmed?.confirmed ? confirmed : result?.kind === "plate" ? estPlateTotals : estProdTotals;
 
   return (
     <div className="card" style={{ border: "1px dashed #d1d5db", padding: 12 }}>
-      {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
         <div>
           <div style={{ fontWeight: 600 }} dangerouslySetInnerHTML={{ __html: t("calories.foodSnap.header.title") }} />
@@ -510,7 +539,6 @@ export default function FoodSnap({ today, onSave }: Props) {
         <input ref={inputRef} type="file" accept="image/*" capture="environment" onChange={onFile} hidden />
       </div>
 
-      {/* Scanner */}
       {showScanner && (
         <div style={{ marginTop: 10 }}>
           <BarcodeScanner
@@ -524,17 +552,10 @@ export default function FoodSnap({ today, onSave }: Props) {
         </div>
       )}
 
-      {/* Search */}
       <div className="card" style={{ marginTop: 10, padding: 10, border: "1px solid #e5e7eb" }}>
         <div style={{ fontWeight: 600, marginBottom: 6 }}>{t("calories.foodSnap.search.title")}</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8 }}>
-          <input
-            className="input"
-            type="search"
-            placeholder={t("calories.foodSnap.search.placeholder")}
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-          />
+          <input className="input" type="search" placeholder={t("calories.foodSnap.search.placeholder")} value={q} onChange={(e) => setQ(e.target.value)} />
           <button className="btn" type="button" onClick={searchAnyFoodByName} disabled={qLoading}>
             {qLoading ? t("calories.foodSnap.search.loading") : t("calories.foodSnap.search.submit")}
           </button>
@@ -565,6 +586,8 @@ export default function FoodSnap({ today, onSave }: Props) {
                       barcode: null,
                       portion_estimated_g: 250,
                       warnings: [],
+                      food_likelihood: 0.7,
+                      non_food_reason: null,
                     };
                     setResult(prod);
                     setConfirmed(null);
@@ -572,8 +595,6 @@ export default function FoodSnap({ today, onSave }: Props) {
                     applyCandidateToProduct(c);
                     setBarcode(null);
                     setPortion(250);
-                    setSaveMsg(null);
-                    setAutoSaving(false);
                   }}
                 >
                   {t("calories.foodSnap.search.choose")}
@@ -584,7 +605,6 @@ export default function FoodSnap({ today, onSave }: Props) {
         )}
       </div>
 
-      {/* Preview */}
       {preview && (
         <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
           <img src={preview} alt={t("calories.foodSnap.preview.alt")} style={{ maxWidth: "100%", borderRadius: 8 }} />
@@ -601,13 +621,49 @@ export default function FoodSnap({ today, onSave }: Props) {
 
       {error && <div className="text-xs" style={{ color: "#dc2626", marginTop: 8 }}>{error}</div>}
 
-      {/* Result */}
       {result && (
         <div style={{ marginTop: 10, display: "grid", gap: 12 }}>
           <div className="text-xs" style={{ color: "#6b7280" }}>
             Ajuste les quantités puis confirme.
           </div>
 
+          {/* ✅ bloc anti non-food */}
+          {mustConfirmFood && (
+            <div className="card" style={{ padding: 10, border: "1px solid #f59e0b66", background: "#f59e0b12" }}>
+              <div style={{ fontWeight: 700, marginBottom: 6 }}>⚠️ Vérification</div>
+              <div className="text-sm" style={{ color: "#6b7280" }}>
+                La photo ne semble pas contenir de nourriture. Confirme si tu veux continuer.
+              </div>
+              <label style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={userFoodConfirmed}
+                  onChange={(e) => setUserFoodConfirmed(e.target.checked)}
+                />
+                <span className="text-sm">Oui, c’est bien de la nourriture</span>
+              </label>
+              {(result as any)?.non_food_reason ? (
+                <div className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>
+                  Raison: {(result as any).non_food_reason}
+                </div>
+              ) : null}
+            </div>
+          )}
+
+          {Array.isArray((result as any)?.warnings) && (result as any).warnings.length > 0 && (
+            <div className="card" style={{ padding: 10, border: "1px solid #e5e7eb" }}>
+              <div style={{ fontWeight: 700, marginBottom: 6 }}>Notes</div>
+              <ul style={{ margin: 0, paddingLeft: 18 }}>
+                {(result as any).warnings.map((w: string, i: number) => (
+                  <li key={i} className="text-sm" style={{ color: "#6b7280", marginTop: 4 }}>
+                    {w}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* --- (le reste de ton UI plate/product) --- */}
           {result.kind === "plate" ? (
             <>
               <div style={{ fontWeight: 600 }}>{t("calories.foodSnap.plate.title")}</div>
@@ -771,7 +827,6 @@ export default function FoodSnap({ today, onSave }: Props) {
             </>
           )}
 
-          {/* Totaux */}
           <div className="card" style={{ padding: 10, border: "1px solid #e5e7eb" }}>
             <div style={{ fontWeight: 700, marginBottom: 6 }}>
               {confirmed?.confirmed ? tf("calories.foodSnap.confirm.finalTotal", "Total confirmé") : tf("calories.foodSnap.confirm.estimatedTotal", "Total estimé")}
@@ -788,12 +843,16 @@ export default function FoodSnap({ today, onSave }: Props) {
             </div>
           </div>
 
-          {/* Actions */}
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             <button
               className="btn btn-dash"
               onClick={confirmAndCompute}
-              disabled={autoSaving || confirming || !(shownTotals as any)?.total_kcal}
+              disabled={
+                autoSaving ||
+                confirming ||
+                !(shownTotals as any)?.total_kcal ||
+                (mustConfirmFood && !userFoodConfirmed)
+              }
             >
               {confirming ? tf("calories.foodSnap.confirm.loading", "Calcul…") : tf("calories.foodSnap.confirm.button", "Confirmer & calculer")}
             </button>
@@ -802,17 +861,16 @@ export default function FoodSnap({ today, onSave }: Props) {
               {t("calories.foodSnap.actions.fillForm")}
             </button>
 
-            {/* Bouton manuel (optionnel) : on le garde si tu veux */}
             {onSave && (
               <form
                 action={async (fd) => {
-                  // garde le comportement (sans redirect) si l’utilisateur veut cliquer manuellement
                   const r = await onSave(fd);
-                  if ((r as any)?.ok) {
+                  if (r?.ok) {
                     setSaveMsg("✅ Ajouté aux calories d’aujourd’hui");
                     router.refresh();
+                    window.dispatchEvent(new CustomEvent("app:kcal-updated", { detail: { date: today } }));
                   } else {
-                    setSaveMsg("❌ Erreur lors de l’enregistrement");
+                    setSaveMsg(r?.error === "bad_date" ? "❌ Date invalide" : "❌ Valeur kcal invalide");
                   }
                 }}
                 style={{ display: "inline-flex", gap: 8 }}
@@ -820,7 +878,7 @@ export default function FoodSnap({ today, onSave }: Props) {
                 <input type="hidden" name="date" value={today} />
                 <input type="hidden" name="kcal" value={canFinalize ? (confirmed as any).total_kcal : 0} />
                 <input type="hidden" name="note" value={buildNote()} />
-                <button className="btn btn-dash" type="submit" disabled={!canFinalize || autoSaving}>
+                <button className="btn btn-dash" type="submit" disabled={!canFinalize || autoSaving || (mustConfirmFood && !userFoodConfirmed)}>
                   {t("calories.foodSnap.actions.addToCalories")}
                 </button>
               </form>
@@ -828,7 +886,7 @@ export default function FoodSnap({ today, onSave }: Props) {
           </div>
 
           {saveMsg && (
-            <div className="text-xs" style={{ color: saveMsg.startsWith("✅") ? "#16a34a" : "#dc2626", marginTop: 6 }}>
+            <div className="text-xs" style={{ color: saveMsg.startsWith("✅") ? "#16a34a" : saveMsg.startsWith("⚠️") ? "#f59e0b" : "#dc2626", marginTop: 6 }}>
               {saveMsg}
             </div>
           )}
