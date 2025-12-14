@@ -1,34 +1,29 @@
-// apps/web/app/dashboard/calories/page.tsx
 import { cookies } from "next/headers";
 import FoodSnap from "./FoodSnap";
 import { saveCalories } from "./actions";
-import { translations } from "@/app/i18n/translations"; // ✅ i18n
+import { translations } from "@/app/i18n/translations";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-/* ========== i18n helpers (server) ========== */
 type Lang = "fr" | "en";
 
 function getFromPath(obj: any, path: string): any {
   return path.split(".").reduce((acc, key) => acc?.[key], obj);
 }
-
 function tServer(lang: Lang, path: string, fallback?: string): string {
   const dict = translations[lang] as any;
   const v = getFromPath(dict, path);
   if (typeof v === "string") return v;
   return fallback ?? path;
 }
-
 function getLang(): Lang {
   const cookieLang = cookies().get("fc-lang")?.value;
   if (cookieLang === "en") return "en";
   return "fr";
 }
 
-/* ========== Types & helpers ========== */
 type KcalStore = Record<string, number>;
 type NotesStore = Record<string, string>;
 
@@ -73,7 +68,6 @@ export default async function Page() {
   const today = todayISO();
   const todayKcal = store[today] || 0;
 
-  // Liste des 14 derniers jours
   const days: { date: string; kcal: number; note?: string }[] = [];
   for (let i = 13; i >= 0; i--) {
     const d = new Date();
@@ -82,7 +76,7 @@ export default async function Page() {
     days.push({ date, kcal: store[date] || 0, note: notes[date] });
   }
 
-  // ✅ Wrapper compatible <form action=...> (retourne Promise<void>)
+  // ✅ <form action> exige Promise<void> (pas d'objet retourné)
   async function saveCaloriesAction(formData: FormData): Promise<void> {
     "use server";
     await saveCalories(formData);
@@ -105,7 +99,6 @@ export default async function Page() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* Colonne 1 : Aujourd’hui + formulaire principal */}
         <article className="card">
           <h3 style={{ marginTop: 0, fontSize: 16, color: "#111827" }}>
             {t("calories.today.title", "Aujourd’hui")}
@@ -127,6 +120,7 @@ export default async function Page() {
 
           <form action={saveCaloriesAction} style={{ display: "grid", gap: 10, marginTop: 12 }}>
             <input type="hidden" name="date" value={today} />
+
             <div>
               <label className="label">{t("calories.form.kcal.label", "Calories à ajouter")}</label>
               <input
@@ -188,13 +182,11 @@ export default async function Page() {
           </form>
         </article>
 
-        {/* Colonne 2 : Ajout via photo / code-barres / recherche */}
         <article className="card">
           <FoodSnap today={today} onSave={saveCalories} />
         </article>
       </div>
 
-      {/* Historique 14 jours */}
       <div className="card" style={{ marginTop: 16 }}>
         <details>
           <summary
@@ -219,14 +211,7 @@ export default async function Page() {
           </div>
 
           <div className="table-wrapper" style={{ overflowX: "auto" }}>
-            <table
-              className="table"
-              style={{
-                width: "100%",
-                borderCollapse: "collapse",
-                fontSize: 14,
-              }}
-            >
+            <table className="table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
               <thead>
                 <tr>
                   <th style={{ textAlign: "left", padding: "6px 8px" }}>
@@ -254,13 +239,7 @@ export default async function Page() {
                         ({d.date})
                       </span>
                     </td>
-                    <td
-                      style={{
-                        padding: "6px 8px",
-                        textAlign: "right",
-                        fontFamily: "tabular-nums",
-                      }}
-                    >
+                    <td style={{ padding: "6px 8px", textAlign: "right", fontFamily: "tabular-nums" }}>
                       {d.kcal.toLocaleString("fr-FR")}
                     </td>
                     <td style={{ padding: "6px 8px", color: "#374151" }}>
