@@ -1,8 +1,7 @@
-//apps/web/app/dashboard/calories/actions.ts
+// apps/web/app/dashboard/calories/actions.ts
 "use server";
 
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
 
 type KcalStore = Record<string, number>;
 type NotesStore = Record<string, string>;
@@ -47,13 +46,13 @@ function pruneStore(store: Record<string, unknown>, keepDays = 60) {
   for (let i = 0; i < toDrop; i++) delete (store as any)[keys[i]];
 }
 
-export async function saveCalories(formData: FormData) {
+export async function saveCalories(formData: FormData): Promise<{ ok: true } | { ok: false; error: "bad_date" | "bad_kcal" }> {
   const date = String(formData.get("date") || todayISO());
   const kcal = Number(formData.get("kcal"));
   const note = (formData.get("note") || "").toString().slice(0, 120);
 
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) redirect("/dashboard/calories?err=bad_date");
-  if (!Number.isFinite(kcal) || kcal < 0 || kcal > 50000) redirect("/dashboard/calories?err=bad_kcal");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { ok: false, error: "bad_date" };
+  if (!Number.isFinite(kcal) || kcal < 0 || kcal > 50000) return { ok: false, error: "bad_kcal" };
 
   const jar = cookies();
   const store = parseKcalStore(jar.get("app.kcals")?.value);
@@ -62,7 +61,10 @@ export async function saveCalories(formData: FormData) {
   pruneStore(store, 60);
 
   jar.set("app.kcals", JSON.stringify(store), {
-    path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365, httpOnly: false,
+    path: "/",
+    sameSite: "lax",
+    maxAge: 60 * 60 * 24 * 365,
+    httpOnly: false,
   });
 
   if (note) {
@@ -70,9 +72,12 @@ export async function saveCalories(formData: FormData) {
     notes[date] = note;
     pruneStore(notes, 60);
     jar.set("app.kcals.notes", JSON.stringify(notes), {
-      path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365, httpOnly: false,
+      path: "/",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24 * 365,
+      httpOnly: false,
     });
   }
 
-  redirect("/dashboard/calories?saved=1#saved");
+  return { ok: true };
 }
