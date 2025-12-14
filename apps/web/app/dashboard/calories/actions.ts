@@ -1,4 +1,3 @@
-// apps/web/app/dashboard/calories/actions.ts
 "use server";
 
 import { cookies } from "next/headers";
@@ -46,7 +45,11 @@ function pruneStore(store: Record<string, unknown>, keepDays = 60) {
   for (let i = 0; i < toDrop; i++) delete (store as any)[keys[i]];
 }
 
-export async function saveCalories(formData: FormData): Promise<{ ok: true } | { ok: false; error: "bad_date" | "bad_kcal" }> {
+export type SaveCaloriesResult =
+  | { ok: true }
+  | { ok: false; error: "bad_date" | "bad_kcal" };
+
+export async function saveCalories(formData: FormData): Promise<SaveCaloriesResult> {
   const date = String(formData.get("date") || todayISO());
   const kcal = Number(formData.get("kcal"));
   const note = (formData.get("note") || "").toString().slice(0, 120);
