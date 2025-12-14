@@ -23,7 +23,6 @@ function t(path: string): string {
   if (typeof v === "string") return v;
   return path;
 }
-// fallback: si clé i18n manquante => texte FR simple
 function tf(path: string, fallback: string) {
   const v = t(path);
   return v === path ? fallback : v;
@@ -41,7 +40,8 @@ type NutrPer100 = {
 
 type Candidate = {
   label: string;
-  source: "OFF" | "USDA" | "DICT" | "IA";
+  // source/détails existent côté API mais on ne les affiche jamais
+  source?: "OFF" | "USDA" | "DICT" | "IA";
   details?: string;
   confidence?: number;
 } & NutrPer100;
@@ -142,7 +142,6 @@ export default function FoodSnap({ today, onSave }: Props) {
   const [sugar100, setSugar100] = React.useState<string>("");
   const [salt100, setSalt100] = React.useState<string>("");
 
-  const [source, setSource] = React.useState<"OFF" | "IA" | "DICT" | "USDA">("IA");
   const [label, setLabel] = React.useState<string>("");
   const [barcode, setBarcode] = React.useState<string | null>(null);
 
@@ -177,7 +176,6 @@ export default function FoodSnap({ today, onSave }: Props) {
     setSugar100("");
     setSalt100("");
 
-    setSource("IA");
     setLabel("");
     setBarcode(null);
     setItems([]);
@@ -208,7 +206,6 @@ export default function FoodSnap({ today, onSave }: Props) {
     setFiber100(c.fibers_g_per_100g != null ? String(c.fibers_g_per_100g) : "");
     setSugar100(c.sugars_g_per_100g != null ? String(c.sugars_g_per_100g) : "");
     setSalt100(c.salt_g_per_100g != null ? String(c.salt_g_per_100g) : "");
-    setSource(c.source as any);
     setConfirmed(null);
   }
 
@@ -242,7 +239,6 @@ export default function FoodSnap({ today, onSave }: Props) {
             fibers_g_per_100g: it.fibers_g_per_100g ?? null,
             sugars_g_per_100g: it.sugars_g_per_100g ?? null,
             salt_g_per_100g: it.salt_g_per_100g ?? null,
-            source: it.source,
           }))
         );
       } else {
@@ -403,7 +399,6 @@ export default function FoodSnap({ today, onSave }: Props) {
           fibers_g_per_100g: (fiber100 || "").trim() === "" ? null : Number((fiber100 || "").trim()),
           sugars_g_per_100g: (sugar100 || "").trim() === "" ? null : Number((sugar100 || "").trim()),
           salt_g_per_100g: (salt100 || "").trim() === "" ? null : Number((salt100 || "").trim()),
-          source,
           barcode,
         };
       }
