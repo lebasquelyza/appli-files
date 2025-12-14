@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useLanguage } from "@/components/LanguageProvider";
 
@@ -9,34 +9,81 @@ type Workout = { status: "active" | "done"; startedAt?: string; endedAt?: string
 type Store = { sessions: Workout[] };
 
 function parseKcalStore(raw?: string): KcalStore {
-  try { return JSON.parse(raw || "{}") || {}; } catch { return {}; }
+  try {
+    const data = JSON.parse(raw || "{}") || {};
+    if (data && typeof data === "object") return data as KcalStore;
+    return {};
+  } catch {
+    return {};
+  }
 }
 function parseSessions(raw?: string): Store {
   try {
     const o = JSON.parse(raw || "{}");
     return { sessions: Array.isArray(o?.sessions) ? o.sessions : [] };
-  } catch { return { sessions: [] }; }
+  } catch {
+    return { sessions: [] };
+  }
 }
 
 function todayISO(tz = "Europe/Paris") {
   return new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date());
 }
 
+function readCookieValue(name: string): string {
+  if (typeof document === "undefined") return "";
+  const m = document.cookie.match(new RegExp(`(?:^|;\\s*)${name.replace(/\./g, "\\.")}=([^;]+)`));
+  return m ? m[1] : "";
+}
+
+function readKcalsCookie(): KcalStore {
+  const raw = readCookieValue("app.kcals");
+  // important: le cookie peut être encodé
+  return parseKcalStore(raw ? decodeURIComponent(raw) : "{}");
+}
+
+function readSessionsCookie(): Store {
+  const raw = readCookieValue("app_sessions");
+  return parseSessions(raw ? decodeURIComponent(raw) : "{}");
+}
+
 export default function DashboardPage() {
   const { t, lang } = useLanguage();
 
-  // Lecture cookies côté client
-  const kcals = parseKcalStore(typeof document !== "undefined" ? document.cookie.match(/app.kcals=([^;]+)/)?.[1] : "{}");
-  const sessions = parseSessions(typeof document !== "undefined" ? document.cookie.match(/app_sessions=([^;]+)/)?.[1] : "{}");
+  const [kcals, setKcals] = useState<KcalStore>({});
+  const [sessions, setSessions] = useState<Store>({ sessions: [] });
+
+  useEffect(() => {
+    const updateAll = () => {
+      setKcals(readKcalsCookie());
+      setSessions(readSessionsCookie());
+    };
+
+    updateAll(); // 1er chargement
+
+    // écoute les mises à jour venant de /dashboard/calories
+    window.addEventListener("app:kcal-updated", updateAll as any);
+    window.addEventListener("app:sessions-updated", updateAll as any);
+
+    return () => {
+      window.removeEventListener("app:kcal-updated", updateAll as any);
+      window.removeEventListener("app:sessions-updated", updateAll as any);
+    };
+  }, []);
 
   const today = todayISO();
   const todayKcal = kcals[today] || 0;
 
-  const stepsToday = sessions.sessions.filter((x) => x.status === "active").length;
+  const stepsToday = useMemo(
+    () => sessions.sessions.filter((x) => x.status === "active").length,
+    [sessions]
+  );
 
-  const lastDone = sessions.sessions
-    .filter((x) => x.status === "done")
-    .sort((a, b) => (b.endedAt || "").localeCompare(a.endedAt || ""))[0];
+  const lastDone = useMemo(() => {
+    return sessions.sessions
+      .filter((x) => x.status === "done")
+      .sort((a, b) => (b.endedAt || "").localeCompare(a.endedAt || ""))[0];
+  }, [sessions]);
 
   const lastSessionDate =
     lastDone?.endedAt
@@ -159,3 +206,4 @@ function KpiCard({
     </article>
   );
 }
+
