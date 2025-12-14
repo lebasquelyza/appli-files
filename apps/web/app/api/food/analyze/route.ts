@@ -1,10 +1,12 @@
 // apps/web/app/api/food/analyze/route.ts
 import { NextRequest, NextResponse } from "next/server";
 
+/** Next runtime */
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const revalidate = 0;
 
+/** Utils génériques */
 function jsonError(status: number, msg: string) {
   return new NextResponse(JSON.stringify({ error: msg }), {
     status,
@@ -28,7 +30,7 @@ async function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   });
 }
 
-/** --- Image sanitize --- */
+/** Image sanitize */
 type SanitizeOk = { ok: true; url: string; kind: "https" | "data" };
 type SanitizeErr = { ok: false; reason: "empty" | "blob_url" | "bad_base64" | "unsupported" };
 type SanitizeResult = SanitizeOk | SanitizeErr;
@@ -57,7 +59,7 @@ function sanitizeImageInput(raw: string): SanitizeResult {
   return { ok: false, reason: "unsupported" };
 }
 
-/** --- Types nutrition /100g --- */
+/** Types nutrition /100g */
 type NutrPer100 = {
   kcal_per_100g: number;
   proteins_g_per_100g: number | null;
@@ -87,8 +89,8 @@ type FoodAnalysis =
       needs_user_confirmation: true;
       top: Candidate;
       candidates: Candidate[];
-      barcode?: string | null;
       net_weight_g?: number | null;
+      barcode?: string | null;
       portion_estimated_g: number;
       warnings?: string[];
     }
@@ -99,7 +101,30 @@ type FoodAnalysis =
       warnings?: string[];
     };
 
-/** --- Mini DICT (secours) --- */
+/** Helpers */
+function toNum(x: any): number | null {
+  const n = Number(x);
+  return Number.isFinite(n) ? n : null;
+}
+function clamp0(x: any): number {
+  const n = Number(x);
+  return Number.isFinite(n) ? Math.max(0, n) : 0;
+}
+function clampNull0(x: any): number | null {
+  const n = Number(x);
+  return Number.isFinite(n) ? Math.max(0, n) : null;
+}
+function normLabel(s: string) {
+  return String(s || "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * DICT local de secours (valeurs moyennes /100g).
+ * Tu peux l’étendre facilement.
+ */
 const DICT: Record<string, NutrPer100> = {
   "pain complet": {
     kcal_per_100g: 250,
@@ -110,6 +135,15 @@ const DICT: Record<string, NutrPer100> = {
     sugars_g_per_100g: 4,
     salt_g_per_100g: 1.2,
   },
+  "pain": {
+    kcal_per_100g: 260,
+    proteins_g_per_100g: 9,
+    carbs_g_per_100g: 50,
+    fats_g_per_100g: 3.5,
+    fibers_g_per_100g: 3,
+    sugars_g_per_100g: 4,
+    salt_g_per_100g: 1.3,
+  },
   "riz cuit": {
     kcal_per_100g: 130,
     proteins_g_per_100g: 2.7,
@@ -117,6 +151,15 @@ const DICT: Record<string, NutrPer100> = {
     fats_g_per_100g: 0.3,
     fibers_g_per_100g: 0.4,
     sugars_g_per_100g: 0.1,
+    salt_g_per_100g: 0,
+  },
+  "pâtes cuites": {
+    kcal_per_100g: 150,
+    proteins_g_per_100g: 5,
+    carbs_g_per_100g: 30,
+    fats_g_per_100g: 1.2,
+    fibers_g_per_100g: 1.8,
+    sugars_g_per_100g: 0.6,
     salt_g_per_100g: 0,
   },
   "jambon": {
@@ -137,14 +180,27 @@ const DICT: Record<string, NutrPer100> = {
     sugars_g_per_100g: 3,
     salt_g_per_100g: 1.5,
   },
+  "huile": {
+    kcal_per_100g: 900,
+    proteins_g_per_100g: 0,
+    carbs_g_per_100g: 0,
+    fats_g_per_100g: 100,
+    fibers_g_per_100g: 0,
+    sugars_g_per_100g: 0,
+    salt_g_per_100g: 0,
+  },
 };
 
-function n(x: any): number | null {
-  const v = Number(x);
-  return Number.isFinite(v) ? v : null;
+/** Match DICT “contient” (libellé générique) */
+function dictMatch(label: string): { key: string; v: NutrPer100 } | null {
+  const low = normLabel(label);
+  for (const [k, v] of Object.entries(DICT)) {
+    if (low.includes(normLabel(k))) return { key: k, v };
+  }
+  return null;
 }
 
-/** --- OFF helpers --- */
+/** OFF helpers */
 async function fetchOFFByBarcode(barcode: string): Promise<Candidate | null> {
   const url = `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json`;
   const r = await fetch(url, { headers: { "user-agent": "files-coaching/1.0" } });
@@ -156,29 +212,31 @@ async function fetchOFFByBarcode(barcode: string): Promise<Candidate | null> {
   const nutr = p.nutriments || {};
   const label = p.product_name || p.generic_name || p.brands || "Produit OFF";
 
-  const kcal100 = n(nutr["energy-kcal_100g"]) ?? 0;
-  const prot100 = n(nutr["proteins_100g"]);
-  const carbs100 = n(nutr["carbohydrates_100g"]);
-  const fat100 = n(nutr["fat_100g"]);
-  const fiber100 = n(nutr["fiber_100g"]);
-  const sugar100 = n(nutr["sugars_100g"]);
+  const kcal100 = toNum(nutr["energy-kcal_100g"]) ?? 0;
+  const prot100 = toNum(nutr["proteins_100g"]);
+  const carbs100 = toNum(nutr["carbohydrates_100g"]);
+  const fat100 = toNum(nutr["fat_100g"]);
+  const fiber100 = toNum(nutr["fiber_100g"]);
+  const sugar100 = toNum(nutr["sugars_100g"]);
   const salt100 =
-    n(nutr["salt_100g"]) ??
-    (n(nutr["sodium_100g"]) != null ? (n(nutr["sodium_100g"]) as number) * 2.5 : null);
+    toNum(nutr["salt_100g"]) ??
+    (toNum(nutr["sodium_100g"]) != null ? (toNum(nutr["sodium_100g"]) as number) * 2.5 : null);
 
+  // si rien de pertinent
   if (!kcal100 && prot100 == null && carbs100 == null && fat100 == null) return null;
 
   return {
-    label,
+    label: String(label),
     source: "OFF",
     details: p.brands ? `Marque: ${p.brands}` : undefined,
+    confidence: 0.95,
     kcal_per_100g: Math.max(0, Math.round(kcal100)),
-    proteins_g_per_100g: prot100,
-    carbs_g_per_100g: carbs100,
-    fats_g_per_100g: fat100,
-    fibers_g_per_100g: fiber100,
-    sugars_g_per_100g: sugar100,
-    salt_g_per_100g: salt100,
+    proteins_g_per_100g: clampNull0(prot100),
+    carbs_g_per_100g: clampNull0(carbs100),
+    fats_g_per_100g: clampNull0(fat100),
+    fibers_g_per_100g: clampNull0(fiber100),
+    sugars_g_per_100g: clampNull0(sugar100),
+    salt_g_per_100g: clampNull0(salt100),
   };
 }
 
@@ -186,6 +244,7 @@ async function searchOFFByName(q: string): Promise<Candidate[]> {
   const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(
     q
   )}&search_simple=1&action=process&json=1&page_size=5`;
+
   const r = await fetch(url, { headers: { "user-agent": "files-coaching/1.0" } });
   if (!r.ok) return [];
   const j = await r.json().catch(() => null);
@@ -193,38 +252,43 @@ async function searchOFFByName(q: string): Promise<Candidate[]> {
   const out: Candidate[] = [];
   for (const p of j?.products ?? []) {
     const nutr = p.nutriments || {};
-    const kcal100 = n(nutr["energy-kcal_100g"]) ?? 0;
-    const prot100 = n(nutr["proteins_100g"]);
-    const carbs100 = n(nutr["carbohydrates_100g"]);
-    const fat100 = n(nutr["fat_100g"]);
-    const fiber100 = n(nutr["fiber_100g"]);
-    const sugar100 = n(nutr["sugars_100g"]);
+    const kcal100 = toNum(nutr["energy-kcal_100g"]) ?? 0;
+    const prot100 = toNum(nutr["proteins_100g"]);
+    const carbs100 = toNum(nutr["carbohydrates_100g"]);
+    const fat100 = toNum(nutr["fat_100g"]);
+    const fiber100 = toNum(nutr["fiber_100g"]);
+    const sugar100 = toNum(nutr["sugars_100g"]);
     const salt100 =
-      n(nutr["salt_100g"]) ??
-      (n(nutr["sodium_100g"]) != null ? (n(nutr["sodium_100g"]) as number) * 2.5 : null);
+      toNum(nutr["salt_100g"]) ??
+      (toNum(nutr["sodium_100g"]) != null ? (toNum(nutr["sodium_100g"]) as number) * 2.5 : null);
 
     const name =
-      p.product_name || p.generic_name || p.brands || p.categories?.split(",")?.[0] || q;
+      p.product_name ||
+      p.generic_name ||
+      p.brands ||
+      p.categories?.split(",")?.[0] ||
+      q;
 
-    if (kcal100 || prot100 != null || carbs100 != null || fat100 != null) {
-      out.push({
-        label: String(name),
-        source: "OFF",
-        details: p.brands ? `Marque: ${p.brands}` : undefined,
-        kcal_per_100g: Math.max(0, Math.round(kcal100)),
-        proteins_g_per_100g: prot100,
-        carbs_g_per_100g: carbs100,
-        fats_g_per_100g: fat100,
-        fibers_g_per_100g: fiber100,
-        sugars_g_per_100g: sugar100,
-        salt_g_per_100g: salt100,
-      });
-    }
+    if (!kcal100 && prot100 == null && carbs100 == null && fat100 == null) continue;
+
+    out.push({
+      label: String(name),
+      source: "OFF",
+      details: p.brands ? `Marque: ${p.brands}` : undefined,
+      confidence: 0.55, // IMPORTANT: recherche par nom = peu fiable
+      kcal_per_100g: Math.max(0, Math.round(kcal100)),
+      proteins_g_per_100g: clampNull0(prot100),
+      carbs_g_per_100g: clampNull0(carbs100),
+      fats_g_per_100g: clampNull0(fat100),
+      fibers_g_per_100g: clampNull0(fiber100),
+      sugars_g_per_100g: clampNull0(sugar100),
+      salt_g_per_100g: clampNull0(salt100),
+    });
   }
   return out;
 }
 
-/** --- Vision IA (produit vs assiette) --- */
+/** Vision IA : produit vs assiette + barcode/poids si visible */
 async function analyzeWithVision(imageDataUrl: string, apiKey: string) {
   const payload = {
     model: "gpt-4o-mini",
@@ -235,11 +299,12 @@ async function analyzeWithVision(imageDataUrl: string, apiKey: string) {
         role: "system",
         content:
           "FRANÇAIS UNIQUEMENT.\n" +
+          "Objectif: comprendre ce qu'il y a sur la photo, sans inventer.\n" +
           "1) Dire si c'est une ASSIETTE (plusieurs aliments) ou un PRODUIT unique.\n" +
-          "2) Si PRODUIT: extraire name, barcode (si lisible), net_weight_g (si visible).\n" +
-          "3) Si ASSIETTE: lister les principaux éléments ET SÉPARER sauces/condiments/huiles.\n" +
-          "4) Si le texte est illisible, NE PAS inventer une marque/nom précis: rester générique (ex: 'pain complet', 'pain', 'riz').\n" +
-          "JSON uniquement.",
+          "2) Si PRODUIT: extraire name générique, barcode (seulement si lisible), net_weight_g (si visible).\n" +
+          "3) Si ASSIETTE: lister les éléments principaux ET séparer sauces/condiments/huiles si visibles.\n" +
+          "4) Si le texte est illisible: rester générique (ex: 'pain complet', 'pain', 'riz cuit', 'jambon', 'sauce').\n" +
+          "Répondre STRICTEMENT en JSON, aucun texte autour.",
       },
       {
         role: "user",
@@ -248,9 +313,9 @@ async function analyzeWithVision(imageDataUrl: string, apiKey: string) {
             type: "text",
             text:
               "Renvoie STRICTEMENT un JSON UNION:\n" +
-              "CAS_A: { kind:'product', name:string, barcode:string|null, net_weight_g:number|null }\n" +
-              "CAS_B: { kind:'plate', items:[{ label:string, grams:number }...] }\n" +
-              "Max 8 items, inclure sauces/condiments si présents.",
+              "CAS_A (produit): { kind:'product', name:string, barcode:string|null, net_weight_g:number|null }\n" +
+              "CAS_B (assiette): { kind:'plate', items:[{ label:string, grams:number }...] }\n" +
+              "Max 8 items. Inclure sauces/condiments si présents.",
           },
           { type: "image_url", image_url: { url: imageDataUrl } },
         ],
@@ -260,7 +325,10 @@ async function analyzeWithVision(imageDataUrl: string, apiKey: string) {
 
   const resp = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
-    headers: { "content-type": "application/json", Authorization: `Bearer ${apiKey}` },
+    headers: {
+      "content-type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
     body: JSON.stringify(payload),
   });
 
@@ -290,8 +358,8 @@ async function analyzeWithVision(imageDataUrl: string, apiKey: string) {
   return out;
 }
 
-/** --- Densify assiette (macros /100g) --- */
-async function densifyPlateItems(items: Array<{ label: string; grams: number }>, apiKey: string) {
+/** Densify (assiette) : propose macros/100g par item */
+async function densifyPlate(items: Array<{ label: string; grams: number }>, apiKey: string) {
   const payload = {
     model: "gpt-4o-mini",
     temperature: 0,
@@ -300,9 +368,11 @@ async function densifyPlateItems(items: Array<{ label: string; grams: number }>,
       {
         role: "system",
         content:
-          "FRANÇAIS. Pour chaque élément, donner des valeurs réalistes PAR 100g.\n" +
-          "Répond STRICTEMENT: { items:[{ label, kcal_per_100g, proteins_g_per_100g, carbs_g_per_100g, fats_g_per_100g, fibers_g_per_100g, sugars_g_per_100g, salt_g_per_100g }] }.\n" +
-          "Sauces/condiments/huiles: valeurs typiques (souvent plus gras/salé).",
+          "FRANÇAIS.\n" +
+          "Pour chaque élément, donne des valeurs réalistes PAR 100g:\n" +
+          "kcal, protéines, glucides, lipides, fibres, sucres, sel.\n" +
+          "Si sauce/huile/condiment: valeurs typiques (souvent plus gras/salé).\n" +
+          "Répond STRICTEMENT: { items:[{ label, kcal_per_100g, proteins_g_per_100g, carbs_g_per_100g, fats_g_per_100g, fibers_g_per_100g, sugars_g_per_100g, salt_g_per_100g }] }",
       },
       { role: "user", content: [{ type: "text", text: JSON.stringify({ items }, null, 2) }] },
     ],
@@ -310,7 +380,10 @@ async function densifyPlateItems(items: Array<{ label: string; grams: number }>,
 
   const resp = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
-    headers: { "content-type": "application/json", Authorization: `Bearer ${apiKey}` },
+    headers: {
+      "content-type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
     body: JSON.stringify(payload),
   });
 
@@ -324,11 +397,11 @@ async function densifyPlateItems(items: Array<{ label: string; grams: number }>,
   } catch {
     content = { items: [] };
   }
-  return content?.items || [];
+  return (content?.items || []) as any[];
 }
 
-/** --- Densify produit (fallback) --- */
-async function densifySingleFood(label: string, apiKey: string): Promise<Candidate> {
+/** Densify (produit fallback) : macros/100g */
+async function densifySingle(label: string, apiKey: string): Promise<Candidate> {
   const payload = {
     model: "gpt-4o-mini",
     temperature: 0,
@@ -337,7 +410,9 @@ async function densifySingleFood(label: string, apiKey: string): Promise<Candida
       {
         role: "system",
         content:
-          "FRANÇAIS. Donne une estimation nutritionnelle réaliste PAR 100g.\n" +
+          "FRANÇAIS.\n" +
+          "Donne une estimation réaliste PAR 100g (aliment générique) :\n" +
+          "kcal, protéines, glucides, lipides, fibres, sucres, sel.\n" +
           "Répond STRICTEMENT: { label, kcal_per_100g, proteins_g_per_100g, carbs_g_per_100g, fats_g_per_100g, fibers_g_per_100g, sugars_g_per_100g, salt_g_per_100g }",
       },
       { role: "user", content: [{ type: "text", text: label || "aliment" }] },
@@ -346,7 +421,10 @@ async function densifySingleFood(label: string, apiKey: string): Promise<Candida
 
   const resp = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
-    headers: { "content-type": "application/json", Authorization: `Bearer ${apiKey}` },
+    headers: {
+      "content-type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
     body: JSON.stringify(payload),
   });
 
@@ -361,22 +439,22 @@ async function densifySingleFood(label: string, apiKey: string): Promise<Candida
     content = {};
   }
 
-  const toN = (x: any) => (x == null ? null : Number(x));
   return {
     label: String(content?.label || label || "aliment"),
     source: "IA",
-    details: "Estimation IA",
+    details: "Estimation IA (générique)",
     confidence: 0.6,
-    kcal_per_100g: Math.max(0, Math.round(Number(content?.kcal_per_100g || 0))),
-    proteins_g_per_100g: toN(content?.proteins_g_per_100g) != null ? Math.max(0, Number(content.proteins_g_per_100g)) : null,
-    carbs_g_per_100g: toN(content?.carbs_g_per_100g) != null ? Math.max(0, Number(content.carbs_g_per_100g)) : null,
-    fats_g_per_100g: toN(content?.fats_g_per_100g) != null ? Math.max(0, Number(content.fats_g_per_100g)) : null,
-    fibers_g_per_100g: toN(content?.fibers_g_per_100g) != null ? Math.max(0, Number(content.fibers_g_per_100g)) : null,
-    sugars_g_per_100g: toN(content?.sugars_g_per_100g) != null ? Math.max(0, Number(content.sugars_g_per_100g)) : null,
-    salt_g_per_100g: toN(content?.salt_g_per_100g) != null ? Math.max(0, Number(content.salt_g_per_100g)) : null,
+    kcal_per_100g: Math.max(0, Math.round(clamp0(content?.kcal_per_100g))),
+    proteins_g_per_100g: clampNull0(content?.proteins_g_per_100g),
+    carbs_g_per_100g: clampNull0(content?.carbs_g_per_100g),
+    fats_g_per_100g: clampNull0(content?.fats_g_per_100g),
+    fibers_g_per_100g: clampNull0(content?.fibers_g_per_100g),
+    sugars_g_per_100g: clampNull0(content?.sugars_g_per_100g),
+    salt_g_per_100g: clampNull0(content?.salt_g_per_100g),
   };
 }
 
+/** Handler POST */
 export async function POST(req: NextRequest) {
   try {
     const apiKey = (process.env.OPENAI_API_KEY || process.env.OPEN_API_KEY || "").trim();
@@ -406,56 +484,55 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // 1) Vision: produit vs assiette (+ barcode/poids si possible)
     const vision = await withTimeout(analyzeWithVision(imageDataUrl, apiKey), 25_000);
 
-    /** ===== PLATE ===== */
+    /** ===========================
+     *  CAS ASSIETTE
+     *  =========================== */
     if (vision?.kind === "plate" && Array.isArray(vision.items)) {
       const rawItems = (vision.items as any[])
-        .map((x) => ({ label: String(x?.label || "").trim(), grams: Number(x?.grams || 0) }))
+        .map((x) => ({
+          label: String(x?.label || "").trim(),
+          grams: Math.max(1, Math.round(Number(x?.grams || 0))),
+        }))
         .filter((x) => x.label)
         .slice(0, 8);
 
-      const dens = await densifyPlateItems(rawItems, apiKey);
+      // Densité IA (macros/100g)
+      const dens = await withTimeout(densifyPlate(rawItems, apiKey), 20_000).catch(() => []);
 
       const outItems: PlateItemEstimated[] = rawItems.map((it) => {
-        const low = it.label.toLowerCase();
-        const dictEntry = Object.entries(DICT).find(([k]) => low.includes(k))?.[1];
+        const dm = dictMatch(it.label);
+        const low = normLabel(it.label);
+        const densMatch = (dens || []).find((d: any) => normLabel(String(d?.label || "")) === low);
 
-        const densMatch = (dens || []).find(
-          (d: any) => String(d?.label || "").toLowerCase() === low
-        );
-
-        const base: NutrPer100 =
-          dictEntry ?? {
-            kcal_per_100g: Number(densMatch?.kcal_per_100g || 0),
-            proteins_g_per_100g: densMatch?.proteins_g_per_100g != null ? Number(densMatch.proteins_g_per_100g) : null,
-            carbs_g_per_100g: densMatch?.carbs_g_per_100g != null ? Number(densMatch.carbs_g_per_100g) : null,
-            fats_g_per_100g: densMatch?.fats_g_per_100g != null ? Number(densMatch.fats_g_per_100g) : null,
-            fibers_g_per_100g: densMatch?.fibers_g_per_100g != null ? Number(densMatch.fibers_g_per_100g) : null,
-            sugars_g_per_100g: densMatch?.sugars_g_per_100g != null ? Number(densMatch.sugars_g_per_100g) : null,
-            salt_g_per_100g: densMatch?.salt_g_per_100g != null ? Number(densMatch.salt_g_per_100g) : null,
-          };
+        // Base prioritaire : DICT si match, sinon IA densify
+        const base: NutrPer100 = dm?.v ?? {
+          kcal_per_100g: Math.max(0, Math.round(clamp0(densMatch?.kcal_per_100g))),
+          proteins_g_per_100g: clampNull0(densMatch?.proteins_g_per_100g),
+          carbs_g_per_100g: clampNull0(densMatch?.carbs_g_per_100g),
+          fats_g_per_100g: clampNull0(densMatch?.fats_g_per_100g),
+          fibers_g_per_100g: clampNull0(densMatch?.fibers_g_per_100g),
+          sugars_g_per_100g: clampNull0(densMatch?.sugars_g_per_100g),
+          salt_g_per_100g: clampNull0(densMatch?.salt_g_per_100g),
+        };
 
         return {
           label: it.label,
-          grams_estimated: Math.max(1, Math.round(it.grams || 0)),
-          source: dictEntry ? "DICT" : "IA",
+          grams_estimated: it.grams,
+          source: dm ? "DICT" : "IA",
+          ...base,
           kcal_per_100g: Math.max(0, Math.round(Number(base.kcal_per_100g || 0))),
-          proteins_g_per_100g: base.proteins_g_per_100g != null ? Math.max(0, Number(base.proteins_g_per_100g)) : null,
-          carbs_g_per_100g: base.carbs_g_per_100g != null ? Math.max(0, Number(base.carbs_g_per_100g)) : null,
-          fats_g_per_100g: base.fats_g_per_100g != null ? Math.max(0, Number(base.fats_g_per_100g)) : null,
-          fibers_g_per_100g: base.fibers_g_per_100g != null ? Math.max(0, Number(base.fibers_g_per_100g)) : null,
-          sugars_g_per_100g: base.sugars_g_per_100g != null ? Math.max(0, Number(base.sugars_g_per_100g)) : null,
-          salt_g_per_100g: base.salt_g_per_100g != null ? Math.max(0, Number(base.salt_g_per_100g)) : null,
         };
       });
 
       const warnings: string[] = [];
-      warnings.push("Quantités estimées sur photo : merci de confirmer le grammage.");
+      warnings.push("Quantités estimées sur photo : merci de confirmer le grammage avant calcul.");
       if (outItems.some((x) => /riz|p[âa]tes|poulet|b[œo]uf|saumon/i.test(x.label))) {
         warnings.push("Vérifie cru/cuit : les valeurs changent beaucoup.");
       }
-      if (outItems.some((x) => /sauce|roquefort|huile|mayo|cr[èe]me/i.test(x.label))) {
+      if (outItems.some((x) => /sauce|huile|mayo|cr[èe]me|roquefort|beurre/i.test(x.label))) {
         warnings.push("Sauces/huile : souvent sous-estimées, ajuste si besoin.");
       }
 
@@ -465,21 +542,29 @@ export async function POST(req: NextRequest) {
         items: outItems.slice(0, 8),
         warnings,
       };
-      return NextResponse.json(payload, { headers: { "Cache-Control": "no-store, no-transform" } });
+      return NextResponse.json(payload, {
+        headers: { "Cache-Control": "no-store, no-transform" },
+      });
     }
 
-    /** ===== PRODUCT ===== */
+    /** ===========================
+     *  CAS PRODUIT
+     *  =========================== */
     const rawLabel = String(vision?.name || "").trim();
     const label = rawLabel || "aliment";
+
     const barcode =
-      vision?.barcode && /^\d{8,14}$/.test(String(vision.barcode)) ? String(vision.barcode) : null;
+      vision?.barcode && /^\d{8,14}$/.test(String(vision.barcode))
+        ? String(vision.barcode)
+        : null;
+
     const netWeight =
       Number(vision?.net_weight_g || 0) > 0 ? Math.round(Number(vision?.net_weight_g)) : null;
 
     const warnings: string[] = [];
     warnings.push("Portion estimée : merci de confirmer le grammage avant calcul.");
 
-    // 1) Si barcode => OFF fiable
+    // (A) Barcode => OFF = source de vérité
     if (barcode) {
       const off = await fetchOFFByBarcode(barcode).catch(() => null);
       if (off) {
@@ -493,36 +578,45 @@ export async function POST(req: NextRequest) {
           portion_estimated_g: netWeight && netWeight > 0 ? netWeight : 250,
           warnings,
         };
-        return NextResponse.json(payload, { headers: { "Cache-Control": "no-store, no-transform" } });
+        return NextResponse.json(payload, {
+          headers: { "Cache-Control": "no-store, no-transform" },
+        });
       }
       warnings.push("Code-barres détecté mais produit introuvable sur OFF.");
     }
 
-    // 2) Sinon: on propose des candidats OFF mais on NE les met PAS en top
+    // (B) Sans barcode => OFF par nom = SUGGESTIONS seulement
     const offCandidates = label ? await searchOFFByName(label).catch(() => []) : [];
-    const topCandidates = offCandidates.slice(0, 3);
+    const offTop3 = offCandidates.slice(0, 3);
 
-    // 3) top = IA/DICT (générique) pour éviter les faux positifs
-    const dictEntry = Object.entries(DICT).find(([k]) => label.toLowerCase().includes(k))?.[1];
-    const top =
-      dictEntry
-        ? ({
-            label: label,
+    // (C) Top = DICT ou IA générique (jamais OFF par nom)
+    const dm = dictMatch(label);
+    const top: Candidate =
+      dm
+        ? {
+            label,
             source: "DICT",
-            details: "Dictionnaire local (générique)",
-            confidence: 0.75,
-            ...dictEntry,
-          } as Candidate)
-        : await densifySingleFood(label, apiKey);
+            details: `Dictionnaire local (générique: ${dm.key})`,
+            confidence: 0.8,
+            ...dm.v,
+          }
+        : await densifySingle(label, apiKey);
 
-    const candidates: Candidate[] = [top, ...topCandidates].slice(0, 3);
+    // On compose candidates: top + suggestions OFF (au choix côté client)
+    const candidates = [top, ...offTop3]
+      // petite dédup par label+source
+      .filter((c, idx, arr) => {
+        const k = `${normLabel(c.label)}|${c.source}`;
+        return idx === arr.findIndex((x) => `${normLabel(x.label)}|${x.source}` === k);
+      })
+      .slice(0, 3);
 
-    if (topCandidates.length) {
+    if (offTop3.length) {
       warnings.push(
-        "Produit non certain (pas de code-barres) : choisis un candidat ou scanne le code-barres."
+        "Sans code-barres : les résultats OFF par nom sont des suggestions. Choisis un candidat si nécessaire."
       );
     } else {
-      warnings.push("Produit non reconnu sur OFF (sans code-barres) : estimation générique.");
+      warnings.push("Sans code-barres : estimation générique (DICT/IA).");
     }
 
     const payload: FoodAnalysis = {
@@ -535,7 +629,10 @@ export async function POST(req: NextRequest) {
       portion_estimated_g: netWeight && netWeight > 0 ? netWeight : 250,
       warnings,
     };
-    return NextResponse.json(payload, { headers: { "Cache-Control": "no-store, no-transform" } });
+
+    return NextResponse.json(payload, {
+      headers: { "Cache-Control": "no-store, no-transform" },
+    });
   } catch (e: any) {
     const status = e?.status ?? e?.response?.status ?? 500;
     return jsonError(status, e?.message || "internal_error");
