@@ -1,6 +1,7 @@
 // apps/web/app/dashboard/calories/FoodSnap.tsx
 "use client";
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import BarcodeScanner from "./BarcodeScanner";
 import { translations } from "@/app/i18n/translations";
 
@@ -40,7 +41,6 @@ type NutrPer100 = {
 
 type Candidate = {
   label: string;
-  // source/détails existent côté API mais on ne les affiche jamais
   source?: "OFF" | "USDA" | "DICT" | "IA";
   details?: string;
   confidence?: number;
@@ -109,7 +109,10 @@ type ConfirmProductResponse = {
 
 type ConfirmResponse = ConfirmPlateResponse | ConfirmProductResponse;
 
-type Props = { today: string; onSave?: (formData: FormData) => Promise<void> };
+// ✅ onSave retourne maintenant un objet { ok: true } ou { ok:false, error: ... }
+type SaveResult = { ok: true } | { ok: false; error: string };
+
+type Props = { today: string; onSave?: (formData: FormData) => Promise<SaveResult> };
 
 function round1(x: number) {
   return Math.round(x * 10) / 10;
@@ -120,6 +123,8 @@ function numOrNull(x: any): number | null {
 }
 
 export default function FoodSnap({ today, onSave }: Props) {
+  const router = useRouter();
+
   // ---- Fichier / preview
   const [file, setFile] = React.useState<File | null>(null);
   const [preview, setPreview] = React.useState<string | null>(null);
@@ -129,8 +134,11 @@ export default function FoodSnap({ today, onSave }: Props) {
   const [result, setResult] = React.useState<AnalyzeResponse | null>(null);
   const [confirmed, setConfirmed] = React.useState<ConfirmResponse | null>(null);
   const [confirming, setConfirming] = React.useState(false);
-
   const [error, setError] = React.useState<string | null>(null);
+
+  // ✅ auto save (sans redirect)
+  const [autoSaving, setAutoSaving] = React.useState(false);
+  const [saveMsg, setSaveMsg] = React.useState<string | null>(null);
 
   // ---- Produit (édition)
   const [portion, setPortion] = React.useState<number>(250);
@@ -166,6 +174,9 @@ export default function FoodSnap({ today, onSave }: Props) {
     setConfirmed(null);
     setConfirming(false);
     setError(null);
+
+    setAutoSaving(false);
+    setSaveMsg(null);
 
     setPortion(250);
     setKcal100("");
@@ -207,6 +218,7 @@ export default function FoodSnap({ today, onSave }: Props) {
     setSugar100(c.sugars_g_per_100g != null ? String(c.sugars_g_per_100g) : "");
     setSalt100(c.salt_g_per_100g != null ? String(c.salt_g_per_100g) : "");
     setConfirmed(null);
+    setSaveMsg(null);
   }
 
   async function analyze() {
@@ -214,15 +226,14 @@ export default function FoodSnap({ today, onSave }: Props) {
     setLoading(true);
     setError(null);
     setConfirmed(null);
+    setSaveMsg(null);
 
     try {
       const body = new FormData();
       body.append("image", file);
       const res = await fetch("/api/food/analyze", { method: "POST", body });
       if (!res.ok) {
-        throw new Error(
-          (await res.text().catch(() => "")) || t("calories.foodSnap.errors.analyzeGeneric")
-        );
+        throw new Error((await res.text().catch(() => "")) || t("calories.foodSnap.errors.analyzeGeneric"));
       }
       const data: AnalyzeResponse = await res.json();
       setResult(data);
@@ -368,6 +379,7 @@ export default function FoodSnap({ today, onSave }: Props) {
     if (!result) return;
     setConfirming(true);
     setError(null);
+    setSaveMsg(null);
 
     try {
       let payload: any = null;
@@ -413,6 +425,26 @@ export default function FoodSnap({ today, onSave }: Props) {
 
       const data: ConfirmResponse = await res.json();
       setConfirmed(data);
+
+      // ✅ AUTO: sauvegarde immédiate (sans redirect) + refresh de la page
+      if (onSave && data.confirmed && data.total_kcal && !autoSaving) {
+        setAutoSaving(true);
+
+        const fd = new FormData();
+        fd.set("date", today);
+        fd.set("kcal", String(data.total_kcal));
+        fd.set("note", buildNote());
+
+        const saveRes = await onSave(fd);
+
+        if (saveRes?.ok) {
+          setSaveMsg("✅ Ajouté aux calories d’aujourd’hui");
+          router.refresh();
+        } else {
+          setSaveMsg("❌ Erreur lors de l’enregistrement");
+          setAutoSaving(false);
+        }
+      }
     } catch (e: any) {
       setError(e?.message || "confirm_error");
       setConfirmed(null);
@@ -440,19 +472,13 @@ export default function FoodSnap({ today, onSave }: Props) {
     const kcal = confirmed?.confirmed ? confirmed.total_kcal : null;
     if (!kcal) return;
 
-    const kcalInput = document.querySelector<HTMLInputElement>(
-      'form[action][method="post"] input[name="kcal"]'
-    );
-    const noteInput = document.querySelector<HTMLInputElement>(
-      'form[action][method="post"] input[name="note"]'
-    );
+    const kcalInput = document.querySelector<HTMLInputElement>('form[action][method="post"] input[name="kcal"]');
+    const noteInput = document.querySelector<HTMLInputElement>('form[action][method="post"] input[name="note"]');
 
     if (kcalInput) kcalInput.value = String(kcal);
     if (noteInput) noteInput.value = buildNote();
 
-    const submit = document.querySelector<HTMLButtonElement>(
-      'form[action][method="post"] button[type="submit"]'
-    );
+    const submit = document.querySelector<HTMLButtonElement>('form[action][method="post"] button[type="submit"]');
     submit?.focus();
   }
 
@@ -461,8 +487,7 @@ export default function FoodSnap({ today, onSave }: Props) {
   const estPlateTotals = result?.kind === "plate" ? estimateTotalsFromItems(items) : null;
   const estProdTotals = result?.kind === "product" ? estimateTotalsFromProduct() : null;
 
-  const shownTotals =
-    confirmed?.confirmed ? confirmed : result?.kind === "plate" ? estPlateTotals : estProdTotals;
+  const shownTotals = confirmed?.confirmed ? confirmed : result?.kind === "plate" ? estPlateTotals : estProdTotals;
 
   return (
     <div className="card" style={{ border: "1px dashed #d1d5db", padding: 12 }}>
@@ -503,7 +528,13 @@ export default function FoodSnap({ today, onSave }: Props) {
       <div className="card" style={{ marginTop: 10, padding: 10, border: "1px solid #e5e7eb" }}>
         <div style={{ fontWeight: 600, marginBottom: 6 }}>{t("calories.foodSnap.search.title")}</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8 }}>
-          <input className="input" type="search" placeholder={t("calories.foodSnap.search.placeholder")} value={q} onChange={(e) => setQ(e.target.value)} />
+          <input
+            className="input"
+            type="search"
+            placeholder={t("calories.foodSnap.search.placeholder")}
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
           <button className="btn" type="button" onClick={searchAnyFoodByName} disabled={qLoading}>
             {qLoading ? t("calories.foodSnap.search.loading") : t("calories.foodSnap.search.submit")}
           </button>
@@ -541,6 +572,8 @@ export default function FoodSnap({ today, onSave }: Props) {
                     applyCandidateToProduct(c);
                     setBarcode(null);
                     setPortion(250);
+                    setSaveMsg(null);
+                    setAutoSaving(false);
                   }}
                 >
                   {t("calories.foodSnap.search.choose")}
@@ -741,9 +774,7 @@ export default function FoodSnap({ today, onSave }: Props) {
           {/* Totaux */}
           <div className="card" style={{ padding: 10, border: "1px solid #e5e7eb" }}>
             <div style={{ fontWeight: 700, marginBottom: 6 }}>
-              {confirmed?.confirmed
-                ? tf("calories.foodSnap.confirm.finalTotal", "Total confirmé")
-                : tf("calories.foodSnap.confirm.estimatedTotal", "Total estimé")}
+              {confirmed?.confirmed ? tf("calories.foodSnap.confirm.finalTotal", "Total confirmé") : tf("calories.foodSnap.confirm.estimatedTotal", "Total estimé")}
             </div>
 
             <div style={{ fontFamily: "tabular-nums" }}>
@@ -759,7 +790,11 @@ export default function FoodSnap({ today, onSave }: Props) {
 
           {/* Actions */}
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-            <button className="btn btn-dash" onClick={confirmAndCompute} disabled={confirming || !(shownTotals as any)?.total_kcal}>
+            <button
+              className="btn btn-dash"
+              onClick={confirmAndCompute}
+              disabled={autoSaving || confirming || !(shownTotals as any)?.total_kcal}
+            >
               {confirming ? tf("calories.foodSnap.confirm.loading", "Calcul…") : tf("calories.foodSnap.confirm.button", "Confirmer & calculer")}
             </button>
 
@@ -767,17 +802,36 @@ export default function FoodSnap({ today, onSave }: Props) {
               {t("calories.foodSnap.actions.fillForm")}
             </button>
 
+            {/* Bouton manuel (optionnel) : on le garde si tu veux */}
             {onSave && (
-              <form action={onSave} style={{ display: "inline-flex", gap: 8 }}>
+              <form
+                action={async (fd) => {
+                  // garde le comportement (sans redirect) si l’utilisateur veut cliquer manuellement
+                  const r = await onSave(fd);
+                  if ((r as any)?.ok) {
+                    setSaveMsg("✅ Ajouté aux calories d’aujourd’hui");
+                    router.refresh();
+                  } else {
+                    setSaveMsg("❌ Erreur lors de l’enregistrement");
+                  }
+                }}
+                style={{ display: "inline-flex", gap: 8 }}
+              >
                 <input type="hidden" name="date" value={today} />
                 <input type="hidden" name="kcal" value={canFinalize ? (confirmed as any).total_kcal : 0} />
                 <input type="hidden" name="note" value={buildNote()} />
-                <button className="btn btn-dash" type="submit" disabled={!canFinalize}>
+                <button className="btn btn-dash" type="submit" disabled={!canFinalize || autoSaving}>
                   {t("calories.foodSnap.actions.addToCalories")}
                 </button>
               </form>
             )}
           </div>
+
+          {saveMsg && (
+            <div className="text-xs" style={{ color: saveMsg.startsWith("✅") ? "#16a34a" : "#dc2626", marginTop: 6 }}>
+              {saveMsg}
+            </div>
+          )}
         </div>
       )}
     </div>
