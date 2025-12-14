@@ -11,8 +11,7 @@ type Store = { sessions: Workout[] };
 function parseKcalStore(raw?: string): KcalStore {
   try {
     const data = JSON.parse(raw || "{}") || {};
-    if (data && typeof data === "object") return data as KcalStore;
-    return {};
+    return data && typeof data === "object" ? (data as KcalStore) : {};
   } catch {
     return {};
   }
@@ -32,13 +31,13 @@ function todayISO(tz = "Europe/Paris") {
 
 function readCookieValue(name: string): string {
   if (typeof document === "undefined") return "";
-  const m = document.cookie.match(new RegExp(`(?:^|;\\s*)${name.replace(/\./g, "\\.")}=([^;]+)`));
+  const safe = name.replace(/\./g, "\\.");
+  const m = document.cookie.match(new RegExp(`(?:^|;\\s*)${safe}=([^;]+)`));
   return m ? m[1] : "";
 }
 
 function readKcalsCookie(): KcalStore {
   const raw = readCookieValue("app.kcals");
-  // important: le cookie peut être encodé
   return parseKcalStore(raw ? decodeURIComponent(raw) : "{}");
 }
 
@@ -54,20 +53,18 @@ export default function DashboardPage() {
   const [sessions, setSessions] = useState<Store>({ sessions: [] });
 
   useEffect(() => {
-    const updateAll = () => {
+    const update = () => {
       setKcals(readKcalsCookie());
       setSessions(readSessionsCookie());
     };
 
-    updateAll(); // 1er chargement
-
-    // écoute les mises à jour venant de /dashboard/calories
-    window.addEventListener("app:kcal-updated", updateAll as any);
-    window.addEventListener("app:sessions-updated", updateAll as any);
+    update();
+    window.addEventListener("app:kcal-updated", update as any);
+    window.addEventListener("app:sessions-updated", update as any);
 
     return () => {
-      window.removeEventListener("app:kcal-updated", updateAll as any);
-      window.removeEventListener("app:sessions-updated", updateAll as any);
+      window.removeEventListener("app:kcal-updated", update as any);
+      window.removeEventListener("app:sessions-updated", update as any);
     };
   }, []);
 
@@ -92,7 +89,6 @@ export default function DashboardPage() {
 
   return (
     <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
-      {/* HEADER */}
       <div className="page-header" style={{ marginBottom: 8 }}>
         <div>
           <h1 className="h1" style={{ fontSize: 22, color: "#111827" }}>
@@ -104,7 +100,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* KPIs */}
       <section className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
           title={t("dashboard.kpi.calories")}
@@ -126,7 +121,6 @@ export default function DashboardPage() {
         />
       </section>
 
-      {/* QUICK ACTIONS */}
       <section className="grid gap-6 lg:grid-cols-2" style={{ marginTop: 12 }}>
         <article className="card">
           <h3 style={{ margin: 0, fontSize: 16, color: "#111827" }}>
@@ -160,7 +154,6 @@ export default function DashboardPage() {
   );
 }
 
-/* COMPONENT KPI CARD */
 function KpiCard({
   title,
   value,
