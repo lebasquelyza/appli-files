@@ -23,7 +23,7 @@ function t(path: string): string {
   if (typeof v === "string") return v;
   return path;
 }
-// fallback: si la clé i18n manque, on affiche un texte FR propre
+// fallback: si clé i18n manquante => texte FR simple
 function tf(path: string, fallback: string) {
   const v = t(path);
   return v === path ? fallback : v;
@@ -124,12 +124,11 @@ export default function FoodSnap({ today, onSave }: Props) {
   const [file, setFile] = React.useState<File | null>(null);
   const [preview, setPreview] = React.useState<string | null>(null);
 
-  // ---- États communs
+  // ---- États
   const [loading, setLoading] = React.useState(false);
   const [result, setResult] = React.useState<AnalyzeResponse | null>(null);
   const [confirmed, setConfirmed] = React.useState<ConfirmResponse | null>(null);
   const [confirming, setConfirming] = React.useState(false);
-  const [showDetails, setShowDetails] = React.useState(false);
 
   const [error, setError] = React.useState<string | null>(null);
 
@@ -167,7 +166,6 @@ export default function FoodSnap({ today, onSave }: Props) {
     setResult(null);
     setConfirmed(null);
     setConfirming(false);
-    setShowDetails(false);
     setError(null);
 
     setPortion(250);
@@ -202,7 +200,6 @@ export default function FoodSnap({ today, onSave }: Props) {
   }
 
   function applyCandidateToProduct(c: Candidate) {
-    // Met à jour l’édition produit selon le candidat sélectionné
     setLabel(c.label);
     setKcal100(String(c.kcal_per_100g ?? ""));
     setProt100(c.proteins_g_per_100g != null ? String(c.proteins_g_per_100g) : "");
@@ -249,9 +246,7 @@ export default function FoodSnap({ today, onSave }: Props) {
           }))
         );
       } else {
-        // Produit: on remplit avec TOP (qui peut être IA/DICT si pas barcode)
-        const top = data.top;
-        applyCandidateToProduct(top);
+        applyCandidateToProduct(data.top);
         setBarcode(data.barcode || null);
         setPortion(data.portion_estimated_g || 250);
       }
@@ -285,7 +280,7 @@ export default function FoodSnap({ today, onSave }: Props) {
           net_weight_g: null,
           barcode: scan,
           portion_estimated_g: portion || 250,
-          warnings: [tf("calories.foodSnap.confirm.hint", "Portion estimée : merci de confirmer le grammage avant calcul.")],
+          warnings: [],
         };
         setResult(prod);
         setConfirmed(null);
@@ -443,7 +438,7 @@ export default function FoodSnap({ today, onSave }: Props) {
     const itemLabel = label || t("calories.foodSnap.note.defaultItem");
     const gramsPart = `~${portion}g`;
     const kcalPart = `@${kcal100 || "?"}kcal/100g`;
-    return `${t("calories.foodSnap.note.productPrefix")} ${itemLabel} ${gramsPart} ${kcalPart} (${source}, ${suffix})`;
+    return `${t("calories.foodSnap.note.productPrefix")} ${itemLabel} ${gramsPart} ${kcalPart} (${suffix})`;
   }
 
   function injectToMainForm() {
@@ -476,7 +471,7 @@ export default function FoodSnap({ today, onSave }: Props) {
 
   return (
     <div className="card" style={{ border: "1px dashed #d1d5db", padding: 12 }}>
-      {/* En-tête */}
+      {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
         <div>
           <div style={{ fontWeight: 600 }} dangerouslySetInnerHTML={{ __html: t("calories.foodSnap.header.title") }} />
@@ -509,7 +504,7 @@ export default function FoodSnap({ today, onSave }: Props) {
         </div>
       )}
 
-      {/* Recherche multi-sources */}
+      {/* Search */}
       <div className="card" style={{ marginTop: 10, padding: 10, border: "1px solid #e5e7eb" }}>
         <div style={{ fontWeight: 600, marginBottom: 6 }}>{t("calories.foodSnap.search.title")}</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8 }}>
@@ -526,17 +521,9 @@ export default function FoodSnap({ today, onSave }: Props) {
             {qResults.map((c, i) => (
               <div key={i} className="card" style={{ padding: 8, display: "grid", gridTemplateColumns: "1fr auto", alignItems: "center", gap: 8 }}>
                 <div className="text-sm" style={{ lineHeight: 1.3 }}>
-                  <div>
-                    <strong>{c.label}</strong>
-                    {c.details ? (
-                      <>
-                        {" "}
-                        — <span className="text-xs" style={{ color: "#6b7280" }}>{c.details}</span>
-                      </>
-                    ) : null}
-                  </div>
+                  <div><strong>{c.label}</strong></div>
                   <div className="text-xs" style={{ color: "#6b7280" }}>
-                    {c.kcal_per_100g || "?"} kcal/100g · P {c.proteins_g_per_100g ?? "?"}g · G {c.carbs_g_per_100g ?? "?"}g · L {c.fats_g_per_100g ?? "?"}g — {t("calories.foodSnap.search.sourceLabel")}: {c.source}
+                    {c.kcal_per_100g || "?"} kcal/100g · P {c.proteins_g_per_100g ?? "?"}g · G {c.carbs_g_per_100g ?? "?"}g · L {c.fats_g_per_100g ?? "?"}g
                   </div>
                 </div>
                 <button
@@ -551,7 +538,7 @@ export default function FoodSnap({ today, onSave }: Props) {
                       net_weight_g: null,
                       barcode: null,
                       portion_estimated_g: 250,
-                      warnings: [tf("calories.foodSnap.confirm.hint", "Portion estimée : merci de confirmer le grammage avant calcul.")],
+                      warnings: [],
                     };
                     setResult(prod);
                     setConfirmed(null);
@@ -569,7 +556,7 @@ export default function FoodSnap({ today, onSave }: Props) {
         )}
       </div>
 
-      {/* Photo preview */}
+      {/* Preview */}
       {preview && (
         <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
           <img src={preview} alt={t("calories.foodSnap.preview.alt")} style={{ maxWidth: "100%", borderRadius: 8 }} />
@@ -577,32 +564,22 @@ export default function FoodSnap({ today, onSave }: Props) {
             <button className="btn btn-dash" onClick={analyze} disabled={loading}>
               {loading ? t("calories.foodSnap.preview.analyzeLoading") : t("calories.foodSnap.preview.analyze")}
             </button>
-            <button className="btn" onClick={resetAll}>{t("calories.foodSnap.preview.reset")}</button>
+            <button className="btn" onClick={resetAll}>
+              {t("calories.foodSnap.preview.reset")}
+            </button>
           </div>
         </div>
       )}
 
       {error && <div className="text-xs" style={{ color: "#dc2626", marginTop: 8 }}>{error}</div>}
 
-      {/* Résultat */}
+      {/* Result */}
       {result && (
         <div style={{ marginTop: 10, display: "grid", gap: 12 }}>
-          {!!result.warnings?.length && (
-            <div className="text-xs" style={{ color: "#92400e", background: "#fef3c7", border: "1px solid #f59e0b55", padding: 8, borderRadius: 6 }}>
-              {result.warnings.join(" · ")}
-            </div>
-          )}
-
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-            <button className="btn" type="button" onClick={() => setShowDetails((v) => !v)}>
-              {showDetails ? "Masquer détails" : "Afficher détails"}
-            </button>
-            <div className="text-xs" style={{ color: "#6b7280" }}>
-              {tf("calories.foodSnap.confirm.hint", "Portion estimée : merci de confirmer le grammage avant calcul.")}
-            </div>
+          <div className="text-xs" style={{ color: "#6b7280" }}>
+            Ajuste les quantités puis confirme.
           </div>
 
-          {/* Assiette */}
           {result.kind === "plate" ? (
             <>
               <div style={{ fontWeight: 600 }}>{t("calories.foodSnap.plate.title")}</div>
@@ -618,8 +595,7 @@ export default function FoodSnap({ today, onSave }: Props) {
                     <div key={idx} className="card" style={{ padding: 8, display: "grid", gap: 8 }}>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 110px", gap: 8, alignItems: "center" }}>
                         <div style={{ fontSize: 14 }}>
-                          <strong>{it.label}</strong>{" "}
-                          <span className="text-xs" style={{ color: "#6b7280" }}>({it.source || "IA"})</span>
+                          <strong>{it.label}</strong>
                         </div>
                         <label className="label" style={{ margin: 0 }}>
                           {t("calories.foodSnap.plate.grams")}
@@ -634,46 +610,54 @@ export default function FoodSnap({ today, onSave }: Props) {
                         </label>
                       </div>
 
-                      <div style={{ display: "grid", gridTemplateColumns: showDetails ? "repeat(6, 1fr)" : "repeat(3, 1fr)", gap: 8, alignItems: "end" }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, alignItems: "end" }}>
                         <label className="label" style={{ margin: 0 }}>
-                          {t("calories.foodSnap.plate.kcalPer100")}
-                          <input className="input" type="number" min={0} step={1} value={it.kcal_per_100g}
-                            onChange={(e) => setItems((b) => b.map((x, i) => (i === idx ? { ...x, kcal_per_100g: Number(e.target.value) } : x)))} />
+                          kcal/100g
+                          <input
+                            className="input"
+                            type="number"
+                            min={0}
+                            step={1}
+                            value={it.kcal_per_100g}
+                            onChange={(e) => setItems((b) => b.map((x, i) => (i === idx ? { ...x, kcal_per_100g: Number(e.target.value) } : x)))}
+                          />
                         </label>
 
                         <label className="label" style={{ margin: 0 }}>
-                          {t("calories.foodSnap.plate.protPer100")}
-                          <input className="input" type="number" min={0} step="0.1" value={it.proteins_g_per_100g ?? 0}
-                            onChange={(e) => setItems((b) => b.map((x, i) => (i === idx ? { ...x, proteins_g_per_100g: Number(e.target.value) } : x)))} />
+                          P/100g
+                          <input
+                            className="input"
+                            type="number"
+                            min={0}
+                            step="0.1"
+                            value={it.proteins_g_per_100g ?? 0}
+                            onChange={(e) => setItems((b) => b.map((x, i) => (i === idx ? { ...x, proteins_g_per_100g: Number(e.target.value) } : x)))}
+                          />
                         </label>
 
                         <label className="label" style={{ margin: 0 }}>
-                          Glucides/100g
-                          <input className="input" type="number" min={0} step="0.1" value={it.carbs_g_per_100g ?? 0}
-                            onChange={(e) => setItems((b) => b.map((x, i) => (i === idx ? { ...x, carbs_g_per_100g: Number(e.target.value) } : x)))} />
+                          G/100g
+                          <input
+                            className="input"
+                            type="number"
+                            min={0}
+                            step="0.1"
+                            value={it.carbs_g_per_100g ?? 0}
+                            onChange={(e) => setItems((b) => b.map((x, i) => (i === idx ? { ...x, carbs_g_per_100g: Number(e.target.value) } : x)))}
+                          />
                         </label>
 
-                        {showDetails && (
-                          <>
-                            <label className="label" style={{ margin: 0 }}>
-                              Lipides/100g
-                              <input className="input" type="number" min={0} step="0.1" value={it.fats_g_per_100g ?? 0}
-                                onChange={(e) => setItems((b) => b.map((x, i) => (i === idx ? { ...x, fats_g_per_100g: Number(e.target.value) } : x)))} />
-                            </label>
-
-                            <label className="label" style={{ margin: 0 }}>
-                              Fibres/100g
-                              <input className="input" type="number" min={0} step="0.1" value={it.fibers_g_per_100g ?? 0}
-                                onChange={(e) => setItems((b) => b.map((x, i) => (i === idx ? { ...x, fibers_g_per_100g: Number(e.target.value) } : x)))} />
-                            </label>
-
-                            <label className="label" style={{ margin: 0 }}>
-                              Sel/100g
-                              <input className="input" type="number" min={0} step="0.01" value={it.salt_g_per_100g ?? 0}
-                                onChange={(e) => setItems((b) => b.map((x, i) => (i === idx ? { ...x, salt_g_per_100g: Number(e.target.value) } : x)))} />
-                            </label>
-                          </>
-                        )}
+                        <label className="label" style={{ margin: 0 }}>
+                          L/100g
+                          <input
+                            className="input"
+                            type="number"
+                            min={0}
+                            step="0.1"
+                            value={it.fats_g_per_100g ?? 0}
+                            onChange={(e) => setItems((b) => b.map((x, i) => (i === idx ? { ...x, fats_g_per_100g: Number(e.target.value) } : x)))}
+                          />
+                        </label>
                       </div>
 
                       <div className="text-xs" style={{ color: "#6b7280", display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
@@ -690,7 +674,6 @@ export default function FoodSnap({ today, onSave }: Props) {
               </div>
             </>
           ) : (
-            /* Produit */
             <>
               <div style={{ fontSize: 14 }}>
                 <strong>{t("calories.foodSnap.product.title")}</strong>
@@ -699,28 +682,14 @@ export default function FoodSnap({ today, onSave }: Props) {
                 {barcode ? <span className="text-xs" style={{ color: "#6b7280" }}> — {barcode}</span> : null}
               </div>
 
-              <div className="text-xs" style={{ color: "#6b7280" }}>
-                {t("calories.foodSnap.product.sourceLabel")} : <strong>{source}</strong>
-              </div>
-
-              {/* ✅ IMPORTANT : proposer les candidats si available */}
               {result.candidates?.length > 1 && (
                 <div className="card" style={{ padding: 10, border: "1px solid #e5e7eb" }}>
                   <div style={{ fontWeight: 700, marginBottom: 6 }}>Produits possibles</div>
-                  <div className="text-xs" style={{ color: "#6b7280", marginBottom: 8 }}>
-                    Si le résultat est faux (ex: pain → “tartine croustillante”), choisis le bon candidat ou scanne le code-barres.
-                  </div>
-
                   <div style={{ display: "grid", gap: 6 }}>
                     {result.candidates.map((c, i) => (
                       <div key={i} className="card" style={{ padding: 8, display: "grid", gridTemplateColumns: "1fr auto", gap: 8, alignItems: "center" }}>
                         <div className="text-sm" style={{ lineHeight: 1.3 }}>
-                          <div>
-                            <strong>{c.label}</strong>{" "}
-                            <span className="text-xs" style={{ color: "#6b7280" }}>
-                              ({c.source}{c.details ? ` · ${c.details}` : ""})
-                            </span>
-                          </div>
+                          <div><strong>{c.label}</strong></div>
                           <div className="text-xs" style={{ color: "#6b7280" }}>
                             {c.kcal_per_100g} kcal/100g · P {c.proteins_g_per_100g ?? "?"}g · G {c.carbs_g_per_100g ?? "?"}g · L {c.fats_g_per_100g ?? "?"}g
                           </div>
@@ -734,7 +703,7 @@ export default function FoodSnap({ today, onSave }: Props) {
                 </div>
               )}
 
-              <div style={{ display: "grid", gap: 8, gridTemplateColumns: showDetails ? "repeat(4, 1fr)" : "repeat(3, 1fr)", alignItems: "end" }}>
+              <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(4, 1fr)", alignItems: "end" }}>
                 <label className="label">
                   {t("calories.foodSnap.product.portion")}
                   <input className="input" type="number" min={0} step={1} value={portion} onChange={(e) => setPortion(Number(e.target.value))} />
@@ -747,35 +716,30 @@ export default function FoodSnap({ today, onSave }: Props) {
                   {t("calories.foodSnap.product.protPer100")}
                   <input className="input" type="number" min={0} step="0.1" value={prot100} onChange={(e) => setProt100(e.target.value)} />
                 </label>
-
-                {showDetails ? (
-                  <label className="label">
-                    Glucides/100g
-                    <input className="input" type="number" min={0} step="0.1" value={carb100} onChange={(e) => setCarb100(e.target.value)} />
-                  </label>
-                ) : null}
+                <label className="label">
+                  G/100g
+                  <input className="input" type="number" min={0} step="0.1" value={carb100} onChange={(e) => setCarb100(e.target.value)} />
+                </label>
               </div>
 
-              {showDetails && (
-                <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(4, 1fr)", alignItems: "end" }}>
-                  <label className="label">
-                    Lipides/100g
-                    <input className="input" type="number" min={0} step="0.1" value={fat100} onChange={(e) => setFat100(e.target.value)} />
-                  </label>
-                  <label className="label">
-                    Fibres/100g
-                    <input className="input" type="number" min={0} step="0.1" value={fiber100} onChange={(e) => setFiber100(e.target.value)} />
-                  </label>
-                  <label className="label">
-                    Sucres/100g
-                    <input className="input" type="number" min={0} step="0.1" value={sugar100} onChange={(e) => setSugar100(e.target.value)} />
-                  </label>
-                  <label className="label">
-                    Sel/100g
-                    <input className="input" type="number" min={0} step="0.01" value={salt100} onChange={(e) => setSalt100(e.target.value)} />
-                  </label>
-                </div>
-              )}
+              <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(4, 1fr)", alignItems: "end" }}>
+                <label className="label">
+                  L/100g
+                  <input className="input" type="number" min={0} step="0.1" value={fat100} onChange={(e) => setFat100(e.target.value)} />
+                </label>
+                <label className="label">
+                  Fibres/100g
+                  <input className="input" type="number" min={0} step="0.1" value={fiber100} onChange={(e) => setFiber100(e.target.value)} />
+                </label>
+                <label className="label">
+                  Sucres/100g
+                  <input className="input" type="number" min={0} step="0.1" value={sugar100} onChange={(e) => setSugar100(e.target.value)} />
+                </label>
+                <label className="label">
+                  Sel/100g
+                  <input className="input" type="number" min={0} step="0.01" value={salt100} onChange={(e) => setSalt100(e.target.value)} />
+                </label>
+              </div>
             </>
           )}
 
@@ -792,29 +756,16 @@ export default function FoodSnap({ today, onSave }: Props) {
                 {confirmed?.confirmed ? "" : "≈ "}
                 {(shownTotals as any)?.total_kcal ?? "—"} kcal
               </div>
-
               <div className="text-xs" style={{ color: "#6b7280" }}>
                 P {(shownTotals as any)?.total_proteins_g ?? "—"}g · G {(shownTotals as any)?.total_carbs_g ?? "—"}g · L {(shownTotals as any)?.total_fats_g ?? "—"}g
-                {showDetails ? (
-                  <>
-                    {" "}
-                    · Fib {(shownTotals as any)?.total_fibers_g ?? "—"}g · Su {(shownTotals as any)?.total_sugars_g ?? "—"}g · Sel {(shownTotals as any)?.total_salt_g ?? "—"}g
-                  </>
-                ) : null}
               </div>
             </div>
-          </div>
-
-          <div className="text-xs" style={{ color: "#6b7280" }}>
-            {t("calories.foodSnap.help.manual")}
           </div>
 
           {/* Actions */}
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             <button className="btn btn-dash" onClick={confirmAndCompute} disabled={confirming || !(shownTotals as any)?.total_kcal}>
-              {confirming
-                ? tf("calories.foodSnap.confirm.loading", "Calcul…")
-                : tf("calories.foodSnap.confirm.button", "Confirmer le grammage & calculer")}
+              {confirming ? tf("calories.foodSnap.confirm.loading", "Calcul…") : tf("calories.foodSnap.confirm.button", "Confirmer & calculer")}
             </button>
 
             <button className="btn" onClick={injectToMainForm} disabled={!canFinalize}>
@@ -832,12 +783,6 @@ export default function FoodSnap({ today, onSave }: Props) {
               </form>
             )}
           </div>
-
-          {!confirmed?.confirmed && (
-            <div className="text-xs" style={{ color: "#6b7280" }}>
-              {tf("calories.foodSnap.confirm.blockSave", "Confirme le grammage pour pouvoir enregistrer.")}
-            </div>
-          )}
         </div>
       )}
     </div>
