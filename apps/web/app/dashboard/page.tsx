@@ -93,7 +93,7 @@ export default function DashboardPage() {
     return sessions.sessions.filter((x) => x.status === "active").length;
   }, [sessions]);
 
-  // 🔎 Dernière séance terminée + son index (pour lien vers détail)
+  // ✅ Dernière séance terminée + index (pour la page détail)
   const lastDoneInfo = useMemo(() => {
     const doneWithIndex = sessions.sessions
       .map((s, i) => ({ s, i }))
@@ -102,12 +102,10 @@ export default function DashboardPage() {
     return doneWithIndex[0] || null;
   }, [sessions]);
 
-  // ✅ Au lieu d'afficher une date : on affiche un libellé (ou "—" si rien)
-  const lastSessionLabel = lastDoneInfo
-    ? (t("dashboard.kpi.lastSessionValue") || (lang === "en" ? "View details" : "Voir le détail"))
-    : "—";
+  // ✅ Pas de date : on affiche juste "Détail" / "Details"
+  const lastSessionValue = lastDoneInfo ? (lang === "en" ? "Details" : "Détail") : "—";
 
-  // ✅ Lien vers la page détail + param from=home pour que le retour revienne à l'accueil
+  // ✅ Clic => détail. Le from=home sert au bouton retour côté page détail.
   const lastSessionHref = lastDoneInfo
     ? `/dashboard/session?i=${encodeURIComponent(String(lastDoneInfo.i))}&from=home`
     : "/dashboard/profile";
@@ -149,10 +147,10 @@ export default function DashboardPage() {
           manageLabel={t("dashboard.kpi.manage")}
         />
 
-        {/* ✅ KPI: Dernière séance -> clique => détail */}
+        {/* ✅ KPI: Dernière séance (clic => détail, sans date) */}
         <KpiCard
           title={t("dashboard.kpi.lastSession")}
-          value={lastSessionLabel}
+          value={lastSessionValue}
           href={lastSessionHref}
           manageLabel={t("dashboard.kpi.manage")}
         />
