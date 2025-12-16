@@ -476,9 +476,10 @@ export default function ProfileClient(props: Props) {
             {savedList.length > 0 && (
               <ul className="text-sm" style={{ listStyle: "disc", paddingLeft: 18, margin: 0 }}>
                 {savedList.map(({ s, idx, key }) => {
-                  const detailHref = `/dashboard/seance/${encodeURIComponent(
-                    s.id || key
-                  )}${baseLinkQuery ? `?${baseLinkQuery}` : ""}`;
+                  // ✅ CHANGED: ajouter from=profile (et garder baseLinkQuery)
+                  const detailHref = `/dashboard/seance/${encodeURIComponent(s.id || key)}?${
+                    [baseLinkQuery, "from=profile"].filter(Boolean).join("&")
+                  }`;
 
                   const newSavedKeys = [...savedIdSet].filter((k) => k !== key);
                   const removeQuery = [
@@ -549,9 +550,10 @@ export default function ProfileClient(props: Props) {
             {laterList.length > 0 && (
               <ul className="text-sm" style={{ listStyle: "disc", paddingLeft: 18, margin: 0 }}>
                 {laterList.map(({ s, idx, key }) => {
-                  const detailHref = `/dashboard/seance/${encodeURIComponent(
-                    s.id || key
-                  )}${baseLinkQuery ? `?${baseLinkQuery}` : ""}`;
+                  // ✅ CHANGED: ajouter from=profile (et garder baseLinkQuery)
+                  const detailHref = `/dashboard/seance/${encodeURIComponent(s.id || key)}?${
+                    [baseLinkQuery, "from=profile"].filter(Boolean).join("&")
+                  }`;
 
                   const newLaterKeys = [...laterIdSet].filter((k) => k !== key);
                   const removeQuery = [
