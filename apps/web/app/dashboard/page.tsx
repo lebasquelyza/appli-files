@@ -25,8 +25,16 @@ function parseSessions(raw?: string): Store {
   }
 }
 
-function todayISO(tz = "Europe/Paris") {
+const TZ = "Europe/Paris";
+
+function todayISO(tz = TZ) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date());
+}
+
+function toISODateInTZ(dateIsoString: string, tz = TZ): string {
+  const d = new Date(dateIsoString);
+  if (Number.isNaN(d.getTime())) return "";
+  return new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(d);
 }
 
 function readCookieValue(name: string): string {
@@ -68,13 +76,22 @@ export default function DashboardPage() {
     };
   }, []);
 
-  const today = todayISO();
+  const today = todayISO(TZ);
   const todayKcal = kcals[today] || 0;
 
-  const stepsToday = useMemo(
-    () => sessions.sessions.filter((x) => x.status === "active").length,
-    [sessions]
-  );
+  // ✅ Séances faites aujourd’hui (status done + endedAt aujourd’hui)
+  const workoutsDoneToday = useMemo(() => {
+    return sessions.sessions.filter((x) => {
+      if (x.status !== "done") return false;
+      if (!x.endedAt) return false;
+      return toISODateInTZ(x.endedAt, TZ) === today;
+    }).length;
+  }, [sessions, today]);
+
+  // (optionnel) Séances en cours (status active)
+  const workoutsActive = useMemo(() => {
+    return sessions.sessions.filter((x) => x.status === "active").length;
+  }, [sessions]);
 
   const lastDone = useMemo(() => {
     return sessions.sessions
@@ -107,12 +124,23 @@ export default function DashboardPage() {
           href="/dashboard/calories"
           manageLabel={t("dashboard.kpi.manage")}
         />
+
+        {/* ✅ KPI: Séances faites aujourd’hui */}
         <KpiCard
-          title={t("dashboard.kpi.steps")}
-          value={`${stepsToday}`}
-          href="/dashboard/progress"
+          title={t("dashboard.kpi.workoutsDoneToday") || "Séances faites (aujourd’hui)"}
+          value={`${workoutsDoneToday}`}
+          href="/dashboard/profile"
           manageLabel={t("dashboard.kpi.manage")}
         />
+
+        {/* (optionnel) KPI: Séances en cours */}
+        <KpiCard
+          title={t("dashboard.kpi.workoutsActive") || "Séances en cours"}
+          value={`${workoutsActive}`}
+          href="/dashboard/profile"
+          manageLabel={t("dashboard.kpi.manage")}
+        />
+
         <KpiCard
           title={t("dashboard.kpi.lastSession")}
           value={lastSessionDate}
@@ -130,7 +158,11 @@ export default function DashboardPage() {
             {t("dashboard.quick.calories.text")}
           </p>
           <div style={{ marginTop: 10 }}>
-            <Link href="/dashboard/calories" className="btn btn-dash" style={{ padding: "8px 12px", fontWeight: 700 }}>
+            <Link
+              href="/dashboard/calories"
+              className="btn btn-dash"
+              style={{ padding: "8px 12px", fontWeight: 700 }}
+            >
               {t("dashboard.quick.calories.button")}
             </Link>
           </div>
@@ -144,7 +176,11 @@ export default function DashboardPage() {
             {t("dashboard.quick.workouts.text")}
           </p>
           <div style={{ marginTop: 10 }}>
-            <Link href="/dashboard/profile" className="btn btn-dash" style={{ padding: "8px 12px", fontWeight: 700 }}>
+            <Link
+              href="/dashboard/profile"
+              className="btn btn-dash"
+              style={{ padding: "8px 12px", fontWeight: 700 }}
+            >
               {t("dashboard.quick.workouts.button")}
             </Link>
           </div>
@@ -199,4 +235,3 @@ function KpiCard({
     </article>
   );
 }
-
