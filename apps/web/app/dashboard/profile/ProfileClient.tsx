@@ -10,8 +10,8 @@ import type {
 } from "../../../lib/coach/ai";
 import { AdBanner } from "@/components/AdBanner";
 
-// ✅ NEW
-import { syncDoneSessionsToCookie } from "@/lib/sessionsCookie";
+// ✅ NEW (strict nécessaire)
+import { syncDoneSessionsToCookie } from "@/lib/appSessions";
 
 type DebugInfo = { email: string; sheetHit: boolean; reason?: string };
 
@@ -70,6 +70,7 @@ export default function ProfileClient(props: Props) {
     if (showAdOnGenerate) {
       setShowAdOverlay(true);
 
+      // Masquer l’overlay après quelques secondes (ajuste si tu veux)
       const timer = setTimeout(() => {
         setShowAdOverlay(false);
       }, 5000);
@@ -95,11 +96,14 @@ export default function ProfileClient(props: Props) {
     typeof p?.prenom === "string" && p.prenom && !/\d/.test(p.prenom)
       ? p.prenom
       : "";
-  const clientAge = typeof p?.age === "number" && p.age > 0 ? p.age : undefined;
+  const clientAge =
+    typeof p?.age === "number" && p.age > 0 ? p.age : undefined;
 
   // goalLabel – utilise settings.profile.goal.labels.*
   const goalLabel = useMemo(() => {
-    const g = String((p as any)?.objectif || (p as any)?.goal || "").toLowerCase();
+    const g = String(
+      (p as any)?.objectif || (p as any)?.goal || ""
+    ).toLowerCase();
     if (!g) return "";
     const key = `settings.profile.goal.labels.${g}`;
     const translated = t(key);
@@ -130,7 +134,10 @@ export default function ProfileClient(props: Props) {
 
   const titleList =
     equipMode === "none"
-      ? tf("settings.profile.sessions.titleNoEquip", "Mes séances (sans matériel)")
+      ? tf(
+          "settings.profile.sessions.titleNoEquip",
+          "Mes séances (sans matériel)"
+        )
       : tf("settings.profile.sessions.title", "Mes séances");
 
   // Base de query pour les liens vers les détails de séance
@@ -150,15 +157,12 @@ export default function ProfileClient(props: Props) {
     .map((s, i) => ({ s, idx: i, key: sessionKey(s, i) }))
     .filter(({ key }) => laterIdSet.has(key));
 
-  // ✅ NEW: Sync "Séance faite" vers la home (cookie app_sessions)
+  // ✅ NEW: sync "Séance faite ✅" -> cookie app_sessions (pour la Home)
   useEffect(() => {
-    // On ne sync que si on a un programme (sinon rien à écrire)
     if (!hasGenerate) return;
 
-    // On transforme la liste "faite" en une liste stable d'IDs
-    // IMPORTANT: le Dashboard utilise app_sessions, donc on écrit dedans ici.
     const done = savedList.map(({ s, key, idx }) => ({
-      sessionId: String(s.id || key), // id réel si dispo, sinon clé "sX"
+      sessionId: String(s.id || key), // id réel si dispo sinon sX
       title: s.title || `Séance ${idx + 1}`,
       type: (s as any)?.type ? String((s as any).type) : undefined,
     }));
@@ -185,7 +189,7 @@ export default function ProfileClient(props: Props) {
         <div className="fixed inset-0 z-50 bg-white flex items-center justify-center">
           <div className="w-full h-full flex items-center justify-center">
             <AdBanner
-              slot="REPLACE_WITH_YOUR_SLOT_ID"
+              slot="REPLACE_WITH_YOUR_SLOT_ID" // 👈 mets ton vrai data-ad-slot ici
               className="w-full h-full"
             />
           </div>
@@ -198,9 +202,14 @@ export default function ProfileClient(props: Props) {
             {tf("settings.profile.title", "Mon profil")}
           </h1>
           {showDebug && (
-            <div className="text-xs" style={{ marginTop: 4, color: "#6b7280" }}>
+            <div
+              className="text-xs"
+              style={{ marginTop: 4, color: "#6b7280" }}
+            >
               <b>Debug:</b> email = <code>{emailForDisplay || "—"}</code>{" "}
-              {debugInfo.sheetHit ? "· Sheet OK" : `· ${debugInfo.reason || "Sheet KO"}`}
+              {debugInfo.sheetHit
+                ? "· Sheet OK"
+                : `· ${debugInfo.reason || "Sheet KO"}`}
               {forceBlank ? " · BLANK MODE" : ""}
             </div>
           )}
@@ -223,7 +232,10 @@ export default function ProfileClient(props: Props) {
                   "settings.profile.messages.programmeUpdated",
                   "✓ Programme IA mis à jour à partir de vos dernières réponses au questionnaire."
                 )
-              : tf("settings.profile.messages.successGeneric", "✓ Opération réussie.")}
+              : tf(
+                  "settings.profile.messages.successGeneric",
+                  "✓ Opération réussie."
+                )}
           </div>
         )}
         {!!displayedError && (
@@ -257,14 +269,20 @@ export default function ProfileClient(props: Props) {
         </div>
 
         <div className="card">
-          <div className="text-sm" style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+          <div
+            className="text-sm"
+            style={{ display: "flex", gap: 16, flexWrap: "wrap" }}
+          >
             {(clientPrenom || showPlaceholders) && (
               <span>
                 <b>{tf("settings.profile.info.firstName.label", "Prénom")} :</b>{" "}
                 {clientPrenom ||
                   (showPlaceholders && (
                     <i className="text-gray-400">
-                      {tf("settings.profile.info.firstName.missing", "Non renseigné")}
+                      {tf(
+                        "settings.profile.info.firstName.missing",
+                        "Non renseigné"
+                      )}
                     </i>
                   ))}
               </span>
@@ -273,25 +291,35 @@ export default function ProfileClient(props: Props) {
             {(typeof clientAge === "number" || showPlaceholders) && (
               <span>
                 <b>{tf("settings.profile.info.age.label", "Âge")} :</b>{" "}
-                {typeof clientAge === "number" ? (
-                  `${clientAge} ans`
-                ) : (
-                  showPlaceholders && (
-                    <i className="text-gray-400">
-                      {tf("settings.profile.info.age.missing", "Non renseigné")}
-                    </i>
-                  )
-                )}
+                {typeof clientAge === "number"
+                  ? `${clientAge} ans`
+                  : showPlaceholders && (
+                      <i className="text-gray-400">
+                        {tf(
+                          "settings.profile.info.age.missing",
+                          "Non renseigné"
+                        )}
+                      </i>
+                    )}
               </span>
             )}
 
             {(goalLabel || showPlaceholders) && (
               <span>
-                <b>{tf("settings.profile.info.goal.label", "Objectif actuel")} :</b>{" "}
+                <b>
+                  {tf(
+                    "settings.profile.info.goal.label",
+                    "Objectif actuel"
+                  )}{" "}
+                  :
+                </b>{" "}
                 {goalLabel ||
                   (showPlaceholders && (
                     <i className="text-gray-400">
-                      {tf("settings.profile.info.goal.missing", "Non défini")}
+                      {tf(
+                        "settings.profile.info.goal.missing",
+                        "Non défini"
+                      )}
                     </i>
                   ))}
               </span>
@@ -317,7 +345,10 @@ export default function ProfileClient(props: Props) {
               ) : (
                 showPlaceholders && (
                   <span className="text-gray-400">
-                    {tf("settings.profile.info.mail.missing", "Non renseigné")}
+                    {tf(
+                      "settings.profile.info.mail.missing",
+                      "Non renseigné"
+                    )}
                   </span>
                 )
               )}
@@ -404,9 +435,15 @@ export default function ProfileClient(props: Props) {
             <a
               href={hrefGenerate}
               className="inline-flex items-center rounded-md border border-neutral-900 bg-neutral-900 px-4 py-2 text-sm font-semibold text-white"
-              title={tf("settings.profile.sessions.generateCard.buttonTitle", "Générer mon programme")}
+              title={tf(
+                "settings.profile.sessions.generateCard.buttonTitle",
+                "Générer mon programme"
+              )}
             >
-              {tf("settings.profile.sessions.generateCard.button", "→ Générer mon programme")}
+              {tf(
+                "settings.profile.sessions.generateCard.button",
+                "→ Générer mon programme"
+              )}
             </a>
           </div>
         )}
@@ -424,22 +461,24 @@ export default function ProfileClient(props: Props) {
       {/* ===== Bloc bas de page : Séance faite ✅ / À faire plus tard ⏳ ===== */}
       <section className="section" style={{ marginTop: 20 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
-          <h2 style={{ margin: 0 }}>{tf("settings.profile.lists.title", "Mes listes")}</h2>
+          <h2 style={{ margin: 0 }}>
+            {tf("settings.profile.lists.title", "Mes listes")}
+          </h2>
         </div>
 
         <div className="grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           {/* Séance faite ✅ */}
           <div className="card">
             <div className="text-sm" style={{ fontWeight: 600, marginBottom: 6 }}>
-              {tf("settings.profile.lists.done.title", "Séance faite")} <span aria-hidden>✅</span>
+              {tf("settings.profile.lists.done.title", "Séance faite")}{" "}
+              <span aria-hidden>✅</span>
             </div>
-
             {savedList.length > 0 && (
               <ul className="text-sm" style={{ listStyle: "disc", paddingLeft: 18, margin: 0 }}>
                 {savedList.map(({ s, idx, key }) => {
-                  const detailHref = `/dashboard/seance/${encodeURIComponent(s.id || key)}${
-                    baseLinkQuery ? `?${baseLinkQuery}` : ""
-                  }`;
+                  const detailHref = `/dashboard/seance/${encodeURIComponent(
+                    s.id || key
+                  )}${baseLinkQuery ? `?${baseLinkQuery}` : ""}`;
 
                   const newSavedKeys = [...savedIdSet].filter((k) => k !== key);
                   const removeQuery = [
@@ -473,10 +512,12 @@ export default function ProfileClient(props: Props) {
                         {s.title || `Séance ${idx + 1}`}
                         {s.type && <span style={{ color: "#6b7280" }}> · {s.type}</span>}
                       </a>
-
                       <a
                         href={removeHref}
-                        aria-label={tf("settings.profile.lists.removeLabel", "Supprimer cette séance")}
+                        aria-label={tf(
+                          "settings.profile.lists.removeLabel",
+                          "Supprimer cette séance"
+                        )}
                         className="text-xs"
                         style={{
                           fontSize: 12,
@@ -505,13 +546,12 @@ export default function ProfileClient(props: Props) {
               {tf("settings.profile.lists.later.title", "À faire plus tard")}{" "}
               <span aria-hidden>⏳</span>
             </div>
-
             {laterList.length > 0 && (
               <ul className="text-sm" style={{ listStyle: "disc", paddingLeft: 18, margin: 0 }}>
                 {laterList.map(({ s, idx, key }) => {
-                  const detailHref = `/dashboard/seance/${encodeURIComponent(s.id || key)}${
-                    baseLinkQuery ? `?${baseLinkQuery}` : ""
-                  }`;
+                  const detailHref = `/dashboard/seance/${encodeURIComponent(
+                    s.id || key
+                  )}${baseLinkQuery ? `?${baseLinkQuery}` : ""}`;
 
                   const newLaterKeys = [...laterIdSet].filter((k) => k !== key);
                   const removeQuery = [
@@ -545,10 +585,12 @@ export default function ProfileClient(props: Props) {
                         {s.title || `Séance ${idx + 1}`}
                         {s.type && <span style={{ color: "#6b7280" }}> · {s.type}</span>}
                       </a>
-
                       <a
                         href={removeHref}
-                        aria-label={tf("settings.profile.lists.removeLabel", "Supprimer cette séance")}
+                        aria-label={tf(
+                          "settings.profile.lists.removeLabel",
+                          "Supprimer cette séance"
+                        )}
                         className="text-xs"
                         style={{
                           fontSize: 12,
