@@ -13,6 +13,8 @@ type Props = {
   focus: Focus;
   plannedMin: number;
   backHref: string;
+  saveDoneHref: string;   // ✅ NEW
+  saveLaterHref: string;  // ✅ NEW
 };
 
 function stripVariantLetterLocal(s?: string) {
@@ -35,7 +37,6 @@ function cleanTextLocal(s?: string): string {
     .trim();
 }
 
-// ⚠️ IMPORTANT : on garde bien "settings.seancePage" ici
 function focusLabelT(focus: Focus, t: (key: string) => string): string {
   switch (focus) {
     case "upper":
@@ -76,11 +77,12 @@ const SeancePageViewClient: React.FC<Props> = ({
   focus,
   plannedMin,
   backHref,
+  saveDoneHref,
+  saveLaterHref,
 }) => {
   const { t, lang } = useLanguage();
 
-  const displayTitle =
-    stripVariantLetterLocal(base.title) || focusLabelT(focus, t);
+  const displayTitle = stripVariantLetterLocal(base.title) || focusLabelT(focus, t);
 
   return (
     <div>
@@ -125,34 +127,49 @@ const SeancePageViewClient: React.FC<Props> = ({
           padding:6px 10px;
           font-weight:600;
         }
+        .btn-mini {
+          background:#fff;
+          color:#111827;
+          border:1px solid #e5e7eb;
+          border-radius:8px;
+          padding:6px 10px;
+          font-weight:600;
+          font-size: 12px;
+          line-height: 1;
+          white-space: nowrap;
+        }
       `,
         }}
       />
 
       {/* HEADER */}
-      <div
-        className="mb-2 flex items-center justify-between no-print"
-        style={{ paddingInline: 12 }}
-      >
-        <a href={backHref} className="btn-ghost">
-          {t("settings.seancePage.backButton")}
-        </a>
+      <div className="mb-2 flex items-center justify-between no-print" style={{ paddingInline: 12 }}>
+        <div className="flex items-center gap-2">
+          <a href={backHref} className="btn-ghost">
+            {t("settings.seancePage.backButton")}
+          </a>
+
+          {/* ✅ NEW: actions */}
+          <a href={saveDoneHref} className="btn-mini" title="Marquer comme faite">
+            ✅ Séance faite
+          </a>
+          <a href={saveLaterHref} className="btn-mini" title="Marquer à faire plus tard">
+            ⏳ Plus tard
+          </a>
+        </div>
+
         <div className="text-xs text-gray-400">
           {t("settings.seancePage.aiBadge")}
         </div>
       </div>
 
-      <div
-        className="mx-auto w-full"
-        style={{ maxWidth: 640, paddingInline: 12, paddingBottom: 24 }}
-      >
+      <div className="mx-auto w-full" style={{ maxWidth: 640, paddingInline: 12, paddingBottom: 24 }}>
         {/* TITLE */}
         <div className="page-header">
           <div>
             <h1 className="h1-compact">{displayTitle}</h1>
             <p className="lead-compact">
-              {plannedMin}{" "}
-              {t("settings.seancePage.plannedMinSuffix")} · {base.type}
+              {plannedMin} {t("settings.seancePage.plannedMinSuffix")} · {base.type}
             </p>
           </div>
         </div>
@@ -164,11 +181,7 @@ const SeancePageViewClient: React.FC<Props> = ({
               const translatedName = translateExerciseName(ex.name, lang);
 
               const reps = cleanTextLocal(
-                ex.reps
-                  ? String(ex.reps)
-                  : ex.durationSec
-                  ? `${ex.durationSec}s`
-                  : ""
+                ex.reps ? String(ex.reps) : ex.durationSec ? `${ex.durationSec}s` : ""
               );
               const rest = cleanTextLocal(ex.rest || "");
 
@@ -182,9 +195,7 @@ const SeancePageViewClient: React.FC<Props> = ({
                     {typeof ex.sets === "number" && (
                       <Chip
                         label="🧱"
-                        value={`${ex.sets} ${t(
-                          "settings.seancePage.chips.setsLabel"
-                        )}`}
+                        value={`${ex.sets} ${t("settings.seancePage.chips.setsLabel")}`}
                         title={t("settings.seancePage.chips.setsLabel")}
                       />
                     )}
