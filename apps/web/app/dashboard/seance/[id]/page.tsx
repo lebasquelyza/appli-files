@@ -474,9 +474,12 @@ export default async function Page({
   if (saved) qs.set("saved", saved);
   if (later) qs.set("later", later);
 
-  const backHref = `/dashboard/profile${
-    qs.toString() ? `?${qs.toString()}` : ""
-  }`;
+  // ✅ CHANGED: retour dépend de "from"
+  const from = String(getParam("from") || "").toLowerCase(); // "home" | "profile" | ""
+  const backHref =
+    from === "home"
+      ? "/dashboard"
+      : `/dashboard/profile${qs.toString() ? `?${qs.toString()}` : ""}`;
 
   return (
     <SeancePageViewClient
