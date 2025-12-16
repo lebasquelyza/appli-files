@@ -1,3 +1,4 @@
+///apps/web/app/dashboard/page.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -100,9 +101,11 @@ export default function DashboardPage() {
   // ✅ Pas de date : juste "Détail" / "Details"
   const lastSessionValue = lastDoneInfo ? (lang === "en" ? "Details" : "Détail") : "—";
 
-  // ✅ Clic => page détail + from=home pour retour accueil
+  // ✅ CHANGED: lien vers la page détail /dashboard/seance/[id] + from=home
   const lastSessionHref = lastDoneInfo
-    ? `/dashboard/session?i=${encodeURIComponent(String(lastDoneInfo.i))}&from=home`
+    ? `/dashboard/seance/${encodeURIComponent(
+        lastDoneInfo.s.endedAt || lastDoneInfo.s.startedAt || String(lastDoneInfo.i)
+      )}?from=home`
     : "/dashboard/profile";
 
   return (
