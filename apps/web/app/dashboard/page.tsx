@@ -88,11 +88,6 @@ export default function DashboardPage() {
     }).length;
   }, [sessions, today]);
 
-  // (optionnel) Séances en cours (status active)
-  const workoutsActive = useMemo(() => {
-    return sessions.sessions.filter((x) => x.status === "active").length;
-  }, [sessions]);
-
   // ✅ Dernière séance terminée + index (pour lien détail)
   const lastDoneInfo = useMemo(() => {
     const doneWithIndex = sessions.sessions
@@ -123,7 +118,8 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <section className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+      {/* ✅ On passe à 3 colonnes sur lg puisqu’on a retiré un KPI */}
+      <section className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         <KpiCard
           title={t("dashboard.kpi.calories")}
           value={`${todayKcal.toLocaleString(lang === "en" ? "en-US" : "fr-FR")} kcal`}
@@ -135,14 +131,6 @@ export default function DashboardPage() {
         <KpiCard
           title={lang === "en" ? "Workouts done (today)" : "Séances faites (aujourd’hui)"}
           value={`${workoutsDoneToday}`}
-          href="/dashboard/profile"
-          manageLabel={t("dashboard.kpi.manage")}
-        />
-
-        {/* ✅ KPI: Séances en cours (sans nouvelle clé i18n) */}
-        <KpiCard
-          title={lang === "en" ? "Active workouts" : "Séances en cours"}
-          value={`${workoutsActive}`}
           href="/dashboard/profile"
           manageLabel={t("dashboard.kpi.manage")}
         />
