@@ -93,7 +93,7 @@ export default function DashboardPage() {
     return sessions.sessions.filter((x) => x.status === "active").length;
   }, [sessions]);
 
-  // ✅ Dernière séance terminée + index (pour la page détail)
+  // ✅ Dernière séance terminée + index (pour lien détail)
   const lastDoneInfo = useMemo(() => {
     const doneWithIndex = sessions.sessions
       .map((s, i) => ({ s, i }))
@@ -102,10 +102,10 @@ export default function DashboardPage() {
     return doneWithIndex[0] || null;
   }, [sessions]);
 
-  // ✅ Pas de date : on affiche juste "Détail" / "Details"
+  // ✅ Pas de date : juste "Détail" / "Details"
   const lastSessionValue = lastDoneInfo ? (lang === "en" ? "Details" : "Détail") : "—";
 
-  // ✅ Clic => détail. Le from=home sert au bouton retour côté page détail.
+  // ✅ Clic => page détail + from=home pour retour accueil
   const lastSessionHref = lastDoneInfo
     ? `/dashboard/session?i=${encodeURIComponent(String(lastDoneInfo.i))}&from=home`
     : "/dashboard/profile";
@@ -131,23 +131,23 @@ export default function DashboardPage() {
           manageLabel={t("dashboard.kpi.manage")}
         />
 
-        {/* ✅ KPI: Séances faites aujourd’hui */}
+        {/* ✅ KPI: Séances faites aujourd’hui (sans nouvelle clé i18n) */}
         <KpiCard
-          title={t("dashboard.kpi.workoutsDoneToday") || "Séances faites (aujourd’hui)"}
+          title={lang === "en" ? "Workouts done (today)" : "Séances faites (aujourd’hui)"}
           value={`${workoutsDoneToday}`}
           href="/dashboard/profile"
           manageLabel={t("dashboard.kpi.manage")}
         />
 
-        {/* (optionnel) KPI: Séances en cours */}
+        {/* ✅ KPI: Séances en cours (sans nouvelle clé i18n) */}
         <KpiCard
-          title={t("dashboard.kpi.workoutsActive") || "Séances en cours"}
+          title={lang === "en" ? "Active workouts" : "Séances en cours"}
           value={`${workoutsActive}`}
           href="/dashboard/profile"
           manageLabel={t("dashboard.kpi.manage")}
         />
 
-        {/* ✅ KPI: Dernière séance (clic => détail, sans date) */}
+        {/* ✅ KPI: Dernière séance -> clic => détail, sans date */}
         <KpiCard
           title={t("dashboard.kpi.lastSession")}
           value={lastSessionValue}
