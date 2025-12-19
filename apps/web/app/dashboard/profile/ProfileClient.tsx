@@ -41,8 +41,10 @@ type Props = {
 function parseIdListFromArray(list: string[] | undefined) {
   return new Set(list ?? []);
 }
-function sessionKey(_s: AiSessionT, idx: number) {
-  return `s${idx}`;
+
+// ✅ CHANGED: utiliser l'id réel si dispo (sinon fallback sX)
+function sessionKey(s: AiSessionT, idx: number) {
+  return String((s as any).id || `s${idx}`);
 }
 
 export default function ProfileClient(props: Props) {
@@ -168,7 +170,7 @@ export default function ProfileClient(props: Props) {
     if (!hasGenerate) return;
 
     const done = savedList.map(({ s, key, idx }) => ({
-      sessionId: String(s.id || key), // id réel si dispo sinon sX
+      sessionId: String((s as any).id || key), // id réel si dispo sinon clé
       title: s.title || `Séance ${idx + 1}`,
       type: (s as any)?.type ? String((s as any).type) : undefined,
     }));
@@ -502,7 +504,7 @@ export default function ProfileClient(props: Props) {
               >
                 {savedList.map(({ s, idx, key }) => {
                   const detailHref = `/dashboard/seance/${encodeURIComponent(
-                    s.id || key
+                    (s as any).id || key
                   )}?${[baseLinkQuery, "from=profile"]
                     .filter(Boolean)
                     .join("&")}`;
@@ -595,7 +597,7 @@ export default function ProfileClient(props: Props) {
               >
                 {laterList.map(({ s, idx, key }) => {
                   const detailHref = `/dashboard/seance/${encodeURIComponent(
-                    s.id || key
+                    (s as any).id || key
                   )}?${[baseLinkQuery, "from=profile"]
                     .filter(Boolean)
                     .join("&")}`;
@@ -676,5 +678,4 @@ export default function ProfileClient(props: Props) {
     </div>
   );
 }
-
 
