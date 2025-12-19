@@ -38,7 +38,6 @@ const TZ = "Europe/Paris";
 function todayISO(tz = TZ) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date());
 }
-
 function toISOMonthInTZ(dateIsoString: string, tz = TZ): string {
   const d = new Date(dateIsoString);
   if (Number.isNaN(d.getTime())) return "";
@@ -52,12 +51,10 @@ function readCookieValue(name: string): string {
   const m = document.cookie.match(new RegExp(`(?:^|;\\s*)${safe}=([^;]+)`));
   return m ? m[1] : "";
 }
-
 function readKcalsCookie(): KcalStore {
   const raw = readCookieValue("app.kcals");
   return parseKcalStore(raw ? decodeURIComponent(raw) : "{}");
 }
-
 function readSessionsCookie(): Store {
   const raw = readCookieValue("app_sessions");
   return parseSessions(raw ? decodeURIComponent(raw) : "{}");
@@ -106,14 +103,18 @@ export default function DashboardPage() {
 
     const hasAnyEndedAt = doneWithIndex.some(({ s }) => !!s.endedAt);
     if (hasAnyEndedAt) {
-      doneWithIndex.sort((a, b) => (b.s.endedAt || "").localeCompare(a.s.endedAt || ""));
+      doneWithIndex.sort((a, b) =>
+        (b.s.endedAt || "").localeCompare(a.s.endedAt || "")
+      );
       return doneWithIndex[0] || null;
     }
 
     return doneWithIndex[doneWithIndex.length - 1] || null;
   }, [sessions]);
 
-  const lastSessionValue = lastDoneInfo ? (lastDoneInfo.s.title?.trim() || "—") : "—";
+  const lastSessionValue = lastDoneInfo
+    ? lastDoneInfo.s.title?.trim() || "—"
+    : "—";
 
   const lastSessionHref = lastDoneInfo
     ? `/dashboard/seance/${encodeURIComponent(
@@ -124,8 +125,8 @@ export default function DashboardPage() {
       )}?from=home`
     : "/dashboard/profile";
 
-  // ✅ CHANGED: même taille que le titre (text-xs ~ 12px)
-  const kpiValueStyle = { fontSize: 12 } as const;
+  // ✅ CHANGED: taille augmentée pour les 3 blocs KPI
+  const kpiValueStyle = { fontSize: 16, lineHeight: 1.15 } as const;
 
   return (
     <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
@@ -143,14 +144,20 @@ export default function DashboardPage() {
       <section className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         <KpiCard
           title={t("dashboard.kpi.calories")}
-          value={`${todayKcal.toLocaleString(lang === "en" ? "en-US" : "fr-FR")} kcal`}
+          value={`${todayKcal.toLocaleString(
+            lang === "en" ? "en-US" : "fr-FR"
+          )} kcal`}
           href="/dashboard/calories"
           manageLabel={t("dashboard.kpi.manage")}
           valueStyle={kpiValueStyle}
         />
 
         <KpiCard
-          title={lang === "en" ? "Workouts done (this month)" : "Séances faites (ce mois-ci)"}
+          title={
+            lang === "en"
+              ? "Workouts done (this month)"
+              : "Séances faites (ce mois-ci)"
+          }
           value={`${workoutsDoneThisMonth}`}
           href="/dashboard/profile"
           manageLabel={t("dashboard.kpi.manage")}
@@ -222,7 +229,14 @@ function KpiCard({
 }) {
   return (
     <article className="card" style={{ cursor: "default" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 8,
+        }}
+      >
         <p className="text-xs" style={{ color: "#111827", margin: 0 }}>
           {title}
         </p>
