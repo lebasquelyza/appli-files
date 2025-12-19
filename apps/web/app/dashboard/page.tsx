@@ -88,7 +88,6 @@ export default function DashboardPage() {
   const today = todayISO(TZ);
   const todayKcal = kcals[today] || 0;
 
-  // ✅ Séances terminées ce mois-ci
   const currentMonth = today.slice(0, 7);
   const workoutsDoneThisMonth = useMemo(() => {
     return sessions.sessions.filter((x) => {
@@ -98,7 +97,6 @@ export default function DashboardPage() {
     }).length;
   }, [sessions, currentMonth]);
 
-  // ✅ Dernière séance ajoutée à "Séance faite"
   const lastDoneInfo = useMemo(() => {
     const doneWithIndex = sessions.sessions
       .map((s, i) => ({ s, i }))
@@ -126,8 +124,8 @@ export default function DashboardPage() {
       )}?from=home`
     : "/dashboard/profile";
 
-  // ✅ même taille pour les 3 KPI
-  const kpiValueStyle = { fontSize: 14 } as const;
+  // ✅ CHANGED: même taille que le titre (text-xs ~ 12px)
+  const kpiValueStyle = { fontSize: 12 } as const;
 
   return (
     <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
