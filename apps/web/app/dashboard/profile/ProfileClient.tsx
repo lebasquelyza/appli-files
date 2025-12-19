@@ -13,6 +13,9 @@ import { AdBanner } from "@/components/AdBanner";
 // ✅ NEW (strict nécessaire)
 import { syncDoneSessionsToCookie } from "@/lib/appSessions";
 
+// ✅ NEW: pour empêcher le scroll-to-top à la suppression
+import { useRouter } from "next/navigation";
+
 type DebugInfo = { email: string; sheetHit: boolean; reason?: string };
 
 type Props = {
@@ -62,6 +65,9 @@ export default function ProfileClient(props: Props) {
   } = props;
 
   const { t } = useLanguage();
+
+  // ✅ NEW: pour navigation sans scroll
+  const router = useRouter();
 
   // 👉 état pour afficher la pub plein écran après clic sur "Générer"
   const [showAdOverlay, setShowAdOverlay] = useState(false);
@@ -495,14 +501,14 @@ export default function ProfileClient(props: Props) {
                 style={{ listStyle: "disc", paddingLeft: 18, margin: 0 }}
               >
                 {savedList.map(({ s, idx, key }) => {
-                  // ✅ CHANGED: ajouter from=profile (et garder baseLinkQuery)
                   const detailHref = `/dashboard/seance/${encodeURIComponent(
                     s.id || key
-                  )}?${[baseLinkQuery, "from=profile"].filter(Boolean).join("&")}`;
+                  )}?${[baseLinkQuery, "from=profile"]
+                    .filter(Boolean)
+                    .join("&")}`;
 
                   const newSavedKeys = [...savedIdSet].filter((k) => k !== key);
 
-                  // ✅ FIX: garder "saved=" même si la liste devient vide
                   const removeQuery = [
                     equipMode === "none" ? "equip=none" : undefined,
                     `saved=${newSavedKeys.join(",")}`,
@@ -543,6 +549,10 @@ export default function ProfileClient(props: Props) {
                       </a>
                       <a
                         href={removeHref}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          router.push(removeHref, { scroll: false });
+                        }}
                         aria-label={tf(
                           "settings.profile.lists.removeLabel",
                           "Supprimer cette séance"
@@ -584,14 +594,14 @@ export default function ProfileClient(props: Props) {
                 style={{ listStyle: "disc", paddingLeft: 18, margin: 0 }}
               >
                 {laterList.map(({ s, idx, key }) => {
-                  // ✅ CHANGED: ajouter from=profile (et garder baseLinkQuery)
                   const detailHref = `/dashboard/seance/${encodeURIComponent(
                     s.id || key
-                  )}?${[baseLinkQuery, "from=profile"].filter(Boolean).join("&")}`;
+                  )}?${[baseLinkQuery, "from=profile"]
+                    .filter(Boolean)
+                    .join("&")}`;
 
                   const newLaterKeys = [...laterIdSet].filter((k) => k !== key);
 
-                  // ✅ FIX: garder "later=" même si la liste devient vide
                   const removeQuery = [
                     equipMode === "none" ? "equip=none" : undefined,
                     savedIdSet.size
@@ -632,6 +642,10 @@ export default function ProfileClient(props: Props) {
                       </a>
                       <a
                         href={removeHref}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          router.push(removeHref, { scroll: false });
+                        }}
                         aria-label={tf(
                           "settings.profile.lists.removeLabel",
                           "Supprimer cette séance"
@@ -662,4 +676,5 @@ export default function ProfileClient(props: Props) {
     </div>
   );
 }
+
 
