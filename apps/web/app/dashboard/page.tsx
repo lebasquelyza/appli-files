@@ -6,7 +6,17 @@ import Link from "next/link";
 import { useLanguage } from "@/components/LanguageProvider";
 
 type KcalStore = Record<string, number>;
-type Workout = { status: "active" | "done"; startedAt?: string; endedAt?: string };
+
+// ✅ CHANGED: on ajoute title (car syncDoneSessionsToCookie envoie title)
+type Workout = {
+  status: "active" | "done";
+  startedAt?: string;
+  endedAt?: string;
+  title?: string;
+  type?: string;
+  sessionId?: string;
+};
+
 type Store = { sessions: Workout[] };
 
 function parseKcalStore(raw?: string): KcalStore {
@@ -36,14 +46,6 @@ function toISODateInTZ(dateIsoString: string, tz = TZ): string {
   const d = new Date(dateIsoString);
   if (Number.isNaN(d.getTime())) return "";
   return new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(d);
-}
-
-// ✅ NEW: month key "YYYY-MM" in timezone
-function toISOMonthInTZ(dateIsoString: string, tz = TZ): string {
-  const d = new Date(dateIsoString);
-  if (Number.isNaN(d.getTime())) return "";
-  const isoDate = new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(d); // YYYY-MM-DD
-  return isoDate.slice(0, 7); // YYYY-MM
 }
 
 function readCookieValue(name: string): string {
@@ -88,15 +90,14 @@ export default function DashboardPage() {
   const today = todayISO(TZ);
   const todayKcal = kcals[today] || 0;
 
-  // ✅ CHANGED: séances terminées ce mois-ci (status done + endedAt dans le mois courant)
-  const currentMonth = today.slice(0, 7); // YYYY-MM
-  const workoutsDoneThisMonth = useMemo(() => {
+  // ✅ Séances faites aujourd’hui (status done + endedAt aujourd’hui)
+  const workoutsDoneToday = useMemo(() => {
     return sessions.sessions.filter((x) => {
       if (x.status !== "done") return false;
       if (!x.endedAt) return false;
-      return toISOMonthInTZ(x.endedAt, TZ) === currentMonth;
+      return toISODateInTZ(x.endedAt, TZ) === today;
     }).length;
-  }, [sessions, currentMonth]);
+  }, [sessions, today]);
 
   // ✅ Dernière séance terminée + index (pour lien détail)
   const lastDoneInfo = useMemo(() => {
@@ -107,8 +108,11 @@ export default function DashboardPage() {
     return doneWithIndex[0] || null;
   }, [sessions]);
 
-  // ✅ Pas de date : juste "Détail" / "Details"
-  const lastSessionValue = lastDoneInfo ? (lang === "en" ? "Details" : "Détail") : "—";
+  // ✅ CHANGED: afficher le nom complet de la séance (title) au lieu de "Détail/Details"
+  const lastSessionValue = lastDoneInfo
+    ? (lastDoneInfo.s.title?.trim() ||
+        (lang === "en" ? "Details" : "Détail"))
+    : "—";
 
   // ✅ CHANGED: lien vers la page détail /dashboard/seance/[id] + from=home
   const lastSessionHref = lastDoneInfo
@@ -130,7 +134,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ✅ On passe à 3 colonnes sur lg puisqu’on a retiré un KPI */}
       <section className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         <KpiCard
           title={t("dashboard.kpi.calories")}
@@ -139,15 +142,13 @@ export default function DashboardPage() {
           manageLabel={t("dashboard.kpi.manage")}
         />
 
-        {/* ✅ CHANGED: KPI: Séances faites ce mois-ci (sans nouvelle clé i18n) */}
         <KpiCard
-          title={lang === "en" ? "Workouts done (this month)" : "Séances faites (ce mois-ci)"}
-          value={`${workoutsDoneThisMonth}`}
+          title={lang === "en" ? "Workouts done (today)" : "Séances faites (aujourd’hui)"}
+          value={`${workoutsDoneToday}`}
           href="/dashboard/profile"
           manageLabel={t("dashboard.kpi.manage")}
         />
 
-        {/* ✅ KPI: Dernière séance -> clic => détail, sans date */}
         <KpiCard
           title={t("dashboard.kpi.lastSession")}
           value={lastSessionValue}
@@ -211,9 +212,7 @@ function KpiCard({
   return (
     <article className="card" style={{ cursor: "default" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-        <p className="text-xs" style={{ color: "#111827", margin: 0 }}>
-          {title}
-        </p>
+        <p className="text-xs" style={{ color: "#111827", margin: 0 }}>{title}</p>
         {manageLabel && (
           <Link
             href={href}
@@ -236,7 +235,9 @@ function KpiCard({
 
       <Link href={href}>
         <div style={{ marginTop: 8 }}>
-          <strong style={{ fontSize: 20, lineHeight: 1, color: "#111827" }}>{value}</strong>
+          <strong style={{ fontSize: 20, lineHeight: 1, color: "#111827" }}>
+            {value}
+          </strong>
         </div>
       </Link>
     </article>
