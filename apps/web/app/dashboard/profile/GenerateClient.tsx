@@ -1,7 +1,7 @@
 // apps/web/app/dashboard/profile/GenerateClient.tsx
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useMemo, useEffect, useState } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import type { AiSession } from "../../../lib/coach/ai";
 import { useLanguage } from "@/components/LanguageProvider";
@@ -40,6 +40,30 @@ export default function GenerateClient({
   const searchParams = useSearchParams();
   const { t, lang } = useLanguage();
 
+  // ✅ NEW: menu "Enregistrer" (choix faite / plus tard)
+  const [openForKey, setOpenForKey] = useState<string>("");
+
+  useEffect(() => {
+    if (!openForKey) return;
+
+    const onDown = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+
+      // ferme si clic en dehors du conteneur du menu
+      const container = document.querySelector(
+        `[data-save-menu="${openForKey}"]`
+      ) as HTMLElement | null;
+
+      if (container && !container.contains(target)) {
+        setOpenForKey("");
+      }
+    };
+
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [openForKey]);
+
   // Fallback i18n helper
   const tf = (path: string, fallback?: string) => {
     const v = t(path);
@@ -60,9 +84,6 @@ export default function GenerateClient({
   );
 
   /* ======== GÉNÉRATION (via serveur) ======== */
-  // On ne fait PLUS de fetch /api/programme ici.
-  // On déclenche juste une navigation avec ?generate=1
-  // → c'est page.tsx qui décide de régénérer ou non (selon le questionnaire).
   const handleGenerate = () => {
     const sp = new URLSearchParams(searchParams?.toString() || "");
     sp.set("generate", "1"); // indique au serveur "on veut régénérer"
@@ -100,7 +121,6 @@ export default function GenerateClient({
   };
 
   /* ======== UI ======== */
-
   return (
     <section className="section" style={{ marginTop: 24 }}>
       {/* HEADER */}
@@ -152,6 +172,8 @@ export default function GenerateClient({
             )}`;
             const href = linkQuery ? `${baseHref}?${linkQuery}` : baseHref;
 
+            const menuOpen = openForKey === key;
+
             return (
               <li
                 key={s.id || `s-${i}`}
@@ -180,17 +202,78 @@ export default function GenerateClient({
                     </div>
                   </div>
 
-                  <div style={{ position: "relative" }}>
+                  {/* ✅ Bouton Enregistrer -> ouvre un choix */}
+                  <div style={{ position: "relative" }} data-save-menu={key}>
                     <button
                       type="button"
                       className="inline-flex items-center rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-semibold text-neutral-900 hover:border-neutral-400"
                       onClick={(e) => {
                         e.stopPropagation();
-                        markDone(key);
+                        setOpenForKey((prev) => (prev === key ? "" : key));
                       }}
                     >
                       {lang === "fr" ? "Enregistrer" : "Save"}
                     </button>
+
+                    {menuOpen && (
+                      <div
+                        style={{
+                          position: "absolute",
+                          right: 0,
+                          top: "calc(100% + 6px)",
+                          zIndex: 20,
+                          background: "#fff",
+                          border: "1px solid #e5e7eb",
+                          borderRadius: 10,
+                          boxShadow: "0 12px 30px rgba(0,0,0,.12)",
+                          overflow: "hidden",
+                          minWidth: 190,
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOpenForKey("");
+                            markDone(key);
+                          }}
+                          style={{
+                            width: "100%",
+                            textAlign: "left",
+                            padding: "10px 12px",
+                            fontSize: 13,
+                            fontWeight: 700,
+                            background: "transparent",
+                            border: 0,
+                            cursor: "pointer",
+                          }}
+                        >
+                          {lang === "fr" ? "Séance faite ✅" : "Workout done ✅"}
+                        </button>
+
+                        <div style={{ height: 1, background: "#e5e7eb" }} />
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOpenForKey("");
+                            markLater(key);
+                          }}
+                          style={{
+                            width: "100%",
+                            textAlign: "left",
+                            padding: "10px 12px",
+                            fontSize: 13,
+                            fontWeight: 700,
+                            background: "transparent",
+                            border: 0,
+                            cursor: "pointer",
+                          }}
+                        >
+                          {lang === "fr" ? "Plus tard ⏳" : "Do later ⏳"}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </li>
@@ -198,10 +281,6 @@ export default function GenerateClient({
           })}
         </ul>
       )}
-
-      {/* (normalement, GenerateClient est rendu seulement si hasGenerate = true,
-          donc sessions.length > 0 ; sinon, la carte "Générer mon programme"
-          est gérée côté ProfileClient.) */}
     </section>
   );
 }
