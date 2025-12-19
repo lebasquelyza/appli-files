@@ -91,7 +91,8 @@ const SeancePageViewClient: React.FC<Props> = ({
     stripVariantLetterLocal(base.title) || focusLabelT(focus, t);
 
   return (
-    <div>
+    // ✅ CHANGED: évite l’écart blanc à droite (overflow horizontal)
+    <div style={{ overflowX: "hidden" }}>
       <style
         dangerouslySetInnerHTML={{
           __html: `
@@ -158,29 +159,7 @@ const SeancePageViewClient: React.FC<Props> = ({
             {t("settings.seancePage.backButton")}
           </a>
 
-          {/* ✅ Enregistrer uniquement si on ne vient PAS de l'accueil */}
-          {showSaveActions && (
-            <>
-              <button
-                type="button"
-                className="btn-mini"
-                onClick={() => setShowSaveMenu((v) => !v)}
-              >
-                💾 Enregistrer
-              </button>
-
-              {showSaveMenu && (
-                <>
-                  <a href={saveDoneHref} className="btn-mini" title="Marquer comme faite">
-                    ✅ Séance faite
-                  </a>
-                  <a href={saveLaterHref} className="btn-mini" title="Marquer à faire plus tard">
-                    ⏳ Plus tard
-                  </a>
-                </>
-              )}
-            </>
-          )}
+          {/* ✅ CHANGED: suppression du bouton "Enregistrer" + menu */}
         </div>
 
         <div className="text-xs text-gray-400">
