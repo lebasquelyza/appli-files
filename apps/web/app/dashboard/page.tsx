@@ -7,7 +7,7 @@ import { useLanguage } from "@/components/LanguageProvider";
 
 type KcalStore = Record<string, number>;
 
-// ✅ CHANGED: on ajoute title (car syncDoneSessionsToCookie envoie title)
+// ✅ CHANGED: on inclut les champs utilisés par syncDoneSessionsToCookie
 type Workout = {
   status: "active" | "done";
   startedAt?: string;
@@ -46,6 +46,13 @@ function toISODateInTZ(dateIsoString: string, tz = TZ): string {
   const d = new Date(dateIsoString);
   if (Number.isNaN(d.getTime())) return "";
   return new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(d);
+}
+
+function toISOMonthInTZ(dateIsoString: string, tz = TZ): string {
+  const d = new Date(dateIsoString);
+  if (Number.isNaN(d.getTime())) return "";
+  const isoDate = new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(d); // YYYY-MM-DD
+  return isoDate.slice(0, 7); // YYYY-MM
 }
 
 function readCookieValue(name: string): string {
@@ -90,34 +97,50 @@ export default function DashboardPage() {
   const today = todayISO(TZ);
   const todayKcal = kcals[today] || 0;
 
-  // ✅ Séances faites aujourd’hui (status done + endedAt aujourd’hui)
-  const workoutsDoneToday = useMemo(() => {
+  // ✅ Séances terminées ce mois-ci
+  const currentMonth = today.slice(0, 7); // YYYY-MM
+  const workoutsDoneThisMonth = useMemo(() => {
     return sessions.sessions.filter((x) => {
       if (x.status !== "done") return false;
-      if (!x.endedAt) return false;
-      return toISODateInTZ(x.endedAt, TZ) === today;
-    }).length;
-  }, [sessions, today]);
 
-  // ✅ Dernière séance terminée + index (pour lien détail)
+      // si endedAt existe, on filtre sur le mois, sinon on compte quand même
+      // (car ces entrées viennent souvent de la liste "Séance faite")
+      if (!x.endedAt) return true;
+
+      return toISOMonthInTZ(x.endedAt, TZ) === currentMonth;
+    }).length;
+  }, [sessions, currentMonth]);
+
+  // ✅ CHANGED: Dernière séance ajoutée à "Séance faite" = dernière entrée done dans le cookie
   const lastDoneInfo = useMemo(() => {
     const doneWithIndex = sessions.sessions
       .map((s, i) => ({ s, i }))
-      .filter(({ s }) => s.status === "done" && !!s.endedAt)
-      .sort((a, b) => (b.s.endedAt || "").localeCompare(a.s.endedAt || ""));
-    return doneWithIndex[0] || null;
+      .filter(({ s }) => s.status === "done");
+
+    if (!doneWithIndex.length) return null;
+
+    // si on a des endedAt, on choisit la plus récente; sinon on prend la dernière ajoutée
+    const hasAnyEndedAt = doneWithIndex.some(({ s }) => !!s.endedAt);
+    if (hasAnyEndedAt) {
+      doneWithIndex.sort((a, b) => (b.s.endedAt || "").localeCompare(a.s.endedAt || ""));
+      return doneWithIndex[0] || null;
+    }
+
+    return doneWithIndex[doneWithIndex.length - 1] || null;
   }, [sessions]);
 
-  // ✅ CHANGED: afficher le nom complet de la séance (title) au lieu de "Détail/Details"
+  // ✅ CHANGED: afficher le titre complet (nom de séance)
   const lastSessionValue = lastDoneInfo
-    ? (lastDoneInfo.s.title?.trim() ||
-        (lang === "en" ? "Details" : "Détail"))
+    ? (lastDoneInfo.s.title?.trim() || "—")
     : "—";
 
-  // ✅ CHANGED: lien vers la page détail /dashboard/seance/[id] + from=home
+  // ✅ CHANGED: lien vers la séance (on privilégie sessionId)
   const lastSessionHref = lastDoneInfo
     ? `/dashboard/seance/${encodeURIComponent(
-        lastDoneInfo.s.endedAt || lastDoneInfo.s.startedAt || String(lastDoneInfo.i)
+        lastDoneInfo.s.sessionId ||
+          lastDoneInfo.s.endedAt ||
+          lastDoneInfo.s.startedAt ||
+          String(lastDoneInfo.i)
       )}?from=home`
     : "/dashboard/profile";
 
@@ -143,8 +166,8 @@ export default function DashboardPage() {
         />
 
         <KpiCard
-          title={lang === "en" ? "Workouts done (today)" : "Séances faites (aujourd’hui)"}
-          value={`${workoutsDoneToday}`}
+          title={lang === "en" ? "Workouts done (this month)" : "Séances faites (ce mois-ci)"}
+          value={`${workoutsDoneThisMonth}`}
           href="/dashboard/profile"
           manageLabel={t("dashboard.kpi.manage")}
         />
@@ -212,7 +235,9 @@ function KpiCard({
   return (
     <article className="card" style={{ cursor: "default" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-        <p className="text-xs" style={{ color: "#111827", margin: 0 }}>{title}</p>
+        <p className="text-xs" style={{ color: "#111827", margin: 0 }}>
+          {title}
+        </p>
         {manageLabel && (
           <Link
             href={href}
