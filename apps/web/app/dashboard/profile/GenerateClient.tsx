@@ -180,7 +180,18 @@ export default function GenerateClient({
                     </div>
                   </div>
 
-                  {/* ✅ SUPPRIMÉ: bouton Enregistrer/Save */}
+                  <div style={{ position: "relative" }}>
+                    <button
+                      type="button"
+                      className="inline-flex items-center rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-semibold text-neutral-900 hover:border-neutral-400"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        markDone(key);
+                      }}
+                    >
+                      {lang === "fr" ? "Enregistrer" : "Save"}
+                    </button>
+                  </div>
                 </div>
               </li>
             );
