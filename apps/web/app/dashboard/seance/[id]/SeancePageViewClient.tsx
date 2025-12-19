@@ -15,8 +15,8 @@ type Props = {
   backHref: string;
 
   showSaveActions: boolean; // ✅ NEW
-  saveDoneHref: string;     // ✅ NEW
-  saveLaterHref: string;    // ✅ NEW
+  saveDoneHref: string; // ✅ NEW
+  saveLaterHref: string; // ✅ NEW
 };
 
 function stripVariantLetterLocal(s?: string) {
@@ -39,7 +39,6 @@ function cleanTextLocal(s?: string): string {
     .trim();
 }
 
-// ⚠️ IMPORTANT : on garde bien "settings.seancePage" ici
 function focusLabelT(focus: Focus, t: (key: string) => string): string {
   switch (focus) {
     case "upper":
@@ -91,11 +90,17 @@ const SeancePageViewClient: React.FC<Props> = ({
     stripVariantLetterLocal(base.title) || focusLabelT(focus, t);
 
   return (
-    // ✅ CHANGED: évite l’écart blanc à droite (overflow horizontal)
-    <div style={{ overflowX: "hidden" }}>
+    // ✅ CHANGED: verrouille la largeur écran (anti débordement)
+    <div style={{ width: "100%", maxWidth: "100vw", overflowX: "hidden" }}>
       <style
         dangerouslySetInnerHTML={{
           __html: `
+        /* ✅ CHANGED: empêche le scroll horizontal global (cause classique du "blanc à droite") */
+        html, body {
+          overflow-x: hidden !important;
+          max-width: 100vw !important;
+        }
+
         .compact-card {
           padding: 12px;
           border-radius: 16px;
@@ -159,7 +164,38 @@ const SeancePageViewClient: React.FC<Props> = ({
             {t("settings.seancePage.backButton")}
           </a>
 
-          {/* ✅ CHANGED: suppression du bouton "Enregistrer" + menu */}
+          {/* (inchangé ici : si tu avais déjà supprimé "Enregistrer", laisse vide) */}
+          {/* Si tu veux encore l'enlever ici aussi, dis-moi et je le retire à la ligne près */}
+          {showSaveActions && (
+            <>
+              <button
+                type="button"
+                className="btn-mini"
+                onClick={() => setShowSaveMenu((v) => !v)}
+              >
+                💾 Enregistrer
+              </button>
+
+              {showSaveMenu && (
+                <>
+                  <a
+                    href={saveDoneHref}
+                    className="btn-mini"
+                    title="Marquer comme faite"
+                  >
+                    ✅ Séance faite
+                  </a>
+                  <a
+                    href={saveLaterHref}
+                    className="btn-mini"
+                    title="Marquer à faire plus tard"
+                  >
+                    ⏳ Plus tard
+                  </a>
+                </>
+              )}
+            </>
+          )}
         </div>
 
         <div className="text-xs text-gray-400">
@@ -176,8 +212,8 @@ const SeancePageViewClient: React.FC<Props> = ({
           <div>
             <h1 className="h1-compact">{displayTitle}</h1>
             <p className="lead-compact">
-              {plannedMin}{" "}
-              {t("settings.seancePage.plannedMinSuffix")} · {base.type}
+              {plannedMin} {t("settings.seancePage.plannedMinSuffix")} ·{" "}
+              {base.type}
             </p>
           </div>
         </div>
