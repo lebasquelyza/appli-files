@@ -6,8 +6,6 @@ import Link from "next/link";
 import { useLanguage } from "@/components/LanguageProvider";
 
 type KcalStore = Record<string, number>;
-
-// ✅ CHANGED: on inclut les champs utilisés par syncDoneSessionsToCookie
 type Workout = {
   status: "active" | "done";
   startedAt?: string;
@@ -16,7 +14,6 @@ type Workout = {
   type?: string;
   sessionId?: string;
 };
-
 type Store = { sessions: Workout[] };
 
 function parseKcalStore(raw?: string): KcalStore {
@@ -51,8 +48,8 @@ function toISODateInTZ(dateIsoString: string, tz = TZ): string {
 function toISOMonthInTZ(dateIsoString: string, tz = TZ): string {
   const d = new Date(dateIsoString);
   if (Number.isNaN(d.getTime())) return "";
-  const isoDate = new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(d); // YYYY-MM-DD
-  return isoDate.slice(0, 7); // YYYY-MM
+  const isoDate = new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(d);
+  return isoDate.slice(0, 7);
 }
 
 function readCookieValue(name: string): string {
@@ -98,20 +95,16 @@ export default function DashboardPage() {
   const todayKcal = kcals[today] || 0;
 
   // ✅ Séances terminées ce mois-ci
-  const currentMonth = today.slice(0, 7); // YYYY-MM
+  const currentMonth = today.slice(0, 7);
   const workoutsDoneThisMonth = useMemo(() => {
     return sessions.sessions.filter((x) => {
       if (x.status !== "done") return false;
-
-      // si endedAt existe, on filtre sur le mois, sinon on compte quand même
-      // (car ces entrées viennent souvent de la liste "Séance faite")
       if (!x.endedAt) return true;
-
       return toISOMonthInTZ(x.endedAt, TZ) === currentMonth;
     }).length;
   }, [sessions, currentMonth]);
 
-  // ✅ CHANGED: Dernière séance ajoutée à "Séance faite" = dernière entrée done dans le cookie
+  // ✅ Dernière séance ajoutée à "Séance faite"
   const lastDoneInfo = useMemo(() => {
     const doneWithIndex = sessions.sessions
       .map((s, i) => ({ s, i }))
@@ -119,7 +112,6 @@ export default function DashboardPage() {
 
     if (!doneWithIndex.length) return null;
 
-    // si on a des endedAt, on choisit la plus récente; sinon on prend la dernière ajoutée
     const hasAnyEndedAt = doneWithIndex.some(({ s }) => !!s.endedAt);
     if (hasAnyEndedAt) {
       doneWithIndex.sort((a, b) => (b.s.endedAt || "").localeCompare(a.s.endedAt || ""));
@@ -129,12 +121,8 @@ export default function DashboardPage() {
     return doneWithIndex[doneWithIndex.length - 1] || null;
   }, [sessions]);
 
-  // ✅ CHANGED: afficher le titre complet (nom de séance)
-  const lastSessionValue = lastDoneInfo
-    ? (lastDoneInfo.s.title?.trim() || "—")
-    : "—";
+  const lastSessionValue = lastDoneInfo ? (lastDoneInfo.s.title?.trim() || "—") : "—";
 
-  // ✅ CHANGED: lien vers la séance (on privilégie sessionId)
   const lastSessionHref = lastDoneInfo
     ? `/dashboard/seance/${encodeURIComponent(
         lastDoneInfo.s.sessionId ||
@@ -172,11 +160,13 @@ export default function DashboardPage() {
           manageLabel={t("dashboard.kpi.manage")}
         />
 
+        {/* ✅ CHANGED: texte plus petit uniquement pour "Dernière séance" */}
         <KpiCard
           title={t("dashboard.kpi.lastSession")}
           value={lastSessionValue}
           href={lastSessionHref}
           manageLabel={t("dashboard.kpi.manage")}
+          valueStyle={{ fontSize: 14 }}
         />
       </section>
 
@@ -226,11 +216,13 @@ function KpiCard({
   value,
   href,
   manageLabel,
+  valueStyle,
 }: {
   title: string;
   value: string;
   href: string;
   manageLabel?: string;
+  valueStyle?: React.CSSProperties; // ✅ CHANGED
 }) {
   return (
     <article className="card" style={{ cursor: "default" }}>
@@ -260,7 +252,14 @@ function KpiCard({
 
       <Link href={href}>
         <div style={{ marginTop: 8 }}>
-          <strong style={{ fontSize: 20, lineHeight: 1, color: "#111827" }}>
+          <strong
+            style={{
+              fontSize: 20,
+              lineHeight: 1,
+              color: "#111827",
+              ...valueStyle, // ✅ CHANGED
+            }}
+          >
             {value}
           </strong>
         </div>
