@@ -40,7 +40,7 @@ export default function GenerateClient({
   const searchParams = useSearchParams();
   const { t, lang } = useLanguage();
 
-  // ✅ NEW: menu "Enregistrer" (choix faite / plus tard)
+  // ✅ menu "Enregistrer" (choix faite / plus tard)
   const [openForKey, setOpenForKey] = useState<string>("");
 
   useEffect(() => {
@@ -50,7 +50,6 @@ export default function GenerateClient({
       const target = e.target as HTMLElement | null;
       if (!target) return;
 
-      // ferme si clic en dehors du conteneur du menu
       const container = document.querySelector(
         `[data-save-menu="${openForKey}"]`
       ) as HTMLElement | null;
@@ -71,7 +70,6 @@ export default function GenerateClient({
     return fallback ?? path;
   };
 
-  // ✅ On PART des séances calculées côté serveur (persistées en BDD)
   const sessions = initialSessions || [];
 
   const savedSet = useMemo(
@@ -86,7 +84,7 @@ export default function GenerateClient({
   /* ======== GÉNÉRATION (via serveur) ======== */
   const handleGenerate = () => {
     const sp = new URLSearchParams(searchParams?.toString() || "");
-    sp.set("generate", "1"); // indique au serveur "on veut régénérer"
+    sp.set("generate", "1");
     router.push(`${pathname}?${sp.toString()}`);
   };
 
@@ -101,7 +99,8 @@ export default function GenerateClient({
     if (laterStr) sp.set("later", laterStr);
     else sp.delete("later");
 
-    router.push(`${pathname}?${sp.toString()}`);
+    // ✅ FIX: ne pas remonter en haut
+    router.push(`${pathname}?${sp.toString()}`, { scroll: false });
   };
 
   const markDone = (key: string) => {
@@ -120,7 +119,6 @@ export default function GenerateClient({
     navigateWith(nextSaved, nextLater);
   };
 
-  /* ======== UI ======== */
   return (
     <section className="section" style={{ marginTop: 24 }}>
       {/* HEADER */}
@@ -141,7 +139,6 @@ export default function GenerateClient({
           )}
         </h2>
 
-        {/* Bouton Générer / Régénérer (via serveur) */}
         <button
           onClick={handleGenerate}
           className="btn"
@@ -162,7 +159,7 @@ export default function GenerateClient({
         </button>
       </div>
 
-      {/* LISTE DES SÉANCES (toujours celles venant du serveur) */}
+      {/* LISTE DES SÉANCES */}
       {sessions && sessions.length > 0 && (
         <ul className="space-y-2 list-none pl-0">
           {sessions.map((s, i) => {
@@ -185,13 +182,11 @@ export default function GenerateClient({
                 }}
               >
                 <div className="flex items-center justify-between gap-3">
-                  {/* Zone cliquable */}
                   <div
                     onClick={() => router.push(href)}
                     className="cursor-pointer"
                     style={{ minWidth: 0 }}
                   >
-                    {/* Titre IA EXACT (FR ou EN) */}
                     <div className="font-medium text-sm truncate">
                       {s.title || (lang === "fr" ? "Séance" : "Session")}
                     </div>
@@ -202,7 +197,6 @@ export default function GenerateClient({
                     </div>
                   </div>
 
-                  {/* ✅ Bouton Enregistrer -> ouvre un choix */}
                   <div style={{ position: "relative" }} data-save-menu={key}>
                     <button
                       type="button"
