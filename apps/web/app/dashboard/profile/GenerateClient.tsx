@@ -25,8 +25,10 @@ function parseSet(param: string | null): Set<string> {
 function toParam(set: Set<string>) {
   return [...set].join(",");
 }
-function sessionKey(_s: AiSession, idx: number) {
-  return `s${idx}`;
+
+// ✅ CHANGED: utiliser l'id réel si dispo (sinon fallback sX)
+function sessionKey(s: AiSession, idx: number) {
+  return String(s.id || `s${idx}`);
 }
 
 export default function GenerateClient({
@@ -70,6 +72,7 @@ export default function GenerateClient({
     return fallback ?? path;
   };
 
+  // ✅ On PART des séances calculées côté serveur
   const sessions = initialSessions || [];
 
   const savedSet = useMemo(
@@ -164,9 +167,7 @@ export default function GenerateClient({
         <ul className="space-y-2 list-none pl-0">
           {sessions.map((s, i) => {
             const key = sessionKey(s, i);
-            const baseHref = `/dashboard/seance/${encodeURIComponent(
-              s.id || key
-            )}`;
+            const baseHref = `/dashboard/seance/${encodeURIComponent(s.id || key)}`;
             const href = linkQuery ? `${baseHref}?${linkQuery}` : baseHref;
 
             const menuOpen = openForKey === key;
