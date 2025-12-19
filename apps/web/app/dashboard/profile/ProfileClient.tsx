@@ -66,11 +66,14 @@ export default function ProfileClient(props: Props) {
   // 👉 état pour afficher la pub plein écran après clic sur "Générer"
   const [showAdOverlay, setShowAdOverlay] = useState(false);
 
+  // ✅ NEW: choix après clic sur "Enregistrer" (param URL ?pick=sX)
+  const [pickKey, setPickKey] = useState<string>("");
+  const [pickOpen, setPickOpen] = useState(false);
+
   useEffect(() => {
     if (showAdOnGenerate) {
       setShowAdOverlay(true);
 
-      // Masquer l’overlay après quelques secondes (ajuste si tu veux)
       const timer = setTimeout(() => {
         setShowAdOverlay(false);
       }, 5000);
@@ -101,9 +104,7 @@ export default function ProfileClient(props: Props) {
 
   // goalLabel – utilise settings.profile.goal.labels.*
   const goalLabel = useMemo(() => {
-    const g = String(
-      (p as any)?.objectif || (p as any)?.goal || ""
-    ).toLowerCase();
+    const g = String((p as any)?.objectif || (p as any)?.goal || "").toLowerCase();
     if (!g) return "";
     const key = `settings.profile.goal.labels.${g}`;
     const translated = t(key);
@@ -134,10 +135,7 @@ export default function ProfileClient(props: Props) {
 
   const titleList =
     equipMode === "none"
-      ? tf(
-          "settings.profile.sessions.titleNoEquip",
-          "Mes séances (sans matériel)"
-        )
+      ? tf("settings.profile.sessions.titleNoEquip", "Mes séances (sans matériel)")
       : tf("settings.profile.sessions.title", "Mes séances");
 
   // Base de query pour les liens vers les détails de séance
@@ -149,13 +147,13 @@ export default function ProfileClient(props: Props) {
     .filter(Boolean)
     .join("&");
 
-  const savedList = initialSessions
-    .map((s, i) => ({ s, idx: i, key: sessionKey(s, i) }))
-    .filter(({ key }) => savedIdSet.has(key));
+  const allSessionsWithKey = useMemo(
+    () => initialSessions.map((s, i) => ({ s, idx: i, key: sessionKey(s, i) })),
+    [initialSessions]
+  );
 
-  const laterList = initialSessions
-    .map((s, i) => ({ s, idx: i, key: sessionKey(s, i) }))
-    .filter(({ key }) => laterIdSet.has(key));
+  const savedList = allSessionsWithKey.filter(({ key }) => savedIdSet.has(key));
+  const laterList = allSessionsWithKey.filter(({ key }) => laterIdSet.has(key));
 
   // ✅ NEW: sync "Séance faite ✅" -> cookie app_sessions (pour la Home)
   useEffect(() => {
@@ -170,10 +168,49 @@ export default function ProfileClient(props: Props) {
     syncDoneSessionsToCookie(done);
   }, [hasGenerate, savedList]);
 
+  // ✅ NEW: détecter ?pick=sX -> ouvrir le choix (Séance faite / Plus tard)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sp = new URLSearchParams(window.location.search);
+    const k = (sp.get("pick") || "").trim();
+    if (k) {
+      setPickKey(k);
+      setPickOpen(true);
+    } else {
+      setPickOpen(false);
+      setPickKey("");
+    }
+  }, []);
+
+  // ✅ NEW: helper pour naviguer en appliquant saved/later + nettoyage de ?pick
+  function goWithLists(nextSaved: Set<string>, nextLater: Set<string>) {
+    if (typeof window === "undefined") return;
+
+    const savedArr = [...nextSaved];
+    const laterArr = [...nextLater];
+
+    const parts = [
+      equipMode === "none" ? "equip=none" : undefined,
+      savedArr.length ? `saved=${savedArr.join(",")}` : undefined,
+      laterArr.length ? `later=${laterArr.join(",")}` : undefined,
+      // on enlève volontairement "pick"
+    ]
+      .filter(Boolean)
+      .join("&");
+
+    window.location.href = `/dashboard/profile${parts ? `?${parts}` : ""}`;
+  }
+
   // Ce lien sert uniquement à forcer une nouvelle génération du programme
   const hrefGenerate = `/dashboard/profile?generate=1${
     equipMode === "none" ? "&equip=none" : ""
   }${qsKeep ? `&${qsKeep}` : ""}`;
+
+  const picked = useMemo(() => {
+    if (!pickKey) return null;
+    const found = allSessionsWithKey.find(({ key }) => key === pickKey);
+    return found || null;
+  }, [pickKey, allSessionsWithKey]);
 
   return (
     <div
@@ -196,20 +233,103 @@ export default function ProfileClient(props: Props) {
         </div>
       )}
 
+      {/* ✅ NEW: Choix après "Enregistrer" */}
+      {pickOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ background: "rgba(0,0,0,.35)", padding: 16 }}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className="card"
+            style={{
+              width: "min(520px, 100%)",
+              borderRadius: 14,
+              boxShadow: "0 20px 60px rgba(0,0,0,.25)",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 800, color: "#111827" }}>
+                  {tf("settings.profile.pick.title", "Enregistrer la séance")}
+                </div>
+                <div style={{ marginTop: 6, color: "#6b7280", fontSize: 12 }}>
+                  {picked
+                    ? `${picked.s.title || `Séance ${picked.idx + 1}`}`
+                    : tf("settings.profile.pick.unknown", "Séance sélectionnée")}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  // fermer -> retirer pick en rechargeant l’URL sans pick (en gardant les listes)
+                  goWithLists(new Set(savedIdSet), new Set(laterIdSet));
+                }}
+                aria-label={tf("settings.profile.pick.close", "Fermer")}
+                style={{
+                  border: "1px solid #e5e7eb",
+                  borderRadius: 999,
+                  padding: "4px 10px",
+                  fontSize: 12,
+                  color: "#6b7280",
+                  background: "#fff",
+                  fontWeight: 800,
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  const nextSaved = new Set(savedIdSet);
+                  const nextLater = new Set(laterIdSet);
+                  if (pickKey) {
+                    nextSaved.add(pickKey);
+                    nextLater.delete(pickKey);
+                  }
+                  goWithLists(nextSaved, nextLater);
+                }}
+                className="inline-flex items-center rounded-md border border-neutral-900 bg-neutral-900 px-4 py-2 text-sm font-semibold text-white"
+                style={{ cursor: "pointer" }}
+              >
+                {tf("settings.profile.pick.done", "Séance faite")} ✅
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const nextSaved = new Set(savedIdSet);
+                  const nextLater = new Set(laterIdSet);
+                  if (pickKey) {
+                    nextLater.add(pickKey);
+                    nextSaved.delete(pickKey);
+                  }
+                  goWithLists(nextSaved, nextLater);
+                }}
+                className="inline-flex items-center rounded-md border border-neutral-300 bg-white px-4 py-2 text-sm font-semibold text-neutral-900"
+                style={{ cursor: "pointer" }}
+              >
+                {tf("settings.profile.pick.later", "Plus tard")} ⏳
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="page-header">
         <div>
           <h1 className="h1" style={{ fontSize: 22 }}>
             {tf("settings.profile.title", "Mon profil")}
           </h1>
           {showDebug && (
-            <div
-              className="text-xs"
-              style={{ marginTop: 4, color: "#6b7280" }}
-            >
+            <div className="text-xs" style={{ marginTop: 4, color: "#6b7280" }}>
               <b>Debug:</b> email = <code>{emailForDisplay || "—"}</code>{" "}
-              {debugInfo.sheetHit
-                ? "· Sheet OK"
-                : `· ${debugInfo.reason || "Sheet KO"}`}
+              {debugInfo.sheetHit ? "· Sheet OK" : `· ${debugInfo.reason || "Sheet KO"}`}
               {forceBlank ? " · BLANK MODE" : ""}
             </div>
           )}
@@ -232,10 +352,7 @@ export default function ProfileClient(props: Props) {
                   "settings.profile.messages.programmeUpdated",
                   "✓ Programme IA mis à jour à partir de vos dernières réponses au questionnaire."
                 )
-              : tf(
-                  "settings.profile.messages.successGeneric",
-                  "✓ Opération réussie."
-                )}
+              : tf("settings.profile.messages.successGeneric", "✓ Opération réussie.")}
           </div>
         )}
         {!!displayedError && (
@@ -269,20 +386,14 @@ export default function ProfileClient(props: Props) {
         </div>
 
         <div className="card">
-          <div
-            className="text-sm"
-            style={{ display: "flex", gap: 16, flexWrap: "wrap" }}
-          >
+          <div className="text-sm" style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
             {(clientPrenom || showPlaceholders) && (
               <span>
                 <b>{tf("settings.profile.info.firstName.label", "Prénom")} :</b>{" "}
                 {clientPrenom ||
                   (showPlaceholders && (
                     <i className="text-gray-400">
-                      {tf(
-                        "settings.profile.info.firstName.missing",
-                        "Non renseigné"
-                      )}
+                      {tf("settings.profile.info.firstName.missing", "Non renseigné")}
                     </i>
                   ))}
               </span>
@@ -295,10 +406,7 @@ export default function ProfileClient(props: Props) {
                   ? `${clientAge} ans`
                   : showPlaceholders && (
                       <i className="text-gray-400">
-                        {tf(
-                          "settings.profile.info.age.missing",
-                          "Non renseigné"
-                        )}
+                        {tf("settings.profile.info.age.missing", "Non renseigné")}
                       </i>
                     )}
               </span>
@@ -306,20 +414,11 @@ export default function ProfileClient(props: Props) {
 
             {(goalLabel || showPlaceholders) && (
               <span>
-                <b>
-                  {tf(
-                    "settings.profile.info.goal.label",
-                    "Objectif actuel"
-                  )}{" "}
-                  :
-                </b>{" "}
+                <b>{tf("settings.profile.info.goal.label", "Objectif actuel")} :</b>{" "}
                 {goalLabel ||
                   (showPlaceholders && (
                     <i className="text-gray-400">
-                      {tf(
-                        "settings.profile.info.goal.missing",
-                        "Non défini"
-                      )}
+                      {tf("settings.profile.info.goal.missing", "Non défini")}
                     </i>
                   ))}
               </span>
@@ -345,10 +444,7 @@ export default function ProfileClient(props: Props) {
               ) : (
                 showPlaceholders && (
                   <span className="text-gray-400">
-                    {tf(
-                      "settings.profile.info.mail.missing",
-                      "Non renseigné"
-                    )}
+                    {tf("settings.profile.info.mail.missing", "Non renseigné")}
                   </span>
                 )
               )}
@@ -390,10 +486,7 @@ export default function ProfileClient(props: Props) {
                     ? "inline-flex items-center rounded-md border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-sm font-semibold text-white"
                     : "inline-flex items-center rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-semibold text-neutral-900"
                 }
-                title={tf(
-                  "settings.profile.sessions.toggle.withEquipTitle",
-                  "Voir la liste avec matériel"
-                )}
+                title={tf("settings.profile.sessions.toggle.withEquipTitle", "Voir la liste avec matériel")}
               >
                 {tf("settings.profile.sessions.toggle.withEquip", "Matériel")}
               </a>
@@ -435,15 +528,9 @@ export default function ProfileClient(props: Props) {
             <a
               href={hrefGenerate}
               className="inline-flex items-center rounded-md border border-neutral-900 bg-neutral-900 px-4 py-2 text-sm font-semibold text-white"
-              title={tf(
-                "settings.profile.sessions.generateCard.buttonTitle",
-                "Générer mon programme"
-              )}
+              title={tf("settings.profile.sessions.generateCard.buttonTitle", "Générer mon programme")}
             >
-              {tf(
-                "settings.profile.sessions.generateCard.button",
-                "→ Générer mon programme"
-              )}
+              {tf("settings.profile.sessions.generateCard.button", "→ Générer mon programme")}
             </a>
           </div>
         )}
@@ -461,22 +548,18 @@ export default function ProfileClient(props: Props) {
       {/* ===== Bloc bas de page : Séance faite ✅ / À faire plus tard ⏳ ===== */}
       <section className="section" style={{ marginTop: 20 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
-          <h2 style={{ margin: 0 }}>
-            {tf("settings.profile.lists.title", "Mes listes")}
-          </h2>
+          <h2 style={{ margin: 0 }}>{tf("settings.profile.lists.title", "Mes listes")}</h2>
         </div>
 
         <div className="grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           {/* Séance faite ✅ */}
           <div className="card">
             <div className="text-sm" style={{ fontWeight: 600, marginBottom: 6 }}>
-              {tf("settings.profile.lists.done.title", "Séance faite")}{" "}
-              <span aria-hidden>✅</span>
+              {tf("settings.profile.lists.done.title", "Séance faite")} <span aria-hidden>✅</span>
             </div>
             {savedList.length > 0 && (
               <ul className="text-sm" style={{ listStyle: "disc", paddingLeft: 18, margin: 0 }}>
                 {savedList.map(({ s, idx, key }) => {
-                  // ✅ CHANGED: ajouter from=profile (et garder baseLinkQuery)
                   const detailHref = `/dashboard/seance/${encodeURIComponent(s.id || key)}?${
                     [baseLinkQuery, "from=profile"].filter(Boolean).join("&")
                   }`;
@@ -515,10 +598,7 @@ export default function ProfileClient(props: Props) {
                       </a>
                       <a
                         href={removeHref}
-                        aria-label={tf(
-                          "settings.profile.lists.removeLabel",
-                          "Supprimer cette séance"
-                        )}
+                        aria-label={tf("settings.profile.lists.removeLabel", "Supprimer cette séance")}
                         className="text-xs"
                         style={{
                           fontSize: 12,
@@ -544,13 +624,11 @@ export default function ProfileClient(props: Props) {
           {/* À faire plus tard ⏳ */}
           <div className="card">
             <div className="text-sm" style={{ fontWeight: 600, marginBottom: 6 }}>
-              {tf("settings.profile.lists.later.title", "À faire plus tard")}{" "}
-              <span aria-hidden>⏳</span>
+              {tf("settings.profile.lists.later.title", "À faire plus tard")} <span aria-hidden>⏳</span>
             </div>
             {laterList.length > 0 && (
               <ul className="text-sm" style={{ listStyle: "disc", paddingLeft: 18, margin: 0 }}>
                 {laterList.map(({ s, idx, key }) => {
-                  // ✅ CHANGED: ajouter from=profile (et garder baseLinkQuery)
                   const detailHref = `/dashboard/seance/${encodeURIComponent(s.id || key)}?${
                     [baseLinkQuery, "from=profile"].filter(Boolean).join("&")
                   }`;
@@ -589,10 +667,7 @@ export default function ProfileClient(props: Props) {
                       </a>
                       <a
                         href={removeHref}
-                        aria-label={tf(
-                          "settings.profile.lists.removeLabel",
-                          "Supprimer cette séance"
-                        )}
+                        aria-label={tf("settings.profile.lists.removeLabel", "Supprimer cette séance")}
                         className="text-xs"
                         style={{
                           fontSize: 12,
