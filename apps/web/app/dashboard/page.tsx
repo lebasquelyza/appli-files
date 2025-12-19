@@ -39,12 +39,6 @@ function todayISO(tz = TZ) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date());
 }
 
-function toISODateInTZ(dateIsoString: string, tz = TZ): string {
-  const d = new Date(dateIsoString);
-  if (Number.isNaN(d.getTime())) return "";
-  return new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(d);
-}
-
 function toISOMonthInTZ(dateIsoString: string, tz = TZ): string {
   const d = new Date(dateIsoString);
   if (Number.isNaN(d.getTime())) return "";
@@ -132,6 +126,9 @@ export default function DashboardPage() {
       )}?from=home`
     : "/dashboard/profile";
 
+  // ✅ même taille pour les 3 KPI
+  const kpiValueStyle = { fontSize: 14 } as const;
+
   return (
     <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
       <div className="page-header" style={{ marginBottom: 8 }}>
@@ -151,6 +148,7 @@ export default function DashboardPage() {
           value={`${todayKcal.toLocaleString(lang === "en" ? "en-US" : "fr-FR")} kcal`}
           href="/dashboard/calories"
           manageLabel={t("dashboard.kpi.manage")}
+          valueStyle={kpiValueStyle}
         />
 
         <KpiCard
@@ -158,15 +156,15 @@ export default function DashboardPage() {
           value={`${workoutsDoneThisMonth}`}
           href="/dashboard/profile"
           manageLabel={t("dashboard.kpi.manage")}
+          valueStyle={kpiValueStyle}
         />
 
-        {/* ✅ CHANGED: texte plus petit uniquement pour "Dernière séance" */}
         <KpiCard
           title={t("dashboard.kpi.lastSession")}
           value={lastSessionValue}
           href={lastSessionHref}
           manageLabel={t("dashboard.kpi.manage")}
-          valueStyle={{ fontSize: 14 }}
+          valueStyle={kpiValueStyle}
         />
       </section>
 
@@ -222,7 +220,7 @@ function KpiCard({
   value: string;
   href: string;
   manageLabel?: string;
-  valueStyle?: React.CSSProperties; // ✅ CHANGED
+  valueStyle?: React.CSSProperties;
 }) {
   return (
     <article className="card" style={{ cursor: "default" }}>
@@ -257,7 +255,7 @@ function KpiCard({
               fontSize: 20,
               lineHeight: 1,
               color: "#111827",
-              ...valueStyle, // ✅ CHANGED
+              ...valueStyle,
             }}
           >
             {value}
