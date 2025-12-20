@@ -116,6 +116,8 @@ export default function ProfileClient(props: Props) {
   const showPlaceholders = !forceBlank;
   const p = (profile ?? {}) as Partial<ProfileT>;
 
+  const mustUpdateQuestionnaire = forceBlank || !debugInfo.sheetHit;
+
   const clientPrenom =
     typeof p?.prenom === "string" && p.prenom && !/\d/.test(p.prenom)
       ? p.prenom
@@ -478,19 +480,48 @@ export default function ProfileClient(props: Props) {
                 "Files te prépare ton programme. Clique sur « Générer » pour l’afficher."
               )}
             </div>
-            <a
-              href={hrefGenerate}
-              className="inline-flex items-center rounded-md border border-neutral-900 bg-neutral-900 px-4 py-2 text-sm font-semibold text-white"
-              title={tf(
-                "settings.profile.sessions.generateCard.buttonTitle",
-                "Générer mon programme"
-              )}
-            >
-              {tf(
-                "settings.profile.sessions.generateCard.button",
-                "→ Générer mon programme"
-              )}
-            </a>
+
+            {mustUpdateQuestionnaire ? (
+              <div
+                className="text-sm"
+                style={{ display: "flex", gap: 12, alignItems: "center" }}
+              >
+                <span style={{ color: "#6b7280" }}>
+                  {tf(
+                    "settings.profile.sessions.generateCard.disabledNeedQuestionnaire",
+                    "Pour générer ton programme, clique d’abord sur « Mettre à jour mes réponses au questionnaire »."
+                  )}
+                </span>
+
+                <span
+                  aria-disabled="true"
+                  className="inline-flex items-center rounded-md border border-neutral-300 bg-neutral-100 px-4 py-2 text-sm font-semibold text-neutral-400"
+                  title={tf(
+                    "settings.profile.sessions.generateCard.disabledTitle",
+                    "Complète le questionnaire avant de générer"
+                  )}
+                >
+                  {tf(
+                    "settings.profile.sessions.generateCard.button",
+                    "→ Générer mon programme"
+                  )}
+                </span>
+              </div>
+            ) : (
+              <a
+                href={hrefGenerate}
+                className="inline-flex items-center rounded-md border border-neutral-900 bg-neutral-900 px-4 py-2 text-sm font-semibold text-white"
+                title={tf(
+                  "settings.profile.sessions.generateCard.buttonTitle",
+                  "Générer mon programme"
+                )}
+              >
+                {tf(
+                  "settings.profile.sessions.generateCard.button",
+                  "→ Générer mon programme"
+                )}
+              </a>
+            )}
           </div>
         )}
 
