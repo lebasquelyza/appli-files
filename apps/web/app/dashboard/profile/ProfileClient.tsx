@@ -74,11 +74,29 @@ export default function ProfileClient(props: Props) {
   // 👉 état pour afficher la pub plein écran après clic sur "Générer"
   const [showAdOverlay, setShowAdOverlay] = useState(false);
 
+  // ✅ NEW: si l'utilisateur a supprimé ses réponses, on cache les séances
+  // jusqu'à ce qu'il clique sur "Générer"
+  const [answersDeleted, setAnswersDeleted] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const flag = window.localStorage.getItem("profile_answers_deleted");
+    setAnswersDeleted(!!flag);
+  }, []);
+
+  // Si on clique sur "Générer" (?generate=1), on lève le blocage
+  useEffect(() => {
+    if (!showAdOnGenerate) return;
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem("profile_answers_deleted");
+    }
+    setAnswersDeleted(false);
+  }, [showAdOnGenerate]);
+
   useEffect(() => {
     if (showAdOnGenerate) {
       setShowAdOverlay(true);
 
-      // Masquer l’overlay après quelques secondes (ajuste si tu veux)
       const timer = setTimeout(() => {
         setShowAdOverlay(false);
       }, 5000);
@@ -96,7 +114,6 @@ export default function ProfileClient(props: Props) {
 
     window.localStorage.removeItem("profile_after_questionnaire");
 
-    // 1 refresh immédiat + 1 refresh léger ensuite (si le Sheet est en retard)
     router.refresh();
     const t = setTimeout(() => router.refresh(), 1200);
 
@@ -116,6 +133,7 @@ export default function ProfileClient(props: Props) {
   const showPlaceholders = !forceBlank;
   const p = (profile ?? {}) as Partial<ProfileT>;
 
+  // doit remplir le questionnaire avant de générer
   const mustUpdateQuestionnaire = forceBlank || !debugInfo.sheetHit;
 
   const clientPrenom =
@@ -135,7 +153,6 @@ export default function ProfileClient(props: Props) {
     const translated = t(key);
     if (translated && translated !== key) return translated;
 
-    // fallback FR “dur”
     const map: Record<string, string> = {
       hypertrophy: "Hypertrophie / Esthétique",
       fatloss: "Perte de gras",
@@ -175,6 +192,11 @@ export default function ProfileClient(props: Props) {
     .filter(Boolean)
     .join("&");
 
+  // ✅ NEW: on bloque l'affichage des séances si "réponses supprimées"
+  // sauf si on est en train de générer (?generate=1)
+  const blockSessions = answersDeleted && !showAdOnGenerate;
+  const effectiveHasGenerate = hasGenerate && !blockSessions;
+
   const savedList = initialSessions
     .map((s, i) => ({ s, idx: i, key: sessionKey(s, i) }))
     .filter(({ key }) => savedIdSet.has(key));
@@ -185,16 +207,16 @@ export default function ProfileClient(props: Props) {
 
   // ✅ NEW: sync "Séance faite ✅" -> cookie app_sessions (pour la Home)
   useEffect(() => {
-    if (!hasGenerate) return;
+    if (!effectiveHasGenerate) return;
 
     const done = savedList.map(({ s, key, idx }) => ({
-      sessionId: String((s as any).id || key), // id réel si dispo sinon clé
+      sessionId: String((s as any).id || key),
       title: s.title || `Séance ${idx + 1}`,
       type: (s as any)?.type ? String((s as any).type) : undefined,
     }));
 
     syncDoneSessionsToCookie(done);
-  }, [hasGenerate, savedList]);
+  }, [effectiveHasGenerate, savedList]);
 
   // Ce lien sert uniquement à forcer une nouvelle génération du programme
   const hrefGenerate = `/dashboard/profile?generate=1${
@@ -215,7 +237,7 @@ export default function ProfileClient(props: Props) {
         <div className="fixed inset-0 z-50 bg-white flex items-center justify-center">
           <div className="w-full h-full flex items-center justify-center">
             <AdBanner
-              slot="REPLACE_WITH_YOUR_SLOT_ID" // 👈 mets ton vrai data-ad-slot ici
+              slot="REPLACE_WITH_YOUR_SLOT_ID"
               className="w-full h-full"
             />
           </div>
@@ -237,6 +259,7 @@ export default function ProfileClient(props: Props) {
                 ? "· Sheet OK"
                 : `· ${debugInfo.reason || "Sheet KO"}`}
               {forceBlank ? " · BLANK MODE" : ""}
+              {answersDeleted ? " · ANSWERS DELETED" : ""}
             </div>
           )}
         </div>
@@ -389,7 +412,16 @@ export default function ProfileClient(props: Props) {
           </div>
 
           <div className="text-sm" style={{ marginTop: 10 }}>
-            <a href="/dashboard/profile?blank=1" className="underline">
+            <a
+              href="/dashboard/profile?blank=1"
+              className="underline"
+              onClick={() => {
+                if (typeof window !== "undefined") {
+                  window.localStorage.setItem("profile_answers_deleted", "1");
+                }
+                setAnswersDeleted(true);
+              }}
+            >
               {tf(
                 "settings.profile.info.questionnaire.deleteAnswers",
                 "Supprimer mes réponses"
@@ -423,7 +455,7 @@ export default function ProfileClient(props: Props) {
         >
           <h2 style={{ margin: 0 }}>{titleList}</h2>
 
-          {hasGenerate && (
+          {effectiveHasGenerate && (
             <div
               className="inline-flex items-center"
               style={{ display: "inline-flex", gap: 8 }}
@@ -463,8 +495,8 @@ export default function ProfileClient(props: Props) {
           )}
         </div>
 
-        {/* 🟡 ÉTAT AVANT CLIC SUR GÉNÉRER */}
-        {!hasGenerate && (
+        {/* 🟡 ÉTAT AVANT CLIC SUR GÉNÉRER (ou après suppression, tant qu'on n'a pas regénéré) */}
+        {!effectiveHasGenerate && (
           <div
             className="card"
             style={{
@@ -525,7 +557,7 @@ export default function ProfileClient(props: Props) {
           </div>
         )}
 
-        {hasGenerate && (
+        {effectiveHasGenerate && (
           <GenerateClient
             email={emailForDisplay}
             questionnaireBase={questionnaireBase}
