@@ -20,6 +20,37 @@ const QUESTIONNAIRE_BASE =
 // 🔒 Route serveur qui génère l’URL signée et redirige
 const QUESTIONNAIRE_LINK = "/api/questionnaire-link";
 
+/* ✅ NEW: start programme from today's weekday (Europe/Paris) */
+const TZ = "Europe/Paris";
+
+function getWeekdayIndexInTZ(tz = TZ): number {
+  // Lundi=0 ... Dimanche=6
+  const wd = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    weekday: "short",
+  }).format(new Date());
+  const map: Record<string, number> = {
+    Mon: 0,
+    Tue: 1,
+    Wed: 2,
+    Thu: 3,
+    Fri: 4,
+    Sat: 5,
+    Sun: 6,
+  };
+  return map[wd] ?? 0;
+}
+
+function rotateSessionsToStartFromToday<T>(sessions: T[], tz = TZ): T[] {
+  const n = sessions.length;
+  if (n <= 1) return sessions;
+
+  const start = getWeekdayIndexInTZ(tz) % n; // si n < 7 => rotation modulo
+  if (start === 0) return sessions;
+
+  return [...sessions.slice(start), ...sessions.slice(0, start)];
+}
+
 /* Email fallback: session Supabase côté serveur si cookie absent */
 async function getEmailFromSupabaseSession(): Promise<string> {
   try {
@@ -319,10 +350,6 @@ async function saveListsToSupabase(
 }
 
 /* Loaders — Mes infos */
-/**
- * ⚠️ Ici on veut TOUJOURS les réponses les plus récentes du questionnaire.
- * On revient à la logique d'origine : lecture directe du Sheet avec fresh: true.
- */
 async function loadProfile(
   searchParams?: Record<string, string | string[] | undefined>
 ) {
@@ -395,7 +422,6 @@ function normalizeAnswersForComparison(raw: any) {
     updatedAt,
     fetched_at,
     fetchedAt,
-    // on garde le reste
     ...rest
   } = raw as any;
 
@@ -448,11 +474,9 @@ async function loadInitialSessions(
     let mustRegenerate = false;
 
     if (!lastInsight) {
-      // Aucun programme existant → on doit générer au moins une fois
       mustRegenerate = true;
     }
 
-    // On ne compare les réponses que si l'utilisateur clique sur "Régénérer"
     let currentAnswers: any = null;
     if (forceNew) {
       try {
@@ -469,7 +493,6 @@ async function loadInitialSessions(
           JSON.stringify(lastNorm ?? {}) !== JSON.stringify(currentNorm ?? {});
 
         if (answersChanged) {
-          // Réponses modifiées + clic sur "Régénérer" → on régénère
           mustRegenerate = true;
         }
       }
@@ -478,9 +501,10 @@ async function loadInitialSessions(
     // 3) Génération si nécessaire
     if (mustRegenerate) {
       const { sessions } = await planProgrammeFromEmail(email, { lang });
-      baseSessions = sessions || [];
 
-      // Si on n'avait pas (ou plus) currentAnswers, on refait une tentative
+      // ✅ NEW: on commence le programme au jour de génération (Europe/Paris)
+      baseSessions = rotateSessionsToStartFromToday(sessions || [], TZ);
+
       if (!currentAnswers) {
         try {
           currentAnswers = await getAnswersForEmail(email, { fresh: true });
@@ -492,7 +516,6 @@ async function loadInitialSessions(
       await logProgrammeInsightToSupabase(email, currentAnswers, baseSessions);
     }
 
-    // Si malgré tout on n'a rien, on renvoie []
     if (!baseSessions || !baseSessions.length) {
       return [];
     }
@@ -547,42 +570,31 @@ export default async function Page({
   const { emailForDisplay, profile, debugInfo, forceBlank } =
     await loadProfile(searchParams);
 
-  // flag dans l'URL : ?generate=1 → le client a cliqué sur "Régénérer"
   const generateParam =
     String(searchParams?.generate || "").toLowerCase() === "1";
 
   const equipParam = String(searchParams?.equip || "").toLowerCase();
   const equipMode: "full" | "none" = equipParam === "none" ? "none" : "full";
 
-  // On charge TOUJOURS les séances :
-  // - si generateParam = true → on décide de régénérer ou non selon les réponses
-  // - sinon → on essaie d'abord de reprendre le dernier programme existant
   const initialSessions = await loadInitialSessions(
     emailForDisplay,
     equipMode,
     generateParam
   );
 
-  // hasGenerate = est-ce qu'on a un programme à afficher ?
   const hasGenerate = initialSessions.length > 0;
 
-  // 🔁 Listes "faite / plus tard"
-  // 1) On charge ce qui est déjà en BDD
   const dbLists = await loadListsFromSupabase(emailForDisplay);
 
-  // 2) On regarde si l'URL fournit une version à jour (clic sur 🗑️ / ajout)
   const querySavedSet = parseIdList(searchParams?.saved);
   const queryLaterSet = parseIdList(searchParams?.later);
 
   const hasSavedParam = typeof searchParams?.saved !== "undefined";
   const hasLaterParam = typeof searchParams?.later !== "undefined";
 
-  // 3) Si des paramètres sont présents, ils sont la source de vérité,
-  //    sinon on tombe back sur ce qu'il y a en BDD.
   const savedIds = hasSavedParam ? [...querySavedSet] : dbLists.savedIds || [];
   const laterIds = hasLaterParam ? [...queryLaterSet] : dbLists.laterIds || [];
 
-  // 4) On persiste la version finale en BDD (email + listes)
   await saveListsToSupabase(emailForDisplay, savedIds, laterIds);
 
   const displayedError = searchParams?.error || "";
@@ -619,7 +631,6 @@ export default async function Page({
       showDebug={showDebug}
       questionnaireUrl={questionnaireUrl}
       questionnaireBase={QUESTIONNAIRE_BASE}
-      /* 👇 NOUVELLE PROP : permet à ProfileClient de savoir qu'on vient de cliquer sur "Générer" */
       showAdOnGenerate={generateParam}
     />
   );
