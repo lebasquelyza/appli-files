@@ -183,11 +183,6 @@ export default function ProfileClient(props: Props) {
     equipMode === "none" ? "&equip=none" : ""
   }${qsKeep ? `&${qsKeep}` : ""}`;
 
-  // ✅ NEW: lien pour "Supprimer mes réponses" (dans Mes infos)
-  const hrefDeleteAnswers = `/dashboard/profile?blank=1${
-    qsKeep ? `&${qsKeep}` : ""
-  }`;
-
   return (
     <div
       className="container"
@@ -320,19 +315,12 @@ export default function ProfileClient(props: Props) {
             {(goalLabel || showPlaceholders) && (
               <span>
                 <b>
-                  {tf(
-                    "settings.profile.info.goal.label",
-                    "Objectif actuel"
-                  )}{" "}
-                  :
+                  {tf("settings.profile.info.goal.label", "Objectif actuel")} :
                 </b>{" "}
                 {goalLabel ||
                   (showPlaceholders && (
                     <i className="text-gray-400">
-                      {tf(
-                        "settings.profile.info.goal.missing",
-                        "Non défini"
-                      )}
+                      {tf("settings.profile.info.goal.missing", "Non défini")}
                     </i>
                   ))}
               </span>
@@ -358,10 +346,7 @@ export default function ProfileClient(props: Props) {
               ) : (
                 showPlaceholders && (
                   <span className="text-gray-400">
-                    {tf(
-                      "settings.profile.info.mail.missing",
-                      "Non renseigné"
-                    )}
+                    {tf("settings.profile.info.mail.missing", "Non renseigné")}
                   </span>
                 )
               )}
@@ -377,17 +362,16 @@ export default function ProfileClient(props: Props) {
             </a>
           </div>
 
-          {/* ✅ NEW: bouton/lien "Supprimer mes réponses" */}
+          {/* ✅ AJOUT : bouton "Supprimer mes réponses" */}
           <div className="text-sm" style={{ marginTop: 10 }}>
             <a
-              href={hrefDeleteAnswers}
-              className="underline"
-              onClick={(e) => {
-                e.preventDefault();
-                router.push(hrefDeleteAnswers, { scroll: false });
-              }}
+              href="/dashboard/profile?blank=1"
+              className="inline-flex items-center rounded-md border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700"
             >
-              Supprimer mes réponses
+              {tf(
+                "settings.profile.info.questionnaire.deleteAnswers",
+                "Supprimer mes réponses"
+              )}
             </a>
           </div>
         </div>
