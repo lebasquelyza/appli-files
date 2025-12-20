@@ -183,6 +183,11 @@ export default function ProfileClient(props: Props) {
     equipMode === "none" ? "&equip=none" : ""
   }${qsKeep ? `&${qsKeep}` : ""}`;
 
+  // ✅ NEW: lien pour "Supprimer mes réponses" (dans Mes infos)
+  const hrefDeleteAnswers = `/dashboard/profile?blank=1${
+    qsKeep ? `&${qsKeep}` : ""
+  }`;
+
   return (
     <div
       className="container"
@@ -369,6 +374,20 @@ export default function ProfileClient(props: Props) {
                 "settings.profile.info.questionnaire.updateLink",
                 "Mettre à jour mes réponses au questionnaire"
               )}
+            </a>
+          </div>
+
+          {/* ✅ NEW: bouton/lien "Supprimer mes réponses" */}
+          <div className="text-sm" style={{ marginTop: 10 }}>
+            <a
+              href={hrefDeleteAnswers}
+              className="underline"
+              onClick={(e) => {
+                e.preventDefault();
+                router.push(hrefDeleteAnswers, { scroll: false });
+              }}
+            >
+              Supprimer mes réponses
             </a>
           </div>
         </div>
@@ -678,4 +697,3 @@ export default function ProfileClient(props: Props) {
     </div>
   );
 }
-
