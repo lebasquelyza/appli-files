@@ -362,18 +362,23 @@ export default function ProfileClient(props: Props) {
             </a>
           </div>
 
-          {/* ✅ AJOUT : bouton "Supprimer mes réponses" */}
           <div className="text-sm" style={{ marginTop: 10 }}>
-            <a
-              href="/dashboard/profile?blank=1"
-              className="inline-flex items-center rounded-md border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700"
-            >
+            <a href="/dashboard/profile?blank=1" className="underline">
               {tf(
                 "settings.profile.info.questionnaire.deleteAnswers",
                 "Supprimer mes réponses"
               )}
             </a>
           </div>
+
+          {(!debugInfo.sheetHit || forceBlank) && (
+            <div className="text-sm" style={{ marginTop: 10, color: "#6b7280" }}>
+              {tf(
+                "settings.profile.info.questionnaire.ctaIfEmpty",
+                "Vous n’avez pas encore rempli le questionnaire (ou vous l’avez supprimé). Cliquez sur « Mettre à jour mes réponses au questionnaire »."
+              )}
+            </div>
+          )}
         </div>
       </section>
 
