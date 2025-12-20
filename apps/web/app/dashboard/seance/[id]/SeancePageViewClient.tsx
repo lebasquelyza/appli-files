@@ -1,7 +1,7 @@
 // apps/web/app/dashboard/seance/[id]/SeancePageViewClient.tsx
 "use client";
 
-import React, { useEffect } from "react";
+import React from "react";
 import type { AiSession, NormalizedExercise } from "../../../../lib/coach/ai";
 import type { Focus } from "./page";
 import { useLanguage } from "@/components/LanguageProvider";
@@ -85,43 +85,18 @@ const SeancePageViewClient: React.FC<Props> = ({
   const displayTitle =
     stripVariantLetterLocal(base.title) || focusLabelT(focus, t);
 
-  // ✅ CHANGED: verrouillage horizontal sur iOS (spécifique à cette page)
-  useEffect(() => {
-    if (typeof document === "undefined") return;
-
-    const html = document.documentElement;
-    const body = document.body;
-
-    const prev = {
-      htmlOverflowX: html.style.overflowX,
-      htmlWidth: html.style.width,
-      htmlMaxWidth: html.style.maxWidth,
-      bodyOverflowX: body.style.overflowX,
-      bodyWidth: body.style.width,
-      bodyMaxWidth: body.style.maxWidth,
-    };
-
-    html.style.overflowX = "hidden";
-    html.style.width = "100%";
-    html.style.maxWidth = "100%";
-
-    body.style.overflowX = "hidden";
-    body.style.width = "100%";
-    body.style.maxWidth = "100%";
-
-    return () => {
-      html.style.overflowX = prev.htmlOverflowX;
-      html.style.width = prev.htmlWidth;
-      html.style.maxWidth = prev.htmlMaxWidth;
-
-      body.style.overflowX = prev.bodyOverflowX;
-      body.style.width = prev.bodyWidth;
-      body.style.maxWidth = prev.bodyMaxWidth;
-    };
-  }, []);
-
   return (
-    <div style={{ width: "100%", maxWidth: "100vw", overflowX: "hidden" }}>
+    // ✅ CHANGED: "full-bleed" pour sortir du container parent (supprime le blanc à droite sans scroll)
+    <div
+      style={{
+        width: "100vw",
+        position: "relative",
+        left: "50%",
+        right: "50%",
+        marginLeft: "-50vw",
+        marginRight: "-50vw",
+      }}
+    >
       <style
         dangerouslySetInnerHTML={{
           __html: `
@@ -176,7 +151,7 @@ const SeancePageViewClient: React.FC<Props> = ({
           <a href={backHref} className="btn-ghost">
             {t("settings.seancePage.backButton")}
           </a>
-          {/* ✅ bouton Enregistrer supprimé */}
+          {/* ✅ bouton Enregistrer supprimé ici */}
         </div>
 
         <div className="text-xs text-gray-400">
