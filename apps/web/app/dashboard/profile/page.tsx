@@ -20,16 +20,17 @@ const QUESTIONNAIRE_BASE =
 // 🔒 Route serveur qui génère l’URL signée et redirige
 const QUESTIONNAIRE_LINK = "/api/questionnaire-link";
 
-/* ✅ NEW: start programme from today's weekday (Europe/Paris) */
+/* ✅ NEW: start programme based on answers weekday or tomorrow */
 const TZ = "Europe/Paris";
+type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6; // Mon..Sun
 
-function getWeekdayIndexInTZ(tz = TZ): number {
-  // Lundi=0 ... Dimanche=6
+function weekdayIndexInTZ(date: Date, tz = TZ): Weekday {
   const wd = new Intl.DateTimeFormat("en-US", {
     timeZone: tz,
     weekday: "short",
-  }).format(new Date());
-  const map: Record<string, number> = {
+  }).format(date);
+
+  const map: Record<string, Weekday> = {
     Mon: 0,
     Tue: 1,
     Wed: 2,
@@ -41,14 +42,76 @@ function getWeekdayIndexInTZ(tz = TZ): number {
   return map[wd] ?? 0;
 }
 
-function rotateSessionsToStartFromToday<T>(sessions: T[], tz = TZ): T[] {
+function getTomorrowWeekdayIndexInTZ(tz = TZ): Weekday {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return weekdayIndexInTZ(d, tz);
+}
+
+function rotateSessionsToStartFromIndex<T>(sessions: T[], startIndex: number): T[] {
   const n = sessions.length;
   if (n <= 1) return sessions;
-
-  const start = getWeekdayIndexInTZ(tz) % n; // si n < 7 => rotation modulo
+  const start = ((startIndex % n) + n) % n;
   if (start === 0) return sessions;
-
   return [...sessions.slice(start), ...sessions.slice(0, start)];
+}
+
+/**
+ * Détecte un jour explicitement choisi dans les réponses (FR/EN),
+ * en cherchant lundi/mardi/... ou monday/tuesday/... dans toutes les strings.
+ * Retourne 0..6 (Mon..Sun) ou null si aucun jour trouvé.
+ */
+function inferPreferredWeekdayFromAnswers(raw: any): Weekday | null {
+  if (!raw || typeof raw !== "object") return null;
+
+  const frEnMap: Array<[RegExp, Weekday]> = [
+    [/\b(lundi|monday)\b/i, 0],
+    [/\b(mardi|tuesday)\b/i, 1],
+    [/\b(mercredi|wednesday)\b/i, 2],
+    [/\b(jeudi|thursday)\b/i, 3],
+    [/\b(vendredi|friday)\b/i, 4],
+    [/\b(samedi|saturday)\b/i, 5],
+    [/\b(dimanche|sunday)\b/i, 6],
+  ];
+
+  const stack: any[] = [raw];
+  const seen = new Set<any>();
+
+  while (stack.length) {
+    const cur = stack.pop();
+    if (!cur || seen.has(cur)) continue;
+    seen.add(cur);
+
+    if (typeof cur === "string") {
+      const s = cur.toLowerCase();
+      for (const [re, idx] of frEnMap) {
+        if (re.test(s)) return idx;
+      }
+      continue;
+    }
+
+    if (Array.isArray(cur)) {
+      for (const v of cur) stack.push(v);
+      continue;
+    }
+
+    if (typeof cur === "object") {
+      for (const v of Object.values(cur)) stack.push(v);
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Règle demandée :
+ * - si jour explicite dans answers => on commence ce jour-là
+ * - sinon => on commence demain
+ */
+function getStartIndexFromAnswersOrTomorrow(rawAnswers: any, tz = TZ): Weekday {
+  const preferred = inferPreferredWeekdayFromAnswers(rawAnswers);
+  if (preferred !== null) return preferred;
+  return getTomorrowWeekdayIndexInTZ(tz);
 }
 
 /* Email fallback: session Supabase côté serveur si cookie absent */
@@ -500,11 +563,7 @@ async function loadInitialSessions(
 
     // 3) Génération si nécessaire
     if (mustRegenerate) {
-      const { sessions } = await planProgrammeFromEmail(email, { lang });
-
-      // ✅ NEW: on commence le programme au jour de génération (Europe/Paris)
-      baseSessions = rotateSessionsToStartFromToday(sessions || [], TZ);
-
+      // ✅ NEW: on veut les answers si possible AVANT de choisir le jour de départ
       if (!currentAnswers) {
         try {
           currentAnswers = await getAnswersForEmail(email, { fresh: true });
@@ -512,6 +571,14 @@ async function loadInitialSessions(
           currentAnswers = null;
         }
       }
+
+      const { sessions } = await planProgrammeFromEmail(email, { lang });
+
+      // ✅ NEW: start day logic:
+      // - jour explicite dans réponses => commencer ce jour-là
+      // - sinon => commencer demain
+      const startIndex = getStartIndexFromAnswersOrTomorrow(currentAnswers, TZ);
+      baseSessions = rotateSessionsToStartFromIndex(sessions || [], startIndex);
 
       await logProgrammeInsightToSupabase(email, currentAnswers, baseSessions);
     }
@@ -570,6 +637,7 @@ export default async function Page({
   const { emailForDisplay, profile, debugInfo, forceBlank } =
     await loadProfile(searchParams);
 
+  // flag dans l'URL : ?generate=1 → le client a cliqué sur "Régénérer"
   const generateParam =
     String(searchParams?.generate || "").toLowerCase() === "1";
 
@@ -631,6 +699,7 @@ export default async function Page({
       showDebug={showDebug}
       questionnaireUrl={questionnaireUrl}
       questionnaireBase={QUESTIONNAIRE_BASE}
+      /* 👇 NOUVELLE PROP : permet à ProfileClient de savoir qu'on vient de cliquer sur "Générer" */
       showAdOnGenerate={generateParam}
     />
   );
