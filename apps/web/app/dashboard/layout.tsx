@@ -16,6 +16,12 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           // ⬅️ annule le paddingTop global du RootLayout
           marginTop: "calc(-40px - env(safe-area-inset-top))",
           paddingBottom: "var(--mobile-tabbar, 0px)",
+
+          // ✅ CHANGED: empêche tout débordement horizontal (bande blanche à droite iOS)
+          width: "100%",
+          maxWidth: "100%",
+          boxSizing: "border-box",
+          overflowX: "clip",
         }}
       >
         <div className="md:hidden">
@@ -24,7 +30,6 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
         <section>{children}</section>
 
-        {/* ⬇️ ICI : on force le centrage avec style textAlign:"center" */}
         <footer
           className="mt-10 py-4 text-sm text-gray-500"
           style={{ textAlign: "center" }}
