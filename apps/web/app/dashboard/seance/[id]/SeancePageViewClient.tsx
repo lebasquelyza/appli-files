@@ -86,17 +86,7 @@ const SeancePageViewClient: React.FC<Props> = ({
     stripVariantLetterLocal(base.title) || focusLabelT(focus, t);
 
   return (
-    // ✅ CHANGED: "full-bleed" pour sortir du container parent (supprime le blanc à droite sans scroll)
-    <div
-      style={{
-        width: "100vw",
-        position: "relative",
-        left: "50%",
-        right: "50%",
-        marginLeft: "-50vw",
-        marginRight: "-50vw",
-      }}
-    >
+    <div style={{ width: "100%" }}>
       <style
         dangerouslySetInnerHTML={{
           __html: `
@@ -161,7 +151,12 @@ const SeancePageViewClient: React.FC<Props> = ({
 
       <div
         className="mx-auto w-full"
-        style={{ maxWidth: 640, paddingInline: 12, paddingBottom: 24 }}
+        style={{
+          // ✅ CHANGED: un peu plus large, sans prendre "trop de place"
+          maxWidth: 720,
+          paddingInline: 12,
+          paddingBottom: 24,
+        }}
       >
         {/* TITLE */}
         <div className="page-header">
