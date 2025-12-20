@@ -14,9 +14,9 @@ type Props = {
   plannedMin: number;
   backHref: string;
 
-  showSaveActions: boolean; // ✅ NEW (laissé, mais plus utilisé ici)
-  saveDoneHref: string;     // ✅ NEW (laissé, mais plus utilisé ici)
-  saveLaterHref: string;    // ✅ NEW (laissé, mais plus utilisé ici)
+  showSaveActions: boolean; // laissé, mais non utilisé ici
+  saveDoneHref: string; // laissé, mais non utilisé ici
+  saveLaterHref: string; // laissé, mais non utilisé ici
 };
 
 function stripVariantLetterLocal(s?: string) {
@@ -67,6 +67,11 @@ function Chip({
     <span
       title={title || label}
       className="inline-flex items-center rounded-md border border-neutral-200 bg-white px-2 py-1 text-[12px] leading-[14px] text-neutral-800"
+      style={{
+        maxWidth: "100%",
+        overflowWrap: "anywhere",
+        wordBreak: "break-word",
+      }}
     >
       <span className="mr-1 opacity-70">{label}</span> {value}
     </span>
@@ -86,12 +91,10 @@ const SeancePageViewClient: React.FC<Props> = ({
     stripVariantLetterLocal(base.title) || focusLabelT(focus, t);
 
   return (
-    // ✅ CHANGED: anti "blanc à droite" (overflow horizontal)
     <div style={{ width: "100%", maxWidth: "100vw", overflowX: "hidden" }}>
       <style
         dangerouslySetInnerHTML={{
           __html: `
-        /* ✅ CHANGED: empêche le scroll horizontal global */
         html, body {
           overflow-x: hidden !important;
           max-width: 100vw !important;
@@ -103,30 +106,43 @@ const SeancePageViewClient: React.FC<Props> = ({
           background: #fff;
           box-shadow: 0 1px 0 rgba(17,24,39,.05);
           border: 1px solid #e5e7eb;
+          overflow: hidden; /* ✅ CHANGED: coupe tout débordement horizontal */
         }
+
         .h1-compact {
           margin-bottom:2px;
           font-size: clamp(20px, 2.2vw, 24px);
           line-height:1.15;
           font-weight:800;
+          overflow-wrap: anywhere; /* ✅ CHANGED */
+          word-break: break-word;  /* ✅ CHANGED */
         }
+
         .lead-compact {
           margin-top:4px;
           font-size: clamp(12px, 1.6vw, 14px);
           line-height:1.35;
           color:#4b5563;
+          overflow-wrap: anywhere; /* ✅ CHANGED */
+          word-break: break-word;  /* ✅ CHANGED */
         }
+
         .exoname {
           font-size: 15.5px;
           line-height:1.25;
           font-weight:700;
+          overflow-wrap: anywhere; /* ✅ CHANGED */
+          word-break: break-word;  /* ✅ CHANGED */
         }
+
         .chips {
           display:flex;
           flex-wrap:wrap;
           gap:6px;
           margin-top:8px;
+          max-width: 100%;          /* ✅ CHANGED */
         }
+
         .btn-ghost {
           background:#fff;
           color:#111827;
@@ -144,15 +160,14 @@ const SeancePageViewClient: React.FC<Props> = ({
         className="mb-2 flex items-center justify-between no-print"
         style={{ paddingInline: 12 }}
       >
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2" style={{ minWidth: 0 }}>
           <a href={backHref} className="btn-ghost">
             {t("settings.seancePage.backButton")}
           </a>
-
-          {/* ✅ CHANGED: bouton Enregistrer supprimé ici */}
+          {/* ✅ bouton Enregistrer supprimé ici */}
         </div>
 
-        <div className="text-xs text-gray-400">
+        <div className="text-xs text-gray-400" style={{ flexShrink: 0 }}>
           {t("settings.seancePage.aiBadge")}
         </div>
       </div>
@@ -163,7 +178,7 @@ const SeancePageViewClient: React.FC<Props> = ({
       >
         {/* TITLE */}
         <div className="page-header">
-          <div>
+          <div style={{ minWidth: 0 }}>
             <h1 className="h1-compact">{displayTitle}</h1>
             <p className="lead-compact">
               {plannedMin} {t("settings.seancePage.plannedMinSuffix")} ·{" "}
@@ -189,8 +204,13 @@ const SeancePageViewClient: React.FC<Props> = ({
 
               return (
                 <article key={i} className="compact-card">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="exoname">{translatedName}</div>
+                  <div
+                    className="flex items-start justify-between gap-3"
+                    style={{ minWidth: 0 }}
+                  >
+                    <div className="exoname" style={{ minWidth: 0 }}>
+                      {translatedName}
+                    </div>
                   </div>
 
                   <div className="chips">
