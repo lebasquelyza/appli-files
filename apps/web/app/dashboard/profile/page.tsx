@@ -48,7 +48,10 @@ function getTomorrowWeekdayIndexInTZ(tz = TZ): Weekday {
   return weekdayIndexInTZ(d, tz);
 }
 
-function rotateSessionsToStartFromIndex<T>(sessions: T[], startIndex: number): T[] {
+function rotateSessionsToStartFromIndex<T>(
+  sessions: T[],
+  startIndex: number
+): T[] {
   const n = sessions.length;
   if (n <= 1) return sessions;
   const start = ((startIndex % n) + n) % n;
@@ -56,11 +59,6 @@ function rotateSessionsToStartFromIndex<T>(sessions: T[], startIndex: number): T
   return [...sessions.slice(start), ...sessions.slice(0, start)];
 }
 
-/**
- * Détecte un jour explicitement choisi dans les réponses (FR/EN),
- * en cherchant lundi/mardi/... ou monday/tuesday/... dans toutes les strings.
- * Retourne 0..6 (Mon..Sun) ou null si aucun jour trouvé.
- */
 function inferPreferredWeekdayFromAnswers(raw: any): Weekday | null {
   if (!raw || typeof raw !== "object") return null;
 
@@ -103,15 +101,15 @@ function inferPreferredWeekdayFromAnswers(raw: any): Weekday | null {
   return null;
 }
 
-/**
- * Règle demandée :
- * - si jour explicite dans answers => on commence ce jour-là
- * - sinon => on commence demain
- */
 function getStartIndexFromAnswersOrTomorrow(rawAnswers: any, tz = TZ): Weekday {
   const preferred = inferPreferredWeekdayFromAnswers(rawAnswers);
   if (preferred !== null) return preferred;
   return getTomorrowWeekdayIndexInTZ(tz);
+}
+
+/* ✅ NEW: key helper (must match client) */
+function sessionKeyForLists(s: AiSessionT, idx: number) {
+  return String((s as any)?.id || `s${idx}`);
 }
 
 /* Email fallback: session Supabase côté serveur si cookie absent */
@@ -352,6 +350,45 @@ async function logProgrammeInsightToSupabase(
   }
 }
 
+/* ✅ NEW: load sessions from history matching saved/later keys */
+async function loadSessionsForListsFromInsights(
+  email: string,
+  wantedKeys: Set<string>
+): Promise<AiSessionT[]> {
+  try {
+    const supabaseAdmin = await getSupabaseAdmin();
+    const normalizedEmail = (email || "").trim().toLowerCase();
+    if (!supabaseAdmin || !normalizedEmail || wantedKeys.size === 0) return [];
+
+    const { data, error } = await supabaseAdmin
+      .from("programme_insights")
+      .select("sessions, created_at")
+      .eq("email", normalizedEmail)
+      .eq("questionnaire_key", "onboarding_v1")
+      .order("created_at", { ascending: false })
+      .limit(10);
+
+    if (error || !data || !data.length) return [];
+
+    const found = new Map<string, AiSessionT>();
+
+    for (const row of data as any[]) {
+      const sess: AiSessionT[] = Array.isArray(row.sessions) ? row.sessions : [];
+      for (let i = 0; i < sess.length; i++) {
+        const s = sess[i];
+        const key = sessionKeyForLists(s, i);
+        if (!wantedKeys.has(key)) continue;
+        if (!found.has(key)) found.set(key, s);
+      }
+    }
+
+    return [...found.values()];
+  } catch (e) {
+    console.error("[loadSessionsForListsFromInsights] error:", e);
+    return [];
+  }
+}
+
 /* ===== Helpers Supabase → programme_lists (listes faite / plus tard) ===== */
 
 type ProgrammeLists = {
@@ -563,7 +600,7 @@ async function loadInitialSessions(
 
     // 3) Génération si nécessaire
     if (mustRegenerate) {
-      // ✅ NEW: on veut les answers si possible AVANT de choisir le jour de départ
+      // on veut les answers AVANT de choisir le jour de départ
       if (!currentAnswers) {
         try {
           currentAnswers = await getAnswersForEmail(email, { fresh: true });
@@ -574,7 +611,7 @@ async function loadInitialSessions(
 
       const { sessions } = await planProgrammeFromEmail(email, { lang });
 
-      // ✅ NEW: start day logic:
+      // ✅ start day logic:
       // - jour explicite dans réponses => commencer ce jour-là
       // - sinon => commencer demain
       const startIndex = getStartIndexFromAnswersOrTomorrow(currentAnswers, TZ);
@@ -637,7 +674,6 @@ export default async function Page({
   const { emailForDisplay, profile, debugInfo, forceBlank } =
     await loadProfile(searchParams);
 
-  // flag dans l'URL : ?generate=1 → le client a cliqué sur "Régénérer"
   const generateParam =
     String(searchParams?.generate || "").toLowerCase() === "1";
 
@@ -652,6 +688,7 @@ export default async function Page({
 
   const hasGenerate = initialSessions.length > 0;
 
+  // 🔁 Listes "faite / plus tard"
   const dbLists = await loadListsFromSupabase(emailForDisplay);
 
   const querySavedSet = parseIdList(searchParams?.saved);
@@ -664,6 +701,13 @@ export default async function Page({
   const laterIds = hasLaterParam ? [...queryLaterSet] : dbLists.laterIds || [];
 
   await saveListsToSupabase(emailForDisplay, savedIds, laterIds);
+
+  // ✅ NEW: charger les anciennes séances correspondantes aux saved/later pour les afficher même après régénération
+  const wantedKeys = new Set<string>([...savedIds, ...laterIds].filter(Boolean));
+  const listSessionsExtra = await loadSessionsForListsFromInsights(
+    emailForDisplay,
+    wantedKeys
+  );
 
   const displayedError = searchParams?.error || "";
   const displayedSuccess = searchParams?.success || "";
@@ -699,8 +743,9 @@ export default async function Page({
       showDebug={showDebug}
       questionnaireUrl={questionnaireUrl}
       questionnaireBase={QUESTIONNAIRE_BASE}
-      /* 👇 NOUVELLE PROP : permet à ProfileClient de savoir qu'on vient de cliquer sur "Générer" */
       showAdOnGenerate={generateParam}
+      /* ✅ NEW */
+      listSessionsExtra={listSessionsExtra}
     />
   );
 }
