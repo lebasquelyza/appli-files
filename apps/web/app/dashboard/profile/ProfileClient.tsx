@@ -13,8 +13,8 @@ import { AdBanner } from "@/components/AdBanner";
 // ✅ NEW (strict nécessaire)
 import { syncDoneSessionsToCookie } from "@/lib/appSessions";
 
-// ✅ NEW: pour empêcher le scroll-to-top à la suppression
-import { useRouter } from "next/navigation";
+// ✅ NEW: pour empêcher le scroll-to-top à la suppression + lire l'URL
+import { useRouter, useSearchParams } from "next/navigation";
 
 type DebugInfo = { email: string; sheetHit: boolean; reason?: string };
 
@@ -37,9 +37,14 @@ type Props = {
   showAdOnGenerate?: boolean; // 👈 flag venant de ?generate=1
 };
 
-/* Helpers côté client */
-function parseIdListFromArray(list: string[] | undefined) {
-  return new Set(list ?? []);
+function parseIdListFromParam(raw: string | null): string[] | null {
+  if (raw === null) return null; // null = param absent (donc on garde props)
+  const v = String(raw || "").trim();
+  if (!v) return [];
+  return v
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
 }
 
 // ✅ CHANGED: utiliser l'id réel si dispo (sinon fallback sX)
@@ -67,14 +72,13 @@ export default function ProfileClient(props: Props) {
   } = props;
 
   const { t } = useLanguage();
-
-  // ✅ NEW: pour navigation sans scroll
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   // 👉 état pour afficher la pub plein écran après clic sur "Générer"
   const [showAdOverlay, setShowAdOverlay] = useState(false);
 
-  // ✅ NEW: si l'utilisateur a supprimé ses réponses, on cache les séances
+  // ✅ si l'utilisateur a supprimé ses réponses, on cache les séances
   // jusqu'à ce qu'il clique sur "Générer"
   const [answersDeleted, setAnswersDeleted] = useState(false);
 
@@ -127,13 +131,9 @@ export default function ProfileClient(props: Props) {
     return fallback ?? path;
   };
 
-  const savedIdSet = useMemo(() => parseIdListFromArray(savedIds), [savedIds]);
-  const laterIdSet = useMemo(() => parseIdListFromArray(laterIds), [laterIds]);
-
   const showPlaceholders = !forceBlank;
   const p = (profile ?? {}) as Partial<ProfileT>;
 
-  // doit remplir le questionnaire avant de générer
   const mustUpdateQuestionnaire = forceBlank || !debugInfo.sheetHit;
 
   const clientPrenom =
@@ -164,6 +164,22 @@ export default function ProfileClient(props: Props) {
     return map[g] || (p as any)?.objectif || "";
   }, [p, t]);
 
+  // ✅ NEW: source de vérité = query params (si présents), sinon props
+  const savedFromUrl = parseIdListFromParam(searchParams.get("saved"));
+  const laterFromUrl = parseIdListFromParam(searchParams.get("later"));
+
+  const effectiveSavedIds = savedFromUrl !== null ? savedFromUrl : savedIds;
+  const effectiveLaterIds = laterFromUrl !== null ? laterFromUrl : laterIds;
+
+  const savedIdSet = useMemo(
+    () => new Set(effectiveSavedIds ?? []),
+    [effectiveSavedIds]
+  );
+  const laterIdSet = useMemo(
+    () => new Set(effectiveLaterIds ?? []),
+    [effectiveLaterIds]
+  );
+
   // Conserver saved/later quand on change de mode
   const qsKeep = [
     savedIdSet.size ? `saved=${[...savedIdSet].join(",")}` : undefined,
@@ -192,7 +208,7 @@ export default function ProfileClient(props: Props) {
     .filter(Boolean)
     .join("&");
 
-  // ✅ NEW: on bloque l'affichage des séances si "réponses supprimées"
+  // ✅ on bloque l'affichage des séances si "réponses supprimées"
   // sauf si on est en train de générer (?generate=1)
   const blockSessions = answersDeleted && !showAdOnGenerate;
   const effectiveHasGenerate = hasGenerate && !blockSessions;
@@ -205,7 +221,7 @@ export default function ProfileClient(props: Props) {
     .map((s, i) => ({ s, idx: i, key: sessionKey(s, i) }))
     .filter(({ key }) => laterIdSet.has(key));
 
-  // ✅ NEW: sync "Séance faite ✅" -> cookie app_sessions (pour la Home)
+  // ✅ sync "Séance faite ✅" -> cookie app_sessions (pour la Home)
   useEffect(() => {
     if (!effectiveHasGenerate) return;
 
