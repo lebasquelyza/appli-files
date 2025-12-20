@@ -87,6 +87,22 @@ export default function ProfileClient(props: Props) {
     }
   }, [showAdOnGenerate]);
 
+  // 🔄 Après retour du questionnaire, forcer un refresh pour afficher les réponses
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const flag = window.localStorage.getItem("profile_after_questionnaire");
+    if (!flag) return;
+
+    window.localStorage.removeItem("profile_after_questionnaire");
+
+    // 1 refresh immédiat + 1 refresh léger ensuite (si le Sheet est en retard)
+    router.refresh();
+    const t = setTimeout(() => router.refresh(), 1200);
+
+    return () => clearTimeout(t);
+  }, [router]);
+
   // helper t avec fallback si la clé n’existe pas
   const tf = (path: string, fallback?: string) => {
     const v = t(path);
@@ -354,7 +370,15 @@ export default function ProfileClient(props: Props) {
           )}
 
           <div className="text-sm" style={{ marginTop: 10 }}>
-            <a href={questionnaireUrl} className="underline">
+            <a
+              href={questionnaireUrl}
+              className="underline"
+              onClick={() => {
+                if (typeof window !== "undefined") {
+                  window.localStorage.setItem("profile_after_questionnaire", "1");
+                }
+              }}
+            >
               {tf(
                 "settings.profile.info.questionnaire.updateLink",
                 "Mettre à jour mes réponses au questionnaire"
