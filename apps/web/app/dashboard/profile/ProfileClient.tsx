@@ -1,4 +1,4 @@
-//apps/web/app/dashboard/profile/ProfileClient.tsx
+// apps/web/app/dashboard/profile/ProfileClient.tsx
 "use client";
 
 import { useMemo, useState, useEffect } from "react";
@@ -12,9 +12,6 @@ import { AdBanner } from "@/components/AdBanner";
 
 // ✅ NEW (strict nécessaire)
 import { syncDoneSessionsToCookie } from "@/lib/appSessions";
-
-// ✅ NEW: pour empêcher le scroll-to-top à la suppression + lire l'URL
-import { useRouter, useSearchParams } from "next/navigation";
 
 type DebugInfo = { email: string; sheetHit: boolean; reason?: string };
 
@@ -34,22 +31,20 @@ type Props = {
   questionnaireUrl: string;
   questionnaireBase: string;
   lang?: "fr" | "en";
-  showAdOnGenerate?: boolean; // 👈 flag venant de ?generate=1
+  showAdOnGenerate?: boolean;
+
+  // ✅ NEW: anciennes séances (issues des anciens programmes) à afficher dans "Mes listes"
+  listSessionsExtra?: AiSessionT[];
 };
 
-function parseIdListFromParam(raw: string | null): string[] | null {
-  if (raw === null) return null; // null = param absent (donc on garde props)
-  const v = String(raw || "").trim();
-  if (!v) return [];
-  return v
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
+/* Helpers côté client */
+function parseIdListFromArray(list: string[] | undefined) {
+  return new Set(list ?? []);
 }
 
 // ✅ CHANGED: utiliser l'id réel si dispo (sinon fallback sX)
 function sessionKey(s: AiSessionT, idx: number) {
-  return String((s as any).id || `s${idx}`);
+  return String((s as any)?.id || `s${idx}`);
 }
 
 export default function ProfileClient(props: Props) {
@@ -69,72 +64,34 @@ export default function ProfileClient(props: Props) {
     questionnaireUrl,
     questionnaireBase,
     showAdOnGenerate,
+    listSessionsExtra = [],
   } = props;
 
   const { t } = useLanguage();
-  const router = useRouter();
-  const searchParams = useSearchParams();
 
-  // 👉 état pour afficher la pub plein écran après clic sur "Générer"
   const [showAdOverlay, setShowAdOverlay] = useState(false);
-
-  // ✅ si l'utilisateur a supprimé ses réponses, on cache les séances
-  // jusqu'à ce qu'il clique sur "Générer"
-  const [answersDeleted, setAnswersDeleted] = useState(false);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const flag = window.localStorage.getItem("profile_answers_deleted");
-    setAnswersDeleted(!!flag);
-  }, []);
-
-  // Si on clique sur "Générer" (?generate=1), on lève le blocage
-  useEffect(() => {
-    if (!showAdOnGenerate) return;
-    if (typeof window !== "undefined") {
-      window.localStorage.removeItem("profile_answers_deleted");
-    }
-    setAnswersDeleted(false);
-  }, [showAdOnGenerate]);
 
   useEffect(() => {
     if (showAdOnGenerate) {
       setShowAdOverlay(true);
-
       const timer = setTimeout(() => {
         setShowAdOverlay(false);
       }, 5000);
-
       return () => clearTimeout(timer);
     }
   }, [showAdOnGenerate]);
 
-  // 🔄 Après retour du questionnaire, forcer un refresh pour afficher les réponses
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const flag = window.localStorage.getItem("profile_after_questionnaire");
-    if (!flag) return;
-
-    window.localStorage.removeItem("profile_after_questionnaire");
-
-    router.refresh();
-    const t = setTimeout(() => router.refresh(), 1200);
-
-    return () => clearTimeout(t);
-  }, [router]);
-
-  // helper t avec fallback si la clé n’existe pas
   const tf = (path: string, fallback?: string) => {
     const v = t(path);
     if (v && v !== path) return v;
     return fallback ?? path;
   };
 
+  const savedIdSet = useMemo(() => parseIdListFromArray(savedIds), [savedIds]);
+  const laterIdSet = useMemo(() => parseIdListFromArray(laterIds), [laterIds]);
+
   const showPlaceholders = !forceBlank;
   const p = (profile ?? {}) as Partial<ProfileT>;
-
-  const mustUpdateQuestionnaire = forceBlank || !debugInfo.sheetHit;
 
   const clientPrenom =
     typeof p?.prenom === "string" && p.prenom && !/\d/.test(p.prenom)
@@ -143,11 +100,8 @@ export default function ProfileClient(props: Props) {
   const clientAge =
     typeof p?.age === "number" && p.age > 0 ? p.age : undefined;
 
-  // goalLabel – utilise settings.profile.goal.labels.*
   const goalLabel = useMemo(() => {
-    const g = String(
-      (p as any)?.objectif || (p as any)?.goal || ""
-    ).toLowerCase();
+    const g = String((p as any)?.objectif || (p as any)?.goal || "").toLowerCase();
     if (!g) return "";
     const key = `settings.profile.goal.labels.${g}`;
     const translated = t(key);
@@ -164,23 +118,6 @@ export default function ProfileClient(props: Props) {
     return map[g] || (p as any)?.objectif || "";
   }, [p, t]);
 
-  // ✅ NEW: source de vérité = query params (si présents), sinon props
-  const savedFromUrl = parseIdListFromParam(searchParams.get("saved"));
-  const laterFromUrl = parseIdListFromParam(searchParams.get("later"));
-
-  const effectiveSavedIds = savedFromUrl !== null ? savedFromUrl : savedIds;
-  const effectiveLaterIds = laterFromUrl !== null ? laterFromUrl : laterIds;
-
-  const savedIdSet = useMemo(
-    () => new Set(effectiveSavedIds ?? []),
-    [effectiveSavedIds]
-  );
-  const laterIdSet = useMemo(
-    () => new Set(effectiveLaterIds ?? []),
-    [effectiveLaterIds]
-  );
-
-  // Conserver saved/later quand on change de mode
   const qsKeep = [
     savedIdSet.size ? `saved=${[...savedIdSet].join(",")}` : undefined,
     laterIdSet.size ? `later=${[...laterIdSet].join(",")}` : undefined,
@@ -193,13 +130,9 @@ export default function ProfileClient(props: Props) {
 
   const titleList =
     equipMode === "none"
-      ? tf(
-          "settings.profile.sessions.titleNoEquip",
-          "Mes séances (sans matériel)"
-        )
+      ? tf("settings.profile.sessions.titleNoEquip", "Mes séances (sans matériel)")
       : tf("settings.profile.sessions.title", "Mes séances");
 
-  // Base de query pour les liens vers les détails de séance
   const baseLinkQuery = [
     equipMode === "none" ? "equip=none" : undefined,
     savedIdSet.size ? `saved=${[...savedIdSet].join(",")}` : undefined,
@@ -208,33 +141,52 @@ export default function ProfileClient(props: Props) {
     .filter(Boolean)
     .join("&");
 
-  // ✅ on bloque l'affichage des séances si "réponses supprimées"
-  // sauf si on est en train de générer (?generate=1)
-  const blockSessions = answersDeleted && !showAdOnGenerate;
-  const effectiveHasGenerate = hasGenerate && !blockSessions;
+  // ✅ NEW: on combine programme actuel + sessions historiques, pour garder "Séance faite" après régénération
+  const allForLists = useMemo(() => {
+    const out: { s: AiSessionT; idx: number; key: string }[] = [];
+    const seen = new Set<string>();
 
-  const savedList = initialSessions
-    .map((s, i) => ({ s, idx: i, key: sessionKey(s, i) }))
-    .filter(({ key }) => savedIdSet.has(key));
+    // programme actuel d'abord
+    (initialSessions || []).forEach((s, idx) => {
+      const key = sessionKey(s, idx);
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push({ s, idx, key });
+    });
 
-  const laterList = initialSessions
-    .map((s, i) => ({ s, idx: i, key: sessionKey(s, i) }))
-    .filter(({ key }) => laterIdSet.has(key));
+    // puis l'historique (idx fictif)
+    (listSessionsExtra || []).forEach((s, j) => {
+      const key = String((s as any)?.id || `extra-${j}`);
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push({ s, idx: -(j + 1), key });
+    });
 
-  // ✅ sync "Séance faite ✅" -> cookie app_sessions (pour la Home)
+    return out;
+  }, [initialSessions, listSessionsExtra]);
+
+  const savedList = useMemo(
+    () => allForLists.filter(({ key }) => savedIdSet.has(key)),
+    [allForLists, savedIdSet]
+  );
+
+  const laterList = useMemo(
+    () => allForLists.filter(({ key }) => laterIdSet.has(key)),
+    [allForLists, laterIdSet]
+  );
+
   useEffect(() => {
-    if (!effectiveHasGenerate) return;
+    if (!hasGenerate) return;
 
     const done = savedList.map(({ s, key, idx }) => ({
       sessionId: String((s as any).id || key),
-      title: s.title || `Séance ${idx + 1}`,
+      title: s.title || `Séance ${idx > 0 ? idx + 1 : ""}`.trim(),
       type: (s as any)?.type ? String((s as any).type) : undefined,
     }));
 
     syncDoneSessionsToCookie(done);
-  }, [effectiveHasGenerate, savedList]);
+  }, [hasGenerate, savedList]);
 
-  // Ce lien sert uniquement à forcer une nouvelle génération du programme
   const hrefGenerate = `/dashboard/profile?generate=1${
     equipMode === "none" ? "&equip=none" : ""
   }${qsKeep ? `&${qsKeep}` : ""}`;
@@ -248,14 +200,10 @@ export default function ProfileClient(props: Props) {
         fontSize: "var(--settings-fs, 12px)",
       }}
     >
-      {/* 👇 Overlay pub PLEIN ÉCRAN après clic sur "Générer" */}
       {showAdOverlay && (
         <div className="fixed inset-0 z-50 bg-white flex items-center justify-center">
           <div className="w-full h-full flex items-center justify-center">
-            <AdBanner
-              slot="REPLACE_WITH_YOUR_SLOT_ID"
-              className="w-full h-full"
-            />
+            <AdBanner slot="REPLACE_WITH_YOUR_SLOT_ID" className="w-full h-full" />
           </div>
         </div>
       )}
@@ -266,16 +214,10 @@ export default function ProfileClient(props: Props) {
             {tf("settings.profile.title", "Mon profil")}
           </h1>
           {showDebug && (
-            <div
-              className="text-xs"
-              style={{ marginTop: 4, color: "#6b7280" }}
-            >
+            <div className="text-xs" style={{ marginTop: 4, color: "#6b7280" }}>
               <b>Debug:</b> email = <code>{emailForDisplay || "—"}</code>{" "}
-              {debugInfo.sheetHit
-                ? "· Sheet OK"
-                : `· ${debugInfo.reason || "Sheet KO"}`}
+              {debugInfo.sheetHit ? "· Sheet OK" : `· ${debugInfo.reason || "Sheet KO"}`}
               {forceBlank ? " · BLANK MODE" : ""}
-              {answersDeleted ? " · ANSWERS DELETED" : ""}
             </div>
           )}
         </div>
@@ -297,10 +239,7 @@ export default function ProfileClient(props: Props) {
                   "settings.profile.messages.programmeUpdated",
                   "✓ Programme IA mis à jour à partir de vos dernières réponses au questionnaire."
                 )
-              : tf(
-                  "settings.profile.messages.successGeneric",
-                  "✓ Opération réussie."
-                )}
+              : tf("settings.profile.messages.successGeneric", "✓ Opération réussie.")}
           </div>
         )}
         {!!displayedError && (
@@ -334,20 +273,14 @@ export default function ProfileClient(props: Props) {
         </div>
 
         <div className="card">
-          <div
-            className="text-sm"
-            style={{ display: "flex", gap: 16, flexWrap: "wrap" }}
-          >
+          <div className="text-sm" style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
             {(clientPrenom || showPlaceholders) && (
               <span>
                 <b>{tf("settings.profile.info.firstName.label", "Prénom")} :</b>{" "}
                 {clientPrenom ||
                   (showPlaceholders && (
                     <i className="text-gray-400">
-                      {tf(
-                        "settings.profile.info.firstName.missing",
-                        "Non renseigné"
-                      )}
+                      {tf("settings.profile.info.firstName.missing", "Non renseigné")}
                     </i>
                   ))}
               </span>
@@ -360,10 +293,7 @@ export default function ProfileClient(props: Props) {
                   ? `${clientAge} ans`
                   : showPlaceholders && (
                       <i className="text-gray-400">
-                        {tf(
-                          "settings.profile.info.age.missing",
-                          "Non renseigné"
-                        )}
+                        {tf("settings.profile.info.age.missing", "Non renseigné")}
                       </i>
                     )}
               </span>
@@ -371,9 +301,7 @@ export default function ProfileClient(props: Props) {
 
             {(goalLabel || showPlaceholders) && (
               <span>
-                <b>
-                  {tf("settings.profile.info.goal.label", "Objectif actuel")} :
-                </b>{" "}
+                <b>{tf("settings.profile.info.goal.label", "Objectif actuel")} :</b>{" "}
                 {goalLabel ||
                   (showPlaceholders && (
                     <i className="text-gray-400">
@@ -411,48 +339,13 @@ export default function ProfileClient(props: Props) {
           )}
 
           <div className="text-sm" style={{ marginTop: 10 }}>
-            <a
-              href={questionnaireUrl}
-              className="underline"
-              onClick={() => {
-                if (typeof window !== "undefined") {
-                  window.localStorage.setItem("profile_after_questionnaire", "1");
-                }
-              }}
-            >
+            <a href={questionnaireUrl} className="underline">
               {tf(
                 "settings.profile.info.questionnaire.updateLink",
                 "Mettre à jour mes réponses au questionnaire"
               )}
             </a>
           </div>
-
-          <div className="text-sm" style={{ marginTop: 10 }}>
-            <a
-              href="/dashboard/profile?blank=1"
-              className="underline"
-              onClick={() => {
-                if (typeof window !== "undefined") {
-                  window.localStorage.setItem("profile_answers_deleted", "1");
-                }
-                setAnswersDeleted(true);
-              }}
-            >
-              {tf(
-                "settings.profile.info.questionnaire.deleteAnswers",
-                "Supprimer mes réponses"
-              )}
-            </a>
-          </div>
-
-          {(!debugInfo.sheetHit || forceBlank) && (
-            <div className="text-sm" style={{ marginTop: 10, color: "#6b7280" }}>
-              {tf(
-                "settings.profile.info.questionnaire.ctaIfEmpty",
-                "Vous n’avez pas encore rempli le questionnaire (ou vous l’avez supprimé). Cliquez sur « Mettre à jour mes réponses au questionnaire »."
-              )}
-            </div>
-          )}
         </div>
       </section>
 
@@ -471,11 +364,8 @@ export default function ProfileClient(props: Props) {
         >
           <h2 style={{ margin: 0 }}>{titleList}</h2>
 
-          {effectiveHasGenerate && (
-            <div
-              className="inline-flex items-center"
-              style={{ display: "inline-flex", gap: 8 }}
-            >
+          {hasGenerate && (
+            <div className="inline-flex items-center" style={{ display: "inline-flex", gap: 8 }}>
               <a
                 href={hrefFull}
                 className={
@@ -502,17 +392,13 @@ export default function ProfileClient(props: Props) {
                   "Voir la liste sans matériel"
                 )}
               >
-                {tf(
-                  "settings.profile.sessions.toggle.withoutEquip",
-                  "Sans matériel"
-                )}
+                {tf("settings.profile.sessions.toggle.withoutEquip", "Sans matériel")}
               </a>
             </div>
           )}
         </div>
 
-        {/* 🟡 ÉTAT AVANT CLIC SUR GÉNÉRER (ou après suppression, tant qu'on n'a pas regénéré) */}
-        {!effectiveHasGenerate && (
+        {!hasGenerate && (
           <div
             className="card"
             style={{
@@ -528,52 +414,17 @@ export default function ProfileClient(props: Props) {
                 "Files te prépare ton programme. Clique sur « Générer » pour l’afficher."
               )}
             </div>
-
-            {mustUpdateQuestionnaire ? (
-              <div
-                className="text-sm"
-                style={{ display: "flex", gap: 12, alignItems: "center" }}
-              >
-                <span style={{ color: "#6b7280" }}>
-                  {tf(
-                    "settings.profile.sessions.generateCard.disabledNeedQuestionnaire",
-                    "Pour générer ton programme, clique d’abord sur « Mettre à jour mes réponses au questionnaire »."
-                  )}
-                </span>
-
-                <span
-                  aria-disabled="true"
-                  className="inline-flex items-center rounded-md border border-neutral-300 bg-neutral-100 px-4 py-2 text-sm font-semibold text-neutral-400"
-                  title={tf(
-                    "settings.profile.sessions.generateCard.disabledTitle",
-                    "Complète le questionnaire avant de générer"
-                  )}
-                >
-                  {tf(
-                    "settings.profile.sessions.generateCard.button",
-                    "→ Générer mon programme"
-                  )}
-                </span>
-              </div>
-            ) : (
-              <a
-                href={hrefGenerate}
-                className="inline-flex items-center rounded-md border border-neutral-900 bg-neutral-900 px-4 py-2 text-sm font-semibold text-white"
-                title={tf(
-                  "settings.profile.sessions.generateCard.buttonTitle",
-                  "Générer mon programme"
-                )}
-              >
-                {tf(
-                  "settings.profile.sessions.generateCard.button",
-                  "→ Générer mon programme"
-                )}
-              </a>
-            )}
+            <a
+              href={hrefGenerate}
+              className="inline-flex items-center rounded-md border border-neutral-900 bg-neutral-900 px-4 py-2 text-sm font-semibold text-white"
+              title={tf("settings.profile.sessions.generateCard.buttonTitle", "Générer mon programme")}
+            >
+              {tf("settings.profile.sessions.generateCard.button", "→ Générer mon programme")}
+            </a>
           </div>
         )}
 
-        {effectiveHasGenerate && (
+        {hasGenerate && (
           <GenerateClient
             email={emailForDisplay}
             questionnaireBase={questionnaireBase}
@@ -586,55 +437,32 @@ export default function ProfileClient(props: Props) {
       {/* ===== Bloc bas de page : Séance faite ✅ / À faire plus tard ⏳ ===== */}
       <section className="section" style={{ marginTop: 20 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
-          <h2 style={{ margin: 0 }}>
-            {tf("settings.profile.lists.title", "Mes listes")}
-          </h2>
+          <h2 style={{ margin: 0 }}>{tf("settings.profile.lists.title", "Mes listes")}</h2>
         </div>
 
-        <div
-          className="grid"
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 12,
-          }}
-        >
+        <div className="grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           {/* Séance faite ✅ */}
           <div className="card">
-            <div
-              className="text-sm"
-              style={{ fontWeight: 600, marginBottom: 6 }}
-            >
-              {tf("settings.profile.lists.done.title", "Séance faite")}{" "}
-              <span aria-hidden>✅</span>
+            <div className="text-sm" style={{ fontWeight: 600, marginBottom: 6 }}>
+              {tf("settings.profile.lists.done.title", "Séance faite")} <span aria-hidden>✅</span>
             </div>
+
             {savedList.length > 0 && (
-              <ul
-                className="text-sm"
-                style={{ listStyle: "disc", paddingLeft: 18, margin: 0 }}
-              >
+              <ul className="text-sm" style={{ listStyle: "disc", paddingLeft: 18, margin: 0 }}>
                 {savedList.map(({ s, idx, key }) => {
-                  const detailHref = `/dashboard/seance/${encodeURIComponent(
-                    (s as any).id || key
-                  )}?${[baseLinkQuery, "from=profile"]
-                    .filter(Boolean)
-                    .join("&")}`;
+                  const detailHref = `/dashboard/seance/${encodeURIComponent((s as any).id || key)}?${
+                    [baseLinkQuery, "from=profile"].filter(Boolean).join("&")
+                  }`;
 
                   const newSavedKeys = [...savedIdSet].filter((k) => k !== key);
-
                   const removeQuery = [
                     equipMode === "none" ? "equip=none" : undefined,
-                    `saved=${newSavedKeys.join(",")}`,
-                    laterIdSet.size
-                      ? `later=${[...laterIdSet].join(",")}`
-                      : undefined,
+                    newSavedKeys.length ? `saved=${newSavedKeys.join(",")}` : undefined,
+                    laterIdSet.size ? `later=${[...laterIdSet].join(",")}` : undefined,
                   ]
-                    .filter((x) => x !== undefined)
+                    .filter(Boolean)
                     .join("&");
-
-                  const removeHref = `/dashboard/profile${
-                    removeQuery ? `?${removeQuery}` : ""
-                  }`;
+                  const removeHref = `/dashboard/profile${removeQuery ? `?${removeQuery}` : ""}`;
 
                   return (
                     <li
@@ -655,21 +483,12 @@ export default function ProfileClient(props: Props) {
                           textUnderlineOffset: 2,
                         }}
                       >
-                        {s.title || `Séance ${idx + 1}`}
-                        {s.type && (
-                          <span style={{ color: "#6b7280" }}> · {s.type}</span>
-                        )}
+                        {s.title || (idx >= 0 ? `Séance ${idx + 1}` : "Séance")}
+                        {s.type && <span style={{ color: "#6b7280" }}> · {s.type}</span>}
                       </a>
                       <a
                         href={removeHref}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          router.push(removeHref, { scroll: false });
-                        }}
-                        aria-label={tf(
-                          "settings.profile.lists.removeLabel",
-                          "Supprimer cette séance"
-                        )}
+                        aria-label={tf("settings.profile.lists.removeLabel", "Supprimer cette séance")}
                         className="text-xs"
                         style={{
                           fontSize: 12,
@@ -694,40 +513,26 @@ export default function ProfileClient(props: Props) {
 
           {/* À faire plus tard ⏳ */}
           <div className="card">
-            <div
-              className="text-sm"
-              style={{ fontWeight: 600, marginBottom: 6 }}
-            >
-              {tf("settings.profile.lists.later.title", "À faire plus tard")}{" "}
-              <span aria-hidden>⏳</span>
+            <div className="text-sm" style={{ fontWeight: 600, marginBottom: 6 }}>
+              {tf("settings.profile.lists.later.title", "À faire plus tard")} <span aria-hidden>⏳</span>
             </div>
+
             {laterList.length > 0 && (
-              <ul
-                className="text-sm"
-                style={{ listStyle: "disc", paddingLeft: 18, margin: 0 }}
-              >
+              <ul className="text-sm" style={{ listStyle: "disc", paddingLeft: 18, margin: 0 }}>
                 {laterList.map(({ s, idx, key }) => {
-                  const detailHref = `/dashboard/seance/${encodeURIComponent(
-                    (s as any).id || key
-                  )}?${[baseLinkQuery, "from=profile"]
-                    .filter(Boolean)
-                    .join("&")}`;
+                  const detailHref = `/dashboard/seance/${encodeURIComponent((s as any).id || key)}?${
+                    [baseLinkQuery, "from=profile"].filter(Boolean).join("&")
+                  }`;
 
                   const newLaterKeys = [...laterIdSet].filter((k) => k !== key);
-
                   const removeQuery = [
                     equipMode === "none" ? "equip=none" : undefined,
-                    savedIdSet.size
-                      ? `saved=${[...savedIdSet].join(",")}`
-                      : undefined,
-                    `later=${newLaterKeys.join(",")}`,
+                    savedIdSet.size ? `saved=${[...savedIdSet].join(",")}` : undefined,
+                    newLaterKeys.length ? `later=${newLaterKeys.join(",")}` : undefined,
                   ]
-                    .filter((x) => x !== undefined)
+                    .filter(Boolean)
                     .join("&");
-
-                  const removeHref = `/dashboard/profile${
-                    removeQuery ? `?${removeQuery}` : ""
-                  }`;
+                  const removeHref = `/dashboard/profile${removeQuery ? `?${removeQuery}` : ""}`;
 
                   return (
                     <li
@@ -748,21 +553,12 @@ export default function ProfileClient(props: Props) {
                           textUnderlineOffset: 2,
                         }}
                       >
-                        {s.title || `Séance ${idx + 1}`}
-                        {s.type && (
-                          <span style={{ color: "#6b7280" }}> · {s.type}</span>
-                        )}
+                        {s.title || (idx >= 0 ? `Séance ${idx + 1}` : "Séance")}
+                        {s.type && <span style={{ color: "#6b7280" }}> · {s.type}</span>}
                       </a>
                       <a
                         href={removeHref}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          router.push(removeHref, { scroll: false });
-                        }}
-                        aria-label={tf(
-                          "settings.profile.lists.removeLabel",
-                          "Supprimer cette séance"
-                        )}
+                        aria-label={tf("settings.profile.lists.removeLabel", "Supprimer cette séance")}
                         className="text-xs"
                         style={{
                           fontSize: 12,
