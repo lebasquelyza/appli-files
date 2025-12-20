@@ -587,12 +587,8 @@ export default async function Page({
 
   // 3) Si des paramètres sont présents, ils sont la source de vérité,
   //    sinon on tombe back sur ce qu'il y a en BDD.
-  const savedIds = hasSavedParam
-    ? [...querySavedSet]
-    : dbLists.savedIds || [];
-  const laterIds = hasLaterParam
-    ? [...queryLaterSet]
-    : dbLists.laterIds || [];
+  const savedIds = hasSavedParam ? [...querySavedSet] : dbLists.savedIds || [];
+  const laterIds = hasLaterParam ? [...queryLaterSet] : dbLists.laterIds || [];
 
   // 4) On persiste la version finale en BDD (email + listes)
   await saveListsToSupabase(emailForDisplay, savedIds, laterIds);
@@ -615,6 +611,10 @@ export default async function Page({
     return qs ? `${QUESTIONNAIRE_LINK}?${qs}` : QUESTIONNAIRE_LINK;
   })();
 
+  // ✅ URL pour le bouton "Supprimer mes réponses"
+  // (utilise la logique déjà en place: ?blank=1)
+  const deleteAnswersUrl = "/dashboard/profile?blank=1";
+
   return (
     <ProfileClient
       emailForDisplay={emailForDisplay}
@@ -631,9 +631,9 @@ export default async function Page({
       showDebug={showDebug}
       questionnaireUrl={questionnaireUrl}
       questionnaireBase={QUESTIONNAIRE_BASE}
+      deleteAnswersUrl={deleteAnswersUrl}
       /* 👇 NOUVELLE PROP : permet à ProfileClient de savoir qu'on vient de cliquer sur "Générer" */
       showAdOnGenerate={generateParam}
     />
   );
 }
-
