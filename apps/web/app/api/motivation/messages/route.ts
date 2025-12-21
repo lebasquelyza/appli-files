@@ -56,11 +56,17 @@ export async function POST(req: NextRequest) {
   const normTarget = normalizeTarget(target);
 
   if (!validateDays(days) || days.length === 0) {
-    return NextResponse.json({ error: "At least one valid day is required" }, { status: 400 });
+    return NextResponse.json(
+      { error: "At least one valid day is required" },
+      { status: 400 }
+    );
   }
 
   if (!time || typeof time !== "string" || !isValidTimeHHmm(time)) {
-    return NextResponse.json({ error: "Invalid time (expected HH:mm)" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Invalid time (expected HH:mm)" },
+      { status: 400 }
+    );
   }
 
   if (normTarget === "ME") {
@@ -70,7 +76,8 @@ export async function POST(req: NextRequest) {
         userId,
         target: "ME",
         mode: "COACH",
-        content: (content ?? "").slice(0, 240), // ignoré pour l'envoi, mais gardé si tu veux
+        // ✅ on garde mais propre
+        content: (content ?? "").trim().slice(0, 240),
         days: daysArrayToString(days),
         time,
         active: true,
@@ -84,11 +91,17 @@ export async function POST(req: NextRequest) {
   const trimmed = (content ?? "").trim();
   if (!trimmed) return NextResponse.json({ error: "Missing content" }, { status: 400 });
   if (trimmed.length > 240) {
-    return NextResponse.json({ error: "Content too long (max 240 chars)" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Content too long (max 240 chars)" },
+      { status: 400 }
+    );
   }
 
   if (!Array.isArray(recipientIds) || recipientIds.length === 0) {
-    return NextResponse.json({ error: "Select at least one friend" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Select at least one friend" },
+      { status: 400 }
+    );
   }
 
   // Vérifie que ce sont bien des amis ACCEPTED (sinon on refuse)
@@ -109,7 +122,10 @@ export async function POST(req: NextRequest) {
 
   const invalid = recipientIds.filter((id) => !friendSet.has(id));
   if (invalid.length > 0) {
-    return NextResponse.json({ error: "Some recipients are not your accepted friends" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Some recipients are not your accepted friends" },
+      { status: 400 }
+    );
   }
 
   const msg = await prisma.motivationMessage.create({
