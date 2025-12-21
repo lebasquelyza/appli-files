@@ -6,7 +6,7 @@
     "dev": "next dev -p 3000",
     "build": "next build",
     "start": "next start -p 3000",
-    "postinstall": "node -e \"if(!process.env.NETLIFY){require('child_process').execSync('prisma generate',{stdio:'inherit'})} else {console.log('[postinstall] skip prisma generate on netlify')}}\""
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.0.5",
