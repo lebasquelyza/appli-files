@@ -4,7 +4,7 @@
 import { useSession } from "next-auth/react";
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { translations } from "@/app/i18n/translations";
-import { ensurePushSubscribed } from "@/app/lib/pushClient";
+import { enableWebPush } from "@/lib/pushClient";
 
 /* ---------------- i18n helpers (client) ---------------- */
 type Lang = "fr" | "en";
@@ -58,7 +58,7 @@ type MotivationMessageApi = {
   id: string;
   userId: string;
   target: string; // "ME" | "FRIENDS"
-  mode?: string;  // "COACH" | "CUSTOM"
+  mode?: string; // "COACH" | "CUSTOM"
   content: string;
   days: string; // "mon,tue,wed"
   time: string; // "HH:mm"
@@ -174,7 +174,10 @@ export default function MotivationPage() {
                   ? t("motivation.selfNotification.title", "Programmation “Files Le Coach” ✅")
                   : t("motivation.customNotification.title", "Message programmé pour tes amis 💌"),
                 message: isMe
-                  ? t("motivation.selfNotification.bodyHint", "Tu recevras une motivation de Files Le Coach aux jours/heures choisis.")
+                  ? t(
+                      "motivation.selfNotification.bodyHint",
+                      "Tu recevras une motivation de Files Le Coach aux jours/heures choisis."
+                    )
                   : msg.content,
                 createdAt: msg.createdAt,
                 read: true,
@@ -383,7 +386,10 @@ export default function MotivationPage() {
             ? t("motivation.selfNotification.title", "Programmation “Files Le Coach” ✅")
             : t("motivation.customNotification.title", "Message programmé pour tes amis 💌"),
           message: isMe
-            ? t("motivation.selfNotification.bodyHint", "Tu recevras une motivation de Files Le Coach aux jours/heures choisis.")
+            ? t(
+                "motivation.selfNotification.bodyHint",
+                "Tu recevras une motivation de Files Le Coach aux jours/heures choisis."
+              )
             : trimmed,
           createdAt: msg.createdAt ?? new Date().toISOString(),
           read: true,
@@ -409,7 +415,8 @@ export default function MotivationPage() {
     !!scheduleTime &&
     !savingSelf &&
     !sharingCustom &&
-    (scheduleTarget === "ME" || (scheduleTarget === "FRIENDS" && !!message.trim() && selectedFriendIds.length > 0));
+    (scheduleTarget === "ME" ||
+      (scheduleTarget === "FRIENDS" && !!message.trim() && selectedFriendIds.length > 0));
 
   const activatePush = async () => {
     if (!VAPID_PUBLIC_KEY) {
@@ -418,7 +425,7 @@ export default function MotivationPage() {
     }
     setPushBusy(true);
     try {
-      await ensurePushSubscribed(VAPID_PUBLIC_KEY);
+      await enableWebPush(VAPID_PUBLIC_KEY);
       alert("Notifications activées ✅");
     } catch (e) {
       console.error(e);
@@ -636,7 +643,16 @@ export default function MotivationPage() {
           }}
         />
 
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginTop: 4, flexWrap: "wrap" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 8,
+            marginTop: 4,
+            flexWrap: "wrap",
+          }}
+        >
           <span style={{ fontSize: 11, color: "#6b7280" }}>
             {remaining} {t("motivation.messageBlock.remaining", "caractères restants")}
           </span>
@@ -671,7 +687,15 @@ export default function MotivationPage() {
 
         {/* Step 2 */}
         {scheduleTarget && (
-          <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid #e5e7eb", display: "grid", gap: 6 }}>
+          <div
+            style={{
+              marginTop: 8,
+              paddingTop: 8,
+              borderTop: "1px solid #e5e7eb",
+              display: "grid",
+              gap: 6,
+            }}
+          >
             <div style={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>
               {scheduleTarget === "ME"
                 ? "Pour toi : choisis les jours et l’heure (Files Le Coach)"
@@ -747,14 +771,10 @@ export default function MotivationPage() {
                 {/* Selected */}
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                   {selectedFriendIds.length === 0 ? (
-                    <span style={{ fontSize: 11, color: "#6b7280" }}>
-                      Aucun ami sélectionné (obligatoire).
-                    </span>
+                    <span style={{ fontSize: 11, color: "#6b7280" }}>Aucun ami sélectionné (obligatoire).</span>
                   ) : (
                     selectedFriendIds.map((id) => {
-                      const u =
-                        friends.find((f) => f.id === id) ||
-                        searchResults.find((s) => s.id === id);
+                      const u = friends.find((f) => f.id === id) || searchResults.find((s) => s.id === id);
                       const label = u?.name || u?.email || id;
                       return (
                         <button
@@ -785,7 +805,8 @@ export default function MotivationPage() {
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                     {friends.length === 0 ? (
                       <span style={{ fontSize: 11, color: "#6b7280" }}>
-                        Pas d’amis pour le moment. Cherche un utilisateur et envoie une demande dans l’onglet “Amis” (à ajouter).
+                        Pas d’amis pour le moment. Cherche un utilisateur et envoie une demande dans l’onglet “Amis” (à
+                        ajouter).
                       </span>
                     ) : (
                       friends.map((f) => (
