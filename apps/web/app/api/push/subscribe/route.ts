@@ -1,22 +1,58 @@
+// apps/web/app/api/push/subscribe/route.ts
 import { NextRequest, NextResponse } from "next/server";
-
-const url  = process.env.UPSTASH_REDIS_REST_URL!;
-const token= process.env.UPSTASH_REDIS_REST_TOKEN!;
-const KEY_PREFIX = "push:sub:";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 
 export async function POST(req: NextRequest) {
-  const { deviceId, subscription } = await req.json();
-  if (!deviceId || !subscription) {
-    return NextResponse.json({ ok: false, error: "missing" }, { status: 400 });
+  const session = await getServerSession(authOptions);
+  const userId = (session?.user as any)?.id as string | undefined;
+
+  if (!userId) {
+    return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
-  // stocke la souscription (string)
-  const r = await fetch(`${url}/set/${KEY_PREFIX}${deviceId}`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify(subscription),
+  const body = await req.json().catch(() => null);
+  if (!body) {
+    return NextResponse.json({ ok: false, error: "invalid_json" }, { status: 400 });
+  }
+
+  // Rétro-compat : certains clients envoient { deviceId, subscription }
+  const subscription = body.subscription ?? body;
+
+  const endpoint = subscription?.endpoint;
+  const p256dh = subscription?.keys?.p256dh;
+  const auth = subscription?.keys?.auth;
+
+  if (
+    typeof endpoint !== "string" ||
+    typeof p256dh !== "string" ||
+    typeof auth !== "string"
+  ) {
+    return NextResponse.json(
+      { ok: false, error: "invalid_subscription" },
+      { status: 400 }
+    );
+  }
+
+  const userAgent = req.headers.get("user-agent") ?? undefined;
+
+  await prisma.pushSubscription.upsert({
+    where: { endpoint },
+    update: {
+      userId,
+      p256dh,
+      auth,
+      userAgent,
+    },
+    create: {
+      userId,
+      endpoint,
+      p256dh,
+      auth,
+      userAgent,
+    },
   });
 
-  if (!r.ok) return NextResponse.json({ ok: false }, { status: 500 });
   return NextResponse.json({ ok: true });
 }
