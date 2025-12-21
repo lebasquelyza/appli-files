@@ -20,18 +20,18 @@ function urlBase64ToUint8Array(base64String: string) {
 }
 
 async function registerSW() {
-  if (!("serviceWorker" in navigator)) {
-    throw new Error("Service Worker non supporté");
-  }
+  if (!("serviceWorker" in navigator)) throw new Error("Service Worker unsupported");
+
   // sw.js doit être dans /public/sw.js
   const reg = await navigator.serviceWorker.register("/sw.js");
   await navigator.serviceWorker.ready;
+
   return reg;
 }
 
 export async function ensurePushSubscription(vapidPublicKey: string) {
-  if (!("PushManager" in window)) throw new Error("Push API non supportée");
-  if (!vapidPublicKey) throw new Error("VAPID public key manquante");
+  if (!("PushManager" in window)) throw new Error("Push API unsupported");
+  if (!vapidPublicKey) throw new Error("Missing VAPID public key");
 
   const reg = await registerSW();
 
@@ -47,24 +47,27 @@ export async function ensurePushSubscription(vapidPublicKey: string) {
 }
 
 /**
- * Active les notifications (permission + subscription + save backend)
+ * Active Web Push :
+ * - vérifie HTTPS
+ * - demande permission Notification
+ * - crée la subscription
+ * - l'enregistre via /api/push/subscribe
  */
 export async function enableWebPush(vapidPublicKey: string) {
-  // 1) Secure context obligatoire (https ou localhost)
+  if (typeof window === "undefined") throw new Error("Client only");
   if (!window.isSecureContext) {
     throw new Error("Web Push nécessite HTTPS (ou localhost)");
   }
 
-  // 2) Permission notifications
+  if (!("Notification" in window)) throw new Error("Notifications unsupported");
+
   const perm = await Notification.requestPermission();
   if (perm !== "granted") {
-    throw new Error("Permission notifications refusée");
+    throw new Error(`Permission notifications refusée (perm=${perm})`);
   }
 
-  // 3) Subscription
   const subscription = await ensurePushSubscription(vapidPublicKey);
 
-  // 4) Save subscription backend
   const deviceId = getDeviceId();
   const res = await fetch("/api/push/subscribe", {
     method: "POST",
@@ -73,8 +76,8 @@ export async function enableWebPush(vapidPublicKey: string) {
   });
 
   if (!res.ok) {
-    const j = await res.json().catch(() => ({}));
-    throw new Error(`subscribe api failed: ${JSON.stringify(j)}`);
+    const data = await res.json().catch(() => ({}));
+    throw new Error(`subscribe_api_failed: ${JSON.stringify(data)}`);
   }
 
   return { ok: true };
