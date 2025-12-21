@@ -24,7 +24,13 @@ export async function ensurePushSubscription(vapidPublicKey: string) {
   if (!("PushManager" in window)) throw new Error("Push API unsupported");
   if (!vapidPublicKey) throw new Error("Missing VAPID public key");
 
+  // ✅ demander la permission (sinon subscribe peut échouer silencieusement)
+  const permission = await Notification.requestPermission();
+  if (permission !== "granted") throw new Error("Notification permission denied");
+
+  // ✅ s'assurer que le SW est prêt
   const reg = await navigator.serviceWorker.ready;
+
   let sub = await reg.pushManager.getSubscription();
 
   if (!sub) {
@@ -36,4 +42,55 @@ export async function ensurePushSubscription(vapidPublicKey: string) {
   }
 
   return sub;
+}
+
+/**
+ * ✅ NEW: assure la subscription ET l'enregistre sur le serveur (Prisma PushSubscription)
+ */
+export async function enableWebPush(vapidPublicKey: string) {
+  const deviceId = getDeviceId();
+  const subscription = await ensurePushSubscription(vapidPublicKey);
+
+  const res = await fetch("/api/push/subscribe", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    // deviceId conservé pour compat rétro, mais le backend n'en a plus besoin
+    body: JSON.stringify({ deviceId, subscription }),
+  });
+
+  if (!res.ok) {
+    let err: any = null;
+    try {
+      err = await res.json();
+    } catch {}
+    throw new Error(err?.error || "Failed to subscribe on server");
+  }
+
+  return { ok: true, subscription };
+}
+
+/**
+ * ✅ NEW: désactive web push (unsubscribe navigateur + nettoyage serveur)
+ */
+export async function disableWebPush() {
+  if (!("serviceWorker" in navigator)) return { ok: true };
+
+  const reg = await navigator.serviceWorker.ready;
+  const sub = await reg.pushManager.getSubscription();
+
+  if (!sub) return { ok: true };
+
+  // nettoyer serveur (on envoie endpoint)
+  await fetch("/api/push/unsubscribe", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ endpoint: sub.endpoint }),
+  }).catch(() => {});
+
+  // désabonner navigateur
+  try {
+    await sub.unsubscribe();
+  } catch {}
+
+  return { ok: true };
 }
