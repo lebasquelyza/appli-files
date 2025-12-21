@@ -7,85 +7,105 @@ generator client {
   provider = "prisma-client-js"
 }
 
-// --- Annuaire interne (pour chercher des utilisateurs même si NextAuth n'a pas de table User exploitable)
+/* =========================
+   Utilisateurs (annuaire)
+   ========================= */
 model AppUser {
-  id        String   @id               // = session.user.id
-  email     String?  @unique
+  // id = token.sub (id Spotify via NextAuth)
+  id        String   @id
+  email     String?
   name      String?
   image     String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([email])
-  @@index([name])
+  // relations
+  outgoingFriendRequests FriendRequest[] @relation("FriendRequestRequester")
+  incomingFriendRequests FriendRequest[] @relation("FriendRequestAddressee")
+
+  pushSubscriptions PushSubscription[]
 }
 
-enum FriendRequestStatus {
-  PENDING
-  ACCEPTED
-  DECLINED
-  BLOCKED
-}
-
+/* =========================
+   Amis (sans enum)
+   status = "PENDING" | "ACCEPTED" | "DECLINED" | "BLOCKED"
+   ========================= */
 model FriendRequest {
-  id          String               @id @default(cuid())
+  id          String   @id @default(cuid())
+
   requesterId String
   addresseeId String
-  status      FriendRequestStatus  @default(PENDING)
-  createdAt   DateTime             @default(now())
-  updatedAt   DateTime             @updatedAt
+
+  // ✅ SQLite: pas d'enum -> String
+  status      String   @default("PENDING")
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  requester   AppUser  @relation("FriendRequestRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  addressee   AppUser  @relation("FriendRequestAddressee", fields: [addresseeId], references: [id], onDelete: Cascade)
 
   @@unique([requesterId, addresseeId])
   @@index([addresseeId, status])
   @@index([requesterId, status])
 }
 
-// --- Web Push subscriptions (multi-devices)
+/* =========================
+   Web Push Subscriptions
+   ========================= */
 model PushSubscription {
   id        String   @id @default(cuid())
+
   userId    String
   endpoint  String   @unique
   p256dh    String
   auth      String
   userAgent String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  user      AppUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
 
-// --- Banque "Files Le Coach"
+/* =========================
+   Banque de messages Coach
+   ========================= */
 model CoachMotivation {
   id        String   @id @default(cuid())
-  lang      String   // "fr" | "en"
-  title     String
+  lang      String   @default("fr") // "fr" | "en"
+  title     String?
   message   String
   active    Boolean  @default(true)
+
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([lang, active])
 }
 
-// --- Programmations
+/* =========================
+   Messages programmés
+   target = "ME" | "FRIENDS"
+   mode   = "COACH" | "CUSTOM"
+   (sans enum -> String)
+   ========================= */
 model MotivationMessage {
   id        String   @id @default(cuid())
 
-  // propriétaire de la programmation (l'utilisateur connecté)
   userId    String
+  target    String   // "ME" | "FRIENDS"
+  mode      String   // "COACH" | "CUSTOM"
 
-  // "ME" ou "FRIENDS"
-  target    String
+  content   String   // pour COACH: facultatif, ignoré à l’envoi; pour CUSTOM: message
 
-  // "COACH" (pour ME) ou "CUSTOM" (pour FRIENDS)
-  mode      String   @default("CUSTOM")
-
-  // Texte du message (utilisé pour FRIENDS). Pour ME, peut être ignoré.
-  content   String
-
-  // jours de la semaine "mon,tue,wed"
+  // jours de la semaine, stockés sous forme "mon,tue,wed"
   days      String
 
-  // Heure "HH:mm"
+  // Heure au format "HH:mm"
   time      String
 
   active    Boolean  @default(true)
@@ -95,26 +115,35 @@ model MotivationMessage {
 
   recipients MotivationMessageRecipient[]
   dispatches  MotivationDispatch[]
+
+  @@index([userId, active])
+  @@index([time])
 }
 
+/* =========================
+   Destinataires sélectionnés
+   ========================= */
 model MotivationMessageRecipient {
-  id                  String   @id @default(cuid())
+  id                 String   @id @default(cuid())
   motivationMessageId String
-  recipientUserId     String
-  createdAt           DateTime @default(now())
+  recipientUserId    String
 
-  motivationMessage   MotivationMessage @relation(fields: [motivationMessageId], references: [id], onDelete: Cascade)
+  createdAt          DateTime @default(now())
 
-  @@unique([motivationMessageId, recipientUserId])
-  @@index([recipientUserId])
+  motivationMessage  MotivationMessage @relation(fields: [motivationMessageId], references: [id], onDelete: Cascade)
+
   @@index([motivationMessageId])
+  @@index([recipientUserId])
 }
 
-// Anti-doublon : 1 envoi max / programmation / minute
+/* =========================
+   Anti-doublon d'envoi
+   sendKey = "YYYY-MM-DD|HH:mm|Europe/Paris"
+   ========================= */
 model MotivationDispatch {
   id                  String   @id @default(cuid())
   motivationMessageId String
-  sendKey             String   // ex: "2025-12-21|09:00|Europe/Paris"
+  sendKey             String
   createdAt           DateTime @default(now())
 
   motivationMessage   MotivationMessage @relation(fields: [motivationMessageId], references: [id], onDelete: Cascade)
