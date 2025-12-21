@@ -7,27 +7,118 @@ generator client {
   provider = "prisma-client-js"
 }
 
-// Modèle pour stocker les messages de motivation
+// --- Annuaire interne (pour chercher des utilisateurs même si NextAuth n'a pas de table User exploitable)
+model AppUser {
+  id        String   @id               // = session.user.id
+  email     String?  @unique
+  name      String?
+  image     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([email])
+  @@index([name])
+}
+
+enum FriendRequestStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  BLOCKED
+}
+
+model FriendRequest {
+  id          String               @id @default(cuid())
+  requesterId String
+  addresseeId String
+  status      FriendRequestStatus  @default(PENDING)
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  @@unique([requesterId, addresseeId])
+  @@index([addresseeId, status])
+  @@index([requesterId, status])
+}
+
+// --- Web Push subscriptions (multi-devices)
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+// --- Banque "Files Le Coach"
+model CoachMotivation {
+  id        String   @id @default(cuid())
+  lang      String   // "fr" | "en"
+  title     String
+  message   String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@index([lang, active])
+}
+
+// --- Programmations
 model MotivationMessage {
   id        String   @id @default(cuid())
 
-  // id de l'utilisateur (par ex. id Spotify via NextAuth)
+  // propriétaire de la programmation (l'utilisateur connecté)
   userId    String
 
-  // "ME" ou "FRIENDS" (on gère ça en TypeScript / code)
+  // "ME" ou "FRIENDS"
   target    String
 
-  content   String   // texte du message
+  // "COACH" (pour ME) ou "CUSTOM" (pour FRIENDS)
+  mode      String   @default("CUSTOM")
 
-  // jours de la semaine, stockés sous forme "mon,tue,wed"
+  // Texte du message (utilisé pour FRIENDS). Pour ME, peut être ignoré.
+  content   String
+
+  // jours de la semaine "mon,tue,wed"
   days      String
 
-  // Heure au format "HH:mm"
+  // Heure "HH:mm"
   time      String
 
   active    Boolean  @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  recipients MotivationMessageRecipient[]
+  dispatches  MotivationDispatch[]
 }
 
+model MotivationMessageRecipient {
+  id                  String   @id @default(cuid())
+  motivationMessageId String
+  recipientUserId     String
+  createdAt           DateTime @default(now())
+
+  motivationMessage   MotivationMessage @relation(fields: [motivationMessageId], references: [id], onDelete: Cascade)
+
+  @@unique([motivationMessageId, recipientUserId])
+  @@index([recipientUserId])
+  @@index([motivationMessageId])
+}
+
+// Anti-doublon : 1 envoi max / programmation / minute
+model MotivationDispatch {
+  id                  String   @id @default(cuid())
+  motivationMessageId String
+  sendKey             String   // ex: "2025-12-21|09:00|Europe/Paris"
+  createdAt           DateTime @default(now())
+
+  motivationMessage   MotivationMessage @relation(fields: [motivationMessageId], references: [id], onDelete: Cascade)
+
+  @@unique([motivationMessageId, sendKey])
+  @@index([sendKey])
+}
