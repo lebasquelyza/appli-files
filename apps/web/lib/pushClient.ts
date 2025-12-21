@@ -4,7 +4,7 @@ const DEVICE_ID_KEY = "device:id";
 export function getDeviceId() {
   let id = localStorage.getItem(DEVICE_ID_KEY);
   if (!id) {
-    id = (self.crypto?.randomUUID?.() ?? String(Math.random())).toString();
+    id = (globalThis.crypto?.randomUUID?.() ?? String(Math.random())).toString();
     localStorage.setItem(DEVICE_ID_KEY, id);
   }
   return id;
@@ -19,20 +19,23 @@ function urlBase64ToUint8Array(base64String: string) {
   return arr;
 }
 
+async function registerSW() {
+  if (!("serviceWorker" in navigator)) {
+    throw new Error("Service Worker non supporté");
+  }
+  // sw.js doit être dans /public/sw.js
+  const reg = await navigator.serviceWorker.register("/sw.js");
+  await navigator.serviceWorker.ready;
+  return reg;
+}
+
 export async function ensurePushSubscription(vapidPublicKey: string) {
-  if (!("serviceWorker" in navigator)) throw new Error("Service Worker unsupported");
-  if (!("PushManager" in window)) throw new Error("Push API unsupported");
-  if (!vapidPublicKey) throw new Error("Missing VAPID public key");
+  if (!("PushManager" in window)) throw new Error("Push API non supportée");
+  if (!vapidPublicKey) throw new Error("VAPID public key manquante");
 
-  // ✅ demander la permission (sinon subscribe peut échouer silencieusement)
-  const permission = await Notification.requestPermission();
-  if (permission !== "granted") throw new Error("Notification permission denied");
-
-  // ✅ s'assurer que le SW est prêt
-  const reg = await navigator.serviceWorker.ready;
+  const reg = await registerSW();
 
   let sub = await reg.pushManager.getSubscription();
-
   if (!sub) {
     const appKey = urlBase64ToUint8Array(vapidPublicKey);
     sub = await reg.pushManager.subscribe({
@@ -40,57 +43,39 @@ export async function ensurePushSubscription(vapidPublicKey: string) {
       applicationServerKey: appKey,
     });
   }
-
   return sub;
 }
 
 /**
- * ✅ NEW: assure la subscription ET l'enregistre sur le serveur (Prisma PushSubscription)
+ * Active les notifications (permission + subscription + save backend)
  */
 export async function enableWebPush(vapidPublicKey: string) {
-  const deviceId = getDeviceId();
+  // 1) Secure context obligatoire (https ou localhost)
+  if (!window.isSecureContext) {
+    throw new Error("Web Push nécessite HTTPS (ou localhost)");
+  }
+
+  // 2) Permission notifications
+  const perm = await Notification.requestPermission();
+  if (perm !== "granted") {
+    throw new Error("Permission notifications refusée");
+  }
+
+  // 3) Subscription
   const subscription = await ensurePushSubscription(vapidPublicKey);
 
+  // 4) Save subscription backend
+  const deviceId = getDeviceId();
   const res = await fetch("/api/push/subscribe", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    // deviceId conservé pour compat rétro, mais le backend n'en a plus besoin
     body: JSON.stringify({ deviceId, subscription }),
   });
 
   if (!res.ok) {
-    let err: any = null;
-    try {
-      err = await res.json();
-    } catch {}
-    throw new Error(err?.error || "Failed to subscribe on server");
+    const j = await res.json().catch(() => ({}));
+    throw new Error(`subscribe api failed: ${JSON.stringify(j)}`);
   }
-
-  return { ok: true, subscription };
-}
-
-/**
- * ✅ NEW: désactive web push (unsubscribe navigateur + nettoyage serveur)
- */
-export async function disableWebPush() {
-  if (!("serviceWorker" in navigator)) return { ok: true };
-
-  const reg = await navigator.serviceWorker.ready;
-  const sub = await reg.pushManager.getSubscription();
-
-  if (!sub) return { ok: true };
-
-  // nettoyer serveur (on envoie endpoint)
-  await fetch("/api/push/unsubscribe", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ endpoint: sub.endpoint }),
-  }).catch(() => {});
-
-  // désabonner navigateur
-  try {
-    await sub.unsubscribe();
-  } catch {}
 
   return { ok: true };
 }
