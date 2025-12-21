@@ -1,58 +1,51 @@
 // apps/web/app/api/push/subscribe/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+
+const url = process.env.UPSTASH_REDIS_REST_URL;
+const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+const KEY_PREFIX = "push:sub:";
 
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  const userId = (session?.user as any)?.id as string | undefined;
-
-  if (!userId) {
-    return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+  if (!url || !token) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "missing_upstash_env",
+        hasUrl: !!url,
+        hasToken: !!token,
+      },
+      { status: 500 }
+    );
   }
 
   const body = await req.json().catch(() => null);
-  if (!body) {
-    return NextResponse.json({ ok: false, error: "invalid_json" }, { status: 400 });
-  }
+  const deviceId = body?.deviceId;
+  const subscription = body?.subscription;
 
-  // Rétro-compat : certains clients envoient { deviceId, subscription }
-  const subscription = body.subscription ?? body;
-
-  const endpoint = subscription?.endpoint;
-  const p256dh = subscription?.keys?.p256dh;
-  const auth = subscription?.keys?.auth;
-
-  if (
-    typeof endpoint !== "string" ||
-    typeof p256dh !== "string" ||
-    typeof auth !== "string"
-  ) {
+  if (!deviceId || !subscription) {
     return NextResponse.json(
-      { ok: false, error: "invalid_subscription" },
+      { ok: false, error: "missing_deviceId_or_subscription" },
       { status: 400 }
     );
   }
 
-  const userAgent = req.headers.get("user-agent") ?? undefined;
-
-  await prisma.pushSubscription.upsert({
-    where: { endpoint },
-    update: {
-      userId,
-      p256dh,
-      auth,
-      userAgent,
+  // stocke la souscription (string JSON) dans Upstash
+  const r = await fetch(`${url}/set/${KEY_PREFIX}${deviceId}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
     },
-    create: {
-      userId,
-      endpoint,
-      p256dh,
-      auth,
-      userAgent,
-    },
+    body: JSON.stringify(subscription),
   });
+
+  if (!r.ok) {
+    const txt = await r.text().catch(() => "");
+    return NextResponse.json(
+      { ok: false, error: "upstash_write_failed", detail: txt },
+      { status: 500 }
+    );
+  }
 
   return NextResponse.json({ ok: true });
 }
