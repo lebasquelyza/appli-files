@@ -1,8 +1,13 @@
 # netlify.toml (racine)
 
 [build]
+  # Ton app Next se trouve dans apps/web
   base    = "apps/web"
+
+  # Nettoyage + install sans scripts (évite postinstall) + prisma generate + build
   command = "rm -f components/ExerciseLink.tsx components/DemoBrowser.tsx && npm ci --no-audit --no-fund --ignore-scripts && npx prisma generate --schema=prisma/schema.prisma && npm run build"
+
+  # Dossier de sortie Next relatif à base
   publish = ".next"
 
 [build.environment]
@@ -10,14 +15,29 @@
   NEXT_TELEMETRY_DISABLED = "1"
   NPM_FLAGS = "--no-audit --no-fund"
 
+  # ⚠️ Mets tes vraies valeurs dans Netlify UI (Site settings → Environment variables)
+  # (ne laisse pas de "" ici sinon ça écrase)
+  # DATABASE_URL
+  # NEXTAUTH_SECRET
+  # SPOTIFY_CLIENT_ID
+  # SPOTIFY_CLIENT_SECRET
+  # NEXT_PUBLIC_VAPID_PUBLIC_KEY
+  # VAPID_PUBLIC_KEY
+  # VAPID_PRIVATE_KEY
+  # VAPID_SUBJECT
+  # UPSTASH_REDIS_REST_URL
+  # UPSTASH_REDIS_REST_TOKEN
+  # etc.
+
 [functions]
+  # Avec base="apps/web", ce chemin pointe sur apps/web/netlify/functions
   directory = "netlify/functions"
   node_bundler = "esbuild"
   external_node_modules = ["@upstash/redis", "@upstash/ratelimit", "web-push"]
 
-# Optionnel (tu l'as déjà dans la function aussi, mais ça ne gêne pas)
+# Optionnel : tu peux aussi laisser le schedule dans la function (exports.config)
 [functions."push-cron"]
-  schedule = "*/1 * * * *"
+  schedule = "*/5 * * * *"
 
 [[headers]]
   for = "/api/analyze"
