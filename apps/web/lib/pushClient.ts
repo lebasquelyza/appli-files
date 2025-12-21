@@ -21,11 +21,8 @@ function urlBase64ToUint8Array(base64String: string) {
 
 async function registerSW() {
   if (!("serviceWorker" in navigator)) throw new Error("Service Worker unsupported");
-
-  // sw.js doit être dans /public/sw.js
   const reg = await navigator.serviceWorker.register("/sw.js");
   await navigator.serviceWorker.ready;
-
   return reg;
 }
 
@@ -34,8 +31,8 @@ export async function ensurePushSubscription(vapidPublicKey: string) {
   if (!vapidPublicKey) throw new Error("Missing VAPID public key");
 
   const reg = await registerSW();
-
   let sub = await reg.pushManager.getSubscription();
+
   if (!sub) {
     const appKey = urlBase64ToUint8Array(vapidPublicKey);
     sub = await reg.pushManager.subscribe({
@@ -43,28 +40,17 @@ export async function ensurePushSubscription(vapidPublicKey: string) {
       applicationServerKey: appKey,
     });
   }
+
   return sub;
 }
 
-/**
- * Active Web Push :
- * - vérifie HTTPS
- * - demande permission Notification
- * - crée la subscription
- * - l'enregistre via /api/push/subscribe
- */
 export async function enableWebPush(vapidPublicKey: string) {
   if (typeof window === "undefined") throw new Error("Client only");
-  if (!window.isSecureContext) {
-    throw new Error("Web Push nécessite HTTPS (ou localhost)");
-  }
-
+  if (!window.isSecureContext) throw new Error("Web Push nécessite HTTPS (ou localhost)");
   if (!("Notification" in window)) throw new Error("Notifications unsupported");
 
   const perm = await Notification.requestPermission();
-  if (perm !== "granted") {
-    throw new Error(`Permission notifications refusée (perm=${perm})`);
-  }
+  if (perm !== "granted") throw new Error(`Permission notifications refusée (perm=${perm})`);
 
   const subscription = await ensurePushSubscription(vapidPublicKey);
 
@@ -76,8 +62,21 @@ export async function enableWebPush(vapidPublicKey: string) {
   });
 
   if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(`subscribe_api_failed: ${JSON.stringify(data)}`);
+    const text = await res.text().catch(() => "");
+    // On essaie de parser en JSON pour afficher proprement
+    let parsed: any = null;
+    try {
+      parsed = text ? JSON.parse(text) : null;
+    } catch {
+      parsed = null;
+    }
+
+    const detail =
+      parsed ? JSON.stringify(parsed, null, 2) : (text || "(empty body)");
+
+    throw new Error(
+      `subscribe_api_failed (HTTP ${res.status})\n\n${detail}`
+    );
   }
 
   return { ok: true };
