@@ -71,6 +71,10 @@ export default function ProfileClient(props: Props) {
 
   const [showAdOverlay, setShowAdOverlay] = useState(false);
 
+  // ✅ NEW: dérouler/plier les listes
+  const [openDone, setOpenDone] = useState(false);
+  const [openLater, setOpenLater] = useState(false);
+
   useEffect(() => {
     if (showAdOnGenerate) {
       setShowAdOverlay(true);
@@ -443,12 +447,32 @@ export default function ProfileClient(props: Props) {
         <div className="grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           {/* Séance faite ✅ */}
           <div className="card">
-            <div className="text-sm" style={{ fontWeight: 600, marginBottom: 6 }}>
-              {tf("settings.profile.lists.done.title", "Séance faite")} <span aria-hidden>✅</span>
-            </div>
+            <button
+              type="button"
+              onClick={() => setOpenDone((v) => !v)}
+              style={{
+                width: "100%",
+                textAlign: "left",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 8,
+                background: "transparent",
+                border: 0,
+                padding: 0,
+                cursor: "pointer",
+              }}
+            >
+              <div className="text-sm" style={{ fontWeight: 600 }}>
+                {tf("settings.profile.lists.done.title", "Séance faite")} <span aria-hidden>✅</span>
+              </div>
+              <span aria-hidden style={{ color: "#6b7280", fontWeight: 700 }}>
+                {openDone ? "▾" : "▸"}
+              </span>
+            </button>
 
-            {savedList.length > 0 && (
-              <ul className="text-sm" style={{ listStyle: "disc", paddingLeft: 18, margin: 0 }}>
+            {openDone && savedList.length > 0 && (
+              <ul className="text-sm" style={{ listStyle: "disc", paddingLeft: 18, margin: "8px 0 0" }}>
                 {savedList.map(({ s, idx, key }) => {
                   const detailHref = `/dashboard/seance/${encodeURIComponent((s as any).id || key)}?${
                     [baseLinkQuery, "from=profile"].filter(Boolean).join("&")
@@ -513,12 +537,32 @@ export default function ProfileClient(props: Props) {
 
           {/* À faire plus tard ⏳ */}
           <div className="card">
-            <div className="text-sm" style={{ fontWeight: 600, marginBottom: 6 }}>
-              {tf("settings.profile.lists.later.title", "À faire plus tard")} <span aria-hidden>⏳</span>
-            </div>
+            <button
+              type="button"
+              onClick={() => setOpenLater((v) => !v)}
+              style={{
+                width: "100%",
+                textAlign: "left",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 8,
+                background: "transparent",
+                border: 0,
+                padding: 0,
+                cursor: "pointer",
+              }}
+            >
+              <div className="text-sm" style={{ fontWeight: 600 }}>
+                {tf("settings.profile.lists.later.title", "À faire plus tard")} <span aria-hidden>⏳</span>
+              </div>
+              <span aria-hidden style={{ color: "#6b7280", fontWeight: 700 }}>
+                {openLater ? "▾" : "▸"}
+              </span>
+            </button>
 
-            {laterList.length > 0 && (
-              <ul className="text-sm" style={{ listStyle: "disc", paddingLeft: 18, margin: 0 }}>
+            {openLater && laterList.length > 0 && (
+              <ul className="text-sm" style={{ listStyle: "disc", paddingLeft: 18, margin: "8px 0 0" }}>
                 {laterList.map(({ s, idx, key }) => {
                   const detailHref = `/dashboard/seance/${encodeURIComponent((s as any).id || key)}?${
                     [baseLinkQuery, "from=profile"].filter(Boolean).join("&")
