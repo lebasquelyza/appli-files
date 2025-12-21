@@ -7,9 +7,9 @@ generator client {
   provider = "prisma-client-js"
 }
 
-/* =========================
-   Utilisateurs (annuaire)
-   ========================= */
+// ========================
+// Utilisateurs (annuaire)
+// ========================
 model AppUser {
   // id = token.sub (id Spotify via NextAuth)
   id        String   @id
@@ -20,24 +20,23 @@ model AppUser {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // relations
   outgoingFriendRequests FriendRequest[] @relation("FriendRequestRequester")
   incomingFriendRequests FriendRequest[] @relation("FriendRequestAddressee")
 
   pushSubscriptions PushSubscription[]
 }
 
-/* =========================
-   Amis (sans enum)
-   status = "PENDING" | "ACCEPTED" | "DECLINED" | "BLOCKED"
-   ========================= */
+// ========================
+// Amis (sans enum)
+// status: "PENDING" | "ACCEPTED" | "DECLINED" | "BLOCKED"
+// ========================
 model FriendRequest {
   id          String   @id @default(cuid())
 
   requesterId String
   addresseeId String
 
-  // ✅ SQLite: pas d'enum -> String
+  // SQLite: pas d'enum -> String
   status      String   @default("PENDING")
 
   createdAt   DateTime @default(now())
@@ -51,9 +50,9 @@ model FriendRequest {
   @@index([requesterId, status])
 }
 
-/* =========================
-   Web Push Subscriptions
-   ========================= */
+// ========================
+// Web Push Subscriptions
+// ========================
 model PushSubscription {
   id        String   @id @default(cuid())
 
@@ -71,9 +70,9 @@ model PushSubscription {
   @@index([userId])
 }
 
-/* =========================
-   Banque de messages Coach
-   ========================= */
+// ========================
+// Banque de messages Coach
+// ========================
 model CoachMotivation {
   id        String   @id @default(cuid())
   lang      String   @default("fr") // "fr" | "en"
@@ -87,25 +86,20 @@ model CoachMotivation {
   @@index([lang, active])
 }
 
-/* =========================
-   Messages programmés
-   target = "ME" | "FRIENDS"
-   mode   = "COACH" | "CUSTOM"
-   (sans enum -> String)
-   ========================= */
+// ========================
+// Messages programmés
+// target: "ME" | "FRIENDS"
+// mode:   "COACH" | "CUSTOM"
+// ========================
 model MotivationMessage {
   id        String   @id @default(cuid())
 
   userId    String
-  target    String   // "ME" | "FRIENDS"
-  mode      String   // "COACH" | "CUSTOM"
+  target    String
+  mode      String
 
-  content   String   // pour COACH: facultatif, ignoré à l’envoi; pour CUSTOM: message
-
-  // jours de la semaine, stockés sous forme "mon,tue,wed"
+  content   String
   days      String
-
-  // Heure au format "HH:mm"
   time      String
 
   active    Boolean  @default(true)
@@ -120,26 +114,26 @@ model MotivationMessage {
   @@index([time])
 }
 
-/* =========================
-   Destinataires sélectionnés
-   ========================= */
+// ========================
+// Destinataires sélectionnés
+// ========================
 model MotivationMessageRecipient {
-  id                 String   @id @default(cuid())
+  id                  String   @id @default(cuid())
   motivationMessageId String
-  recipientUserId    String
+  recipientUserId     String
 
-  createdAt          DateTime @default(now())
+  createdAt           DateTime @default(now())
 
-  motivationMessage  MotivationMessage @relation(fields: [motivationMessageId], references: [id], onDelete: Cascade)
+  motivationMessage   MotivationMessage @relation(fields: [motivationMessageId], references: [id], onDelete: Cascade)
 
   @@index([motivationMessageId])
   @@index([recipientUserId])
 }
 
-/* =========================
-   Anti-doublon d'envoi
-   sendKey = "YYYY-MM-DD|HH:mm|Europe/Paris"
-   ========================= */
+// ========================
+// Anti-doublon d'envoi
+// sendKey: "YYYY-MM-DD|HH:mm|Europe/Paris"
+// ========================
 model MotivationDispatch {
   id                  String   @id @default(cuid())
   motivationMessageId String
