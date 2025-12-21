@@ -98,29 +98,24 @@ export default function MotivationPage() {
   const [filter, setFilter] = useState<"all" | "unread">("all");
   const [sending, setSending] = useState(false);
 
-  // message unique (servira pour FRIENDS; pour ME on l'ignore côté backend)
   const [message, setMessage] = useState("");
   const remaining = CUSTOM_MESSAGE_MAX - message.length;
 
-  // Step 2
   const [scheduleTarget, setScheduleTarget] = useState<null | "ME" | "FRIENDS">(null);
   const [scheduleDays, setScheduleDays] = useState<DayKey[]>([]);
   const [scheduleTime, setScheduleTime] = useState("09:00");
   const [savingSelf, setSavingSelf] = useState(false);
   const [sharingCustom, setSharingCustom] = useState(false);
 
-  // Friends selection
   const [friends, setFriends] = useState<FriendUser[]>([]);
   const [friendQuery, setFriendQuery] = useState("");
   const [searchResults, setSearchResults] = useState<FriendUser[]>([]);
   const [selectedFriendIds, setSelectedFriendIds] = useState<string[]>([]);
   const [loadingFriends, setLoadingFriends] = useState(false);
 
-  // Push
   const [pushBusy, setPushBusy] = useState(false);
   const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || "";
 
-  // Notifs mock
   useEffect(() => {
     setNotifications([
       {
@@ -150,7 +145,6 @@ export default function MotivationPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Charger programmations depuis API
   useEffect(() => {
     let cancelled = false;
 
@@ -276,7 +270,6 @@ export default function MotivationPage() {
     setTimeout(() => setSending(false), 400);
   };
 
-  // Charger la liste d'amis acceptés
   const loadFriends = async () => {
     setLoadingFriends(true);
     try {
@@ -291,7 +284,6 @@ export default function MotivationPage() {
     }
   };
 
-  // Recherche users (annuaire)
   useEffect(() => {
     let cancelled = false;
 
@@ -322,7 +314,6 @@ export default function MotivationPage() {
     setScheduleTarget(target);
     setScheduleDays((prev) => (prev.length > 0 ? prev : ["mon", "tue", "wed", "thu", "fri"]));
 
-    // si FRIENDS : charge amis + reset sélection
     if (target === "FRIENDS") {
       setSelectedFriendIds([]);
       await loadFriends();
@@ -349,10 +340,7 @@ export default function MotivationPage() {
     const trimmed = message.trim();
     if (!scheduleTarget) return;
 
-    if (scheduleDays.length === 0) {
-      console.error("No days selected");
-      return;
-    }
+    if (scheduleDays.length === 0) return;
 
     if (scheduleTarget === "ME") setSavingSelf(true);
     if (scheduleTarget === "FRIENDS") setSharingCustom(true);
@@ -363,7 +351,7 @@ export default function MotivationPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           target: scheduleTarget,
-          content: trimmed, // pour ME: ignoré côté backend, pour FRIENDS: utilisé
+          content: trimmed,
           days: scheduleDays,
           time: scheduleTime,
           recipientIds: scheduleTarget === "FRIENDS" ? selectedFriendIds : undefined,
@@ -418,18 +406,21 @@ export default function MotivationPage() {
     (scheduleTarget === "ME" ||
       (scheduleTarget === "FRIENDS" && !!message.trim() && selectedFriendIds.length > 0));
 
+  // ✅ IMPORTANT : affiche l'erreur exacte
   const activatePush = async () => {
     if (!VAPID_PUBLIC_KEY) {
-      alert("NEXT_PUBLIC_VAPID_PUBLIC_KEY manquant");
+      alert("NEXT_PUBLIC_VAPID_PUBLIC_KEY manquant (à configurer dans Netlify)");
       return;
     }
+
     setPushBusy(true);
     try {
       await enableWebPush(VAPID_PUBLIC_KEY);
       alert("Notifications activées ✅");
-    } catch (e) {
-      console.error(e);
-      alert("Impossible d’activer les notifications");
+    } catch (e: any) {
+      console.error("[push] enable failed:", e);
+      const msg = e?.message || String(e);
+      alert(`Impossible d'activer les notifications:\n\n${msg}`);
     } finally {
       setPushBusy(false);
     }
@@ -471,15 +462,12 @@ export default function MotivationPage() {
       }}
     >
       {/* Header */}
-      <div
-        className="page-header"
-        style={{ marginBottom: 10, display: "flex", justifyContent: "space-between", gap: 8 }}
-      >
+      <div style={{ marginBottom: 10, display: "flex", justifyContent: "space-between", gap: 8 }}>
         <div>
           <h1 className="h1" style={{ fontSize: 20, color: "#111827" }}>
             {t("motivation.pageTitle", "Motivation")}
           </h1>
-          <p className="lead" style={{ fontSize: 12, marginTop: 2, color: "#6b7280" }}>
+          <p style={{ fontSize: 12, marginTop: 2, color: "#6b7280" }}>
             {t(
               "motivation.pageSubtitle",
               "Crée tes propres messages de motivation pour toi ou pour tes amis, et retrouve ici l’historique."
@@ -643,16 +631,7 @@ export default function MotivationPage() {
           }}
         />
 
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: 8,
-            marginTop: 4,
-            flexWrap: "wrap",
-          }}
-        >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginTop: 4, flexWrap: "wrap" }}>
           <span style={{ fontSize: 11, color: "#6b7280" }}>
             {remaining} {t("motivation.messageBlock.remaining", "caractères restants")}
           </span>
@@ -687,15 +666,7 @@ export default function MotivationPage() {
 
         {/* Step 2 */}
         {scheduleTarget && (
-          <div
-            style={{
-              marginTop: 8,
-              paddingTop: 8,
-              borderTop: "1px solid #e5e7eb",
-              display: "grid",
-              gap: 6,
-            }}
-          >
+          <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid #e5e7eb", display: "grid", gap: 6 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>
               {scheduleTarget === "ME"
                 ? "Pour toi : choisis les jours et l’heure (Files Le Coach)"
@@ -768,7 +739,6 @@ export default function MotivationPage() {
                   </button>
                 </div>
 
-                {/* Selected */}
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                   {selectedFriendIds.length === 0 ? (
                     <span style={{ fontSize: 11, color: "#6b7280" }}>Aucun ami sélectionné (obligatoire).</span>
@@ -799,14 +769,12 @@ export default function MotivationPage() {
                   )}
                 </div>
 
-                {/* Friends list quick add */}
                 <div style={{ display: "grid", gap: 6 }}>
                   <div style={{ fontSize: 11, color: "#6b7280" }}>Suggestions (tes amis acceptés)</div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                     {friends.length === 0 ? (
                       <span style={{ fontSize: 11, color: "#6b7280" }}>
-                        Pas d’amis pour le moment. Cherche un utilisateur et envoie une demande dans l’onglet “Amis” (à
-                        ajouter).
+                        Pas d’amis pour le moment. Cherche un utilisateur et envoie une demande dans l’onglet “Amis”.
                       </span>
                     ) : (
                       friends.map((f) => (
@@ -831,7 +799,6 @@ export default function MotivationPage() {
                   </div>
                 </div>
 
-                {/* Search results add */}
                 {searchResults.length > 0 && (
                   <div style={{ display: "grid", gap: 6 }}>
                     <div style={{ fontSize: 11, color: "#6b7280" }}>Résultats recherche (utilisateurs)</div>
@@ -850,7 +817,6 @@ export default function MotivationPage() {
                             color: selectedFriendIds.includes(u.id) ? "#fff" : "#374151",
                             cursor: "pointer",
                           }}
-                          title="Ajouter à la sélection"
                         >
                           {(u.name || u.email || u.id).toString()}
                         </button>
@@ -864,7 +830,6 @@ export default function MotivationPage() {
               </div>
             )}
 
-            {/* Actions */}
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
               <button
                 type="button"
@@ -953,7 +918,6 @@ export default function MotivationPage() {
 
               <p style={{ fontSize: 13, color: "#374151", marginTop: 2, marginBottom: 4 }}>{n.message}</p>
 
-              {/* Rating */}
               <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
                 <span style={{ fontSize: 11, color: "#6b7280", marginRight: 2 }}>Ta note :</span>
                 <div>
