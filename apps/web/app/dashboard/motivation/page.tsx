@@ -4,6 +4,7 @@
 import { useSession } from "next-auth/react";
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { translations } from "@/app/i18n/translations";
+import { ensurePushSubscribed } from "@/app/lib/pushClient";
 
 /* ---------------- i18n helpers (client) ---------------- */
 type Lang = "fr" | "en";
@@ -14,7 +15,6 @@ function getFromPath(obj: any, path: string): any {
 
 function getLangClient(): Lang {
   if (typeof document === "undefined") return "fr";
-  // 🔁 on lit le nouveau cookie fc-lang-v2
   const match = document.cookie.match(/(?:^|; )fc-lang-v2=(fr|en)/);
   const val = match?.[1] as Lang | undefined;
   return val === "en" ? "en" : "fr";
@@ -48,7 +48,7 @@ type CoachingNotification = {
   message: string;
   createdAt: string; // ISO
   read: boolean;
-  source?: string; // ex: "Files Coaching"
+  source?: string;
   rating?: number; // 0–5
 };
 
@@ -58,20 +58,26 @@ type MotivationMessageApi = {
   id: string;
   userId: string;
   target: string; // "ME" | "FRIENDS"
+  mode?: string;  // "COACH" | "CUSTOM"
   content: string;
   days: string; // "mon,tue,wed"
   time: string; // "HH:mm"
   active: boolean;
   createdAt: string;
   updatedAt: string;
+  recipients?: Array<{ recipientUserId: string }>;
+};
+
+type FriendUser = {
+  id: string;
+  email?: string | null;
+  name?: string | null;
+  image?: string | null;
 };
 
 const SIDE_PADDING = 16;
 const PAGE_MAX_WIDTH = 740;
-
 const ALL_DAYS: DayKey[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
-
-// Longueur max pour le message
 const CUSTOM_MESSAGE_MAX = 240;
 
 function formatTime(dateStr: string) {
@@ -92,18 +98,29 @@ export default function MotivationPage() {
   const [filter, setFilter] = useState<"all" | "unread">("all");
   const [sending, setSending] = useState(false);
 
-  // Texte unique pour les deux usages (pour lui / pour ses amis)
+  // message unique (servira pour FRIENDS; pour ME on l'ignore côté backend)
   const [message, setMessage] = useState("");
   const remaining = CUSTOM_MESSAGE_MAX - message.length;
 
-  // Step 2 : choix des jours / heure après clic sur Programmer/Partager
+  // Step 2
   const [scheduleTarget, setScheduleTarget] = useState<null | "ME" | "FRIENDS">(null);
   const [scheduleDays, setScheduleDays] = useState<DayKey[]>([]);
   const [scheduleTime, setScheduleTime] = useState("09:00");
   const [savingSelf, setSavingSelf] = useState(false);
   const [sharingCustom, setSharingCustom] = useState(false);
 
-  // Notifs en dur (mock) au chargement
+  // Friends selection
+  const [friends, setFriends] = useState<FriendUser[]>([]);
+  const [friendQuery, setFriendQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<FriendUser[]>([]);
+  const [selectedFriendIds, setSelectedFriendIds] = useState<string[]>([]);
+  const [loadingFriends, setLoadingFriends] = useState(false);
+
+  // Push
+  const [pushBusy, setPushBusy] = useState(false);
+  const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || "";
+
+  // Notifs mock
   useEffect(() => {
     setNotifications([
       {
@@ -133,7 +150,7 @@ export default function MotivationPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Charger les messages déjà programmés depuis l'API (backend Prisma)
+  // Charger programmations depuis API
   useEffect(() => {
     let cancelled = false;
 
@@ -142,43 +159,28 @@ export default function MotivationPage() {
         const res = await fetch("/api/motivation/messages");
         if (!res.ok) return;
         const data: MotivationMessageApi[] = await res.json();
-
         if (cancelled || !Array.isArray(data)) return;
 
         setNotifications((prev) => {
-          // on évite de dupliquer si on re-fetch (par id)
           const existingIds = new Set(prev.map((n) => n.id));
           const extra: CoachingNotification[] = data
             .filter((msg) => !existingIds.has(msg.id))
             .map((msg) => {
               const isMe = msg.target === "ME";
-              const daysLabel = msg.days
-                .split(",")
-                .filter(Boolean)
-                .join(", ");
+              const daysLabel = msg.days.split(",").filter(Boolean).join(", ");
               return {
                 id: msg.id,
                 title: isMe
-                  ? t(
-                      "motivation.selfNotification.title",
-                      "Message programmé pour toi ✅"
-                    )
-                  : t(
-                      "motivation.customNotification.title",
-                      "Message programmé pour tes amis 💌"
-                    ),
-                message: msg.content,
+                  ? t("motivation.selfNotification.title", "Programmation “Files Le Coach” ✅")
+                  : t("motivation.customNotification.title", "Message programmé pour tes amis 💌"),
+                message: isMe
+                  ? t("motivation.selfNotification.bodyHint", "Tu recevras une motivation de Files Le Coach aux jours/heures choisis.")
+                  : msg.content,
                 createdAt: msg.createdAt,
                 read: true,
                 source: isMe
-                  ? t(
-                      "motivation.selfNotification.source",
-                      `Rappel perso – ${daysLabel} à ${msg.time}`
-                    )
-                  : t(
-                      "motivation.customNotification.source",
-                      `Toi → tes amis – ${daysLabel} à ${msg.time}`
-                    ),
+                  ? t("motivation.selfNotification.source", `Files Le Coach – ${daysLabel} à ${msg.time}`)
+                  : t("motivation.customNotification.source", `Toi → amis – ${daysLabel} à ${msg.time}`),
               };
             });
 
@@ -190,40 +192,28 @@ export default function MotivationPage() {
     }
 
     loadMessages();
-
     return () => {
       cancelled = true;
     };
   }, [t]);
 
   const visibleNotifications = useMemo(
-    () =>
-      filter === "all"
-        ? notifications
-        : notifications.filter((n) => !n.read),
+    () => (filter === "all" ? notifications : notifications.filter((n) => !n.read)),
     [notifications, filter]
   );
 
-  const unreadCount = useMemo(
-    () => notifications.filter((n) => !n.read).length,
-    [notifications]
-  );
+  const unreadCount = useMemo(() => notifications.filter((n) => !n.read).length, [notifications]);
 
   const markAsRead = (id: string) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
-    );
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
   };
 
   const markAllAsRead = () => {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
   };
 
-  // Noter une notification (100% côté client)
   const setRating = (id: string, rating: number) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, rating } : n))
-    );
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, rating } : n)));
   };
 
   const getDayLabel = (day: DayKey) =>
@@ -241,12 +231,9 @@ export default function MotivationPage() {
     );
 
   const toggleScheduleDay = (day: DayKey) => {
-    setScheduleDays((prev) =>
-      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
-    );
+    setScheduleDays((prev) => (prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]));
   };
 
-  // Notification de test générée directement par l'appli (pas de backend)
   const sendTestNotification = async () => {
     if (sending) return;
     setSending(true);
@@ -264,48 +251,6 @@ export default function MotivationPage() {
         message: t(
           "motivation.samples.respireEtAvance.message",
           "Ne cherche pas la perfection. Cherche la progression. Un pas après l’autre."
-        ),
-      },
-      {
-        title: t("motivation.samples.tuPeuxLeFaire.title", "Tu peux le faire ✨"),
-        message: t(
-          "motivation.samples.tuPeuxLeFaire.message",
-          "Rappelle-toi pourquoi tu as commencé. Tu as déjà traversé plus dur que ça."
-        ),
-      },
-      {
-        title: t("motivation.samples.tonFuturToi.title", "Ton futur toi te remercie"),
-        message: t(
-          "motivation.samples.tonFuturToi.message",
-          "Chaque décision d’aujourd’hui construit la personne que tu seras dans 3 mois."
-        ),
-      },
-      {
-        title: t("motivation.samples.miniSeance.title", "Mini séance, maxi impact"),
-        message: t(
-          "motivation.samples.miniSeance.message",
-          "Si tu n’as pas le temps pour 30 minutes, fais-en 5. Ce qui compte, c’est le mouvement."
-        ),
-      },
-      {
-        title: t("motivation.samples.recommence.title", "Recommence autant que nécessaire"),
-        message: t(
-          "motivation.samples.recommence.message",
-          "Tomber fait partie du jeu. Ce qui compte, c’est à quelle vitesse tu te relèves."
-        ),
-      },
-      {
-        title: t("motivation.samples.tuNESPasSeul.title", "Tu n’es pas seul·e"),
-        message: t(
-          "motivation.samples.tuNESPasSeul.message",
-          "Demander de l’aide, c’est aussi une forme de force. Tu fais ça pour TOI."
-        ),
-      },
-      {
-        title: t("motivation.samples.cestTonMoment.title", "C’est ton moment"),
-        message: t(
-          "motivation.samples.cestTonMoment.message",
-          "Bloque 10 minutes rien que pour toi maintenant. Ton corps et ta tête te diront merci."
         ),
       },
     ];
@@ -328,100 +273,158 @@ export default function MotivationPage() {
     setTimeout(() => setSending(false), 400);
   };
 
-  // Ouverture de l'étape de programmation / partage (on demande jours + heure)
-  const openSchedule = (target: "ME" | "FRIENDS") => {
-    if (!message.trim()) return;
+  // Charger la liste d'amis acceptés
+  const loadFriends = async () => {
+    setLoadingFriends(true);
+    try {
+      const res = await fetch("/api/friends/list");
+      const data: FriendUser[] = res.ok ? await res.json() : [];
+      setFriends(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error(e);
+      setFriends([]);
+    } finally {
+      setLoadingFriends(false);
+    }
+  };
+
+  // Recherche users (annuaire)
+  useEffect(() => {
+    let cancelled = false;
+
+    async function runSearch() {
+      const q = friendQuery.trim();
+      if (q.length < 2) {
+        setSearchResults([]);
+        return;
+      }
+      try {
+        const res = await fetch(`/api/users/search?q=${encodeURIComponent(q)}`);
+        const data: FriendUser[] = res.ok ? await res.json() : [];
+        if (!cancelled) setSearchResults(Array.isArray(data) ? data : []);
+      } catch (e) {
+        if (!cancelled) setSearchResults([]);
+      }
+    }
+
+    const tmr = setTimeout(runSearch, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(tmr);
+    };
+  }, [friendQuery]);
+
+  const openSchedule = async (target: "ME" | "FRIENDS") => {
+    if (!message.trim() && target === "FRIENDS") return;
     setScheduleTarget(target);
-    // valeur par défaut : tous les jours de semaine si rien sélectionné
-    setScheduleDays((prev) =>
-      prev.length > 0 ? prev : ["mon", "tue", "wed", "thu", "fri"]
-    );
+    setScheduleDays((prev) => (prev.length > 0 ? prev : ["mon", "tue", "wed", "thu", "fri"]));
+
+    // si FRIENDS : charge amis + reset sélection
+    if (target === "FRIENDS") {
+      setSelectedFriendIds([]);
+      await loadFriends();
+    }
   };
 
   const cancelSchedule = () => {
     setScheduleTarget(null);
     setScheduleDays([]);
+    setFriendQuery("");
+    setSearchResults([]);
+    setSelectedFriendIds([]);
   };
 
-  // Validation de l'étape jours + heure -> appel API
+  const addSelected = (id: string) => {
+    setSelectedFriendIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+  };
+
+  const removeSelected = (id: string) => {
+    setSelectedFriendIds((prev) => prev.filter((x) => x !== id));
+  };
+
   const confirmSchedule = async () => {
     const trimmed = message.trim();
-    if (!trimmed || !scheduleTarget) return;
+    if (!scheduleTarget) return;
+
     if (scheduleDays.length === 0) {
       console.error("No days selected");
       return;
     }
 
-    const target = scheduleTarget;
-    if (target === "ME") setSavingSelf(true);
-    if (target === "FRIENDS") setSharingCustom(true);
+    if (scheduleTarget === "ME") setSavingSelf(true);
+    if (scheduleTarget === "FRIENDS") setSharingCustom(true);
 
     try {
       const res = await fetch("/api/motivation/messages", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          target,
-          content: trimmed,
+          target: scheduleTarget,
+          content: trimmed, // pour ME: ignoré côté backend, pour FRIENDS: utilisé
           days: scheduleDays,
           time: scheduleTime,
+          recipientIds: scheduleTarget === "FRIENDS" ? selectedFriendIds : undefined,
         }),
       });
 
       if (!res.ok) {
         console.error("Error saving message", await res.json());
-      } else {
-        const msg: MotivationMessageApi = await res.json();
-        const isMe = msg.target === "ME";
-
-        const daysLabel = msg.days
-          .split(",")
-          .filter(Boolean)
-          .join(", ");
-
-        setNotifications((prev) => [
-          {
-            id: msg.id ?? `${isMe ? "self" : "custom"}-${Date.now()}`,
-            title: isMe
-              ? t(
-                  "motivation.selfNotification.title",
-                  "Message programmé pour toi ✅"
-                )
-              : t(
-                  "motivation.customNotification.title",
-                  "Message programmé pour tes amis 💌"
-                ),
-            message: trimmed,
-            createdAt: msg.createdAt ?? new Date().toISOString(),
-            read: true,
-            source: isMe
-              ? t(
-                  "motivation.selfNotification.source",
-                  `Rappel perso – ${daysLabel || scheduleDays
-                    .map((d) => getDayLabel(d))
-                    .join(", ")} à ${msg.time || scheduleTime}`
-                )
-              : t(
-                  "motivation.customNotification.source",
-                  `Toi → tes amis – ${daysLabel || scheduleDays
-                    .map((d) => getDayLabel(d))
-                    .join(", ")} à ${msg.time || scheduleTime}`
-                ),
-          },
-          ...prev,
-        ]);
-
-        // on vide le message et on ferme l'étape
-        setMessage("");
-        cancelSchedule();
+        return;
       }
+
+      const msg: MotivationMessageApi = await res.json();
+      const isMe = msg.target === "ME";
+      const daysLabel = msg.days.split(",").filter(Boolean).join(", ");
+
+      setNotifications((prev) => [
+        {
+          id: msg.id ?? `${isMe ? "self" : "custom"}-${Date.now()}`,
+          title: isMe
+            ? t("motivation.selfNotification.title", "Programmation “Files Le Coach” ✅")
+            : t("motivation.customNotification.title", "Message programmé pour tes amis 💌"),
+          message: isMe
+            ? t("motivation.selfNotification.bodyHint", "Tu recevras une motivation de Files Le Coach aux jours/heures choisis.")
+            : trimmed,
+          createdAt: msg.createdAt ?? new Date().toISOString(),
+          read: true,
+          source: isMe
+            ? t("motivation.selfNotification.source", `Files Le Coach – ${daysLabel} à ${msg.time}`)
+            : t("motivation.customNotification.source", `Toi → amis – ${daysLabel} à ${msg.time}`),
+        },
+        ...prev,
+      ]);
+
+      setMessage("");
+      cancelSchedule();
     } catch (e) {
       console.error(e);
     } finally {
-      if (target === "ME") setSavingSelf(false);
-      if (target === "FRIENDS") setSharingCustom(false);
+      if (scheduleTarget === "ME") setSavingSelf(false);
+      if (scheduleTarget === "FRIENDS") setSharingCustom(false);
+    }
+  };
+
+  const canConfirm =
+    scheduleDays.length > 0 &&
+    !!scheduleTime &&
+    !savingSelf &&
+    !sharingCustom &&
+    (scheduleTarget === "ME" || (scheduleTarget === "FRIENDS" && !!message.trim() && selectedFriendIds.length > 0));
+
+  const activatePush = async () => {
+    if (!VAPID_PUBLIC_KEY) {
+      alert("NEXT_PUBLIC_VAPID_PUBLIC_KEY manquant");
+      return;
+    }
+    setPushBusy(true);
+    try {
+      await ensurePushSubscribed(VAPID_PUBLIC_KEY);
+      alert("Notifications activées ✅");
+    } catch (e) {
+      console.error(e);
+      alert("Impossible d’activer les notifications");
+    } finally {
+      setPushBusy(false);
     }
   };
 
@@ -463,25 +466,13 @@ export default function MotivationPage() {
       {/* Header */}
       <div
         className="page-header"
-        style={{
-          marginBottom: 10,
-          display: "flex",
-          justifyContent: "space-between",
-          gap: 8,
-        }}
+        style={{ marginBottom: 10, display: "flex", justifyContent: "space-between", gap: 8 }}
       >
         <div>
           <h1 className="h1" style={{ fontSize: 20, color: "#111827" }}>
             {t("motivation.pageTitle", "Motivation")}
           </h1>
-          <p
-            className="lead"
-            style={{
-              fontSize: 12,
-              marginTop: 2,
-              color: "#6b7280",
-            }}
-          >
+          <p className="lead" style={{ fontSize: 12, marginTop: 2, color: "#6b7280" }}>
             {t(
               "motivation.pageSubtitle",
               "Crée tes propres messages de motivation pour toi ou pour tes amis, et retrouve ici l’historique."
@@ -500,13 +491,12 @@ export default function MotivationPage() {
             }}
           >
             {t("motivation.header.connectedAs", "Connecté en tant que")}{" "}
-            {session.user?.email ??
-              t("motivation.header.clientFallback", "client")}
+            {session.user?.email ?? t("motivation.header.clientFallback", "client")}
           </div>
         )}
       </div>
 
-      {/* Barre d’actions & filtres */}
+      {/* Actions */}
       <div
         className="card"
         style={{
@@ -523,28 +513,32 @@ export default function MotivationPage() {
         }}
       >
         <div style={{ fontSize: 13, color: "#374151" }}>
-          <strong>{unreadCount}</strong>{" "}
-          {t(
-            "motivation.bar.unreadSuffix",
-            "notification(s) non lue(s)."
-          )}
+          <strong>{unreadCount}</strong> {t("motivation.bar.unreadSuffix", "notification(s) non lue(s).")}
           <br />
           <span style={{ fontSize: 11, color: "#6b7280" }}>
-            {t(
-              "motivation.bar.info",
-              "Les messages que tu programmes ou envoies s’affichent ici."
-            )}
+            {t("motivation.bar.info", "Les programmations et notifications s’affichent ici.")}
           </span>
         </div>
+
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          <div
+          <button
+            type="button"
+            className="btn"
             style={{
-              display: "inline-flex",
+              fontSize: 12,
+              background: "#111827",
+              color: "#ffffff",
               borderRadius: 999,
-              border: "1px solid #e5e7eb",
-              overflow: "hidden",
+              padding: "6px 10px",
+              opacity: pushBusy ? 0.7 : 1,
             }}
+            onClick={activatePush}
+            disabled={pushBusy}
           >
+            {pushBusy ? "Activation..." : "Activer les notifications"}
+          </button>
+
+          <div style={{ display: "inline-flex", borderRadius: 999, border: "1px solid #e5e7eb", overflow: "hidden" }}>
             <button
               type="button"
               onClick={() => setFilter("all")}
@@ -552,8 +546,7 @@ export default function MotivationPage() {
                 fontSize: 12,
                 padding: "4px 10px",
                 border: "none",
-                background:
-                  filter === "all" ? "#111827" : "transparent",
+                background: filter === "all" ? "#111827" : "transparent",
                 color: filter === "all" ? "#ffffff" : "#6b7280",
                 cursor: "pointer",
               }}
@@ -567,8 +560,7 @@ export default function MotivationPage() {
                 fontSize: 12,
                 padding: "4px 10px",
                 border: "none",
-                background:
-                  filter === "unread" ? "#111827" : "transparent",
+                background: filter === "unread" ? "#111827" : "transparent",
                 color: filter === "unread" ? "#ffffff" : "#6b7280",
                 cursor: "pointer",
               }}
@@ -584,36 +576,22 @@ export default function MotivationPage() {
             onClick={markAllAsRead}
             disabled={unreadCount === 0}
           >
-            {t(
-              "motivation.bar.markAllRead",
-              "Tout marquer comme lu"
-            )}
+            {t("motivation.bar.markAllRead", "Tout marquer comme lu")}
           </button>
 
           <button
             type="button"
             className="btn"
-            style={{
-              fontSize: 12,
-              background: "#111827",
-              color: "#ffffff",
-              borderRadius: 999,
-              padding: "6px 10px",
-            }}
+            style={{ fontSize: 12, background: "#111827", color: "#ffffff", borderRadius: 999, padding: "6px 10px" }}
             onClick={sendTestNotification}
             disabled={sending}
           >
-            {sending
-              ? t("motivation.bar.sending", "Envoi...")
-              : t(
-                  "motivation.bar.sendTest",
-                  "Envoyer une notif de test"
-                )}
+            {sending ? t("motivation.bar.sending", "Envoi...") : t("motivation.bar.sendTest", "Envoyer une notif de test")}
           </button>
         </div>
       </div>
 
-      {/* Bloc unique : message pour toi ET pour tes amis */}
+      {/* Message block */}
       <div
         className="card"
         style={{
@@ -626,27 +604,13 @@ export default function MotivationPage() {
           gap: 6,
         }}
       >
-        <div
-          style={{
-            fontSize: 14,
-            fontWeight: 700,
-            color: "#111827",
-          }}
-        >
-          {t(
-            "motivation.messageBlock.title",
-            "Crée ton message motivant"
-          )}
+        <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>
+          {t("motivation.messageBlock.title", "Crée ton message motivant")}
         </div>
-        <div
-          style={{
-            fontSize: 12,
-            color: "#6b7280",
-          }}
-        >
+        <div style={{ fontSize: 12, color: "#6b7280" }}>
           {t(
             "motivation.messageBlock.subtitle",
-            "Tu peux l’utiliser pour te motiver toi, ou pour motiver tes amis qui ont l’appli."
+            "Pour “Programmer pour moi”, tu recevras un message de Files Le Coach. Pour “Partager à mes amis”, ton texte sera envoyé."
           )}
         </div>
 
@@ -654,9 +618,7 @@ export default function MotivationPage() {
           value={message}
           onChange={(e) => {
             const value = e.target.value;
-            if (value.length <= CUSTOM_MESSAGE_MAX) {
-              setMessage(value);
-            }
+            if (value.length <= CUSTOM_MESSAGE_MAX) setMessage(value);
           }}
           rows={3}
           placeholder={t(
@@ -674,51 +636,18 @@ export default function MotivationPage() {
           }}
         />
 
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: 8,
-            marginTop: 4,
-            flexWrap: "wrap",
-          }}
-        >
-          <span
-            style={{
-              fontSize: 11,
-              color: remaining < 0 ? "#b91c1c" : "#6b7280",
-            }}
-          >
-            {remaining}{" "}
-            {t(
-              "motivation.messageBlock.remaining",
-              "caractères restants"
-            )}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginTop: 4, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 11, color: "#6b7280" }}>
+            {remaining} {t("motivation.messageBlock.remaining", "caractères restants")}
           </span>
-          <div
-            style={{
-              display: "flex",
-              gap: 6,
-              flexWrap: "wrap",
-            }}
-          >
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             <button
               type="button"
               className="btn btn-dash"
               onClick={() => openSchedule("ME")}
-              disabled={!message.trim()}
-              style={{
-                fontSize: 12,
-                borderRadius: 999,
-                padding: "6px 10px",
-                cursor: !message.trim() ? "not-allowed" : "pointer",
-              }}
+              style={{ fontSize: 12, borderRadius: 999, padding: "6px 10px" }}
             >
-              {t(
-                "motivation.messageBlock.programForMe",
-                "Programmer pour moi"
-              )}
+              Programmer pour moi
             </button>
             <button
               type="button"
@@ -735,63 +664,22 @@ export default function MotivationPage() {
                 cursor: !message.trim() ? "not-allowed" : "pointer",
               }}
             >
-              {t(
-                "motivation.messageBlock.shareWithFriends",
-                "Partager à mes amis"
-              )}
+              Partager à mes amis
             </button>
           </div>
         </div>
 
-        {/* Étape 2 : choix des jours + heure */}
+        {/* Step 2 */}
         {scheduleTarget && (
-          <div
-            style={{
-              marginTop: 8,
-              paddingTop: 8,
-              borderTop: "1px solid #e5e7eb",
-              display: "grid",
-              gap: 6,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 13,
-                fontWeight: 600,
-                color: "#111827",
-              }}
-            >
+          <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid #e5e7eb", display: "grid", gap: 6 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>
               {scheduleTarget === "ME"
-                ? t(
-                    "motivation.schedule.titleSelf",
-                    "Pour toi : choisis les jours et l’heure de ce message"
-                  )
-                : t(
-                    "motivation.schedule.titleFriends",
-                    "Pour tes amis : choisis les jours et l’heure de ce message"
-                  )}
-            </div>
-            <div
-              style={{
-                fontSize: 11,
-                color: "#6b7280",
-              }}
-            >
-              {t(
-                "motivation.schedule.subtitle",
-                "Ce message sera enregistré et utilisé pour envoyer des notifications aux jours et à l’heure choisis."
-              )}
+                ? "Pour toi : choisis les jours et l’heure (Files Le Coach)"
+                : "Pour tes amis : choisis les jours/heure et sélectionne les amis"}
             </div>
 
-            {/* Jours */}
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: 6,
-                marginTop: 2,
-              }}
-            >
+            {/* Days */}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 2 }}>
               {ALL_DAYS.map((day) => {
                 const active = scheduleDays.includes(day);
                 return (
@@ -815,110 +703,179 @@ export default function MotivationPage() {
               })}
             </div>
 
-            {/* Heure */}
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                marginTop: 4,
-                flexWrap: "wrap",
-              }}
-            >
-              <label
-                style={{
-                  fontSize: 12,
-                  color: "#374151",
-                }}
-              >
-                {t("motivation.schedule.timeLabel", "Heure :")}
-              </label>
+            {/* Time */}
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4, flexWrap: "wrap" }}>
+              <label style={{ fontSize: 12, color: "#374151" }}>Heure :</label>
               <input
                 type="time"
                 value={scheduleTime}
                 onChange={(e) => setScheduleTime(e.target.value)}
-                style={{
-                  fontSize: 12,
-                  padding: "4px 8px",
-                  borderRadius: 8,
-                  border: "1px solid #e5e7eb",
-                }}
+                style={{ fontSize: 12, padding: "4px 8px", borderRadius: 8, border: "1px solid #e5e7eb" }}
               />
             </div>
 
-            {/* Actions de validation */}
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "flex-end",
-                gap: 6,
-                marginTop: 6,
-                flexWrap: "wrap",
-              }}
-            >
+            {/* Friends selection */}
+            {scheduleTarget === "FRIENDS" && (
+              <div style={{ marginTop: 6, display: "grid", gap: 6 }}>
+                <div style={{ fontSize: 12, color: "#374151", fontWeight: 600 }}>Sélection des amis</div>
+
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  <input
+                    value={friendQuery}
+                    onChange={(e) => setFriendQuery(e.target.value)}
+                    placeholder="Rechercher par email / nom (min 2 caractères)"
+                    style={{
+                      flex: 1,
+                      minWidth: 240,
+                      fontSize: 12,
+                      padding: "6px 8px",
+                      borderRadius: 8,
+                      border: "1px solid #e5e7eb",
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-dash"
+                    onClick={loadFriends}
+                    disabled={loadingFriends}
+                    style={{ fontSize: 12, borderRadius: 999, padding: "6px 10px" }}
+                  >
+                    {loadingFriends ? "Chargement..." : "Mes amis"}
+                  </button>
+                </div>
+
+                {/* Selected */}
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {selectedFriendIds.length === 0 ? (
+                    <span style={{ fontSize: 11, color: "#6b7280" }}>
+                      Aucun ami sélectionné (obligatoire).
+                    </span>
+                  ) : (
+                    selectedFriendIds.map((id) => {
+                      const u =
+                        friends.find((f) => f.id === id) ||
+                        searchResults.find((s) => s.id === id);
+                      const label = u?.name || u?.email || id;
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          onClick={() => removeSelected(id)}
+                          style={{
+                            borderRadius: 999,
+                            border: "1px solid #e5e7eb",
+                            padding: "4px 10px",
+                            fontSize: 12,
+                            background: "#111827",
+                            color: "#fff",
+                            cursor: "pointer",
+                          }}
+                          title="Cliquer pour retirer"
+                        >
+                          {label} ✕
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+
+                {/* Friends list quick add */}
+                <div style={{ display: "grid", gap: 6 }}>
+                  <div style={{ fontSize: 11, color: "#6b7280" }}>Suggestions (tes amis acceptés)</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {friends.length === 0 ? (
+                      <span style={{ fontSize: 11, color: "#6b7280" }}>
+                        Pas d’amis pour le moment. Cherche un utilisateur et envoie une demande dans l’onglet “Amis” (à ajouter).
+                      </span>
+                    ) : (
+                      friends.map((f) => (
+                        <button
+                          key={f.id}
+                          type="button"
+                          onClick={() => addSelected(f.id)}
+                          style={{
+                            borderRadius: 999,
+                            border: "1px solid #e5e7eb",
+                            padding: "4px 10px",
+                            fontSize: 12,
+                            background: selectedFriendIds.includes(f.id) ? "#111827" : "#ffffff",
+                            color: selectedFriendIds.includes(f.id) ? "#fff" : "#374151",
+                            cursor: "pointer",
+                          }}
+                        >
+                          {(f.name || f.email || f.id).toString()}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {/* Search results add */}
+                {searchResults.length > 0 && (
+                  <div style={{ display: "grid", gap: 6 }}>
+                    <div style={{ fontSize: 11, color: "#6b7280" }}>Résultats recherche (utilisateurs)</div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      {searchResults.map((u) => (
+                        <button
+                          key={u.id}
+                          type="button"
+                          onClick={() => addSelected(u.id)}
+                          style={{
+                            borderRadius: 999,
+                            border: "1px solid #e5e7eb",
+                            padding: "4px 10px",
+                            fontSize: 12,
+                            background: selectedFriendIds.includes(u.id) ? "#111827" : "#ffffff",
+                            color: selectedFriendIds.includes(u.id) ? "#fff" : "#374151",
+                            cursor: "pointer",
+                          }}
+                          title="Ajouter à la sélection"
+                        >
+                          {(u.name || u.email || u.id).toString()}
+                        </button>
+                      ))}
+                    </div>
+                    <div style={{ fontSize: 11, color: "#6b7280" }}>
+                      Note : pour envoyer réellement, l’utilisateur doit être un ami accepté.
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Actions */}
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
               <button
                 type="button"
                 className="btn btn-dash"
                 onClick={cancelSchedule}
-                style={{
-                  fontSize: 12,
-                  borderRadius: 999,
-                  padding: "6px 10px",
-                }}
+                style={{ fontSize: 12, borderRadius: 999, padding: "6px 10px" }}
               >
-                {t("motivation.schedule.cancel", "Annuler")}
+                Annuler
               </button>
               <button
                 type="button"
                 className="btn"
                 onClick={confirmSchedule}
-                disabled={
-                  scheduleDays.length === 0 ||
-                  !scheduleTime ||
-                  !message.trim() ||
-                  savingSelf ||
-                  sharingCustom
-                }
+                disabled={!canConfirm}
                 style={{
                   fontSize: 12,
                   background: "#111827",
                   color: "#ffffff",
                   borderRadius: 999,
                   padding: "6px 10px",
-                  opacity:
-                    scheduleDays.length === 0 ||
-                    !scheduleTime ||
-                    !message.trim() ||
-                    savingSelf ||
-                    sharingCustom
-                      ? 0.6
-                      : 1,
-                  cursor:
-                    scheduleDays.length === 0 ||
-                    !scheduleTime ||
-                    !message.trim() ||
-                    savingSelf ||
-                    sharingCustom
-                      ? "not-allowed"
-                      : "pointer",
+                  opacity: canConfirm ? 1 : 0.6,
+                  cursor: canConfirm ? "pointer" : "not-allowed",
                 }}
               >
-                {savingSelf || sharingCustom
-                  ? t(
-                      "motivation.schedule.saving",
-                      "Enregistrement..."
-                    )
-                  : t(
-                      "motivation.schedule.confirm",
-                      "Valider ce message"
-                    )}
+                {savingSelf || sharingCustom ? "Enregistrement..." : "Valider"}
               </button>
             </div>
           </div>
         )}
       </div>
 
-      {/* Liste des notifications */}
+      {/* Notifications list */}
       <div className="grid gap-3">
         {visibleNotifications.length === 0 ? (
           <div
@@ -932,15 +889,7 @@ export default function MotivationPage() {
               color: "#6b7280",
             }}
           >
-            {t(
-              "motivation.empty.title",
-              "Aucune notification à afficher pour le moment."
-            )}
-            <br />
-            {t(
-              "motivation.empty.hint",
-              'Programme un message ou utilise le bouton “Envoyer une notif de test” pour voir le rendu.'
-            )}
+            Aucune notification à afficher.
           </div>
         ) : (
           visibleNotifications.map((n) => (
@@ -956,20 +905,8 @@ export default function MotivationPage() {
                 gap: 4,
               }}
             >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: 8,
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: 14,
-                    fontWeight: 700,
-                    color: "#111827",
-                  }}
-                >
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>
                   {n.title}
                   {!n.read && (
                     <span
@@ -984,98 +921,33 @@ export default function MotivationPage() {
                         color: "#f9fafb",
                       }}
                     >
-                      {t("motivation.card.badgeNew", "Nouveau")}
+                      Nouveau
                     </span>
                   )}
                 </div>
-                <div
-                  style={{
-                    fontSize: 11,
-                    color: "#6b7280",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {formatTime(n.createdAt)}
-                </div>
+                <div style={{ fontSize: 11, color: "#6b7280", whiteSpace: "nowrap" }}>{formatTime(n.createdAt)}</div>
               </div>
-              {n.source && (
-                <div
-                  style={{
-                    fontSize: 11,
-                    color: "#6b7280",
-                  }}
-                >
-                  {t("motivation.card.sourcePrefix", "Source :")}{" "}
-                  {n.source}
-                </div>
-              )}
-              <p
-                style={{
-                  fontSize: 13,
-                  color: "#374151",
-                  marginTop: 2,
-                  marginBottom: 4,
-                }}
-              >
-                {n.message}
-              </p>
 
-              {/* Notation */}
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                  marginTop: 4,
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: 11,
-                    color: "#6b7280",
-                    marginRight: 2,
-                  }}
-                >
-                  {t("motivation.card.ratingLabel", "Ta note :")}
-                </span>
+              {n.source && <div style={{ fontSize: 11, color: "#6b7280" }}>Source : {n.source}</div>}
+
+              <p style={{ fontSize: 13, color: "#374151", marginTop: 2, marginBottom: 4 }}>{n.message}</p>
+
+              {/* Rating */}
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
+                <span style={{ fontSize: 11, color: "#6b7280", marginRight: 2 }}>Ta note :</span>
                 <div>
                   {[1, 2, 3, 4, 5].map((star) => (
                     <button
                       key={star}
                       type="button"
                       onClick={() => setRating(n.id, star)}
-                      style={{
-                        background: "transparent",
-                        border: "none",
-                        padding: 0,
-                        margin: "0 1px",
-                        cursor: "pointer",
-                      }}
+                      style={{ background: "transparent", border: "none", padding: 0, margin: "0 1px", cursor: "pointer" }}
                     >
-                      <span
-                        style={{
-                          fontSize: 16,
-                          color:
-                            star <= (n.rating ?? 0)
-                              ? "#facc15"
-                              : "#d1d5db",
-                        }}
-                      >
-                        ★
-                      </span>
+                      <span style={{ fontSize: 16, color: star <= (n.rating ?? 0) ? "#facc15" : "#d1d5db" }}>★</span>
                     </button>
                   ))}
                 </div>
-                {typeof n.rating === "number" && (
-                  <span
-                    style={{
-                      fontSize: 11,
-                      color: "#6b7280",
-                    }}
-                  >
-                    ({n.rating}/5)
-                  </span>
-                )}
+                {typeof n.rating === "number" && <span style={{ fontSize: 11, color: "#6b7280" }}>({n.rating}/5)</span>}
               </div>
 
               {!n.read && (
@@ -1086,10 +958,7 @@ export default function MotivationPage() {
                     style={{ fontSize: 12, padding: "4px 8px" }}
                     onClick={() => markAsRead(n.id)}
                   >
-                    {t(
-                      "motivation.card.markRead",
-                      "Marquer comme lu"
-                    )}
+                    Marquer comme lu
                   </button>
                 </div>
               )}
