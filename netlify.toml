@@ -4,45 +4,42 @@
   # Ton app Next se trouve dans apps/web
   base    = "apps/web"
 
-  # ⬇️ Ici on supprime les fichiers fantômes AVANT le build
-  command = "rm -f components/ExerciseLink.tsx components/DemoBrowser.tsx && npm ci --no-audit --no-fund && npm run build"
+  # Nettoyage + install sans scripts (évite postinstall prisma) + prisma generate + build
+  command = "rm -f components/ExerciseLink.tsx components/DemoBrowser.tsx && npm ci --no-audit --no-fund --ignore-scripts && npx prisma generate --schema=prisma/schema.prisma && npm run build"
 
   # Dossier de sortie de Next relatif à base
   publish = ".next"
 
-
 [build.environment]
   NODE_VERSION = "20"
-  NPM_FLAGS = "--no-audit --no-fund"
   NEXT_TELEMETRY_DISABLED = "1"
+  NPM_FLAGS = "--no-audit --no-fund"
 
-  # === VAPID (renseigne les vraies valeurs dans le dashboard Netlify) ===
-  NEXT_PUBLIC_VAPID_PUBLIC_KEY = ""
-  VAPID_PUBLIC_KEY   = ""
-  VAPID_PRIVATE_KEY  = ""
-  VAPID_SUBJECT      = "mailto:admin@example.com"
-
-  # === Tes variables existantes (met les vraies valeurs côté Netlify) ===
-  OPEN_API_KEY   = ""
-  NEXT_PUBLIC_SUPABASE_URL   = ""
-  NEXT_PUBLIC_SUPABASE_ANON_KEY = ""
-  SUPABASE_SERVICE_ROLE_KEY  = ""
-  UPSTASH_REDIS_REST_URL   = ""
-  UPSTASH_REDIS_REST_TOKEN = ""
-  ANALYZE_RL_IP_LIMIT   = "3"
-  ANALYZE_RL_IP_WINDOW  = "60"
-  ANALYZE_RL_ORG_LIMIT  = "10"
-  ANALYZE_RL_ORG_WINDOW = "60"
-  ANALYZE_UPLOAD_BUCKET = "analyze-uploads-public"
+  # ⚠️ IMPORTANT :
+  # Ne mets PAS tes secrets ici avec "".
+  # Configure-les dans Netlify > Site settings > Environment variables :
+  #
+  # - DATABASE_URL
+  # - NEXTAUTH_SECRET
+  # - SPOTIFY_CLIENT_ID
+  # - SPOTIFY_CLIENT_SECRET
+  #
+  # - NEXT_PUBLIC_VAPID_PUBLIC_KEY
+  # - VAPID_PUBLIC_KEY
+  # - VAPID_PRIVATE_KEY
+  # - VAPID_SUBJECT
+  #
+  # (et le reste : Supabase, etc.)
 
 [functions]
   # Avec [build].base = "apps/web", tes fonctions vivent dans apps/web/netlify/functions/
+  directory = "netlify/functions"
   node_bundler = "esbuild"
   external_node_modules = ["@upstash/redis", "@upstash/ratelimit", "web-push"]
 
-# (optionnel) Si tu veux stocker les fonctions à la racine, décommente la ligne suivante
-# et place tes fonctions dans netlify/functions/ :
-# directory = "../../netlify/functions"
+# Optionnel : tu peux aussi forcer le schedule ici (en plus de exports.config dans la function)
+[functions."push-cron"]
+  schedule = "*/1 * * * *"
 
 [[headers]]
   for = "/api/analyze"
