@@ -7,30 +7,33 @@ import { prisma } from "@/lib/prisma";
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   const meId = (session?.user as any)?.id as string | undefined;
-  if (!meId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const q = req.nextUrl.searchParams.get("q")?.trim() ?? "";
+  if (!meId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const q = (req.nextUrl.searchParams.get("q") ?? "").trim();
   if (q.length < 2) return NextResponse.json([]);
 
+  // SQLite/Prisma: pas de `mode: "insensitive"` (selon connecteur/collation)
+  // -> on fait un search simple "contains"
   const users = await prisma.appUser.findMany({
     where: {
       id: { not: meId },
       OR: [
-        { email: { contains: q, mode: "insensitive" } },
-        { name: { contains: q, mode: "insensitive" } },
+        { email: { contains: q } },
+        { name: { contains: q } },
       ],
     },
     take: 10,
     orderBy: { updatedAt: "desc" },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      image: true,
+    },
   });
 
-  // réponse minimale
-  return NextResponse.json(
-    users.map((u) => ({
-      id: u.id,
-      email: u.email,
-      name: u.name,
-      image: u.image,
-    }))
-  );
+  return NextResponse.json(users);
 }
