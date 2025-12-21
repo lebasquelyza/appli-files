@@ -2,6 +2,7 @@
 "use client";
 
 import { useMemo, useState, useEffect } from "react";
+import Link from "next/link";
 import { useLanguage } from "@/components/LanguageProvider";
 import GenerateClient from "./GenerateClient";
 import type {
@@ -510,8 +511,11 @@ export default function ProfileClient(props: Props) {
                         {s.title || (idx >= 0 ? `Séance ${idx + 1}` : "Séance")}
                         {s.type && <span style={{ color: "#6b7280" }}> · {s.type}</span>}
                       </a>
-                      <a
+
+                      {/* ✅ CHANGED: Link scroll={false} pour ne pas remonter en haut */}
+                      <Link
                         href={removeHref}
+                        scroll={false}
                         aria-label={tf("settings.profile.lists.removeLabel", "Supprimer cette séance")}
                         className="text-xs"
                         style={{
@@ -524,10 +528,11 @@ export default function ProfileClient(props: Props) {
                           display: "inline-flex",
                           alignItems: "center",
                           justifyContent: "center",
+                          textDecoration: "none",
                         }}
                       >
                         🗑️
-                      </a>
+                      </Link>
                     </li>
                   );
                 })}
@@ -600,8 +605,11 @@ export default function ProfileClient(props: Props) {
                         {s.title || (idx >= 0 ? `Séance ${idx + 1}` : "Séance")}
                         {s.type && <span style={{ color: "#6b7280" }}> · {s.type}</span>}
                       </a>
-                      <a
+
+                      {/* ✅ CHANGED: Link scroll={false} pour ne pas remonter en haut */}
+                      <Link
                         href={removeHref}
+                        scroll={false}
                         aria-label={tf("settings.profile.lists.removeLabel", "Supprimer cette séance")}
                         className="text-xs"
                         style={{
@@ -614,10 +622,11 @@ export default function ProfileClient(props: Props) {
                           display: "inline-flex",
                           alignItems: "center",
                           justifyContent: "center",
+                          textDecoration: "none",
                         }}
                       >
                         🗑️
-                      </a>
+                      </Link>
                     </li>
                   );
                 })}
