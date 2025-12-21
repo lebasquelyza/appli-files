@@ -1,5 +1,7 @@
+// apps/web/lib/auth.ts
 import type { NextAuthOptions } from "next-auth";
 import SpotifyProvider from "next-auth/providers/spotify";
+import { prisma } from "@/lib/prisma"; // ✅ NEW: pour AppUser annuaire interne
 
 async function refreshSpotifyToken(refreshToken: string) {
   const body = new URLSearchParams({
@@ -17,7 +19,9 @@ async function refreshSpotifyToken(refreshToken: string) {
 
   const data = await res.json();
   if (!res.ok) {
-    throw new Error((data as any)?.error_description || "Failed to refresh token");
+    throw new Error(
+      (data as any)?.error_description || "Failed to refresh token"
+    );
   }
 
   const expiresAt = Date.now() + Number((data as any).expires_in ?? 3600) * 1000;
@@ -46,7 +50,7 @@ export const authOptions: NextAuthOptions = {
             "streaming",
             "user-modify-playback-state",
             "user-read-playback-state",
-            "user-library-read", // accès aux titres likés
+            "user-library-read",
           ].join(" "),
           show_dialog: true,
         },
@@ -81,7 +85,9 @@ export const authOptions: NextAuthOptions = {
 
       if (exp && Date.now() > exp - 60_000 && (token as any).refreshToken) {
         try {
-          const r = await refreshSpotifyToken((token as any).refreshToken as string);
+          const r = await refreshSpotifyToken(
+            (token as any).refreshToken as string
+          );
           (token as any).accessToken = r.accessToken;
           (token as any).refreshToken = r.refreshToken;
           (token as any).expiresAt = r.expiresAt;
@@ -99,10 +105,33 @@ export const authOptions: NextAuthOptions = {
       // on met l'accessToken dans la session (comme tu le faisais déjà)
       (session as any).accessToken = (token as any).accessToken;
 
-      // 🔴 AJOUT IMPORTANT : exposer un user.id dans la session
-      // NextAuth met en général l'id dans token.sub (id Spotify ici)
+      // ✅ user.id stable (Spotify id via token.sub)
       if (session.user && token.sub) {
         (session.user as any).id = token.sub;
+      }
+
+      // ✅ NEW: upsert dans l'annuaire AppUser pour "se trouver entre amis"
+      // (On ne casse rien si la table n'existe pas encore : ça log juste une erreur)
+      try {
+        const id = (session.user as any)?.id as string | undefined;
+        if (id) {
+          await prisma.appUser.upsert({
+            where: { id },
+            update: {
+              email: session.user.email ?? undefined,
+              name: session.user.name ?? undefined,
+              image: (session.user as any).image ?? undefined,
+            },
+            create: {
+              id,
+              email: session.user.email ?? undefined,
+              name: session.user.name ?? undefined,
+              image: (session.user as any).image ?? undefined,
+            },
+          });
+        }
+      } catch (e) {
+        console.error("AppUser upsert failed", e);
       }
 
       return session;
