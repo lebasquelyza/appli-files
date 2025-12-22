@@ -1,6 +1,7 @@
 // apps/web/app/api/push/subscribe/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
+import { getToken } from "next-auth/jwt";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
@@ -16,13 +17,24 @@ export async function POST(req: NextRequest) {
   const prisma = new PrismaClient();
 
   try {
-    // ✅ Session NextAuth
+    // ✅ 1) On essaie la session (parfois null en prod)
     const session = await getServerSession(authOptions);
-
-    // ✅ Identité robuste: priorité à user.id, fallback sur email
-    const identity =
+    let identity =
       ((session?.user as any)?.id as string | undefined) ||
       (session?.user?.email as string | undefined);
+
+    // ✅ 2) Fallback ultra robuste: lecture du JWT NextAuth directement
+    // (c'est ça qui règle 99% des 401 "no_userId" sur Netlify/iOS)
+    if (!identity) {
+      const token = await getToken({
+        req: req as any,
+        secret: process.env.NEXTAUTH_SECRET,
+      });
+
+      identity =
+        (token?.sub as string | undefined) ||
+        (token?.email as string | undefined);
+    }
 
     if (!identity) {
       return NextResponse.json(
@@ -47,37 +59,15 @@ export async function POST(req: NextRequest) {
     const auth = subscription.keys?.auth;
 
     if (!p256dh || !auth) {
-      return NextResponse.json({ ok: false, error: "missing_keys" }, { status: 400 });
+      return NextResponse.json(
+        { ok: false, error: "missing_keys" },
+        { status: 400 }
+      );
     }
 
-    // (Optionnel) garder l'annuaire AppUser à jour si identity = spotifyId
-    // Si identity = email, on ne touche pas AppUser (car id attendu = spotifyId)
-    if ((session?.user as any)?.id) {
-      const userId = (session?.user as any)?.id as string;
-      await prisma.appUser
-        .upsert({
-          where: { id: userId },
-          update: {
-            email: session?.user?.email ?? undefined,
-            name: session?.user?.name ?? undefined,
-            image: (session?.user as any)?.image ?? undefined,
-          },
-          create: {
-            id: userId,
-            email: session?.user?.email ?? undefined,
-            name: session?.user?.name ?? undefined,
-            image: (session?.user as any)?.image ?? undefined,
-          },
-        })
-        .catch(() => {
-          // on évite de faire échouer l'inscription push si AppUser pose souci
-        });
-    }
-
-    // ✅ Stockage dans Prisma pour que push-cron.js puisse envoyer
-    // NOTE: "userId" ici = identity (spotifyId OU email)
+    // ✅ Stockage Prisma pour le cron
     await prisma.pushSubscription.upsert({
-      where: { endpoint }, // endpoint doit être @unique dans Prisma
+      where: { endpoint }, // endpoint doit être @unique
       update: { userId: identity, p256dh, auth },
       create: { userId: identity, endpoint, p256dh, auth },
     });
