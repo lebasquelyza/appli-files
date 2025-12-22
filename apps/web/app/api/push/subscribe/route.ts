@@ -17,8 +17,16 @@ function safeParseUrl(raw: string) {
 
 export async function POST(req: NextRequest) {
   try {
-    const rawUrl = (process.env.UPSTASH_REDIS_REST_URL ?? "").trim();
+    // ✅ Nettoyage robuste des variables d’env
+    const rawUrl = (process.env.UPSTASH_REDIS_REST_URL ?? "")
+      .trim()
+      .replace(/\s+/g, ""); // enlève espaces / retours ligne partout
+
     const token = (process.env.UPSTASH_REDIS_REST_TOKEN ?? "").trim();
+
+    // 🔎 Logs de debug (sans exposer le token)
+    console.log("[push/subscribe] URL raw:", JSON.stringify(process.env.UPSTASH_REDIS_REST_URL));
+    console.log("[push/subscribe] URL cleaned:", JSON.stringify(rawUrl));
 
     if (!rawUrl || !token) {
       console.error("[push/subscribe] Missing Upstash env", {
@@ -34,7 +42,7 @@ export async function POST(req: NextRequest) {
     const parsed = safeParseUrl(rawUrl);
     if (!parsed.ok) {
       console.error("[push/subscribe] Invalid UPSTASH_REDIS_REST_URL", {
-        rawUrlPreview: rawUrl.slice(0, 60),
+        rawUrlPreview: rawUrl.slice(0, 80),
         error: parsed.error,
       });
       return NextResponse.json(
@@ -42,6 +50,8 @@ export async function POST(req: NextRequest) {
         { status: 500 }
       );
     }
+
+    console.log("[push/subscribe] Using Upstash host:", parsed.url.host);
 
     const body = await req.json().catch(() => null);
     const deviceId = body?.deviceId as string | undefined;
@@ -54,7 +64,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Construit l’URL Upstash REST
+    // 🔑 Construction URL Upstash REST
     const upstashBase = parsed.url.toString().replace(/\/+$/, "");
     const key = `${KEY_PREFIX}${deviceId}`;
     const upstashUrl = `${upstashBase}/set/${encodeURIComponent(key)}`;
@@ -70,7 +80,7 @@ export async function POST(req: NextRequest) {
         body: JSON.stringify(subscription),
       });
     } catch (e: any) {
-      // ✅ Ici on capture le fameux "fetch failed"
+      // ❌ Erreur DNS / réseau (celle que tu avais)
       console.error("[push/subscribe] fetch failed", {
         host: parsed.url.host,
         protocol: parsed.url.protocol,
