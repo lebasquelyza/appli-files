@@ -1,10 +1,8 @@
 // apps/web/app/api/push/subscribe/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
-
-// ⚠️ adapte ce chemin selon ton projet NextAuth
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth"; // <-- change si nécessaire
+import { authOptions } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,15 +16,25 @@ export async function POST(req: NextRequest) {
   const prisma = new PrismaClient();
 
   try {
-    // 1) User connecté
+    // ✅ Session NextAuth
     const session = await getServerSession(authOptions);
-    const userId = (session?.user as any)?.id as string | undefined;
+    const email = session?.user?.email ?? null;
 
-    if (!userId) {
-      return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+    if (!email) {
+      return NextResponse.json({ ok: false, error: "unauthorized_no_session" }, { status: 401 });
     }
 
-    // 2) Body
+    // ✅ Retrouver le userId via email
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true },
+    });
+
+    if (!user?.id) {
+      return NextResponse.json({ ok: false, error: "unauthorized_user_not_found" }, { status: 401 });
+    }
+
+    // ✅ Body
     const body = await req.json().catch(() => null);
     const subscription = body?.subscription as WebPushSubscription | undefined;
 
@@ -42,19 +50,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "missing_keys" }, { status: 400 });
     }
 
-    // 3) Upsert par endpoint (évite les doublons)
-    //    - si endpoint déjà connu, on met à jour userId + keys
-    //    - sinon on crée
+    // ✅ Upsert (endpoint unique)
     await prisma.pushSubscription.upsert({
-      where: { endpoint }, // endpoint doit être @unique dans Prisma
+      where: { endpoint },
       update: {
-        userId,
+        userId: user.id,
         p256dh,
         auth,
-        updatedAt: new Date(),
       },
       create: {
-        userId,
+        userId: user.id,
         endpoint,
         p256dh,
         auth,
