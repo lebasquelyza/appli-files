@@ -16,25 +16,13 @@ export async function POST(req: NextRequest) {
   const prisma = new PrismaClient();
 
   try {
-    // ✅ Session NextAuth
     const session = await getServerSession(authOptions);
-    const email = session?.user?.email ?? null;
+    const userId = (session?.user as any)?.id as string | undefined;
 
-    if (!email) {
-      return NextResponse.json({ ok: false, error: "unauthorized_no_session" }, { status: 401 });
+    if (!userId) {
+      return NextResponse.json({ ok: false, error: "unauthorized_no_userId" }, { status: 401 });
     }
 
-    // ✅ Retrouver le userId via email
-    const user = await prisma.user.findUnique({
-      where: { email },
-      select: { id: true },
-    });
-
-    if (!user?.id) {
-      return NextResponse.json({ ok: false, error: "unauthorized_user_not_found" }, { status: 401 });
-    }
-
-    // ✅ Body
     const body = await req.json().catch(() => null);
     const subscription = body?.subscription as WebPushSubscription | undefined;
 
@@ -50,20 +38,28 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "missing_keys" }, { status: 400 });
     }
 
-    // ✅ Upsert (endpoint unique)
-    await prisma.pushSubscription.upsert({
-      where: { endpoint },
+    // (Optionnel mais recommandé) s'assurer que l'utilisateur existe dans AppUser
+    // Ton callback session le fait déjà, mais là au moins on sécurise.
+    await prisma.appUser.upsert({
+      where: { id: userId },
       update: {
-        userId: user.id,
-        p256dh,
-        auth,
+        email: session?.user?.email ?? undefined,
+        name: session?.user?.name ?? undefined,
+        image: (session?.user as any)?.image ?? undefined,
       },
       create: {
-        userId: user.id,
-        endpoint,
-        p256dh,
-        auth,
+        id: userId,
+        email: session?.user?.email ?? undefined,
+        name: session?.user?.name ?? undefined,
+        image: (session?.user as any)?.image ?? undefined,
       },
+    });
+
+    // ✅ Stockage subscription pour le cron (Prisma)
+    await prisma.pushSubscription.upsert({
+      where: { endpoint }, // endpoint doit être @unique
+      update: { userId, p256dh, auth },
+      create: { userId, endpoint, p256dh, auth },
     });
 
     return NextResponse.json({ ok: true });
