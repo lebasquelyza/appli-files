@@ -46,8 +46,8 @@ export async function ensurePushSubscription(vapidPublicKey: string) {
 }
 
 /**
- * Active les notifications ET enregistre la subscription via /api/push/subscribe (NextAuth),
- * qui upsert ensuite en DB Supabase (service role).
+ * Active les notifications ET enregistre la subscription via /api/push/subscribe.
+ * Le serveur doit ensuite l'upsert en DB (Supabase) en associant au user connecté.
  */
 export async function enableWebPush(vapidPublicKey: string) {
   if (typeof window === "undefined") throw new Error("Client only");
@@ -66,12 +66,13 @@ export async function enableWebPush(vapidPublicKey: string) {
     throw new Error("Subscription invalide: endpoint/keys manquants");
   }
 
-  // 3) Envoi au serveur (NextAuth)
+  // 3) Envoi au serveur (NextAuth session cookies)
   const deviceId = getDeviceId();
 
   const res = await fetch("/api/push/subscribe", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: "include", // ✅ IMPORTANT: envoie les cookies NextAuth
     body: JSON.stringify({
       deviceId,
       subscription: subJson,
