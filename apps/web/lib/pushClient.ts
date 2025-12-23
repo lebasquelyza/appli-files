@@ -1,5 +1,5 @@
 // apps/web/lib/pushClient.ts
-import { supabase } from "@/lib/supabaseClient";
+import { getSupabase } from "@/lib/supabaseClient";
 
 const DEVICE_ID_KEY = "device:id";
 
@@ -49,24 +49,23 @@ export async function ensurePushSubscription(vapidPublicKey: string) {
 /**
  * Active les notifications ET enregistre la subscription en DB Supabase (vraies notifs).
  * Pré-requis:
- * - user Supabase Auth connecté (supabase.auth)
- * - table push_subscriptions + RLS (user_id = auth.uid())
+ * - utilisateur connecté via Supabase Auth
+ * - table "push_subscriptions" avec endpoint UNIQUE
  */
 export async function enableWebPush(vapidPublicKey: string) {
   if (typeof window === "undefined") throw new Error("Client only");
   if (!window.isSecureContext) throw new Error("Web Push nécessite HTTPS (ou localhost)");
   if (!("Notification" in window)) throw new Error("Notifications unsupported");
 
+  const supabase = getSupabase();
+
   // 0) user connecté Supabase
-  const {
-    data: { user },
-    error: userErr,
-  } = await supabase.auth.getUser();
-
+  const { data, error: userErr } = await supabase.auth.getUser();
   if (userErr) throw new Error(`Supabase getUser error: ${userErr.message}`);
-  if (!user) throw new Error("Utilisateur non connecté (Supabase Auth) — impossible d’enregistrer la subscription");
+  const user = data?.user;
+  if (!user) throw new Error("Utilisateur non connecté (Supabase Auth)");
 
-  // 1) Permission notifications
+  // 1) Permission
   const perm = await Notification.requestPermission();
   if (perm !== "granted") throw new Error(`Permission notifications refusée (perm=${perm})`);
 
@@ -82,20 +81,24 @@ export async function enableWebPush(vapidPublicKey: string) {
     throw new Error("Subscription invalide: endpoint/keys manquants");
   }
 
-  // 3) Save Supabase (upsert)
-  const payload = {
-    user_id: user.id,
-    endpoint,
-    p256dh,
-    auth,
-    user_agent: navigator.userAgent,
-    // device_id si tu veux (optionnel)
-    device_id: getDeviceId(),
-  };
+  // 3) Upsert Supabase
+  const device_id = getDeviceId();
+  const user_agent = navigator.userAgent;
 
   const { error: upsertErr } = await supabase
     .from("push_subscriptions")
-    .upsert(payload as any, { onConflict: "endpoint" });
+    .upsert(
+      {
+        user_id: user.id,
+        endpoint,
+        p256dh,
+        auth,
+        device_id,
+        user_agent,
+        updated_at: new Date().toISOString(),
+      } as any,
+      { onConflict: "endpoint" }
+    );
 
   if (upsertErr) {
     throw new Error(`Supabase upsert push_subscriptions failed: ${upsertErr.message}`);
