@@ -22,10 +22,11 @@ function getSupabaseAdmin() {
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    const email = (session?.user as any)?.email as string | undefined;
 
-    if (!email) {
-      return NextResponse.json({ ok: false, error: "unauthorized_no_email" }, { status: 401 });
+    // ✅ ID stable NextAuth (Spotify id = token.sub)
+    const appUserId = (session?.user as any)?.id as string | undefined;
+    if (!appUserId) {
+      return NextResponse.json({ ok: false, error: "unauthorized_no_app_user_id" }, { status: 401 });
     }
 
     const body = await req.json().catch(() => null);
@@ -49,43 +50,18 @@ export async function POST(req: NextRequest) {
 
     const supabase = getSupabaseAdmin();
 
-    // ✅ 1) récupérer le profile via email
-    const { data: profile, error: profErr } = await supabase
-      .from("profiles")
-      .select("id,email,pseudo")
-      .eq("email", email)
-      .maybeSingle<{ id: string; email: string | null; pseudo: string | null }>();
-
-    if (profErr) {
-      console.error("[push/subscribe] profile lookup failed", profErr);
-      return NextResponse.json({ ok: false, error: "profile_lookup_failed" }, { status: 500 });
-    }
-
-    if (!profile?.id) {
-      return NextResponse.json(
-        { ok: false, error: "no_profile_for_email", hint: "Vérifie le trigger handle_new_user sur auth.users." },
-        { status: 401 }
-      );
-    }
-
-    // ✅ option : exiger un pseudo avant activation (décommente si tu veux)
-    // if (!profile.pseudo || profile.pseudo.trim().length === 0) {
-    //   return NextResponse.json({ ok: false, error: "missing_pseudo" }, { status: 400 });
-    // }
-
-    // ✅ 2) upsert subscription
     const { error } = await supabase
       .from("push_subscriptions")
       .upsert(
         {
-          user_id: profile.id, // UUID auth.users.id
+          app_user_id: appUserId,
           device_id: deviceId,
           endpoint,
           p256dh,
           auth,
           user_agent: userAgent,
         },
-        { onConflict: "user_id,device_id" }
+        { onConflict: "app_user_id,device_id" }
       );
 
     if (error) {
@@ -95,7 +71,10 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ok: true });
   } catch (e: any) {
-    console.error("[push/subscribe] fatal", e);
-    return NextResponse.json({ ok: false, error: "fatal", message: String(e?.message || e) }, { status: 500 });
+    console.error("[push/subscribe] Fatal error", e);
+    return NextResponse.json(
+      { ok: false, error: "fatal", message: String(e?.message || e) },
+      { status: 500 }
+    );
   }
 }
