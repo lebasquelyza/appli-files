@@ -1,79 +1,75 @@
 // apps/web/app/api/push/test/route.ts
 import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
-
-const url = process.env.UPSTASH_REDIS_REST_URL!;
-const token = process.env.UPSTASH_REDIS_REST_TOKEN!;
-const KEY_PREFIX = "push:sub:";
+export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   try {
-    // --- Params ---
-    const { deviceId, payload } = await req.json();
-    if (!deviceId) {
-      return NextResponse.json({ ok: false, error: "missing_device" }, { status: 400 });
+    const session = await getServerSession(authOptions);
+    const userId = (session?.user as any)?.id as string | undefined;
+
+    if (!userId) {
+      return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }
 
-    // --- VAPID env checks ---
-    const VAPID_PUB = process.env.VAPID_PUBLIC_KEY;
-    const VAPID_PRIV = process.env.VAPID_PRIVATE_KEY;
-    const VAPID_SUBJ = process.env.VAPID_SUBJECT || "mailto:admin@example.com";
-    if (!VAPID_PUB || !VAPID_PRIV) {
+    const PUB = process.env.VAPID_PUBLIC_KEY;
+    const PRIV = process.env.VAPID_PRIVATE_KEY;
+    const SUBJ = process.env.VAPID_SUBJECT || "mailto:admin@example.com";
+
+    if (!PUB || !PRIV) {
       return NextResponse.json({ ok: false, error: "missing_vapid_keys" }, { status: 500 });
     }
 
-    // --- Get subscription from Upstash ---
-    const r = await fetch(`${url}/get/${KEY_PREFIX}${deviceId}`, {
-      headers: { Authorization: `Bearer ${token}` },
-      cache: "no-store",
-    });
-    if (!r.ok) {
-      return NextResponse.json({ ok: false, error: "kv_get_failed" }, { status: 500 });
-    }
-    const { result } = await r.json();
-    if (!result) {
-      return NextResponse.json({ ok: false, error: "not_found" }, { status: 404 });
-    }
-    const subscription = JSON.parse(result);
-
-    // --- web-push (dynamic import to avoid edge bundling) ---
     const webpush = (await import("web-push")).default;
-    webpush.setVapidDetails(VAPID_SUBJ, VAPID_PUB, VAPID_PRIV);
+    webpush.setVapidDetails(SUBJ, PUB, PRIV);
 
-    // --- Payload (default: Files Coaching) ---
-    const body = JSON.stringify(
-      payload ?? {
-        title: "Files Coaching",
-        body: "Test push : prêt·e pour 10 min ? 💪",
-        url: "/dashboard",
-      }
-    );
+    const subs = await prisma.pushSubscription.findMany({
+      where: { userId },
+      select: { endpoint: true, p256dh: true, auth: true },
+    });
 
-    await webpush.sendNotification(subscription, body);
-    return NextResponse.json({ ok: true });
-  } catch (err: any) {
-    const statusCode = Number(err?.statusCode || err?.status || 500);
-    const msg = String(err?.message || err);
-
-    // Subscription expired/gone — clean it up to avoid repeated failures
-    if (statusCode === 410) {
-      const body = await req
-        .json()
-        .catch(() => ({ deviceId: undefined })) as { deviceId?: string };
-      const id = body?.deviceId;
-      if (id) {
-        try {
-          await fetch(`${url}/del/${KEY_PREFIX}${id}`, {
-            method: "POST",
-            headers: { Authorization: `Bearer ${token}` },
-          });
-        } catch {}
-      }
-      return NextResponse.json({ ok: false, error: "subscription_gone" }, { status: 410 });
+    if (!subs.length) {
+      return NextResponse.json({ ok: true, sent: 0, info: "no_subscriptions_for_user" });
     }
 
-    console.error("[/api/push/test] error:", err);
-    return NextResponse.json({ ok: false, error: msg }, { status: 500 });
+    const payload = {
+      title: "Files",
+      body: "Notification de test ✅",
+      data: { url: "/dashboard/motivation" },
+    };
+
+    let sent = 0;
+
+    for (const s of subs) {
+      const subscription = {
+        endpoint: s.endpoint,
+        keys: { p256dh: s.p256dh, auth: s.auth },
+      };
+
+      try {
+        await webpush.sendNotification(subscription, JSON.stringify(payload));
+        sent++;
+      } catch (e: any) {
+        const code = Number(e?.statusCode || e?.status || 0);
+        console.error("[push/test] send error", code, e?.message || e);
+
+        // Nettoyage si expirée
+        if (code === 404 || code === 410) {
+          await prisma.pushSubscription.deleteMany({ where: { endpoint: s.endpoint } });
+        }
+      }
+    }
+
+    return NextResponse.json({ ok: true, sent });
+  } catch (e: any) {
+    console.error("[push/test] fatal", e);
+    return NextResponse.json(
+      { ok: false, error: "fatal", message: String(e?.message || e) },
+      { status: 500 }
+    );
   }
 }
