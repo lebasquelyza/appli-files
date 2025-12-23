@@ -58,12 +58,12 @@ export async function enableWebPush(vapidPublicKey: string) {
   const res = await fetch("/api/push/subscribe", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: "include", // ✅ important pour transmettre la session quand elle existe
     body: JSON.stringify({ deviceId, subscription }),
   });
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    // On essaie de parser en JSON pour afficher proprement
     let parsed: any = null;
     try {
       parsed = text ? JSON.parse(text) : null;
@@ -71,12 +71,9 @@ export async function enableWebPush(vapidPublicKey: string) {
       parsed = null;
     }
 
-    const detail =
-      parsed ? JSON.stringify(parsed, null, 2) : (text || "(empty body)");
+    const detail = parsed ? JSON.stringify(parsed, null, 2) : (text || "(empty body)");
 
-    throw new Error(
-      `subscribe_api_failed (HTTP ${res.status})\n\n${detail}`
-    );
+    throw new Error(`subscribe_api_failed (HTTP ${res.status})\n\n${detail}`);
   }
 
   return { ok: true };
