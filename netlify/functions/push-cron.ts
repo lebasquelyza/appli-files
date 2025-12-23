@@ -22,13 +22,13 @@ const DAY_MAP_FR_SHORT: Record<string, DayKey> = {
   "dim.": "sun",
 };
 
-function nowInTZ(tz: string) {
+function nowParis() {
   const d = new Date();
   const parts = new Intl.DateTimeFormat("fr-FR", {
     hour: "2-digit",
     minute: "2-digit",
     weekday: "short",
-    timeZone: tz,
+    timeZone: "Europe/Paris",
     hour12: false,
   }).formatToParts(d);
 
@@ -39,8 +39,13 @@ function nowInTZ(tz: string) {
   return { hhmm, dayKey };
 }
 
-function stampInTZ(tz: string) {
-  const ymd = new Intl.DateTimeFormat("fr-FR", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" })
+function stampParis() {
+  const ymd = new Intl.DateTimeFormat("fr-FR", {
+    timeZone: "Europe/Paris",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  })
     .format(new Date())
     .split("/")
     .reverse()
@@ -70,16 +75,15 @@ export const handler: Handler = async () => {
     // 1) Messages actifs
     const { data: msgs, error: msgErr } = await supabase
       .from("motivation_messages")
-      .select("id, app_user_id, target, mode, content, days, time, tz, active")
+      .select("id, user_id, target, mode, content, days, time, active")
       .eq("active", true);
 
     if (msgErr) throw new Error(msgErr.message);
     if (!msgs?.length) return { statusCode: 200, body: "no messages" };
 
-    // 2) Filtre "dus maintenant"
+    // 2) Filtre "dus maintenant" (Europe/Paris)
+    const { hhmm, dayKey } = nowParis();
     const due = (msgs as any[]).filter((m) => {
-      const tz = m.tz || "Europe/Paris";
-      const { hhmm, dayKey } = nowInTZ(tz);
       if (hhmm !== m.time) return false;
       const days = parseDays(m.days);
       return days.includes(dayKey);
@@ -94,25 +98,25 @@ export const handler: Handler = async () => {
     if (friendMsgIds.length) {
       const { data: recs, error: recErr } = await supabase
         .from("motivation_recipients")
-        .select("message_id, recipient_app_user_id")
+        .select("message_id, recipient_user_id")
         .in("message_id", friendMsgIds);
 
       if (recErr) throw new Error(recErr.message);
 
       for (const r of (recs as any[]) || []) {
         const mid = r.message_id as string;
-        const rid = r.recipient_app_user_id as string;
+        const rid = r.recipient_user_id as string;
         if (!recByMsg[mid]) recByMsg[mid] = [];
         recByMsg[mid].push(rid);
       }
     }
 
-    // 4) Jobs d'envoi (par user)
-    const sendJobs: Array<{ toUserId: string; payload: string; stamp: string; tz: string }> = [];
+    // 4) Build jobs (userId + payload + dedupKey)
+    const ymd = stampParis();
+    const sendJobs: Array<{ messageId: string; toUserId: string; payload: string; sendKey: string }> = [];
 
     for (const m of due as any[]) {
-      const tz = m.tz || "Europe/Paris";
-      const stamp = `${stampInTZ(tz)}-${String(m.time || "").replace(":", "")}`;
+      const baseKey = `${ymd}-${String(m.time || "").replace(":", "")}`;
 
       if (m.target === "ME") {
         const payload = JSON.stringify({
@@ -120,7 +124,9 @@ export const handler: Handler = async () => {
           body: "C’est l’heure de ta séance 💪",
           url: "/dashboard",
         });
-        sendJobs.push({ toUserId: m.app_user_id, payload, stamp, tz });
+
+        // dedup par message+minute (OK)
+        sendJobs.push({ messageId: m.id, toUserId: m.user_id, payload, sendKey: baseKey });
       } else {
         const recipients = recByMsg[m.id] || [];
         if (!recipients.length) continue;
@@ -132,7 +138,8 @@ export const handler: Handler = async () => {
         });
 
         for (const rid of recipients) {
-          sendJobs.push({ toUserId: rid, payload, stamp, tz });
+          // IMPORTANT: inclut rid sinon collision unique(message_id, send_key) -> 1 seul ami recevrait
+          sendJobs.push({ messageId: m.id, toUserId: rid, payload, sendKey: `${baseKey}:${rid}` });
         }
       }
     }
@@ -143,31 +150,30 @@ export const handler: Handler = async () => {
     const uniqueUserIds = Array.from(new Set(sendJobs.map((j) => j.toUserId)));
     const { data: subs, error: subErr } = await supabase
       .from("push_subscriptions")
-      .select("endpoint, p256dh, auth, device_id, app_user_id")
-      .in("app_user_id", uniqueUserIds);
+      .select("endpoint, p256dh, auth, user_id, device_id")
+      .in("user_id", uniqueUserIds);
 
     if (subErr) throw new Error(subErr.message);
     if (!subs?.length) return { statusCode: 200, body: "no subs" };
 
     const subsByUser: Record<string, any[]> = {};
     for (const s of subs as any[]) {
-      const uid = s.app_user_id as string;
+      const uid = s.user_id as string;
       if (!subsByUser[uid]) subsByUser[uid] = [];
       subsByUser[uid].push(s);
     }
 
-    // 6) Envoi + dédup (push_send_log)
-    // Table attendue: push_send_log(device_id text, stamp text, created_at timestamptz default now())
-    // UNIQUE(device_id, stamp)
+    // 6) Envoi + anti-doublon via motivation_dispatches
     const tasks = sendJobs.flatMap((job) => {
       const userSubs = subsByUser[job.toUserId] || [];
       return userSubs.map(async (s) => {
-        const deviceId = s.device_id || s.endpoint;
-        const { error: logErr } = await supabase
-          .from("push_send_log")
-          .upsert({ device_id: deviceId, stamp: job.stamp }, { onConflict: "device_id,stamp" });
+        // Dédup : unique(message_id, send_key)
+        const { error: dErr } = await supabase
+          .from("motivation_dispatches")
+          .insert({ message_id: job.messageId, send_key: job.sendKey });
 
-        if (logErr) return;
+        // si déjà envoyé (conflit), on skip silencieusement
+        if (dErr) return;
 
         const subscription = {
           endpoint: s.endpoint,
@@ -179,6 +185,7 @@ export const handler: Handler = async () => {
         } catch (e: any) {
           const code = Number(e?.statusCode || e?.status || 0);
           if (code === 410) {
+            // subscription invalide => delete
             await supabase.from("push_subscriptions").delete().eq("endpoint", s.endpoint);
           }
         }
