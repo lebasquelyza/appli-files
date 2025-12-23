@@ -13,7 +13,7 @@ type WebPushSubscription = {
 };
 
 function getSupabaseAdmin() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) throw new Error("Missing SUPABASE url or SUPABASE_SERVICE_ROLE_KEY");
   return createClient(url, key, { auth: { persistSession: false } });
@@ -22,26 +22,18 @@ function getSupabaseAdmin() {
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
+    const email = (session?.user as any)?.email as string | undefined;
 
-    // UUID Supabase attendu (stocké dans la session NextAuth)
-    const supaUserId = (session?.user as any)?.supabaseUserId as string | undefined;
-    if (!supaUserId) {
-      return NextResponse.json(
-        { ok: false, error: "unauthorized_no_supabase_user_id" },
-        { status: 401 }
-      );
+    if (!email) {
+      return NextResponse.json({ ok: false, error: "unauthorized_no_email" }, { status: 401 });
     }
 
     const body = await req.json().catch(() => null);
-
     const deviceId = (body?.deviceId as string | undefined)?.trim();
     const subscription = body?.subscription as WebPushSubscription | undefined;
 
     if (!deviceId || !subscription) {
-      return NextResponse.json(
-        { ok: false, error: "missing_deviceId_or_subscription" },
-        { status: 400 }
-      );
+      return NextResponse.json({ ok: false, error: "missing_deviceId_or_subscription" }, { status: 400 });
     }
 
     const endpoint = subscription?.endpoint?.trim();
@@ -49,10 +41,7 @@ export async function POST(req: NextRequest) {
     const auth = subscription?.keys?.auth?.trim();
 
     if (!endpoint || !p256dh || !auth) {
-      return NextResponse.json(
-        { ok: false, error: "missing_endpoint_or_keys" },
-        { status: 400 }
-      );
+      return NextResponse.json({ ok: false, error: "missing_endpoint_or_keys" }, { status: 400 });
     }
 
     const userAgent =
@@ -60,12 +49,36 @@ export async function POST(req: NextRequest) {
 
     const supabase = getSupabaseAdmin();
 
-    // ✅ Upsert par (user_id, device_id) pour éviter les doublons quand l'endpoint change
+    // ✅ 1) récupérer le profile via email
+    const { data: profile, error: profErr } = await supabase
+      .from("profiles")
+      .select("id,email,pseudo")
+      .eq("email", email)
+      .maybeSingle<{ id: string; email: string | null; pseudo: string | null }>();
+
+    if (profErr) {
+      console.error("[push/subscribe] profile lookup failed", profErr);
+      return NextResponse.json({ ok: false, error: "profile_lookup_failed" }, { status: 500 });
+    }
+
+    if (!profile?.id) {
+      return NextResponse.json(
+        { ok: false, error: "no_profile_for_email", hint: "Vérifie le trigger handle_new_user sur auth.users." },
+        { status: 401 }
+      );
+    }
+
+    // ✅ option : exiger un pseudo avant activation (décommente si tu veux)
+    // if (!profile.pseudo || profile.pseudo.trim().length === 0) {
+    //   return NextResponse.json({ ok: false, error: "missing_pseudo" }, { status: 400 });
+    // }
+
+    // ✅ 2) upsert subscription
     const { error } = await supabase
       .from("push_subscriptions")
       .upsert(
         {
-          user_id: supaUserId,
+          user_id: profile.id, // UUID auth.users.id
           device_id: deviceId,
           endpoint,
           p256dh,
@@ -82,10 +95,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ok: true });
   } catch (e: any) {
-    console.error("[push/subscribe] Fatal error", e);
-    return NextResponse.json(
-      { ok: false, error: "fatal", message: String(e?.message || e) },
-      { status: 500 }
-    );
+    console.error("[push/subscribe] fatal", e);
+    return NextResponse.json({ ok: false, error: "fatal", message: String(e?.message || e) }, { status: 500 });
   }
 }
