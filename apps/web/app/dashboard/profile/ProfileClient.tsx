@@ -1,7 +1,7 @@
 // apps/web/app/dashboard/profile/ProfileClient.tsx
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useTransition } from "react";
 import Link from "next/link";
 import { useLanguage } from "@/components/LanguageProvider";
 import GenerateClient from "./GenerateClient";
@@ -76,16 +76,6 @@ export default function ProfileClient(props: Props) {
   const [openDone, setOpenDone] = useState(false);
   const [openLater, setOpenLater] = useState(false);
 
-  useEffect(() => {
-    if (showAdOnGenerate) {
-      setShowAdOverlay(true);
-      const timer = setTimeout(() => {
-        setShowAdOverlay(false);
-      }, 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [showAdOnGenerate]);
-
   const tf = (path: string, fallback?: string) => {
     const v = t(path);
     if (v && v !== path) return v;
@@ -98,6 +88,58 @@ export default function ProfileClient(props: Props) {
   const showPlaceholders = !forceBlank;
   const p = (profile ?? {}) as Partial<ProfileT>;
 
+  // ✅ PSEUDO (persisté via /api/profile/pseudo)
+  const initialPseudo =
+    typeof (p as any)?.pseudo === "string" ? String((p as any).pseudo) : "";
+  const [pseudo, setPseudo] = useState(initialPseudo);
+  const [isSavingPseudo, startSavingPseudo] = useTransition();
+  const [pseudoMsg, setPseudoMsg] = useState("");
+
+  useEffect(() => {
+    setPseudo(initialPseudo);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialPseudo]);
+
+  const savePseudo = () => {
+    setPseudoMsg("");
+    const value = pseudo.trim();
+
+    if (value.length > 32) {
+      setPseudoMsg("Max 32 caractères.");
+      return;
+    }
+
+    startSavingPseudo(async () => {
+      try {
+        const res = await fetch("/api/profile/pseudo", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pseudo: value }),
+        });
+
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setPseudoMsg(json?.error || "Erreur lors de l’enregistrement.");
+          return;
+        }
+
+        setPseudoMsg("Pseudo enregistré ✅");
+      } catch {
+        setPseudoMsg("Erreur réseau.");
+      }
+    });
+  };
+
+  useEffect(() => {
+    if (showAdOnGenerate) {
+      setShowAdOverlay(true);
+      const timer = setTimeout(() => {
+        setShowAdOverlay(false);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [showAdOnGenerate]);
+
   const clientPrenom =
     typeof p?.prenom === "string" && p.prenom && !/\d/.test(p.prenom)
       ? p.prenom
@@ -106,9 +148,7 @@ export default function ProfileClient(props: Props) {
     typeof p?.age === "number" && p.age > 0 ? p.age : undefined;
 
   const goalLabel = useMemo(() => {
-    const g = String(
-      (p as any)?.objectif || (p as any)?.goal || ""
-    ).toLowerCase();
+    const g = String((p as any)?.objectif || (p as any)?.goal || "").toLowerCase();
     if (!g) return "";
     const key = `settings.profile.goal.labels.${g}`;
     const translated = t(key);
@@ -137,10 +177,7 @@ export default function ProfileClient(props: Props) {
 
   const titleList =
     equipMode === "none"
-      ? tf(
-          "settings.profile.sessions.titleNoEquip",
-          "Mes séances (sans matériel)"
-        )
+      ? tf("settings.profile.sessions.titleNoEquip", "Mes séances (sans matériel)")
       : tf("settings.profile.sessions.title", "Mes séances");
 
   const baseLinkQuery = [
@@ -213,10 +250,7 @@ export default function ProfileClient(props: Props) {
       {showAdOverlay && (
         <div className="fixed inset-0 z-50 bg-white flex items-center justify-center">
           <div className="w-full h-full flex items-center justify-center">
-            <AdBanner
-              slot="REPLACE_WITH_YOUR_SLOT_ID"
-              className="w-full h-full"
-            />
+            <AdBanner slot="REPLACE_WITH_YOUR_SLOT_ID" className="w-full h-full" />
           </div>
         </div>
       )}
@@ -229,9 +263,7 @@ export default function ProfileClient(props: Props) {
           {showDebug && (
             <div className="text-xs" style={{ marginTop: 4, color: "#6b7280" }}>
               <b>Debug:</b> email = <code>{emailForDisplay || "—"}</code>{" "}
-              {debugInfo.sheetHit
-                ? "· Sheet OK"
-                : `· ${debugInfo.reason || "Sheet KO"}`}
+              {debugInfo.sheetHit ? "· Sheet OK" : `· ${debugInfo.reason || "Sheet KO"}`}
               {forceBlank ? " · BLANK MODE" : ""}
             </div>
           )}
@@ -254,10 +286,7 @@ export default function ProfileClient(props: Props) {
                   "settings.profile.messages.programmeUpdated",
                   "✓ Programme IA mis à jour à partir de vos dernières réponses au questionnaire."
                 )
-              : tf(
-                  "settings.profile.messages.successGeneric",
-                  "✓ Opération réussie."
-                )}
+              : tf("settings.profile.messages.successGeneric", "✓ Opération réussie.")}
           </div>
         )}
         {!!displayedError && (
@@ -291,20 +320,14 @@ export default function ProfileClient(props: Props) {
         </div>
 
         <div className="card">
-          <div
-            className="text-sm"
-            style={{ display: "flex", gap: 16, flexWrap: "wrap" }}
-          >
+          <div className="text-sm" style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
             {(clientPrenom || showPlaceholders) && (
               <span>
                 <b>{tf("settings.profile.info.firstName.label", "Prénom")} :</b>{" "}
                 {clientPrenom ||
                   (showPlaceholders && (
                     <i className="text-gray-400">
-                      {tf(
-                        "settings.profile.info.firstName.missing",
-                        "Non renseigné"
-                      )}
+                      {tf("settings.profile.info.firstName.missing", "Non renseigné")}
                     </i>
                   ))}
               </span>
@@ -317,10 +340,7 @@ export default function ProfileClient(props: Props) {
                   ? `${clientAge} ans`
                   : showPlaceholders && (
                       <i className="text-gray-400">
-                        {tf(
-                          "settings.profile.info.age.missing",
-                          "Non renseigné"
-                        )}
+                        {tf("settings.profile.info.age.missing", "Non renseigné")}
                       </i>
                     )}
               </span>
@@ -337,17 +357,6 @@ export default function ProfileClient(props: Props) {
                   ))}
               </span>
             )}
-
-            {/* ✅ AJOUT: Pseudo (simple, non persisté) */}
-            <span>
-              <b>Pseudo :</b>{" "}
-              <input
-                type="text"
-                placeholder="Ton pseudo"
-                className="rounded-md border border-neutral-300 px-2 py-1 text-sm"
-                style={{ minWidth: 160 }}
-              />
-            </span>
           </div>
 
           {(emailForDisplay || showPlaceholders) && (
@@ -376,6 +385,53 @@ export default function ProfileClient(props: Props) {
             </div>
           )}
 
+          {/* ✅ AJOUT: Pseudo + bouton OK visible */}
+          <div className="text-sm" style={{ marginTop: 10 }}>
+            <b>Pseudo :</b>
+            <div
+              style={{
+                marginTop: 6,
+                display: "flex",
+                gap: 8,
+                alignItems: "center",
+                flexWrap: "wrap",
+              }}
+            >
+              <input
+                value={pseudo}
+                onChange={(e) => setPseudo(e.target.value)}
+                placeholder="Ton pseudo"
+                maxLength={32}
+                style={{
+                  border: "1px solid #d1d5db",
+                  borderRadius: 8,
+                  padding: "6px 10px",
+                  minWidth: 180,
+                }}
+              />
+
+              <button
+                type="button"
+                onClick={savePseudo}
+                disabled={isSavingPseudo}
+                style={{
+                  border: "1px solid #111827",
+                  background: "#111827",
+                  color: "white",
+                  borderRadius: 8,
+                  padding: "6px 12px",
+                  fontWeight: 700,
+                  cursor: isSavingPseudo ? "not-allowed" : "pointer",
+                  opacity: isSavingPseudo ? 0.7 : 1,
+                }}
+              >
+                OK
+              </button>
+
+              {pseudoMsg ? <span style={{ color: "#6b7280" }}>{pseudoMsg}</span> : null}
+            </div>
+          </div>
+
           <div className="text-sm" style={{ marginTop: 10 }}>
             <a href={questionnaireUrl} className="underline">
               {tf(
@@ -403,10 +459,7 @@ export default function ProfileClient(props: Props) {
           <h2 style={{ margin: 0 }}>{titleList}</h2>
 
           {hasGenerate && (
-            <div
-              className="inline-flex items-center"
-              style={{ display: "inline-flex", gap: 8 }}
-            >
+            <div className="inline-flex items-center" style={{ display: "inline-flex", gap: 8 }}>
               <a
                 href={hrefFull}
                 className={
@@ -433,10 +486,7 @@ export default function ProfileClient(props: Props) {
                   "Voir la liste sans matériel"
                 )}
               >
-                {tf(
-                  "settings.profile.sessions.toggle.withoutEquip",
-                  "Sans matériel"
-                )}
+                {tf("settings.profile.sessions.toggle.withoutEquip", "Sans matériel")}
               </a>
             </div>
           )}
@@ -461,15 +511,9 @@ export default function ProfileClient(props: Props) {
             <a
               href={hrefGenerate}
               className="inline-flex items-center rounded-md border border-neutral-900 bg-neutral-900 px-4 py-2 text-sm font-semibold text-white"
-              title={tf(
-                "settings.profile.sessions.generateCard.buttonTitle",
-                "Générer mon programme"
-              )}
+              title={tf("settings.profile.sessions.generateCard.buttonTitle", "Générer mon programme")}
             >
-              {tf(
-                "settings.profile.sessions.generateCard.button",
-                "→ Générer mon programme"
-              )}
+              {tf("settings.profile.sessions.generateCard.button", "→ Générer mon programme")}
             </a>
           </div>
         )}
@@ -487,19 +531,10 @@ export default function ProfileClient(props: Props) {
       {/* ===== Bloc bas de page : Séance faite ✅ / À faire plus tard ⏳ ===== */}
       <section className="section" style={{ marginTop: 20 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
-          <h2 style={{ margin: 0 }}>
-            {tf("settings.profile.lists.title", "Mes listes")}
-          </h2>
+          <h2 style={{ margin: 0 }}>{tf("settings.profile.lists.title", "Mes listes")}</h2>
         </div>
 
-        <div
-          className="grid"
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 12,
-          }}
-        >
+        <div className="grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           {/* Séance faite ✅ */}
           <div className="card">
             <button
@@ -519,8 +554,7 @@ export default function ProfileClient(props: Props) {
               }}
             >
               <div className="text-sm" style={{ fontWeight: 600 }}>
-                {tf("settings.profile.lists.done.title", "Séance faite")}{" "}
-                <span aria-hidden>✅</span>
+                {tf("settings.profile.lists.done.title", "Séance faite")} <span aria-hidden>✅</span>
               </div>
               <span aria-hidden style={{ color: "#6b7280", fontWeight: 700 }}>
                 {openDone ? "▾" : "▸"}
@@ -528,34 +562,21 @@ export default function ProfileClient(props: Props) {
             </button>
 
             {openDone && savedList.length > 0 && (
-              <ul
-                className="text-sm"
-                style={{
-                  listStyle: "disc",
-                  paddingLeft: 18,
-                  margin: "8px 0 0",
-                }}
-              >
+              <ul className="text-sm" style={{ listStyle: "disc", paddingLeft: 18, margin: "8px 0 0" }}>
                 {savedList.map(({ s, idx, key }) => {
-                  const detailHref = `/dashboard/seance/${encodeURIComponent(
-                    (s as any).id || key
-                  )}?${[baseLinkQuery, "from=profile"].filter(Boolean).join("&")}`;
+                  const detailHref = `/dashboard/seance/${encodeURIComponent((s as any).id || key)}?${
+                    [baseLinkQuery, "from=profile"].filter(Boolean).join("&")
+                  }`;
 
                   const newSavedKeys = [...savedIdSet].filter((k) => k !== key);
                   const removeQuery = [
                     equipMode === "none" ? "equip=none" : undefined,
-                    newSavedKeys.length
-                      ? `saved=${newSavedKeys.join(",")}`
-                      : undefined,
-                    laterIdSet.size
-                      ? `later=${[...laterIdSet].join(",")}`
-                      : undefined,
+                    newSavedKeys.length ? `saved=${newSavedKeys.join(",")}` : undefined,
+                    laterIdSet.size ? `later=${[...laterIdSet].join(",")}` : undefined,
                   ]
                     .filter(Boolean)
                     .join("&");
-                  const removeHref = `/dashboard/profile${
-                    removeQuery ? `?${removeQuery}` : ""
-                  }`;
+                  const removeHref = `/dashboard/profile${removeQuery ? `?${removeQuery}` : ""}`;
 
                   return (
                     <li
@@ -576,20 +597,14 @@ export default function ProfileClient(props: Props) {
                           textUnderlineOffset: 2,
                         }}
                       >
-                        {s.title ||
-                          (idx >= 0 ? `Séance ${idx + 1}` : "Séance")}
-                        {s.type && (
-                          <span style={{ color: "#6b7280" }}> · {s.type}</span>
-                        )}
+                        {s.title || (idx >= 0 ? `Séance ${idx + 1}` : "Séance")}
+                        {s.type && <span style={{ color: "#6b7280" }}> · {s.type}</span>}
                       </a>
 
                       <Link
                         href={removeHref}
                         scroll={false}
-                        aria-label={tf(
-                          "settings.profile.lists.removeLabel",
-                          "Supprimer cette séance"
-                        )}
+                        aria-label={tf("settings.profile.lists.removeLabel", "Supprimer cette séance")}
                         className="text-xs"
                         style={{
                           fontSize: 12,
@@ -632,8 +647,7 @@ export default function ProfileClient(props: Props) {
               }}
             >
               <div className="text-sm" style={{ fontWeight: 600 }}>
-                {tf("settings.profile.lists.later.title", "À faire plus tard")}{" "}
-                <span aria-hidden>⏳</span>
+                {tf("settings.profile.lists.later.title", "À faire plus tard")} <span aria-hidden>⏳</span>
               </div>
               <span aria-hidden style={{ color: "#6b7280", fontWeight: 700 }}>
                 {openLater ? "▾" : "▸"}
@@ -641,32 +655,21 @@ export default function ProfileClient(props: Props) {
             </button>
 
             {openLater && laterList.length > 0 && (
-              <ul
-                className="text-sm"
-                style={{
-                  listStyle: "disc",
-                  paddingLeft: 18,
-                  margin: "8px 0 0",
-                }}
-              >
+              <ul className="text-sm" style={{ listStyle: "disc", paddingLeft: 18, margin: "8px 0 0" }}>
                 {laterList.map(({ s, idx, key }) => {
-                  const detailHref = `/dashboard/seance/${encodeURIComponent(
-                    (s as any).id || key
-                  )}?${[baseLinkQuery, "from=profile"].filter(Boolean).join("&")}`;
+                  const detailHref = `/dashboard/seance/${encodeURIComponent((s as any).id || key)}?${
+                    [baseLinkQuery, "from=profile"].filter(Boolean).join("&")
+                  }`;
 
                   const newLaterKeys = [...laterIdSet].filter((k) => k !== key);
                   const removeQuery = [
                     equipMode === "none" ? "equip=none" : undefined,
                     savedIdSet.size ? `saved=${[...savedIdSet].join(",")}` : undefined,
-                    newLaterKeys.length
-                      ? `later=${newLaterKeys.join(",")}`
-                      : undefined,
+                    newLaterKeys.length ? `later=${newLaterKeys.join(",")}` : undefined,
                   ]
                     .filter(Boolean)
                     .join("&");
-                  const removeHref = `/dashboard/profile${
-                    removeQuery ? `?${removeQuery}` : ""
-                  }`;
+                  const removeHref = `/dashboard/profile${removeQuery ? `?${removeQuery}` : ""}`;
 
                   return (
                     <li
@@ -687,20 +690,14 @@ export default function ProfileClient(props: Props) {
                           textUnderlineOffset: 2,
                         }}
                       >
-                        {s.title ||
-                          (idx >= 0 ? `Séance ${idx + 1}` : "Séance")}
-                        {s.type && (
-                          <span style={{ color: "#6b7280" }}> · {s.type}</span>
-                        )}
+                        {s.title || (idx >= 0 ? `Séance ${idx + 1}` : "Séance")}
+                        {s.type && <span style={{ color: "#6b7280" }}> · {s.type}</span>}
                       </a>
 
                       <Link
                         href={removeHref}
                         scroll={false}
-                        aria-label={tf(
-                          "settings.profile.lists.removeLabel",
-                          "Supprimer cette séance"
-                        )}
+                        aria-label={tf("settings.profile.lists.removeLabel", "Supprimer cette séance")}
                         className="text-xs"
                         style={{
                           fontSize: 12,
