@@ -1,230 +1,201 @@
-// apps/web/netlify/functions/push-cron.js
+// netlify/functions/push-cron.ts
+import type { Handler } from "@netlify/functions";
 
-// ✅ On passe à toutes les minutes pour supporter n'importe quelle heure HH:mm
-// (sinon, si tu gardes */5, un message prévu à 09:02 ne partira jamais)
-exports.config = { schedule: "*/1 * * * *" };
+export const config = { schedule: "*/5 * * * *" };
 
-// ENV requis sur Netlify :
-// DATABASE_URL (Prisma)
-// VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT
-// (optionnel mais recommandé) CRON_SECRET
-
-const TZ = "Europe/Paris";
-
-function dayKeyFromParis(date) {
-  const wd = new Intl.DateTimeFormat("en-US", {
-    weekday: "short",
-    timeZone: TZ,
-  }).format(date);
-
-  const map = {
-    Mon: "mon",
-    Tue: "tue",
-    Wed: "wed",
-    Thu: "thu",
-    Fri: "fri",
-    Sat: "sat",
-    Sun: "sun",
-  };
-  return map[wd] || "mon";
+function getSupabaseAdmin() {
+  const { createClient } = require("@supabase/supabase-js") as typeof import("@supabase/supabase-js");
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) throw new Error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
+  return createClient(url, key, { auth: { persistSession: false } });
 }
 
-function timeHHmmParis(date) {
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone: TZ,
+type DayKey = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
+const DAY_MAP_FR_SHORT: Record<string, DayKey> = {
+  "lun.": "mon",
+  "mar.": "tue",
+  "mer.": "wed",
+  "jeu.": "thu",
+  "ven.": "fri",
+  "sam.": "sat",
+  "dim.": "sun",
+};
+
+function nowParis() {
+  const d = new Date();
+  const parts = new Intl.DateTimeFormat("fr-FR", {
     hour: "2-digit",
     minute: "2-digit",
+    weekday: "short",
+    timeZone: "Europe/Paris",
     hour12: false,
-  }).formatToParts(date);
+  }).formatToParts(d);
 
-  const hh = parts.find((p) => p.type === "hour")?.value || "00";
-  const mm = parts.find((p) => p.type === "minute")?.value || "00";
-  return `${hh}:${mm}`;
+  const get = (t: string) => parts.find((p) => p.type === t)?.value || "";
+  const wd = (get("weekday") || "").toLowerCase();
+  const dayKey = DAY_MAP_FR_SHORT[wd] || "mon";
+  const hhmm = `${get("hour")}:${get("minute")}`;
+  return { hhmm, dayKey };
 }
 
-function dateYmdParis(date) {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: TZ,
+function stampParis() {
+  const ymd = new Intl.DateTimeFormat("fr-FR", {
+    timeZone: "Europe/Paris",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).formatToParts(date);
-
-  const y = parts.find((p) => p.type === "year")?.value || "1970";
-  const m = parts.find((p) => p.type === "month")?.value || "01";
-  const d = parts.find((p) => p.type === "day")?.value || "01";
-  return `${y}-${m}-${d}`;
+  })
+    .format(new Date())
+    .split("/")
+    .reverse()
+    .join("");
+  return ymd;
 }
 
-async function pickCoachMessage(prisma, lang = "fr") {
-  const list = await prisma.coachMotivation.findMany({
-    where: { active: true, lang },
-    select: { title: true, message: true },
-  });
-
-  if (!list.length) {
-    return {
-      title: "Files Le Coach",
-      message: "Petite action aujourd’hui, grand impact demain. Tu avances. 💪",
-    };
-  }
-
-  const item = list[Math.floor(Math.random() * list.length)];
-  return {
-    title: item.title || "Files Le Coach",
-    message: item.message,
-  };
+function parseDays(daysStr: string): DayKey[] {
+  return (daysStr || "")
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean) as DayKey[];
 }
 
-async function sendPushToUser(prisma, webpush, userId, payload) {
-  const subs = await prisma.pushSubscription.findMany({
-    where: { userId },
-    select: { endpoint: true, p256dh: true, auth: true },
-  });
-
-  if (!subs.length) return 0;
-
-  let ok = 0;
-
-  for (const s of subs) {
-    const subscription = {
-      endpoint: s.endpoint,
-      keys: { p256dh: s.p256dh, auth: s.auth },
-    };
-
-    try {
-      await webpush.sendNotification(subscription, JSON.stringify(payload));
-      ok++;
-    } catch (e) {
-      const code = Number(e?.statusCode || e?.status || 0);
-      console.error("[push-cron] push error:", code, e?.message || e);
-
-      // subscription expirée => nettoyage
-      if (code === 410 || code === 404) {
-        await prisma.pushSubscription.deleteMany({
-          where: { endpoint: s.endpoint },
-        });
-      }
-    }
-  }
-
-  return ok;
-}
-
-exports.handler = async (event) => {
+export const handler: Handler = async () => {
   try {
-    // (Optionnel) sécuriser l’appel manuel
-    if (process.env.CRON_SECRET) {
-      const secret =
-        event.headers?.["x-cron-secret"] ||
-        event.headers?.["X-Cron-Secret"] ||
-        event.queryStringParameters?.secret;
+    const supabase = getSupabaseAdmin();
 
-      if (secret !== process.env.CRON_SECRET) {
-        return { statusCode: 401, body: "Unauthorized" };
-      }
-    }
-
-    const PUB = process.env.VAPID_PUBLIC_KEY;
-    const PRIV = process.env.VAPID_PRIVATE_KEY;
-    const SUBJ = process.env.VAPID_SUBJECT || "mailto:admin@example.com";
-
-    if (!PUB || !PRIV) {
-      console.error("[push-cron] Missing VAPID keys");
-      return { statusCode: 500, body: "missing_vapid_keys" };
-    }
-
+    // web-push setup
     const webpush = (await import("web-push")).default;
+    const PUB = process.env.VAPID_PUBLIC_KEY!;
+    const PRIV = process.env.VAPID_PRIVATE_KEY!;
+    const SUBJ = process.env.VAPID_SUBJECT || "mailto:admin@example.com";
+    if (!PUB || !PRIV) throw new Error("Missing VAPID_PUBLIC_KEY or VAPID_PRIVATE_KEY");
     webpush.setVapidDetails(SUBJ, PUB, PRIV);
 
-    // Prisma côté Netlify function
-    const { PrismaClient } = await import("@prisma/client");
-    const prisma = new PrismaClient();
+    // 1) Messages actifs
+    const { data: msgs, error: msgErr } = await supabase
+      .from("motivation_messages")
+      .select("id, user_id, target, mode, content, days, time, active")
+      .eq("active", true);
 
-    const now = new Date();
-    const dayKey = dayKeyFromParis(now);     // "mon".."sun"
-    const hhmm = timeHHmmParis(now);         // "HH:mm"
-    const ymd = dateYmdParis(now);           // "YYYY-MM-DD"
-    const sendKey = `${ymd}|${hhmm}|${TZ}`;  // anti-doublon
+    if (msgErr) throw new Error(msgErr.message);
+    if (!msgs?.length) return { statusCode: 200, body: "no messages" };
 
-    // 1) Messages dus maintenant
-    // - active
-    // - time match
-    // - days contains dayKey
-    const due = await prisma.motivationMessage.findMany({
-      where: {
-        active: true,
-        time: hhmm,
-        days: { contains: dayKey },
-      },
-      include: {
-        recipients: true, // besoin pour FRIENDS sélection
-      },
+    // 2) Filtre "dus maintenant" (Europe/Paris)
+    const { hhmm, dayKey } = nowParis();
+    const due = (msgs as any[]).filter((m) => {
+      if (hhmm !== m.time) return false;
+      const days = parseDays(m.days);
+      return days.includes(dayKey);
     });
 
-    let processed = 0;
-    let sent = 0;
+    if (!due.length) return { statusCode: 200, body: "no due" };
 
-    for (const msg of due) {
-      // 2) Anti-doublon : 1 envoi max / msg / minute
-      try {
-        await prisma.motivationDispatch.create({
-          data: {
-            motivationMessageId: msg.id,
-            sendKey,
-          },
-        });
-      } catch {
-        // unique conflict => déjà envoyé
-        continue;
+    // 3) Recipients FRIENDS
+    const friendMsgIds = due.filter((m) => m.target === "FRIENDS").map((m) => m.id);
+    let recByMsg: Record<string, string[]> = {};
+
+    if (friendMsgIds.length) {
+      const { data: recs, error: recErr } = await supabase
+        .from("motivation_recipients")
+        .select("message_id, recipient_user_id")
+        .in("message_id", friendMsgIds);
+
+      if (recErr) throw new Error(recErr.message);
+
+      for (const r of (recs as any[]) || []) {
+        const mid = r.message_id as string;
+        const rid = r.recipient_user_id as string;
+        if (!recByMsg[mid]) recByMsg[mid] = [];
+        recByMsg[mid].push(rid);
       }
-
-      processed++;
-
-      // 3) ME => Files Le Coach (COACH)
-      if (msg.target === "ME" && msg.mode === "COACH") {
-        const coach = await pickCoachMessage(prisma, "fr");
-        sent += await sendPushToUser(prisma, webpush, msg.userId, {
-          title: coach.title || "Files Le Coach",
-          body: coach.message,
-          data: { url: "/dashboard/motivation" },
-        });
-        continue;
-      }
-
-      // 4) FRIENDS => message custom aux destinataires sélectionnés
-      if (msg.target === "FRIENDS" && msg.mode === "CUSTOM") {
-        const recipients = (msg.recipients || []).map((r) => r.recipientUserId);
-
-        for (const rid of recipients) {
-          sent += await sendPushToUser(prisma, webpush, rid, {
-            title: "Files",
-            body: msg.content,
-            data: { url: "/dashboard/motivation" },
-          });
-        }
-        continue;
-      }
-
-      // Si mode/target inattendus, on skip (mais on a quand même locké le dispatch)
-      console.warn("[push-cron] skipped message (unexpected target/mode):", msg.id, msg.target, msg.mode);
     }
 
-    await prisma.$disconnect();
+    // 4) Build jobs (userId + payload + dedupKey)
+    const ymd = stampParis();
+    const sendJobs: Array<{ messageId: string; toUserId: string; payload: string; sendKey: string }> = [];
 
-    return {
-      statusCode: 200,
-      body: JSON.stringify({
-        ok: true,
-        at: sendKey,
-        due: due.length,
-        processed,
-        sent,
-      }),
-    };
-  } catch (e) {
-    console.error("[push-cron] fatal error", e);
+    for (const m of due as any[]) {
+      const baseKey = `${ymd}-${String(m.time || "").replace(":", "")}`;
+
+      if (m.target === "ME") {
+        const payload = JSON.stringify({
+          title: "Files Coaching",
+          body: "C’est l’heure de ta séance 💪",
+          url: "/dashboard",
+        });
+
+        // dedup par message+minute (OK)
+        sendJobs.push({ messageId: m.id, toUserId: m.user_id, payload, sendKey: baseKey });
+      } else {
+        const recipients = recByMsg[m.id] || [];
+        if (!recipients.length) continue;
+
+        const payload = JSON.stringify({
+          title: "Files Coaching",
+          body: m.content || "Motivation 💪",
+          url: "/dashboard/motivation",
+        });
+
+        for (const rid of recipients) {
+          // IMPORTANT: inclut rid sinon collision unique(message_id, send_key) -> 1 seul ami recevrait
+          sendJobs.push({ messageId: m.id, toUserId: rid, payload, sendKey: `${baseKey}:${rid}` });
+        }
+      }
+    }
+
+    if (!sendJobs.length) return { statusCode: 200, body: "no targets" };
+
+    // 5) Subs des users ciblés
+    const uniqueUserIds = Array.from(new Set(sendJobs.map((j) => j.toUserId)));
+    const { data: subs, error: subErr } = await supabase
+      .from("push_subscriptions")
+      .select("endpoint, p256dh, auth, user_id, device_id")
+      .in("user_id", uniqueUserIds);
+
+    if (subErr) throw new Error(subErr.message);
+    if (!subs?.length) return { statusCode: 200, body: "no subs" };
+
+    const subsByUser: Record<string, any[]> = {};
+    for (const s of subs as any[]) {
+      const uid = s.user_id as string;
+      if (!subsByUser[uid]) subsByUser[uid] = [];
+      subsByUser[uid].push(s);
+    }
+
+    // 6) Envoi + anti-doublon via motivation_dispatches
+    const tasks = sendJobs.flatMap((job) => {
+      const userSubs = subsByUser[job.toUserId] || [];
+      return userSubs.map(async (s) => {
+        // Dédup : unique(message_id, send_key)
+        const { error: dErr } = await supabase
+          .from("motivation_dispatches")
+          .insert({ message_id: job.messageId, send_key: job.sendKey });
+
+        // si déjà envoyé (conflit), on skip silencieusement
+        if (dErr) return;
+
+        const subscription = {
+          endpoint: s.endpoint,
+          keys: { p256dh: s.p256dh, auth: s.auth },
+        };
+
+        try {
+          await webpush.sendNotification(subscription, job.payload);
+        } catch (e: any) {
+          const code = Number(e?.statusCode || e?.status || 0);
+          if (code === 410) {
+            // subscription invalide => delete
+            await supabase.from("push_subscriptions").delete().eq("endpoint", s.endpoint);
+          }
+        }
+      });
+    });
+
+    await Promise.allSettled(tasks);
+    return { statusCode: 200, body: "ok" };
+  } catch (e: any) {
+    console.error("[push-cron] error", e);
     return { statusCode: 500, body: String(e?.message || e) };
   }
 };
-
