@@ -11,7 +11,6 @@ self.addEventListener("push", (event) => {
 
   const title = data.title || "Files";
   const body = data.body || "";
-  // ✅ supporte les 2 formats : { url } ou { data: { url } }
   const url = data?.data?.url || data.url || "/";
 
   event.waitUntil(
