@@ -3,28 +3,75 @@ import { cookies } from "next/headers";
 
 export const runtime = "nodejs";
 
+async function getSupabaseAdmin() {
+  const url =
+    process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+  if (!url || !serviceKey) return null;
+
+  const { createClient } = await import("@supabase/supabase-js");
+  return createClient(url, serviceKey);
+}
+
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
   const pseudo = String(body?.pseudo ?? "").trim().slice(0, 32);
 
-  const { createServerClient } = await import("@supabase/ssr");
   const cookieStore = cookies();
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies: { get: (n: string) => cookieStore.get(n)?.value } }
-  );
+  // 1) Essaye via session Supabase (si tu as une vraie auth)
+  try {
+    const { createServerClient } = await import("@supabase/ssr");
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { cookies: { get: (n: string) => cookieStore.get(n)?.value } }
+    );
 
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user?.id) {
-    return NextResponse.json({ ok: false, error: "Non connecté" }, { status: 401 });
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (user?.id) {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ pseudo: pseudo || null })
+        .eq("id", user.id);
+
+      if (error) {
+        return NextResponse.json(
+          { ok: false, error: error.message },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({ ok: true, pseudo });
+    }
+  } catch {
+    // on fallback
   }
 
-  const { error } = await supabase
+  // 2) Fallback : via email cookie (app_email) + service role
+  const email = (cookieStore.get("app_email")?.value || "").trim().toLowerCase();
+  if (!email) {
+    return NextResponse.json(
+      { ok: false, error: "Non connecté" },
+      { status: 401 }
+    );
+  }
+
+  const supabaseAdmin = await getSupabaseAdmin();
+  if (!supabaseAdmin) {
+    return NextResponse.json(
+      { ok: false, error: "Config serveur manquante (service role)" },
+      { status: 500 }
+    );
+  }
+
+  const { error } = await supabaseAdmin
     .from("profiles")
     .update({ pseudo: pseudo || null })
-    .eq("id", user.id);
+    .eq("email", email);
 
   if (error) {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
