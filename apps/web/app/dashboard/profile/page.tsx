@@ -304,6 +304,26 @@ async function findUserIdByEmail(
   }
 }
 
+/* ✅ ADD (minimal): load pseudo from profiles to keep it on refresh */
+async function loadPseudoFromSupabase(email: string): Promise<string> {
+  try {
+    const supabaseAdmin = await getSupabaseAdmin();
+    const normalizedEmail = (email || "").trim().toLowerCase();
+    if (!supabaseAdmin || !normalizedEmail) return "";
+
+    const { data, error } = await supabaseAdmin
+      .from("profiles")
+      .select("pseudo")
+      .eq("email", normalizedEmail)
+      .single();
+
+    if (error || !data) return "";
+    return typeof (data as any).pseudo === "string" ? (data as any).pseudo : "";
+  } catch {
+    return "";
+  }
+}
+
 /**
  * Log unique dans programme_insights :
  * 1 ligne = 1 génération de programme pour un client
@@ -500,6 +520,14 @@ async function loadProfile(
   } catch (e: any) {
     profile = { email: emailForDisplay };
     debugInfo.reason = `Erreur lecture Sheet: ${String(e?.message || e)}`;
+  }
+
+  // ✅ ADD (minimal): inject pseudo from Supabase so it doesn't disappear on refresh
+  try {
+    const pseudo = await loadPseudoFromSupabase(emailForDisplay);
+    if (pseudo) (profile as any).pseudo = pseudo;
+  } catch {
+    // ignore
   }
 
   profile.email = emailForDisplay;
