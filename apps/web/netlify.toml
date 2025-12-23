@@ -29,15 +29,19 @@
   # UPSTASH_REDIS_REST_TOKEN
   # etc.
 
-[functions]
-  # Avec base="apps/web", ce chemin pointe sur apps/web/netlify/functions
-  directory = "netlify/functions"
-  node_bundler = "esbuild"
-  external_node_modules = ["@upstash/redis", "@upstash/ratelimit", "web-push"]
-
-# Optionnel : tu peux aussi laisser le schedule dans la function (exports.config)
-[functions."push-cron"]
-  schedule = "*/5 * * * *"
+# ✅ IMPORTANT:
+# On SUPPRIME la config [functions] pour laisser @netlify/plugin-nextjs gérer
+# les functions Next (API routes + NextAuth). Sinon NextAuth peut renvoyer session=null.
+#
+# [functions]
+#   directory = "netlify/functions"
+#   node_bundler = "esbuild"
+#   external_node_modules = ["@upstash/redis", "@upstash/ratelimit", "web-push"]
+#
+# ⚠️ Et on supprime aussi le schedule ici pour éviter conflit avec exports.config dans la function
+#
+# [functions."push-cron"]
+#   schedule = "*/5 * * * *"
 
 [[headers]]
   for = "/api/analyze"
