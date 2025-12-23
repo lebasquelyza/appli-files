@@ -1,4 +1,6 @@
 // apps/web/lib/pushClient.ts
+import { supabase } from "@/lib/supabaseClient";
+
 const DEVICE_ID_KEY = "device:id";
 
 export function getDeviceId() {
@@ -44,36 +46,59 @@ export async function ensurePushSubscription(vapidPublicKey: string) {
   return sub;
 }
 
+/**
+ * Active les notifications ET enregistre la subscription en DB Supabase (vraies notifs).
+ * Pré-requis:
+ * - user Supabase Auth connecté (supabase.auth)
+ * - table push_subscriptions + RLS (user_id = auth.uid())
+ */
 export async function enableWebPush(vapidPublicKey: string) {
   if (typeof window === "undefined") throw new Error("Client only");
   if (!window.isSecureContext) throw new Error("Web Push nécessite HTTPS (ou localhost)");
   if (!("Notification" in window)) throw new Error("Notifications unsupported");
 
+  // 0) user connecté Supabase
+  const {
+    data: { user },
+    error: userErr,
+  } = await supabase.auth.getUser();
+
+  if (userErr) throw new Error(`Supabase getUser error: ${userErr.message}`);
+  if (!user) throw new Error("Utilisateur non connecté (Supabase Auth) — impossible d’enregistrer la subscription");
+
+  // 1) Permission notifications
   const perm = await Notification.requestPermission();
   if (perm !== "granted") throw new Error(`Permission notifications refusée (perm=${perm})`);
 
+  // 2) Subscription navigateur
   const subscription = await ensurePushSubscription(vapidPublicKey);
+  const json = subscription.toJSON();
 
-  const deviceId = getDeviceId();
-  const res = await fetch("/api/push/subscribe", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include", // ✅ important pour transmettre la session quand elle existe
-    body: JSON.stringify({ deviceId, subscription }),
-  });
+  const endpoint = json?.endpoint;
+  const p256dh = json?.keys?.p256dh;
+  const auth = json?.keys?.auth;
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    let parsed: any = null;
-    try {
-      parsed = text ? JSON.parse(text) : null;
-    } catch {
-      parsed = null;
-    }
+  if (!endpoint || !p256dh || !auth) {
+    throw new Error("Subscription invalide: endpoint/keys manquants");
+  }
 
-    const detail = parsed ? JSON.stringify(parsed, null, 2) : (text || "(empty body)");
+  // 3) Save Supabase (upsert)
+  const payload = {
+    user_id: user.id,
+    endpoint,
+    p256dh,
+    auth,
+    user_agent: navigator.userAgent,
+    // device_id si tu veux (optionnel)
+    device_id: getDeviceId(),
+  };
 
-    throw new Error(`subscribe_api_failed (HTTP ${res.status})\n\n${detail}`);
+  const { error: upsertErr } = await supabase
+    .from("push_subscriptions")
+    .upsert(payload as any, { onConflict: "endpoint" });
+
+  if (upsertErr) {
+    throw new Error(`Supabase upsert push_subscriptions failed: ${upsertErr.message}`);
   }
 
   return { ok: true };
