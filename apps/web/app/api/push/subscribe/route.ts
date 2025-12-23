@@ -23,9 +23,13 @@ export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
 
-    const supaUserId = (session?.user as any)?.supabaseUserId as string | undefined; // UUID attendu
+    // UUID Supabase attendu (stocké dans la session NextAuth)
+    const supaUserId = (session?.user as any)?.supabaseUserId as string | undefined;
     if (!supaUserId) {
-      return NextResponse.json({ ok: false, error: "unauthorized_no_supabase_user_id" }, { status: 401 });
+      return NextResponse.json(
+        { ok: false, error: "unauthorized_no_supabase_user_id" },
+        { status: 401 }
+      );
     }
 
     const body = await req.json().catch(() => null);
@@ -33,7 +37,10 @@ export async function POST(req: NextRequest) {
     const subscription = body?.subscription as WebPushSubscription | undefined;
 
     if (!deviceId || !subscription) {
-      return NextResponse.json({ ok: false, error: "missing_deviceId_or_subscription" }, { status: 400 });
+      return NextResponse.json(
+        { ok: false, error: "missing_deviceId_or_subscription" },
+        { status: 400 }
+      );
     }
 
     const endpoint = subscription?.endpoint;
@@ -41,15 +48,18 @@ export async function POST(req: NextRequest) {
     const auth = subscription?.keys?.auth;
 
     if (!endpoint || !p256dh || !auth) {
-      return NextResponse.json({ ok: false, error: "missing_endpoint_or_keys" }, { status: 400 });
+      return NextResponse.json(
+        { ok: false, error: "missing_endpoint_or_keys" },
+        { status: 400 }
+      );
     }
 
     const userAgent =
-      (body?.userAgent as string | undefined) ||
-      (req.headers.get("user-agent") ?? undefined);
+      (body?.userAgent as string | undefined) || req.headers.get("user-agent") || undefined;
 
     const supabase = getSupabaseAdmin();
 
+    // ✅ Upsert par (user_id, device_id) pour éviter les doublons quand l'endpoint change
     const { error } = await supabase
       .from("push_subscriptions")
       .upsert(
@@ -60,9 +70,8 @@ export async function POST(req: NextRequest) {
           auth,
           device_id: deviceId,
           user_agent: userAgent,
-          updated_at: new Date().toISOString(),
         },
-        { onConflict: "endpoint" }
+        { onConflict: "user_id,device_id" }
       );
 
     if (error) {
@@ -73,7 +82,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true });
   } catch (e: any) {
     console.error("[push/subscribe] Fatal error", e);
-    return NextResponse.json({ ok: false, error: "fatal", message: String(e?.message || e) }, { status: 500 });
+    return NextResponse.json(
+      { ok: false, error: "fatal", message: String(e?.message || e) },
+      { status: 500 }
+    );
   }
 }
 
