@@ -1,5 +1,4 @@
 // apps/web/lib/pushClient.ts
-import { getSupabase } from "@/lib/supabaseClient";
 
 const DEVICE_ID_KEY = "device:id";
 
@@ -47,23 +46,13 @@ export async function ensurePushSubscription(vapidPublicKey: string) {
 }
 
 /**
- * Active les notifications ET enregistre la subscription en DB Supabase (vraies notifs).
- * Pré-requis:
- * - utilisateur connecté via Supabase Auth
- * - table "push_subscriptions" avec endpoint UNIQUE
+ * Active les notifications ET enregistre la subscription via l'API NextAuth /api/push/subscribe,
+ * qui upsert ensuite la subscription en DB Supabase côté serveur (service role).
  */
 export async function enableWebPush(vapidPublicKey: string) {
   if (typeof window === "undefined") throw new Error("Client only");
   if (!window.isSecureContext) throw new Error("Web Push nécessite HTTPS (ou localhost)");
   if (!("Notification" in window)) throw new Error("Notifications unsupported");
-
-  const supabase = getSupabase();
-
-  // 0) user connecté Supabase
-  const { data, error: userErr } = await supabase.auth.getUser();
-  if (userErr) throw new Error(`Supabase getUser error: ${userErr.message}`);
-  const user = data?.user;
-  if (!user) throw new Error("Utilisateur non connecté (Supabase Auth)");
 
   // 1) Permission
   const perm = await Notification.requestPermission();
@@ -71,37 +60,29 @@ export async function enableWebPush(vapidPublicKey: string) {
 
   // 2) Subscription navigateur
   const subscription = await ensurePushSubscription(vapidPublicKey);
-  const json = subscription.toJSON();
+  const subJson = subscription.toJSON();
 
-  const endpoint = json?.endpoint;
-  const p256dh = json?.keys?.p256dh;
-  const auth = json?.keys?.auth;
-
-  if (!endpoint || !p256dh || !auth) {
+  if (!subJson?.endpoint || !subJson?.keys?.p256dh || !subJson?.keys?.auth) {
     throw new Error("Subscription invalide: endpoint/keys manquants");
   }
 
-  // 3) Upsert Supabase
-  const device_id = getDeviceId();
-  const user_agent = navigator.userAgent;
+  // 3) Envoi au serveur (NextAuth)
+  const deviceId = getDeviceId();
 
-  const { error: upsertErr } = await supabase
-    .from("push_subscriptions")
-    .upsert(
-      {
-        user_id: user.id,
-        endpoint,
-        p256dh,
-        auth,
-        device_id,
-        user_agent,
-        updated_at: new Date().toISOString(),
-      } as any,
-      { onConflict: "endpoint" }
-    );
+  const res = await fetch("/api/push/subscribe", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      deviceId,
+      subscription: subJson,
+      // optionnel mais utile
+      userAgent: navigator.userAgent,
+    }),
+  });
 
-  if (upsertErr) {
-    throw new Error(`Supabase upsert push_subscriptions failed: ${upsertErr.message}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error || `Subscribe failed (${res.status})`);
   }
 
   return { ok: true };
