@@ -29,17 +29,18 @@ self.addEventListener("notificationclick", (event) => {
   const url = event.notification?.data?.url || "/";
 
   event.waitUntil(
-    clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
-      // ✅ si une fenêtre existe déjà, on la focus
+    clients.matchAll({ type: "window", includeUncontrolled: true }).then(async (clientList) => {
       for (const client of clientList) {
         if ("focus" in client) {
-          // si l'app est déjà ouverte, focus et (optionnel) navigate
+          try {
+            if ("navigate" in client && client.url && client.url !== url) {
+              await client.navigate(url);
+            }
+          } catch {}
           return client.focus();
         }
       }
-      // sinon on ouvre
       if (clients.openWindow) return clients.openWindow(url);
     })
   );
 });
-
