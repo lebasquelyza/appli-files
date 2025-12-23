@@ -25,7 +25,6 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
   const pseudo = String(body?.pseudo ?? "").trim().slice(0, 32);
 
-  // 🔁 on garde ta logique actuelle: on identifie via cookie app_email
   const email = (cookies().get("app_email")?.value || "").trim().toLowerCase();
   if (!email) {
     return NextResponse.json({ ok: false, error: "Non connecté" }, { status: 401 });
@@ -39,27 +38,12 @@ export async function POST(req: Request) {
     );
   }
 
-  // (optionnel) on vérifie que le profil existe
-  const { data: existing, error: readErr } = await supabaseAdmin
-    .from("profiles")
-    .select("id")
-    .eq("email", email)
-    .maybeSingle();
-
-  if (readErr) {
-    return NextResponse.json({ ok: false, error: readErr.message }, { status: 500 });
-  }
-  if (!existing) {
-    return NextResponse.json(
-      { ok: false, error: "Profil introuvable pour cet email" },
-      { status: 404 }
-    );
-  }
-
   const { error } = await supabaseAdmin
-    .from("profiles")
-    .update({ pseudo: pseudo || null })
-    .eq("email", email);
+    .from("profile_extras")
+    .upsert(
+      { email, pseudo: pseudo || null, updated_at: new Date().toISOString() },
+      { onConflict: "email" }
+    );
 
   if (error) {
     if (isUniqueViolation(error)) {
