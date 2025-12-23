@@ -13,17 +13,20 @@ type WebPushSubscription = {
 };
 
 function getSupabaseAdmin() {
-  const url = process.env.SUPABASE_URL;
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) throw new Error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !key) throw new Error("Missing SUPABASE url or SUPABASE_SERVICE_ROLE_KEY");
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    const userId = (session?.user as any)?.id as string | undefined;
-    if (!userId) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+
+    const supaUserId = (session?.user as any)?.supabaseUserId as string | undefined; // UUID attendu
+    if (!supaUserId) {
+      return NextResponse.json({ ok: false, error: "unauthorized_no_supabase_user_id" }, { status: 401 });
+    }
 
     const body = await req.json().catch(() => null);
     const deviceId = body?.deviceId as string | undefined;
@@ -51,7 +54,7 @@ export async function POST(req: NextRequest) {
       .from("push_subscriptions")
       .upsert(
         {
-          user_id: userId, // ⚠️ doit être un UUID string
+          user_id: supaUserId,
           endpoint,
           p256dh,
           auth,
@@ -73,3 +76,4 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "fatal", message: String(e?.message || e) }, { status: 500 });
   }
 }
+
