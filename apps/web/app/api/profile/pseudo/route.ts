@@ -1,3 +1,4 @@
+// apps/web/app/api/profile/pseudo/route.ts
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 
@@ -13,13 +14,19 @@ async function getSupabaseAdmin() {
   return createClient(url, serviceKey);
 }
 
+function isUniqueViolation(error: any) {
+  const code = String(error?.code || "");
+  const msg = String(error?.message || "").toLowerCase();
+  return code === "23505" || msg.includes("duplicate") || msg.includes("unique");
+}
+
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
   const pseudo = String(body?.pseudo ?? "").trim().slice(0, 32);
 
   const cookieStore = cookies();
 
-  // 1) Essaye via session Supabase (si tu as une vraie auth)
+  // 1) Essai via session Supabase (si auth active)
   try {
     const { createServerClient } = await import("@supabase/ssr");
     const supabase = createServerClient(
@@ -39,6 +46,12 @@ export async function POST(req: Request) {
         .eq("id", user.id);
 
       if (error) {
+        if (isUniqueViolation(error)) {
+          return NextResponse.json(
+            { ok: false, error: "Pseudo déjà utilisé" },
+            { status: 409 }
+          );
+        }
         return NextResponse.json(
           { ok: false, error: error.message },
           { status: 500 }
@@ -51,13 +64,10 @@ export async function POST(req: Request) {
     // on fallback
   }
 
-  // 2) Fallback : via email cookie (app_email) + service role
+  // 2) Fallback via cookie app_email + service role
   const email = (cookieStore.get("app_email")?.value || "").trim().toLowerCase();
   if (!email) {
-    return NextResponse.json(
-      { ok: false, error: "Non connecté" },
-      { status: 401 }
-    );
+    return NextResponse.json({ ok: false, error: "Non connecté" }, { status: 401 });
   }
 
   const supabaseAdmin = await getSupabaseAdmin();
@@ -74,6 +84,12 @@ export async function POST(req: Request) {
     .eq("email", email);
 
   if (error) {
+    if (isUniqueViolation(error)) {
+      return NextResponse.json(
+        { ok: false, error: "Pseudo déjà utilisé" },
+        { status: 409 }
+      );
+    }
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
   }
 
