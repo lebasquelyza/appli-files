@@ -1,4 +1,3 @@
-// apps/web/app/api/push/subscribe/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -25,7 +24,7 @@ type WebPushSubscription = {
 
 export async function POST(req: NextRequest) {
   try {
-    // -------- 1) Lecture env Upstash (logique inchangée) --------
+    // 1) Upstash env (inchangé)
     const rawUrl = (process.env.UPSTASH_REDIS_REST_URL ?? "").trim();
     const token = (process.env.UPSTASH_REDIS_REST_TOKEN ?? "").trim();
 
@@ -46,7 +45,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "invalid_upstash_url", detail: parsed.error }, { status: 500 });
     }
 
-    // -------- 2) Body --------
+    // 2) Body
     const body = await req.json().catch(() => null);
     const deviceId = body?.deviceId as string | undefined;
     const subscription = body?.subscription as WebPushSubscription | undefined;
@@ -55,7 +54,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "missing_deviceId_or_subscription" }, { status: 400 });
     }
 
-    // -------- 3) Écriture Upstash (logique inchangée) --------
+    // 3) Write Upstash (inchangé)
     const upstashBase = parsed.url.toString().replace(/\/+$/, "");
     const key = `${KEY_PREFIX}${deviceId}`;
     const upstashUrl = `${upstashBase}/set/${encodeURIComponent(key)}`;
@@ -100,8 +99,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "upstash_write_failed", status: r.status, detail }, { status: 500 });
     }
 
-    // -------- 4) BONUS: Écriture DB Prisma (pour que le cron envoie) --------
-    // ⚠️ On ne casse jamais l’activation: pas de 401, on tente juste si session dispo.
+    // 4) Write Prisma (pour le cron) — best effort
     try {
       const session = await getServerSession(authOptions);
       const userId = (session?.user as any)?.id as string | undefined;
@@ -114,17 +112,14 @@ export async function POST(req: NextRequest) {
         const userAgent = req.headers.get("user-agent") ?? undefined;
 
         await prisma.pushSubscription.upsert({
-          where: { endpoint }, // endpoint est @unique dans ton schema
+          where: { endpoint }, // endpoint @unique
           update: { userId, p256dh, auth, userAgent },
           create: { userId, endpoint, p256dh, auth, userAgent },
         });
       } else {
-        // pas de session ou subscription incomplète => on ne bloque pas
         if (!userId) console.warn("[push/subscribe] No session => DB not updated");
-        if (userId && (!endpoint || !p256dh || !auth)) console.warn("[push/subscribe] Missing subscription keys => DB not updated");
       }
     } catch (e: any) {
-      // on log mais on ne casse pas le subscribe
       console.error("[push/subscribe] DB write failed (ignored)", e?.message || e);
     }
 
