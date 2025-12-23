@@ -106,7 +106,9 @@ export default function ProfileClient(props: Props) {
     typeof p?.age === "number" && p.age > 0 ? p.age : undefined;
 
   const goalLabel = useMemo(() => {
-    const g = String((p as any)?.objectif || (p as any)?.goal || "").toLowerCase();
+    const g = String(
+      (p as any)?.objectif || (p as any)?.goal || ""
+    ).toLowerCase();
     if (!g) return "";
     const key = `settings.profile.goal.labels.${g}`;
     const translated = t(key);
@@ -135,7 +137,10 @@ export default function ProfileClient(props: Props) {
 
   const titleList =
     equipMode === "none"
-      ? tf("settings.profile.sessions.titleNoEquip", "Mes séances (sans matériel)")
+      ? tf(
+          "settings.profile.sessions.titleNoEquip",
+          "Mes séances (sans matériel)"
+        )
       : tf("settings.profile.sessions.title", "Mes séances");
 
   const baseLinkQuery = [
@@ -208,7 +213,10 @@ export default function ProfileClient(props: Props) {
       {showAdOverlay && (
         <div className="fixed inset-0 z-50 bg-white flex items-center justify-center">
           <div className="w-full h-full flex items-center justify-center">
-            <AdBanner slot="REPLACE_WITH_YOUR_SLOT_ID" className="w-full h-full" />
+            <AdBanner
+              slot="REPLACE_WITH_YOUR_SLOT_ID"
+              className="w-full h-full"
+            />
           </div>
         </div>
       )}
@@ -221,7 +229,9 @@ export default function ProfileClient(props: Props) {
           {showDebug && (
             <div className="text-xs" style={{ marginTop: 4, color: "#6b7280" }}>
               <b>Debug:</b> email = <code>{emailForDisplay || "—"}</code>{" "}
-              {debugInfo.sheetHit ? "· Sheet OK" : `· ${debugInfo.reason || "Sheet KO"}`}
+              {debugInfo.sheetHit
+                ? "· Sheet OK"
+                : `· ${debugInfo.reason || "Sheet KO"}`}
               {forceBlank ? " · BLANK MODE" : ""}
             </div>
           )}
@@ -244,7 +254,10 @@ export default function ProfileClient(props: Props) {
                   "settings.profile.messages.programmeUpdated",
                   "✓ Programme IA mis à jour à partir de vos dernières réponses au questionnaire."
                 )
-              : tf("settings.profile.messages.successGeneric", "✓ Opération réussie.")}
+              : tf(
+                  "settings.profile.messages.successGeneric",
+                  "✓ Opération réussie."
+                )}
           </div>
         )}
         {!!displayedError && (
@@ -278,14 +291,20 @@ export default function ProfileClient(props: Props) {
         </div>
 
         <div className="card">
-          <div className="text-sm" style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+          <div
+            className="text-sm"
+            style={{ display: "flex", gap: 16, flexWrap: "wrap" }}
+          >
             {(clientPrenom || showPlaceholders) && (
               <span>
                 <b>{tf("settings.profile.info.firstName.label", "Prénom")} :</b>{" "}
                 {clientPrenom ||
                   (showPlaceholders && (
                     <i className="text-gray-400">
-                      {tf("settings.profile.info.firstName.missing", "Non renseigné")}
+                      {tf(
+                        "settings.profile.info.firstName.missing",
+                        "Non renseigné"
+                      )}
                     </i>
                   ))}
               </span>
@@ -298,7 +317,10 @@ export default function ProfileClient(props: Props) {
                   ? `${clientAge} ans`
                   : showPlaceholders && (
                       <i className="text-gray-400">
-                        {tf("settings.profile.info.age.missing", "Non renseigné")}
+                        {tf(
+                          "settings.profile.info.age.missing",
+                          "Non renseigné"
+                        )}
                       </i>
                     )}
               </span>
@@ -315,6 +337,17 @@ export default function ProfileClient(props: Props) {
                   ))}
               </span>
             )}
+
+            {/* ✅ AJOUT: Pseudo (simple, non persisté) */}
+            <span>
+              <b>Pseudo :</b>{" "}
+              <input
+                type="text"
+                placeholder="Ton pseudo"
+                className="rounded-md border border-neutral-300 px-2 py-1 text-sm"
+                style={{ minWidth: 160 }}
+              />
+            </span>
           </div>
 
           {(emailForDisplay || showPlaceholders) && (
@@ -370,7 +403,10 @@ export default function ProfileClient(props: Props) {
           <h2 style={{ margin: 0 }}>{titleList}</h2>
 
           {hasGenerate && (
-            <div className="inline-flex items-center" style={{ display: "inline-flex", gap: 8 }}>
+            <div
+              className="inline-flex items-center"
+              style={{ display: "inline-flex", gap: 8 }}
+            >
               <a
                 href={hrefFull}
                 className={
@@ -397,7 +433,10 @@ export default function ProfileClient(props: Props) {
                   "Voir la liste sans matériel"
                 )}
               >
-                {tf("settings.profile.sessions.toggle.withoutEquip", "Sans matériel")}
+                {tf(
+                  "settings.profile.sessions.toggle.withoutEquip",
+                  "Sans matériel"
+                )}
               </a>
             </div>
           )}
@@ -422,9 +461,15 @@ export default function ProfileClient(props: Props) {
             <a
               href={hrefGenerate}
               className="inline-flex items-center rounded-md border border-neutral-900 bg-neutral-900 px-4 py-2 text-sm font-semibold text-white"
-              title={tf("settings.profile.sessions.generateCard.buttonTitle", "Générer mon programme")}
+              title={tf(
+                "settings.profile.sessions.generateCard.buttonTitle",
+                "Générer mon programme"
+              )}
             >
-              {tf("settings.profile.sessions.generateCard.button", "→ Générer mon programme")}
+              {tf(
+                "settings.profile.sessions.generateCard.button",
+                "→ Générer mon programme"
+              )}
             </a>
           </div>
         )}
@@ -442,10 +487,19 @@ export default function ProfileClient(props: Props) {
       {/* ===== Bloc bas de page : Séance faite ✅ / À faire plus tard ⏳ ===== */}
       <section className="section" style={{ marginTop: 20 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
-          <h2 style={{ margin: 0 }}>{tf("settings.profile.lists.title", "Mes listes")}</h2>
+          <h2 style={{ margin: 0 }}>
+            {tf("settings.profile.lists.title", "Mes listes")}
+          </h2>
         </div>
 
-        <div className="grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <div
+          className="grid"
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 12,
+          }}
+        >
           {/* Séance faite ✅ */}
           <div className="card">
             <button
@@ -465,7 +519,8 @@ export default function ProfileClient(props: Props) {
               }}
             >
               <div className="text-sm" style={{ fontWeight: 600 }}>
-                {tf("settings.profile.lists.done.title", "Séance faite")} <span aria-hidden>✅</span>
+                {tf("settings.profile.lists.done.title", "Séance faite")}{" "}
+                <span aria-hidden>✅</span>
               </div>
               <span aria-hidden style={{ color: "#6b7280", fontWeight: 700 }}>
                 {openDone ? "▾" : "▸"}
@@ -473,21 +528,34 @@ export default function ProfileClient(props: Props) {
             </button>
 
             {openDone && savedList.length > 0 && (
-              <ul className="text-sm" style={{ listStyle: "disc", paddingLeft: 18, margin: "8px 0 0" }}>
+              <ul
+                className="text-sm"
+                style={{
+                  listStyle: "disc",
+                  paddingLeft: 18,
+                  margin: "8px 0 0",
+                }}
+              >
                 {savedList.map(({ s, idx, key }) => {
-                  const detailHref = `/dashboard/seance/${encodeURIComponent((s as any).id || key)}?${
-                    [baseLinkQuery, "from=profile"].filter(Boolean).join("&")
-                  }`;
+                  const detailHref = `/dashboard/seance/${encodeURIComponent(
+                    (s as any).id || key
+                  )}?${[baseLinkQuery, "from=profile"].filter(Boolean).join("&")}`;
 
                   const newSavedKeys = [...savedIdSet].filter((k) => k !== key);
                   const removeQuery = [
                     equipMode === "none" ? "equip=none" : undefined,
-                    newSavedKeys.length ? `saved=${newSavedKeys.join(",")}` : undefined,
-                    laterIdSet.size ? `later=${[...laterIdSet].join(",")}` : undefined,
+                    newSavedKeys.length
+                      ? `saved=${newSavedKeys.join(",")}`
+                      : undefined,
+                    laterIdSet.size
+                      ? `later=${[...laterIdSet].join(",")}`
+                      : undefined,
                   ]
                     .filter(Boolean)
                     .join("&");
-                  const removeHref = `/dashboard/profile${removeQuery ? `?${removeQuery}` : ""}`;
+                  const removeHref = `/dashboard/profile${
+                    removeQuery ? `?${removeQuery}` : ""
+                  }`;
 
                   return (
                     <li
@@ -508,15 +576,20 @@ export default function ProfileClient(props: Props) {
                           textUnderlineOffset: 2,
                         }}
                       >
-                        {s.title || (idx >= 0 ? `Séance ${idx + 1}` : "Séance")}
-                        {s.type && <span style={{ color: "#6b7280" }}> · {s.type}</span>}
+                        {s.title ||
+                          (idx >= 0 ? `Séance ${idx + 1}` : "Séance")}
+                        {s.type && (
+                          <span style={{ color: "#6b7280" }}> · {s.type}</span>
+                        )}
                       </a>
 
-                      {/* ✅ CHANGED: Link scroll={false} pour ne pas remonter en haut */}
                       <Link
                         href={removeHref}
                         scroll={false}
-                        aria-label={tf("settings.profile.lists.removeLabel", "Supprimer cette séance")}
+                        aria-label={tf(
+                          "settings.profile.lists.removeLabel",
+                          "Supprimer cette séance"
+                        )}
                         className="text-xs"
                         style={{
                           fontSize: 12,
@@ -559,7 +632,8 @@ export default function ProfileClient(props: Props) {
               }}
             >
               <div className="text-sm" style={{ fontWeight: 600 }}>
-                {tf("settings.profile.lists.later.title", "À faire plus tard")} <span aria-hidden>⏳</span>
+                {tf("settings.profile.lists.later.title", "À faire plus tard")}{" "}
+                <span aria-hidden>⏳</span>
               </div>
               <span aria-hidden style={{ color: "#6b7280", fontWeight: 700 }}>
                 {openLater ? "▾" : "▸"}
@@ -567,21 +641,32 @@ export default function ProfileClient(props: Props) {
             </button>
 
             {openLater && laterList.length > 0 && (
-              <ul className="text-sm" style={{ listStyle: "disc", paddingLeft: 18, margin: "8px 0 0" }}>
+              <ul
+                className="text-sm"
+                style={{
+                  listStyle: "disc",
+                  paddingLeft: 18,
+                  margin: "8px 0 0",
+                }}
+              >
                 {laterList.map(({ s, idx, key }) => {
-                  const detailHref = `/dashboard/seance/${encodeURIComponent((s as any).id || key)}?${
-                    [baseLinkQuery, "from=profile"].filter(Boolean).join("&")
-                  }`;
+                  const detailHref = `/dashboard/seance/${encodeURIComponent(
+                    (s as any).id || key
+                  )}?${[baseLinkQuery, "from=profile"].filter(Boolean).join("&")}`;
 
                   const newLaterKeys = [...laterIdSet].filter((k) => k !== key);
                   const removeQuery = [
                     equipMode === "none" ? "equip=none" : undefined,
                     savedIdSet.size ? `saved=${[...savedIdSet].join(",")}` : undefined,
-                    newLaterKeys.length ? `later=${newLaterKeys.join(",")}` : undefined,
+                    newLaterKeys.length
+                      ? `later=${newLaterKeys.join(",")}`
+                      : undefined,
                   ]
                     .filter(Boolean)
                     .join("&");
-                  const removeHref = `/dashboard/profile${removeQuery ? `?${removeQuery}` : ""}`;
+                  const removeHref = `/dashboard/profile${
+                    removeQuery ? `?${removeQuery}` : ""
+                  }`;
 
                   return (
                     <li
@@ -602,15 +687,20 @@ export default function ProfileClient(props: Props) {
                           textUnderlineOffset: 2,
                         }}
                       >
-                        {s.title || (idx >= 0 ? `Séance ${idx + 1}` : "Séance")}
-                        {s.type && <span style={{ color: "#6b7280" }}> · {s.type}</span>}
+                        {s.title ||
+                          (idx >= 0 ? `Séance ${idx + 1}` : "Séance")}
+                        {s.type && (
+                          <span style={{ color: "#6b7280" }}> · {s.type}</span>
+                        )}
                       </a>
 
-                      {/* ✅ CHANGED: Link scroll={false} pour ne pas remonter en haut */}
                       <Link
                         href={removeHref}
                         scroll={false}
-                        aria-label={tf("settings.profile.lists.removeLabel", "Supprimer cette séance")}
+                        aria-label={tf(
+                          "settings.profile.lists.removeLabel",
+                          "Supprimer cette séance"
+                        )}
                         className="text-xs"
                         style={{
                           fontSize: 12,
