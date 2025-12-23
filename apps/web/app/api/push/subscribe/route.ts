@@ -1,4 +1,3 @@
-// apps/web/app/api/push/subscribe/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -23,17 +22,10 @@ function getSupabaseAdmin() {
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-
-    // ✅ ID stable NextAuth (Spotify id = token.sub)
     const appUserId = (session?.user as any)?.id as string | undefined;
 
-    // ✅ Fallback logique actuelle: cookie email
-    const emailFromCookie = (cookies().get("app_email")?.value || "")
-      .trim()
-      .toLowerCase();
-    const email = emailFromCookie || undefined;
+    const email = (cookies().get("app_email")?.value || "").trim().toLowerCase() || undefined;
 
-    // si ni appUserId ni email => pas d'identité
     if (!appUserId && !email) {
       return NextResponse.json(
         { ok: false, error: "unauthorized_no_app_user_id" },
@@ -46,10 +38,7 @@ export async function POST(req: NextRequest) {
     const subscription = body?.subscription as WebPushSubscription | undefined;
 
     if (!deviceId || !subscription) {
-      return NextResponse.json(
-        { ok: false, error: "missing_deviceId_or_subscription" },
-        { status: 400 }
-      );
+      return NextResponse.json({ ok: false, error: "missing_deviceId_or_subscription" }, { status: 400 });
     }
 
     const endpoint = subscription?.endpoint?.trim();
@@ -57,40 +46,56 @@ export async function POST(req: NextRequest) {
     const auth = subscription?.keys?.auth?.trim();
 
     if (!endpoint || !p256dh || !auth) {
-      return NextResponse.json(
-        { ok: false, error: "missing_endpoint_or_keys" },
-        { status: 400 }
-      );
+      return NextResponse.json({ ok: false, error: "missing_endpoint_or_keys" }, { status: 400 });
     }
 
     const userAgent =
-      (body?.userAgent as string | undefined) ||
-      req.headers.get("user-agent") ||
-      undefined;
+      (body?.userAgent as string | undefined) || req.headers.get("user-agent") || undefined;
 
     const supabase = getSupabaseAdmin();
 
-    // ✅ Si NextAuth => on garde l'ancienne clé app_user_id
-    // ✅ Sinon => on enregistre par email (logique cookie)
-    const payload: any = {
-      device_id: deviceId,
-      endpoint,
-      p256dh,
-      auth,
-      user_agent: userAgent,
-    };
+    // ✅ 1) NextAuth user => table existante (avec user_id/app_user_id NOT NULL)
+    if (appUserId) {
+      const { error } = await supabase
+        .from("push_subscriptions")
+        .upsert(
+          {
+            app_user_id: appUserId, // ou user_id si ta table utilise user_id
+            device_id: deviceId,
+            endpoint,
+            p256dh,
+            auth,
+            user_agent: userAgent,
+          },
+          { onConflict: "app_user_id,device_id" }
+        );
 
-    if (appUserId) payload.app_user_id = appUserId;
-    if (!appUserId && email) payload.email = email;
+      if (error) {
+        console.error("[push/subscribe] Supabase upsert failed", error);
+        return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+      }
 
-    const onConflict = appUserId ? "app_user_id,device_id" : "email,device_id";
+      return NextResponse.json({ ok: true });
+    }
 
+    // ✅ 2) Pas de NextAuth => table email (sans user_id NOT NULL)
     const { error } = await supabase
-      .from("push_subscriptions")
-      .upsert(payload, { onConflict });
+      .from("push_subscriptions_email")
+      .upsert(
+        {
+          email,
+          device_id: deviceId,
+          endpoint,
+          p256dh,
+          auth,
+          user_agent: userAgent,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "email,device_id" }
+      );
 
     if (error) {
-      console.error("[push/subscribe] Supabase upsert failed", error);
+      console.error("[push/subscribe] Supabase upsert failed (email table)", error);
       return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
     }
 
@@ -103,4 +108,3 @@ export async function POST(req: NextRequest) {
     );
   }
 }
-
