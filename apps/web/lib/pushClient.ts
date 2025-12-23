@@ -46,8 +46,8 @@ export async function ensurePushSubscription(vapidPublicKey: string) {
 }
 
 /**
- * Active les notifications ET enregistre la subscription via l'API NextAuth /api/push/subscribe,
- * qui upsert ensuite la subscription en DB Supabase côté serveur (service role).
+ * Active les notifications ET enregistre la subscription via /api/push/subscribe (NextAuth),
+ * qui upsert ensuite en DB Supabase (service role).
  */
 export async function enableWebPush(vapidPublicKey: string) {
   if (typeof window === "undefined") throw new Error("Client only");
@@ -75,7 +75,6 @@ export async function enableWebPush(vapidPublicKey: string) {
     body: JSON.stringify({
       deviceId,
       subscription: subJson,
-      // optionnel mais utile
       userAgent: navigator.userAgent,
     }),
   });
