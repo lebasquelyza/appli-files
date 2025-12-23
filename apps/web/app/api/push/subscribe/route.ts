@@ -33,7 +33,8 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json().catch(() => null);
-    const deviceId = body?.deviceId as string | undefined;
+
+    const deviceId = (body?.deviceId as string | undefined)?.trim();
     const subscription = body?.subscription as WebPushSubscription | undefined;
 
     if (!deviceId || !subscription) {
@@ -43,9 +44,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const endpoint = subscription?.endpoint;
-    const p256dh = subscription?.keys?.p256dh;
-    const auth = subscription?.keys?.auth;
+    const endpoint = subscription?.endpoint?.trim();
+    const p256dh = subscription?.keys?.p256dh?.trim();
+    const auth = subscription?.keys?.auth?.trim();
 
     if (!endpoint || !p256dh || !auth) {
       return NextResponse.json(
@@ -65,10 +66,10 @@ export async function POST(req: NextRequest) {
       .upsert(
         {
           user_id: supaUserId,
+          device_id: deviceId,
           endpoint,
           p256dh,
           auth,
-          device_id: deviceId,
           user_agent: userAgent,
         },
         { onConflict: "user_id,device_id" }
@@ -88,4 +89,3 @@ export async function POST(req: NextRequest) {
     );
   }
 }
-
