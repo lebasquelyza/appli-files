@@ -21,14 +21,12 @@ function getSupabaseAdmin() {
 
 export async function POST(req: NextRequest) {
   try {
-    // 1) NextAuth session
     const session = await getServerSession(authOptions);
     const userId = (session?.user as any)?.id as string | undefined;
     if (!userId) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
 
-    // 2) Body (on supporte ton format existant)
     const body = await req.json().catch(() => null);
-    const deviceId = (body?.deviceId || body?.device_id) as string | undefined;
+    const deviceId = body?.deviceId as string | undefined;
     const subscription = body?.subscription as WebPushSubscription | undefined;
 
     if (!deviceId || !subscription) {
@@ -45,16 +43,15 @@ export async function POST(req: NextRequest) {
 
     const userAgent =
       (body?.userAgent as string | undefined) ||
-      (body?.user_agent as string | undefined) ||
       (req.headers.get("user-agent") ?? undefined);
 
-    // 3) Upsert Supabase
     const supabase = getSupabaseAdmin();
+
     const { error } = await supabase
       .from("push_subscriptions")
       .upsert(
         {
-          app_user_id: userId,
+          user_id: userId, // ⚠️ doit être un UUID string
           endpoint,
           p256dh,
           auth,
