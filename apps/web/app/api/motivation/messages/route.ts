@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { createClient } from "@supabase/supabase-js";
 
 type DayKey = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 type Target = "ME" | "FRIENDS";
@@ -29,18 +30,26 @@ function isValidTimeHHmm(time: string) {
   return hh >= 0 && hh <= 23 && mm >= 0 && mm <= 59;
 }
 
+function getSupabaseAdmin() {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) throw new Error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
+  return createClient(url, key, { auth: { persistSession: false } });
+}
+
 /**
  * POST /api/motivation/messages
- * - ME    => crée une programmation COACH (Files Le Coach)
- * - FRIENDS => crée une programmation CUSTOM + recipients sélectionnés
+ * - ME      => programmation COACH
+ * - FRIENDS => programmation CUSTOM + recipients
+ *
+ * Stockage: Supabase
+ * Vérif amis: Prisma (friendRequest)
  */
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   const userId = (session?.user as any)?.id as string | undefined;
 
-  if (!userId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json().catch(() => null);
   if (!body) return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
@@ -49,62 +58,53 @@ export async function POST(req: NextRequest) {
     target: string;
     content?: string;
     days: DayKey[];
-    time: string; // HH:mm
-    recipientIds?: string[]; // NEW for FRIENDS
+    time: string;
+    recipientIds?: string[];
   };
 
   const normTarget = normalizeTarget(target);
 
   if (!validateDays(days) || days.length === 0) {
-    return NextResponse.json(
-      { error: "At least one valid day is required" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "At least one valid day is required" }, { status: 400 });
   }
 
   if (!time || typeof time !== "string" || !isValidTimeHHmm(time)) {
-    return NextResponse.json(
-      { error: "Invalid time (expected HH:mm)" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "Invalid time (expected HH:mm)" }, { status: 400 });
   }
 
+  const supabase = getSupabaseAdmin();
+  const tz = "Europe/Paris";
+
   if (normTarget === "ME") {
-    // COACH mode: le contenu réellement envoyé sera choisi au moment du cron
-    const msg = await prisma.motivationMessage.create({
-      data: {
-        userId,
+    const msg = await supabase
+      .from("motivation_messages")
+      .insert({
+        app_user_id: userId,
         target: "ME",
         mode: "COACH",
-        // ✅ on garde mais propre
         content: (content ?? "").trim().slice(0, 240),
         days: daysArrayToString(days),
         time,
+        tz,
         active: true,
-      },
-    });
+      })
+      .select("*")
+      .single();
 
-    return NextResponse.json(msg, { status: 201 });
+    if (msg.error) return NextResponse.json({ error: msg.error.message }, { status: 500 });
+    return NextResponse.json(msg.data, { status: 201 });
   }
 
-  // FRIENDS: CUSTOM + recipients obligatoires
+  // FRIENDS
   const trimmed = (content ?? "").trim();
   if (!trimmed) return NextResponse.json({ error: "Missing content" }, { status: 400 });
-  if (trimmed.length > 240) {
-    return NextResponse.json(
-      { error: "Content too long (max 240 chars)" },
-      { status: 400 }
-    );
-  }
+  if (trimmed.length > 240) return NextResponse.json({ error: "Content too long (max 240 chars)" }, { status: 400 });
 
   if (!Array.isArray(recipientIds) || recipientIds.length === 0) {
-    return NextResponse.json(
-      { error: "Select at least one friend" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "Select at least one friend" }, { status: 400 });
   }
 
-  // Vérifie que ce sont bien des amis ACCEPTED (sinon on refuse)
+  // Vérifie ACCEPTED (Prisma)
   const relations = await prisma.friendRequest.findMany({
     where: {
       status: "ACCEPTED",
@@ -122,50 +122,99 @@ export async function POST(req: NextRequest) {
 
   const invalid = recipientIds.filter((id) => !friendSet.has(id));
   if (invalid.length > 0) {
-    return NextResponse.json(
-      { error: "Some recipients are not your accepted friends" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "Some recipients are not your accepted friends" }, { status: 400 });
   }
 
-  const msg = await prisma.motivationMessage.create({
-    data: {
-      userId,
+  // Crée message Supabase
+  const msg = await supabase
+    .from("motivation_messages")
+    .insert({
+      app_user_id: userId,
       target: "FRIENDS",
       mode: "CUSTOM",
       content: trimmed,
       days: daysArrayToString(days),
       time,
+      tz,
       active: true,
-      recipients: {
-        create: recipientIds.map((rid) => ({
-          recipientUserId: rid,
-        })),
-      },
-    },
-    include: { recipients: true },
-  });
+    })
+    .select("*")
+    .single();
 
-  return NextResponse.json(msg, { status: 201 });
+  if (msg.error) return NextResponse.json({ error: msg.error.message }, { status: 500 });
+
+  // Crée recipients Supabase
+  const rows = recipientIds.map((rid) => ({
+    message_id: msg.data.id,
+    recipient_app_user_id: rid,
+  }));
+
+  const rec = await supabase.from("motivation_recipients").insert(rows);
+  if (rec.error) return NextResponse.json({ error: rec.error.message }, { status: 500 });
+
+  return NextResponse.json(
+    {
+      ...msg.data,
+      recipients: recipientIds.map((rid) => ({ recipientUserId: rid })),
+    },
+    { status: 201 }
+  );
 }
 
 /**
  * GET /api/motivation/messages
- * Liste les programmations de l'utilisateur connecté
+ * Liste les programmations actives de l'utilisateur (Supabase)
  */
 export async function GET() {
   const session = await getServerSession(authOptions);
   const userId = (session?.user as any)?.id as string | undefined;
 
-  if (!userId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const supabase = getSupabaseAdmin();
+
+  const msgs = await supabase
+    .from("motivation_messages")
+    .select("*")
+    .eq("app_user_id", userId)
+    .eq("active", true)
+    .order("created_at", { ascending: false });
+
+  if (msgs.error) return NextResponse.json({ error: msgs.error.message }, { status: 500 });
+
+  const ids = (msgs.data || []).map((m: any) => m.id);
+  let recipientsByMsg: Record<string, Array<{ recipientUserId: string }>> = {};
+
+  if (ids.length) {
+    const recs = await supabase
+      .from("motivation_recipients")
+      .select("message_id, recipient_app_user_id")
+      .in("message_id", ids);
+
+    if (recs.error) return NextResponse.json({ error: recs.error.message }, { status: 500 });
+
+    for (const r of recs.data || []) {
+      const mid = (r as any).message_id as string;
+      const rid = (r as any).recipient_app_user_id as string;
+      if (!recipientsByMsg[mid]) recipientsByMsg[mid] = [];
+      recipientsByMsg[mid].push({ recipientUserId: rid });
+    }
   }
 
-  const messages = await prisma.motivationMessage.findMany({
-    where: { userId, active: true },
-    orderBy: { createdAt: "desc" },
-    include: { recipients: true },
-  });
+  // Format compatible front
+  const payload = (msgs.data || []).map((m: any) => ({
+    id: m.id,
+    userId: m.app_user_id,
+    target: m.target,
+    mode: m.mode,
+    content: m.content,
+    days: m.days,
+    time: m.time,
+    active: m.active,
+    createdAt: m.created_at,
+    updatedAt: m.updated_at,
+    recipients: recipientsByMsg[m.id] || [],
+  }));
 
-  return NextResponse.json(messages);
+  return NextResponse.json(payload);
 }
