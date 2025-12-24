@@ -426,6 +426,21 @@ export default function MotivationPage() {
     }
   };
 
+  // ✅ AJOUT : test push serveur (vérifie l'envoi web-push côté API)
+  const sendServerPushTest = async () => {
+    try {
+      const res = await fetch("/api/push/test?secret=DEV", { method: "POST" });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        alert(`Test push serveur échoué (${res.status})\n\n${txt}`);
+        return;
+      }
+      alert("Test push serveur envoyé ✅ (regarde la notif système)");
+    } catch (e: any) {
+      alert(`Test push serveur erreur:\n\n${e?.message || String(e)}`);
+    }
+  };
+
   if (status === "loading") {
     return (
       <div
@@ -533,6 +548,16 @@ export default function MotivationPage() {
             {pushBusy ? "Activation..." : "Activer les notifications"}
           </button>
 
+          {/* ✅ AJOUT : bouton test push serveur */}
+          <button
+            type="button"
+            className="btn btn-dash"
+            style={{ fontSize: 12, borderRadius: 999, padding: "6px 10px" }}
+            onClick={sendServerPushTest}
+          >
+            Test push serveur
+          </button>
+
           <div style={{ display: "inline-flex", borderRadius: 999, border: "1px solid #e5e7eb", overflow: "hidden" }}>
             <button
               type="button"
@@ -631,7 +656,16 @@ export default function MotivationPage() {
           }}
         />
 
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginTop: 4, flexWrap: "wrap" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 8,
+            marginTop: 4,
+            flexWrap: "wrap",
+          }}
+        >
           <span style={{ fontSize: 11, color: "#6b7280" }}>
             {remaining} {t("motivation.messageBlock.remaining", "caractères restants")}
           </span>
