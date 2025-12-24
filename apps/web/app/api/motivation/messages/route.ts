@@ -31,9 +31,10 @@ function isValidTimeHHmm(time: string) {
 }
 
 function getSupabaseAdmin() {
-  const url = process.env.SUPABASE_URL;
+  // ✅ FIX: support Netlify env naming
+  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) throw new Error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !key) throw new Error("Missing SUPABASE_URL (or NEXT_PUBLIC_SUPABASE_URL) or SUPABASE_SERVICE_ROLE_KEY");
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
@@ -46,42 +47,92 @@ function getSupabaseAdmin() {
  * Vérif amis: Prisma (friendRequest)
  */
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  const userId = (session?.user as any)?.id as string | undefined;
+  try {
+    const session = await getServerSession(authOptions);
+    const userId = (session?.user as any)?.id as string | undefined;
 
-  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = await req.json().catch(() => null);
-  if (!body) return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+    const body = await req.json().catch(() => null);
+    if (!body) return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
 
-  const { target, content, days, time, recipientIds } = body as {
-    target: string;
-    content?: string;
-    days: DayKey[];
-    time: string;
-    recipientIds?: string[];
-  };
+    const { target, content, days, time, recipientIds } = body as {
+      target: string;
+      content?: string;
+      days: DayKey[];
+      time: string;
+      recipientIds?: string[];
+    };
 
-  const normTarget = normalizeTarget(target);
+    const normTarget = normalizeTarget(target);
 
-  if (!validateDays(days) || days.length === 0) {
-    return NextResponse.json({ error: "At least one valid day is required" }, { status: 400 });
-  }
+    if (!validateDays(days) || days.length === 0) {
+      return NextResponse.json({ error: "At least one valid day is required" }, { status: 400 });
+    }
 
-  if (!time || typeof time !== "string" || !isValidTimeHHmm(time)) {
-    return NextResponse.json({ error: "Invalid time (expected HH:mm)" }, { status: 400 });
-  }
+    if (!time || typeof time !== "string" || !isValidTimeHHmm(time)) {
+      return NextResponse.json({ error: "Invalid time (expected HH:mm)" }, { status: 400 });
+    }
 
-  const supabase = getSupabaseAdmin();
+    const supabase = getSupabaseAdmin();
 
-  if (normTarget === "ME") {
+    if (normTarget === "ME") {
+      const msg = await supabase
+        .from("motivation_messages")
+        .insert({
+          user_id: userId, // ✅ FIX (was app_user_id)
+          target: "ME",
+          mode: "COACH",
+          content: (content ?? "").trim().slice(0, 240),
+          days: daysArrayToString(days),
+          time,
+          active: true,
+        })
+        .select("*")
+        .single();
+
+      if (msg.error) return NextResponse.json({ error: msg.error.message }, { status: 500 });
+      return NextResponse.json(msg.data, { status: 201 });
+    }
+
+    // FRIENDS
+    const trimmed = (content ?? "").trim();
+    if (!trimmed) return NextResponse.json({ error: "Missing content" }, { status: 400 });
+    if (trimmed.length > 240) return NextResponse.json({ error: "Content too long (max 240 chars)" }, { status: 400 });
+
+    if (!Array.isArray(recipientIds) || recipientIds.length === 0) {
+      return NextResponse.json({ error: "Select at least one friend" }, { status: 400 });
+    }
+
+    // Vérifie ACCEPTED (Prisma)
+    const relations = await prisma.friendRequest.findMany({
+      where: {
+        status: "ACCEPTED",
+        OR: [
+          { requesterId: userId, addresseeId: { in: recipientIds } },
+          { addresseeId: userId, requesterId: { in: recipientIds } },
+        ],
+      },
+    });
+
+    const friendSet = new Set<string>();
+    for (const r of relations) {
+      friendSet.add(r.requesterId === userId ? r.addresseeId : r.requesterId);
+    }
+
+    const invalid = recipientIds.filter((id) => !friendSet.has(id));
+    if (invalid.length > 0) {
+      return NextResponse.json({ error: "Some recipients are not your accepted friends" }, { status: 400 });
+    }
+
+    // Crée message Supabase
     const msg = await supabase
       .from("motivation_messages")
       .insert({
-        user_id: userId, // ✅ FIX (was app_user_id)
-        target: "ME",
-        mode: "COACH",
-        content: (content ?? "").trim().slice(0, 240),
+        user_id: userId, // ✅ FIX
+        target: "FRIENDS",
+        mode: "CUSTOM",
+        content: trimmed,
         days: daysArrayToString(days),
         time,
         active: true,
@@ -90,72 +141,26 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (msg.error) return NextResponse.json({ error: msg.error.message }, { status: 500 });
-    return NextResponse.json(msg.data, { status: 201 });
+
+    // Crée recipients Supabase
+    const rows = recipientIds.map((rid) => ({
+      message_id: msg.data.id,
+      recipient_user_id: rid, // ✅ FIX (was recipient_app_user_id)
+    }));
+
+    const rec = await supabase.from("motivation_recipients").insert(rows);
+    if (rec.error) return NextResponse.json({ error: rec.error.message }, { status: 500 });
+
+    return NextResponse.json(
+      {
+        ...msg.data,
+        recipients: recipientIds.map((rid) => ({ recipientUserId: rid })),
+      },
+      { status: 201 }
+    );
+  } catch (e: any) {
+    return NextResponse.json({ error: "fatal", message: String(e?.message || e) }, { status: 500 });
   }
-
-  // FRIENDS
-  const trimmed = (content ?? "").trim();
-  if (!trimmed) return NextResponse.json({ error: "Missing content" }, { status: 400 });
-  if (trimmed.length > 240) return NextResponse.json({ error: "Content too long (max 240 chars)" }, { status: 400 });
-
-  if (!Array.isArray(recipientIds) || recipientIds.length === 0) {
-    return NextResponse.json({ error: "Select at least one friend" }, { status: 400 });
-  }
-
-  // Vérifie ACCEPTED (Prisma)
-  const relations = await prisma.friendRequest.findMany({
-    where: {
-      status: "ACCEPTED",
-      OR: [
-        { requesterId: userId, addresseeId: { in: recipientIds } },
-        { addresseeId: userId, requesterId: { in: recipientIds } },
-      ],
-    },
-  });
-
-  const friendSet = new Set<string>();
-  for (const r of relations) {
-    friendSet.add(r.requesterId === userId ? r.addresseeId : r.requesterId);
-  }
-
-  const invalid = recipientIds.filter((id) => !friendSet.has(id));
-  if (invalid.length > 0) {
-    return NextResponse.json({ error: "Some recipients are not your accepted friends" }, { status: 400 });
-  }
-
-  // Crée message Supabase
-  const msg = await supabase
-    .from("motivation_messages")
-    .insert({
-      user_id: userId, // ✅ FIX (was app_user_id)
-      target: "FRIENDS",
-      mode: "CUSTOM",
-      content: trimmed,
-      days: daysArrayToString(days),
-      time,
-      active: true,
-    })
-    .select("*")
-    .single();
-
-  if (msg.error) return NextResponse.json({ error: msg.error.message }, { status: 500 });
-
-  // Crée recipients Supabase
-  const rows = recipientIds.map((rid) => ({
-    message_id: msg.data.id,
-    recipient_user_id: rid, // ✅ FIX (was recipient_app_user_id)
-  }));
-
-  const rec = await supabase.from("motivation_recipients").insert(rows);
-  if (rec.error) return NextResponse.json({ error: rec.error.message }, { status: 500 });
-
-  return NextResponse.json(
-    {
-      ...msg.data,
-      recipients: recipientIds.map((rid) => ({ recipientUserId: rid })),
-    },
-    { status: 201 }
-  );
 }
 
 /**
@@ -163,55 +168,58 @@ export async function POST(req: NextRequest) {
  * Liste les programmations actives de l'utilisateur (Supabase)
  */
 export async function GET() {
-  const session = await getServerSession(authOptions);
-  const userId = (session?.user as any)?.id as string | undefined;
+  try {
+    const session = await getServerSession(authOptions);
+    const userId = (session?.user as any)?.id as string | undefined;
 
-  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const supabase = getSupabaseAdmin();
+    const supabase = getSupabaseAdmin();
 
-  const msgs = await supabase
-    .from("motivation_messages")
-    .select("*")
-    .eq("user_id", userId) // ✅ FIX (was app_user_id)
-    .eq("active", true)
-    .order("created_at", { ascending: false });
+    const msgs = await supabase
+      .from("motivation_messages")
+      .select("*")
+      .eq("user_id", userId) // ✅ FIX
+      .eq("active", true)
+      .order("created_at", { ascending: false });
 
-  if (msgs.error) return NextResponse.json({ error: msgs.error.message }, { status: 500 });
+    if (msgs.error) return NextResponse.json({ error: msgs.error.message }, { status: 500 });
 
-  const ids = (msgs.data || []).map((m: any) => m.id);
-  let recipientsByMsg: Record<string, Array<{ recipientUserId: string }>> = {};
+    const ids = (msgs.data || []).map((m: any) => m.id);
+    let recipientsByMsg: Record<string, Array<{ recipientUserId: string }>> = {};
 
-  if (ids.length) {
-    const recs = await supabase
-      .from("motivation_recipients")
-      .select("message_id, recipient_user_id") // ✅ FIX (was recipient_app_user_id)
-      .in("message_id", ids);
+    if (ids.length) {
+      const recs = await supabase
+        .from("motivation_recipients")
+        .select("message_id, recipient_user_id") // ✅ FIX
+        .in("message_id", ids);
 
-    if (recs.error) return NextResponse.json({ error: recs.error.message }, { status: 500 });
+      if (recs.error) return NextResponse.json({ error: recs.error.message }, { status: 500 });
 
-    for (const r of recs.data || []) {
-      const mid = (r as any).message_id as string;
-      const rid = (r as any).recipient_user_id as string;
-      if (!recipientsByMsg[mid]) recipientsByMsg[mid] = [];
-      recipientsByMsg[mid].push({ recipientUserId: rid });
+      for (const r of recs.data || []) {
+        const mid = (r as any).message_id as string;
+        const rid = (r as any).recipient_user_id as string;
+        if (!recipientsByMsg[mid]) recipientsByMsg[mid] = [];
+        recipientsByMsg[mid].push({ recipientUserId: rid });
+      }
     }
+
+    const payload = (msgs.data || []).map((m: any) => ({
+      id: m.id,
+      userId: m.user_id, // ✅ FIX
+      target: m.target,
+      mode: m.mode,
+      content: m.content,
+      days: m.days,
+      time: m.time,
+      active: m.active,
+      createdAt: m.created_at,
+      updatedAt: m.updated_at,
+      recipients: recipientsByMsg[m.id] || [],
+    }));
+
+    return NextResponse.json(payload);
+  } catch (e: any) {
+    return NextResponse.json({ error: "fatal", message: String(e?.message || e) }, { status: 500 });
   }
-
-  // Format compatible front
-  const payload = (msgs.data || []).map((m: any) => ({
-    id: m.id,
-    userId: m.user_id, // ✅ FIX (was app_user_id)
-    target: m.target,
-    mode: m.mode,
-    content: m.content,
-    days: m.days,
-    time: m.time,
-    active: m.active,
-    createdAt: m.created_at,
-    updatedAt: m.updated_at,
-    recipients: recipientsByMsg[m.id] || [],
-  }));
-
-  return NextResponse.json(payload);
 }
