@@ -150,7 +150,8 @@ export default function MotivationPage() {
 
     async function loadMessages() {
       try {
-        const res = await fetch("/api/motivation/messages");
+        // ✅ IMPORTANT: envoie les cookies NextAuth
+        const res = await fetch("/api/motivation/messages", { credentials: "include" });
         if (!res.ok) return;
         const data: MotivationMessageApi[] = await res.json();
         if (cancelled || !Array.isArray(data)) return;
@@ -348,6 +349,7 @@ export default function MotivationPage() {
       const res = await fetch("/api/motivation/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include", // ✅ IMPORTANT: envoie les cookies NextAuth
         body: JSON.stringify({
           target: scheduleTarget,
           content: trimmed,
@@ -357,21 +359,18 @@ export default function MotivationPage() {
         }),
       });
 
-      // ✅ DEBUG: montre exactement la réponse de l'API
       const text = await res.text().catch(() => "");
+      if (!res.ok) {
+        alert(`Erreur API (${res.status})\n\n${text}`);
+        return;
+      }
+
       let json: any = null;
       try {
         json = text ? JSON.parse(text) : null;
       } catch {
         json = null;
       }
-
-      if (!res.ok) {
-        alert(`Erreur API (${res.status})\n\n${text}`);
-        return;
-      }
-
-      alert(`OK ✅\n\n${json ? JSON.stringify(json, null, 2) : text}`);
 
       const msg: MotivationMessageApi = (json as MotivationMessageApi) ?? ({} as any);
       const isMe = msg.target === "ME";
@@ -742,127 +741,6 @@ export default function MotivationPage() {
               />
             </div>
 
-            {/* Friends selection */}
-            {scheduleTarget === "FRIENDS" && (
-              <div style={{ marginTop: 6, display: "grid", gap: 6 }}>
-                <div style={{ fontSize: 12, color: "#374151", fontWeight: 600 }}>Sélection des amis</div>
-
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  <input
-                    value={friendQuery}
-                    onChange={(e) => setFriendQuery(e.target.value)}
-                    placeholder="Rechercher par email / nom (min 2 caractères)"
-                    style={{
-                      flex: 1,
-                      minWidth: 240,
-                      fontSize: 12,
-                      padding: "6px 8px",
-                      borderRadius: 8,
-                      border: "1px solid #e5e7eb",
-                    }}
-                  />
-                  <button
-                    type="button"
-                    className="btn btn-dash"
-                    onClick={loadFriends}
-                    disabled={loadingFriends}
-                    style={{ fontSize: 12, borderRadius: 999, padding: "6px 10px" }}
-                  >
-                    {loadingFriends ? "Chargement..." : "Mes amis"}
-                  </button>
-                </div>
-
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                  {selectedFriendIds.length === 0 ? (
-                    <span style={{ fontSize: 11, color: "#6b7280" }}>Aucun ami sélectionné (obligatoire).</span>
-                  ) : (
-                    selectedFriendIds.map((id) => {
-                      const u = friends.find((f) => f.id === id) || searchResults.find((s) => s.id === id);
-                      const label = u?.name || u?.email || id;
-                      return (
-                        <button
-                          key={id}
-                          type="button"
-                          onClick={() => removeSelected(id)}
-                          style={{
-                            borderRadius: 999,
-                            border: "1px solid #e5e7eb",
-                            padding: "4px 10px",
-                            fontSize: 12,
-                            background: "#111827",
-                            color: "#fff",
-                            cursor: "pointer",
-                          }}
-                          title="Cliquer pour retirer"
-                        >
-                          {label} ✕
-                        </button>
-                      );
-                    })
-                  )}
-                </div>
-
-                <div style={{ display: "grid", gap: 6 }}>
-                  <div style={{ fontSize: 11, color: "#6b7280" }}>Suggestions (tes amis acceptés)</div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                    {friends.length === 0 ? (
-                      <span style={{ fontSize: 11, color: "#6b7280" }}>
-                        Pas d’amis pour le moment. Cherche un utilisateur et envoie une demande dans l’onglet “Amis”.
-                      </span>
-                    ) : (
-                      friends.map((f) => (
-                        <button
-                          key={f.id}
-                          type="button"
-                          onClick={() => addSelected(f.id)}
-                          style={{
-                            borderRadius: 999,
-                            border: "1px solid #e5e7eb",
-                            padding: "4px 10px",
-                            fontSize: 12,
-                            background: selectedFriendIds.includes(f.id) ? "#111827" : "#ffffff",
-                            color: selectedFriendIds.includes(f.id) ? "#fff" : "#374151",
-                            cursor: "pointer",
-                          }}
-                        >
-                          {(f.name || f.email || f.id).toString()}
-                        </button>
-                      ))
-                    )}
-                  </div>
-                </div>
-
-                {searchResults.length > 0 && (
-                  <div style={{ display: "grid", gap: 6 }}>
-                    <div style={{ fontSize: 11, color: "#6b7280" }}>Résultats recherche (utilisateurs)</div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                      {searchResults.map((u) => (
-                        <button
-                          key={u.id}
-                          type="button"
-                          onClick={() => addSelected(u.id)}
-                          style={{
-                            borderRadius: 999,
-                            border: "1px solid #e5e7eb",
-                            padding: "4px 10px",
-                            fontSize: 12,
-                            background: selectedFriendIds.includes(u.id) ? "#111827" : "#ffffff",
-                            color: selectedFriendIds.includes(u.id) ? "#fff" : "#374151",
-                            cursor: "pointer",
-                          }}
-                        >
-                          {(u.name || u.email || u.id).toString()}
-                        </button>
-                      ))}
-                    </div>
-                    <div style={{ fontSize: 11, color: "#6b7280" }}>
-                      Note : pour envoyer réellement, l’utilisateur doit être un ami accepté.
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
               <button
                 type="button"
@@ -987,4 +865,3 @@ export default function MotivationPage() {
     </div>
   );
 }
-
