@@ -9,7 +9,7 @@ self.addEventListener("push", (event) => {
     data = {};
   }
 
-  // ✅ AJOUT : filtrage scope motivation
+  // ✅ AJOUT: filtrage "motivation only"
   const scope = data.scope || data?.data?.scope;
   if (scope && scope !== "motivation") return;
 
