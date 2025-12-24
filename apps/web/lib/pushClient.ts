@@ -47,6 +47,7 @@ export async function ensurePushSubscription(vapidPublicKey: string) {
 
 /**
  * Active les notifications ET enregistre la subscription via /api/push/subscribe.
+ * Le serveur doit ensuite l'upsert en DB (Supabase) en associant au user connecté.
  * + scope pour limiter à une page/fonction (ici: motivation).
  */
 export async function enableWebPush(vapidPublicKey: string, scope: string) {
@@ -72,7 +73,7 @@ export async function enableWebPush(vapidPublicKey: string, scope: string) {
   const res = await fetch("/api/push/subscribe", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    credentials: "include",
+    credentials: "include", // ✅ IMPORTANT: envoie les cookies NextAuth
     body: JSON.stringify({
       deviceId,
       scope, // ✅ AJOUT
