@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -10,19 +8,6 @@ type PushSubRow = { endpoint: string; p256dh: string; auth: string };
 
 export async function POST(req: NextRequest) {
   try {
-    // ✅ Auth: session OU secret (prod)
-    const session = await getServerSession(authOptions);
-    const hasSession = !!session; // ✅ ne dépend PAS de session.user.id
-
-    const isProd = process.env.NODE_ENV === "production";
-    if (isProd && !hasSession) {
-      const secret = req.headers.get("x-push-test-secret") || req.nextUrl.searchParams.get("secret");
-      if (!process.env.PUSH_TEST_SECRET || secret !== process.env.PUSH_TEST_SECRET) {
-        return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
-      }
-    }
-
-    // ✅ Supabase admin
     const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!supabaseUrl || !serviceKey) {
@@ -30,7 +15,6 @@ export async function POST(req: NextRequest) {
     }
     const supabase = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
 
-    // ✅ VAPID
     const PUB = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || process.env.VAPID_PUBLIC_KEY;
     const PRIV = process.env.VAPID_PRIVATE_KEY;
     const SUBJ = process.env.VAPID_SUBJECT || "mailto:admin@example.com";
@@ -38,7 +22,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "missing_vapid_keys" }, { status: 500 });
     }
 
-    // ✅ Récupère 1 subscription scope motivation (la plus récente)
     const { data: subs, error: subsErr } = await supabase
       .from("push_subscriptions")
       .select("endpoint,p256dh,auth")
