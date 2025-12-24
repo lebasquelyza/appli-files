@@ -9,6 +9,10 @@ self.addEventListener("push", (event) => {
     data = {};
   }
 
+  // ✅ AJOUT : filtrage scope motivation
+  const scope = data.scope || data?.data?.scope;
+  if (scope && scope !== "motivation") return;
+
   const title = data.title || "Files";
   const body = data.body || "";
   const url = data?.data?.url || data.url || "/";
