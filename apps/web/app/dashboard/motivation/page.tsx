@@ -406,7 +406,6 @@ export default function MotivationPage() {
     (scheduleTarget === "ME" ||
       (scheduleTarget === "FRIENDS" && !!message.trim() && selectedFriendIds.length > 0));
 
-  // ✅ IMPORTANT : affiche l'erreur exacte
   const activatePush = async () => {
     if (!VAPID_PUBLIC_KEY) {
       alert("NEXT_PUBLIC_VAPID_PUBLIC_KEY manquant (à configurer dans Netlify)");
@@ -426,16 +425,17 @@ export default function MotivationPage() {
     }
   };
 
-  // ✅ AJOUT : test push serveur (vérifie l'envoi web-push côté API)
+  // ✅ AJOUT: bouton test push serveur (dev)
   const sendServerPushTest = async () => {
     try {
-      const res = await fetch("/api/push/test?secret=DEV", { method: "POST" });
+      const res = await fetch("/api/push/test", { method: "POST" });
       if (!res.ok) {
         const txt = await res.text().catch(() => "");
         alert(`Test push serveur échoué (${res.status})\n\n${txt}`);
         return;
       }
-      alert("Test push serveur envoyé ✅ (regarde la notif système)");
+      const json = await res.json().catch(() => null);
+      alert(`Test push serveur envoyé ✅\n\n${json ? JSON.stringify(json) : ""}`);
     } catch (e: any) {
       alert(`Test push serveur erreur:\n\n${e?.message || String(e)}`);
     }
@@ -548,7 +548,7 @@ export default function MotivationPage() {
             {pushBusy ? "Activation..." : "Activer les notifications"}
           </button>
 
-          {/* ✅ AJOUT : bouton test push serveur */}
+          {/* ✅ AJOUT */}
           <button
             type="button"
             className="btn btn-dash"
@@ -656,16 +656,7 @@ export default function MotivationPage() {
           }}
         />
 
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: 8,
-            marginTop: 4,
-            flexWrap: "wrap",
-          }}
-        >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginTop: 4, flexWrap: "wrap" }}>
           <span style={{ fontSize: 11, color: "#6b7280" }}>
             {remaining} {t("motivation.messageBlock.remaining", "caractères restants")}
           </span>
