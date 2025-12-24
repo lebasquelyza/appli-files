@@ -23,19 +23,21 @@ function getSupabaseAdmin() {
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    const appUserId = (session?.user as any)?.id as string | undefined;
+
+    // ✅ SUPABASE UUID (comme motivation_messages.user_id)
+    const userId = (session?.user as any)?.id as string | undefined;
 
     const email = (cookies().get("app_email")?.value || "").trim().toLowerCase() || undefined;
 
-    if (!appUserId && !email) {
-      return NextResponse.json({ ok: false, error: "unauthorized_no_app_user_id" }, { status: 401 });
+    if (!userId && !email) {
+      return NextResponse.json({ ok: false, error: "unauthorized_no_user" }, { status: 401 });
     }
 
     const body = await req.json().catch(() => null);
     const deviceId = (body?.deviceId as string | undefined)?.trim();
     const subscription = body?.subscription as WebPushSubscription | undefined;
 
-    // ✅ AJOUT: scope (pour cibler "motivation" uniquement)
+    // ✅ scope motivation only
     const scope = (body?.scope as string | undefined)?.trim() || "motivation";
 
     if (!deviceId || !subscription) {
@@ -55,21 +57,22 @@ export async function POST(req: NextRequest) {
 
     const supabase = getSupabaseAdmin();
 
-    // ✅ 1) NextAuth user => push_subscriptions (clé unique app_user_id,device_id)
-    if (appUserId) {
+    // ✅ 1) User connecté => push_subscriptions (user_id,device_id)
+    if (userId) {
       const { error } = await supabase
         .from("push_subscriptions")
         .upsert(
           {
-            app_user_id: appUserId, // string (NextAuth)
+            user_id: userId, // ✅ UUID supabase
             device_id: deviceId,
             endpoint,
             p256dh,
             auth,
             user_agent: userAgent,
-            scope, // ✅ AJOUT
+            scope,
+            email: email || null,
           },
-          { onConflict: "app_user_id,device_id" }
+          { onConflict: "user_id,device_id" } // ✅ IMPORTANT
         );
 
       if (error) {
@@ -80,7 +83,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    // ✅ 2) Pas de NextAuth => table email (fallback)
+    // ✅ 2) Fallback email (si pas de session)
     const { error } = await supabase
       .from("push_subscriptions_email")
       .upsert(
@@ -92,9 +95,6 @@ export async function POST(req: NextRequest) {
           auth,
           user_agent: userAgent,
           updated_at: new Date().toISOString(),
-          // ⚠️ Si tu veux aussi filtrer par scope ici:
-          // -> ajoute une colonne scope à push_subscriptions_email et décommente la ligne suivante
-          // scope,
         },
         { onConflict: "email,device_id" }
       );
