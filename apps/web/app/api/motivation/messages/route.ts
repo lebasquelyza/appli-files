@@ -73,19 +73,17 @@ export async function POST(req: NextRequest) {
   }
 
   const supabase = getSupabaseAdmin();
-  const tz = "Europe/Paris";
 
   if (normTarget === "ME") {
     const msg = await supabase
       .from("motivation_messages")
       .insert({
-        app_user_id: userId,
+        user_id: userId, // ✅ FIX (was app_user_id)
         target: "ME",
         mode: "COACH",
         content: (content ?? "").trim().slice(0, 240),
         days: daysArrayToString(days),
         time,
-        tz,
         active: true,
       })
       .select("*")
@@ -129,13 +127,12 @@ export async function POST(req: NextRequest) {
   const msg = await supabase
     .from("motivation_messages")
     .insert({
-      app_user_id: userId,
+      user_id: userId, // ✅ FIX (was app_user_id)
       target: "FRIENDS",
       mode: "CUSTOM",
       content: trimmed,
       days: daysArrayToString(days),
       time,
-      tz,
       active: true,
     })
     .select("*")
@@ -146,7 +143,7 @@ export async function POST(req: NextRequest) {
   // Crée recipients Supabase
   const rows = recipientIds.map((rid) => ({
     message_id: msg.data.id,
-    recipient_app_user_id: rid,
+    recipient_user_id: rid, // ✅ FIX (was recipient_app_user_id)
   }));
 
   const rec = await supabase.from("motivation_recipients").insert(rows);
@@ -176,7 +173,7 @@ export async function GET() {
   const msgs = await supabase
     .from("motivation_messages")
     .select("*")
-    .eq("app_user_id", userId)
+    .eq("user_id", userId) // ✅ FIX (was app_user_id)
     .eq("active", true)
     .order("created_at", { ascending: false });
 
@@ -188,14 +185,14 @@ export async function GET() {
   if (ids.length) {
     const recs = await supabase
       .from("motivation_recipients")
-      .select("message_id, recipient_app_user_id")
+      .select("message_id, recipient_user_id") // ✅ FIX (was recipient_app_user_id)
       .in("message_id", ids);
 
     if (recs.error) return NextResponse.json({ error: recs.error.message }, { status: 500 });
 
     for (const r of recs.data || []) {
       const mid = (r as any).message_id as string;
-      const rid = (r as any).recipient_app_user_id as string;
+      const rid = (r as any).recipient_user_id as string;
       if (!recipientsByMsg[mid]) recipientsByMsg[mid] = [];
       recipientsByMsg[mid].push({ recipientUserId: rid });
     }
@@ -204,7 +201,7 @@ export async function GET() {
   // Format compatible front
   const payload = (msgs.data || []).map((m: any) => ({
     id: m.id,
-    userId: m.app_user_id,
+    userId: m.user_id, // ✅ FIX (was app_user_id)
     target: m.target,
     mode: m.mode,
     content: m.content,
