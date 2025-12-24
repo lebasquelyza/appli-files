@@ -37,12 +37,33 @@ function getSupabaseAdmin() {
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
+// ✅ robuste: récupère l'ID user même si NextAuth ne met pas "id"
+function getSessionUserId(session: any): string | undefined {
+  const u = session?.user || {};
+  return (
+    (u.id as string | undefined) ||
+    (u.sub as string | undefined) ||
+    (u.user_id as string | undefined) ||
+    (u.app_user_id as string | undefined)
+  );
+}
+
+/**
+ * POST /api/motivation/messages
+ * - ME      => programmation COACH
+ * - FRIENDS => programmation CUSTOM + recipients
+ *
+ * Stockage: Supabase
+ * Vérif amis: Prisma (friendRequest)
+ */
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    const userId = (session?.user as any)?.id as string | undefined;
+    const userId = getSessionUserId(session);
 
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized (no user id in session)" }, { status: 401 });
+    }
 
     const body = await req.json().catch(() => null);
     if (!body) return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
@@ -72,7 +93,7 @@ export async function POST(req: NextRequest) {
       const msg = await supabase
         .from("motivation_messages")
         .insert({
-          user_id: userId,
+          user_id: userId, // ✅ FIX: plus jamais null
           target: "ME",
           mode: "COACH",
           content: (content ?? "").trim().slice(0, 240),
@@ -153,12 +174,16 @@ export async function POST(req: NextRequest) {
   }
 }
 
+/**
+ * GET /api/motivation/messages
+ * Liste les programmations actives de l'utilisateur (Supabase)
+ */
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
-    const userId = (session?.user as any)?.id as string | undefined;
+    const userId = getSessionUserId(session);
 
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!userId) return NextResponse.json({ error: "Unauthorized (no user id in session)" }, { status: 401 });
 
     const supabase = getSupabaseAdmin();
 
