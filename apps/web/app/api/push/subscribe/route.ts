@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
     const deviceId = (body?.deviceId as string | undefined)?.trim();
     const subscription = body?.subscription as WebPushSubscription | undefined;
 
-    // ✅ AJOUT (scope)
+    // ✅ AJOUT: scope (pour cibler "motivation" uniquement)
     const scope = (body?.scope as string | undefined)?.trim() || "motivation";
 
     if (!deviceId || !subscription) {
@@ -55,13 +55,13 @@ export async function POST(req: NextRequest) {
 
     const supabase = getSupabaseAdmin();
 
-    // ✅ 1) NextAuth user
+    // ✅ 1) NextAuth user => push_subscriptions (clé unique app_user_id,device_id)
     if (appUserId) {
       const { error } = await supabase
         .from("push_subscriptions")
         .upsert(
           {
-            app_user_id: appUserId,
+            app_user_id: appUserId, // string (NextAuth)
             device_id: deviceId,
             endpoint,
             p256dh,
@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    // ✅ 2) Fallback email (si pas de session)
+    // ✅ 2) Pas de NextAuth => table email (fallback)
     const { error } = await supabase
       .from("push_subscriptions_email")
       .upsert(
@@ -92,7 +92,8 @@ export async function POST(req: NextRequest) {
           auth,
           user_agent: userAgent,
           updated_at: new Date().toISOString(),
-          // ⚠️ si tu veux aussi un scope ici, il faut ajouter une colonne scope à push_subscriptions_email
+          // ⚠️ Si tu veux aussi filtrer par scope ici:
+          // -> ajoute une colonne scope à push_subscriptions_email et décommente la ligne suivante
           // scope,
         },
         { onConflict: "email,device_id" }
@@ -109,4 +110,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "fatal", message: String(e?.message || e) }, { status: 500 });
   }
 }
-
