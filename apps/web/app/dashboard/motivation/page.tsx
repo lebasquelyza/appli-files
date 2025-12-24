@@ -414,7 +414,8 @@ export default function MotivationPage() {
 
     setPushBusy(true);
     try {
-      await enableWebPush(VAPID_PUBLIC_KEY);
+      // ✅ CHANGEMENT: on envoie un scope "motivation" pour limiter aux notifs de cette page
+      await enableWebPush(VAPID_PUBLIC_KEY, "motivation");
       alert("Notifications activées ✅");
     } catch (e: any) {
       console.error("[push] enable failed:", e);
@@ -425,7 +426,6 @@ export default function MotivationPage() {
     }
   };
 
-  // ✅ AJOUT: bouton test push serveur (dev)
   const sendServerPushTest = async () => {
     try {
       const res = await fetch("/api/push/test", { method: "POST" });
@@ -548,7 +548,6 @@ export default function MotivationPage() {
             {pushBusy ? "Activation..." : "Activer les notifications"}
           </button>
 
-          {/* ✅ AJOUT */}
           <button
             type="button"
             className="btn btn-dash"
@@ -656,7 +655,16 @@ export default function MotivationPage() {
           }}
         />
 
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginTop: 4, flexWrap: "wrap" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 8,
+            marginTop: 4,
+            flexWrap: "wrap",
+          }}
+        >
           <span style={{ fontSize: 11, color: "#6b7280" }}>
             {remaining} {t("motivation.messageBlock.remaining", "caractères restants")}
           </span>
