@@ -339,7 +339,6 @@ export default function MotivationPage() {
   const confirmSchedule = async () => {
     const trimmed = message.trim();
     if (!scheduleTarget) return;
-
     if (scheduleDays.length === 0) return;
 
     if (scheduleTarget === "ME") setSavingSelf(true);
@@ -358,14 +357,25 @@ export default function MotivationPage() {
         }),
       });
 
+      // ✅ DEBUG: montre exactement la réponse de l'API
+      const text = await res.text().catch(() => "");
+      let json: any = null;
+      try {
+        json = text ? JSON.parse(text) : null;
+      } catch {
+        json = null;
+      }
+
       if (!res.ok) {
-        console.error("Error saving message", await res.json());
+        alert(`Erreur API (${res.status})\n\n${text}`);
         return;
       }
 
-      const msg: MotivationMessageApi = await res.json();
+      alert(`OK ✅\n\n${json ? JSON.stringify(json, null, 2) : text}`);
+
+      const msg: MotivationMessageApi = (json as MotivationMessageApi) ?? ({} as any);
       const isMe = msg.target === "ME";
-      const daysLabel = msg.days.split(",").filter(Boolean).join(", ");
+      const daysLabel = (msg.days || "").split(",").filter(Boolean).join(", ");
 
       setNotifications((prev) => [
         {
@@ -382,16 +392,16 @@ export default function MotivationPage() {
           createdAt: msg.createdAt ?? new Date().toISOString(),
           read: true,
           source: isMe
-            ? t("motivation.selfNotification.source", `Files Le Coach – ${daysLabel} à ${msg.time}`)
-            : t("motivation.customNotification.source", `Toi → amis – ${daysLabel} à ${msg.time}`),
+            ? t("motivation.selfNotification.source", `Files Le Coach – ${daysLabel} à ${msg.time || scheduleTime}`)
+            : t("motivation.customNotification.source", `Toi → amis – ${daysLabel} à ${msg.time || scheduleTime}`),
         },
         ...prev,
       ]);
 
       setMessage("");
       cancelSchedule();
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      alert(`Erreur réseau\n\n${e?.message || String(e)}`);
     } finally {
       if (scheduleTarget === "ME") setSavingSelf(false);
       if (scheduleTarget === "FRIENDS") setSharingCustom(false);
@@ -414,7 +424,6 @@ export default function MotivationPage() {
 
     setPushBusy(true);
     try {
-      // ✅ CHANGEMENT: on envoie un scope "motivation" pour limiter aux notifs de cette page
       await enableWebPush(VAPID_PUBLIC_KEY, "motivation");
       alert("Notifications activées ✅");
     } catch (e: any) {
@@ -655,16 +664,7 @@ export default function MotivationPage() {
           }}
         />
 
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: 8,
-            marginTop: 4,
-            flexWrap: "wrap",
-          }}
-        >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginTop: 4, flexWrap: "wrap" }}>
           <span style={{ fontSize: 11, color: "#6b7280" }}>
             {remaining} {t("motivation.messageBlock.remaining", "caractères restants")}
           </span>
@@ -987,3 +987,4 @@ export default function MotivationPage() {
     </div>
   );
 }
+
