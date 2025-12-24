@@ -55,9 +55,7 @@ function getSupabaseAdmin() {
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
-// (Optionnel) génération “coach”
-async function pickCoachMessage(/*supabase, lang*/) {
-  // Tu peux plus tard stocker des messages coach dans Supabase si tu veux.
+async function pickCoachMessage() {
   return {
     title: "Files Le Coach",
     message: "Petite action aujourd’hui, grand impact demain. Tu avances. 💪",
@@ -68,7 +66,8 @@ async function sendPushToUser(supabase, webpush, userId, payload) {
   const { data: subs, error } = await supabase
     .from("push_subscriptions")
     .select("endpoint, p256dh, auth")
-    .eq("user_id", userId);
+    .eq("scope", "motivation") // ✅ Motivation only
+    .eq("user_id", userId);   // ✅ SUPABASE UUID (motivation_messages.user_id)
 
   if (error) {
     console.error("[push-cron] supabase subs error:", error.message);
@@ -89,7 +88,6 @@ async function sendPushToUser(supabase, webpush, userId, payload) {
       console.error("[push-cron] push error:", code, e?.message || e);
 
       if (code === 410 || code === 404) {
-        // subscription expirée => nettoyage
         await supabase.from("push_subscriptions").delete().eq("endpoint", s.endpoint);
       }
     }
@@ -100,7 +98,6 @@ async function sendPushToUser(supabase, webpush, userId, payload) {
 
 exports.handler = async (event) => {
   try {
-    // (Optionnel) sécuriser un appel manuel
     if (process.env.CRON_SECRET) {
       const secret =
         event.headers?.["x-cron-secret"] ||
@@ -126,60 +123,12 @@ exports.handler = async (event) => {
 
     const supabase = getSupabaseAdmin();
 
-    // ✅✅✅ ADD (minimal): test push manuel via ?test_email=
-    const testEmail =
-      event.queryStringParameters?.test_email ||
-      event.headers?.["x-test-email"] ||
-      event.headers?.["X-Test-Email"];
-
-    if (testEmail) {
-      const email = String(testEmail).trim().toLowerCase();
-
-      const { data: subs, error } = await supabase
-        .from("push_subscriptions_email")
-        .select("endpoint, p256dh, auth")
-        .eq("email", email);
-
-      if (error) {
-        return {
-          statusCode: 500,
-          body: JSON.stringify({ ok: false, where: "query", error: error.message }),
-        };
-      }
-
-      let sent = 0;
-      for (const s of subs || []) {
-        const subscription = { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } };
-        try {
-          await webpush.sendNotification(
-            subscription,
-            JSON.stringify({ title: "Files (test)", body: "Test push OK ✅", data: { url: "/" } })
-          );
-          sent++;
-        } catch (e) {
-          const code = Number(e?.statusCode || e?.status || 0);
-          return {
-            statusCode: 500,
-            body: JSON.stringify({ ok: false, where: "send", code, message: e?.message || String(e) }),
-          };
-        }
-      }
-
-      return {
-        statusCode: 200,
-        body: JSON.stringify({ ok: true, email, subs: (subs || []).length, sent }),
-      };
-    }
-    // ✅✅✅ END ADD
-
     const now = new Date();
-    const dayKey = dayKeyFromParis(now); // mon..sun
-    const hhmm = timeHHmmParis(now); // HH:mm
-    const ymd = dateYmdParis(now); // YYYY-MM-DD
+    const dayKey = dayKeyFromParis(now);
+    const hhmm = timeHHmmParis(now);
+    const ymd = dateYmdParis(now);
     const sendKeyBase = `${ymd}|${hhmm}|${TZ}`;
 
-    // 1) Messages dus maintenant
-    // NB: Supabase n’a pas un "contains dayKey" parfait ici => on filtre en JS (simple et safe)
     const { data: rows, error: msgErr } = await supabase
       .from("motivation_messages")
       .select("id, user_id, target, mode, content, days, time, active")
@@ -196,7 +145,6 @@ exports.handler = async (event) => {
       return { statusCode: 200, body: JSON.stringify({ ok: true, at: sendKeyBase, due: 0, processed: 0, sent: 0 }) };
     }
 
-    // 2) Précharge recipients pour FRIENDS
     const friendMsgIds = due.filter((m) => m.target === "FRIENDS").map((m) => m.id);
     const recByMsg = {};
 
@@ -221,8 +169,6 @@ exports.handler = async (event) => {
     let sent = 0;
 
     for (const msg of due) {
-      // 3) Anti-doublon : on lock dans motivation_dispatches
-      // IMPORTANT : pour FRIENDS, on lock par recipient pour ne pas bloquer les autres
       if (msg.target === "ME" && msg.mode === "COACH") {
         const send_key = sendKeyBase;
 
@@ -231,10 +177,7 @@ exports.handler = async (event) => {
           send_key,
         });
 
-        if (ins.error) {
-          // déjà envoyé (unique conflict) => skip
-          continue;
-        }
+        if (ins.error) continue;
 
         processed++;
 
@@ -242,7 +185,8 @@ exports.handler = async (event) => {
         sent += await sendPushToUser(supabase, webpush, msg.user_id, {
           title: coach.title || "Files Le Coach",
           body: coach.message,
-          data: { url: "/dashboard/motivation" },
+          scope: "motivation",
+          data: { url: "/dashboard/motivation", scope: "motivation" },
         });
 
         continue;
@@ -252,7 +196,6 @@ exports.handler = async (event) => {
         const recipients = recByMsg[msg.id] || [];
         if (!recipients.length) continue;
 
-        // processed = nombre de messages pris en compte (pas nombre de recipients)
         processed++;
 
         for (const rid of recipients) {
@@ -263,34 +206,25 @@ exports.handler = async (event) => {
             send_key,
           });
 
-          if (ins.error) {
-            // déjà envoyé à CET ami => skip
-            continue;
-          }
+          if (ins.error) continue;
 
           sent += await sendPushToUser(supabase, webpush, rid, {
             title: "Files",
             body: msg.content,
-            data: { url: "/dashboard/motivation" },
+            scope: "motivation",
+            data: { url: "/dashboard/motivation", scope: "motivation" },
           });
         }
 
         continue;
       }
 
-      // mode/target inattendus => on skip
       console.warn("[push-cron] skipped message (unexpected target/mode):", msg.id, msg.target, msg.mode);
     }
 
     return {
       statusCode: 200,
-      body: JSON.stringify({
-        ok: true,
-        at: sendKeyBase,
-        due: due.length,
-        processed,
-        sent,
-      }),
+      body: JSON.stringify({ ok: true, at: sendKeyBase, due: due.length, processed, sent }),
     };
   } catch (e) {
     console.error("[push-cron] fatal error", e);
