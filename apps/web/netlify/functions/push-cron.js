@@ -57,14 +57,23 @@ function getSupabaseAdmin() {
 
 // (Optionnel) génération “coach”
 async function pickCoachMessage(/*supabase, lang*/) {
+  // Tu peux plus tard stocker des messages coach dans Supabase si tu veux.
   return {
     title: "Files Le Coach",
     message: "Petite action aujourd’hui, grand impact demain. Tu avances. 💪",
   };
 }
 
-// ✅ NEW: envoyer à partir d'une liste de subs
-async function sendPushToSubscriptions(supabase, webpush, subs, payload, cleanup) {
+async function sendPushToUser(supabase, webpush, userId, payload) {
+  const { data: subs, error } = await supabase
+    .from("push_subscriptions")
+    .select("endpoint, p256dh, auth")
+    .eq("user_id", userId);
+
+  if (error) {
+    console.error("[push-cron] supabase subs error:", error.message);
+    return 0;
+  }
   if (!subs?.length) return 0;
 
   let ok = 0;
@@ -81,78 +90,12 @@ async function sendPushToSubscriptions(supabase, webpush, subs, payload, cleanup
 
       if (code === 410 || code === 404) {
         // subscription expirée => nettoyage
-        try {
-          await cleanup(s.endpoint);
-        } catch (delErr) {
-          console.error("[push-cron] cleanup failed:", delErr?.message || delErr);
-        }
+        await supabase.from("push_subscriptions").delete().eq("endpoint", s.endpoint);
       }
     }
   }
 
   return ok;
-}
-
-// ✅ CHANGED: d'abord push_subscriptions (user_id), sinon fallback email -> push_subscriptions_email
-async function sendPushToUser(supabase, webpush, userId, payload) {
-  // 1) Essai classique: table liée au user_id
-  const { data: subs1, error: err1 } = await supabase
-    .from("push_subscriptions")
-    .select("endpoint, p256dh, auth")
-    .eq("user_id", userId);
-
-  if (err1) {
-    console.error("[push-cron] supabase push_subscriptions error:", err1.message);
-  }
-
-  if (subs1?.length) {
-    return await sendPushToSubscriptions(
-      supabase,
-      webpush,
-      subs1,
-      payload,
-      async (endpoint) => {
-        await supabase.from("push_subscriptions").delete().eq("endpoint", endpoint);
-      }
-    );
-  }
-
-  // 2) Fallback: récupérer email du user -> table push_subscriptions_email
-  const { data: prof, error: profErr } = await supabase
-    .from("profiles")
-    .select("email")
-    .eq("id", userId)
-    .maybeSingle();
-
-  if (profErr) {
-    console.error("[push-cron] supabase profiles error:", profErr.message);
-    return 0;
-  }
-
-  const email = (prof?.email || "").trim().toLowerCase();
-  if (!email) return 0;
-
-  const { data: subs2, error: err2 } = await supabase
-    .from("push_subscriptions_email")
-    .select("endpoint, p256dh, auth")
-    .eq("email", email);
-
-  if (err2) {
-    console.error("[push-cron] supabase push_subscriptions_email error:", err2.message);
-    return 0;
-  }
-
-  if (!subs2?.length) return 0;
-
-  return await sendPushToSubscriptions(
-    supabase,
-    webpush,
-    subs2,
-    payload,
-    async (endpoint) => {
-      await supabase.from("push_subscriptions_email").delete().eq("endpoint", endpoint);
-    }
-  );
 }
 
 exports.handler = async (event) => {
@@ -183,6 +126,52 @@ exports.handler = async (event) => {
 
     const supabase = getSupabaseAdmin();
 
+    // ✅✅✅ ADD (minimal): test push manuel via ?test_email=
+    const testEmail =
+      event.queryStringParameters?.test_email ||
+      event.headers?.["x-test-email"] ||
+      event.headers?.["X-Test-Email"];
+
+    if (testEmail) {
+      const email = String(testEmail).trim().toLowerCase();
+
+      const { data: subs, error } = await supabase
+        .from("push_subscriptions_email")
+        .select("endpoint, p256dh, auth")
+        .eq("email", email);
+
+      if (error) {
+        return {
+          statusCode: 500,
+          body: JSON.stringify({ ok: false, where: "query", error: error.message }),
+        };
+      }
+
+      let sent = 0;
+      for (const s of subs || []) {
+        const subscription = { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } };
+        try {
+          await webpush.sendNotification(
+            subscription,
+            JSON.stringify({ title: "Files (test)", body: "Test push OK ✅", data: { url: "/" } })
+          );
+          sent++;
+        } catch (e) {
+          const code = Number(e?.statusCode || e?.status || 0);
+          return {
+            statusCode: 500,
+            body: JSON.stringify({ ok: false, where: "send", code, message: e?.message || String(e) }),
+          };
+        }
+      }
+
+      return {
+        statusCode: 200,
+        body: JSON.stringify({ ok: true, email, subs: (subs || []).length, sent }),
+      };
+    }
+    // ✅✅✅ END ADD
+
     const now = new Date();
     const dayKey = dayKeyFromParis(now); // mon..sun
     const hhmm = timeHHmmParis(now); // HH:mm
@@ -190,6 +179,7 @@ exports.handler = async (event) => {
     const sendKeyBase = `${ymd}|${hhmm}|${TZ}`;
 
     // 1) Messages dus maintenant
+    // NB: Supabase n’a pas un "contains dayKey" parfait ici => on filtre en JS (simple et safe)
     const { data: rows, error: msgErr } = await supabase
       .from("motivation_messages")
       .select("id, user_id, target, mode, content, days, time, active")
@@ -203,10 +193,7 @@ exports.handler = async (event) => {
 
     const due = (rows || []).filter((m) => parseDays(m.days).includes(dayKey));
     if (!due.length) {
-      return {
-        statusCode: 200,
-        body: JSON.stringify({ ok: true, at: sendKeyBase, due: 0, processed: 0, sent: 0 }),
-      };
+      return { statusCode: 200, body: JSON.stringify({ ok: true, at: sendKeyBase, due: 0, processed: 0, sent: 0 }) };
     }
 
     // 2) Précharge recipients pour FRIENDS
@@ -265,6 +252,7 @@ exports.handler = async (event) => {
         const recipients = recByMsg[msg.id] || [];
         if (!recipients.length) continue;
 
+        // processed = nombre de messages pris en compte (pas nombre de recipients)
         processed++;
 
         for (const rid of recipients) {
@@ -290,6 +278,7 @@ exports.handler = async (event) => {
         continue;
       }
 
+      // mode/target inattendus => on skip
       console.warn("[push-cron] skipped message (unexpected target/mode):", msg.id, msg.target, msg.mode);
     }
 
