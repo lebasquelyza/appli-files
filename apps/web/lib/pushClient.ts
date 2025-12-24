@@ -47,9 +47,9 @@ export async function ensurePushSubscription(vapidPublicKey: string) {
 
 /**
  * Active les notifications ET enregistre la subscription via /api/push/subscribe.
- * Le serveur doit ensuite l'upsert en DB (Supabase) en associant au user connecté.
+ * + scope pour limiter à une page/fonction (ici: motivation).
  */
-export async function enableWebPush(vapidPublicKey: string) {
+export async function enableWebPush(vapidPublicKey: string, scope: string) {
   if (typeof window === "undefined") throw new Error("Client only");
   if (!window.isSecureContext) throw new Error("Web Push nécessite HTTPS (ou localhost)");
   if (!("Notification" in window)) throw new Error("Notifications unsupported");
@@ -72,9 +72,10 @@ export async function enableWebPush(vapidPublicKey: string) {
   const res = await fetch("/api/push/subscribe", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    credentials: "include", // ✅ IMPORTANT: envoie les cookies NextAuth
+    credentials: "include",
     body: JSON.stringify({
       deviceId,
+      scope, // ✅ AJOUT
       subscription: subJson,
       userAgent: navigator.userAgent,
     }),
