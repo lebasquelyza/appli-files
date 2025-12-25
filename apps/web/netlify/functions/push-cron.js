@@ -96,6 +96,41 @@ async function sendPushToUser(supabase, webpush, userId, payload) {
   return ok;
 }
 
+// ✅ NEW: device-only subscriptions
+async function sendPushToDevice(supabase, webpush, deviceId, payload) {
+  const { data: subs, error } = await supabase
+    .from("push_subscriptions_device")
+    .select("endpoint, p256dh, auth")
+    .eq("scope", "motivation")
+    .eq("device_id", deviceId);
+
+  if (error) {
+    console.error("[push-cron] supabase device subs error:", error.message);
+    return 0;
+  }
+  if (!subs?.length) return 0;
+
+  let ok = 0;
+
+  for (const s of subs) {
+    const subscription = { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } };
+
+    try {
+      await webpush.sendNotification(subscription, JSON.stringify(payload));
+      ok++;
+    } catch (e) {
+      const code = Number(e?.statusCode || e?.status || 0);
+      console.error("[push-cron] push error:", code, e?.message || e);
+
+      if (code === 410 || code === 404) {
+        await supabase.from("push_subscriptions_device").delete().eq("endpoint", s.endpoint);
+      }
+    }
+  }
+
+  return ok;
+}
+
 exports.handler = async (event) => {
   try {
     if (process.env.CRON_SECRET) {
@@ -131,7 +166,8 @@ exports.handler = async (event) => {
 
     const { data: rows, error: msgErr } = await supabase
       .from("motivation_messages")
-      .select("id, user_id, target, mode, content, days, time, active")
+      // ✅ include device_id (non-breaking)
+      .select("id, user_id, device_id, target, mode, content, days, time, active")
       .eq("active", true)
       .eq("time", hhmm);
 
@@ -182,12 +218,23 @@ exports.handler = async (event) => {
         processed++;
 
         const coach = await pickCoachMessage();
-        sent += await sendPushToUser(supabase, webpush, msg.user_id, {
-          title: coach.title || "Files Le Coach",
-          body: coach.message,
-          scope: "motivation",
-          data: { url: "/dashboard/motivation", scope: "motivation" },
-        });
+
+        // ✅ Prefer device-only (no auth), fallback to user_id (existing)
+        if (msg.device_id) {
+          sent += await sendPushToDevice(supabase, webpush, msg.device_id, {
+            title: coach.title || "Files Le Coach",
+            body: coach.message,
+            scope: "motivation",
+            data: { url: "/dashboard/motivation", scope: "motivation" },
+          });
+        } else if (msg.user_id) {
+          sent += await sendPushToUser(supabase, webpush, msg.user_id, {
+            title: coach.title || "Files Le Coach",
+            body: coach.message,
+            scope: "motivation",
+            data: { url: "/dashboard/motivation", scope: "motivation" },
+          });
+        }
 
         continue;
       }
