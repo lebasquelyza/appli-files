@@ -4,7 +4,7 @@
 import { useSession } from "next-auth/react";
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { translations } from "@/app/i18n/translations";
-import { enableWebPush } from "@/lib/pushClient";
+import { enableWebPush, getDeviceId } from "@/lib/pushClient";
 
 /* ---------------- i18n helpers (client) ---------------- */
 type Lang = "fr" | "en";
@@ -56,7 +56,8 @@ type DayKey = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 
 type MotivationMessageApi = {
   id: string;
-  userId: string;
+  userId: string | null;
+  deviceId?: string | null;
   target: string; // "ME" | "FRIENDS"
   mode?: string; // "COACH" | "CUSTOM"
   content: string;
@@ -150,8 +151,12 @@ export default function MotivationPage() {
 
     async function loadMessages() {
       try {
-        // ✅ IMPORTANT: envoie les cookies NextAuth
-        const res = await fetch("/api/motivation/messages", { credentials: "include" });
+        // ✅ device-only fallback: si pas de session, on filtre côté API via deviceId
+        const did = getDeviceId();
+        const url = session ? "/api/motivation/messages" : `/api/motivation/messages?deviceId=${encodeURIComponent(did)}`;
+
+        // ✅ IMPORTANT: envoie les cookies NextAuth (si présents)
+        const res = await fetch(url, { credentials: "include" });
         if (!res.ok) return;
         const data: MotivationMessageApi[] = await res.json();
         if (cancelled || !Array.isArray(data)) return;
@@ -193,7 +198,7 @@ export default function MotivationPage() {
     return () => {
       cancelled = true;
     };
-  }, [t]);
+  }, [t, session]);
 
   const visibleNotifications = useMemo(
     () => (filter === "all" ? notifications : notifications.filter((n) => !n.read)),
@@ -346,16 +351,21 @@ export default function MotivationPage() {
     if (scheduleTarget === "FRIENDS") setSharingCustom(true);
 
     try {
+      const did = getDeviceId();
+
       const res = await fetch("/api/motivation/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include", // ✅ IMPORTANT: envoie les cookies NextAuth
+        credentials: "include", // ✅ IMPORTANT: envoie les cookies NextAuth (si présents)
         body: JSON.stringify({
           target: scheduleTarget,
           content: trimmed,
           days: scheduleDays,
           time: scheduleTime,
           recipientIds: scheduleTarget === "FRIENDS" ? selectedFriendIds : undefined,
+
+          // ✅ device-only: nécessaire pour "ME" sans authentification (ne change rien si connecté)
+          deviceId: scheduleTarget === "ME" ? did : undefined,
         }),
       });
 
@@ -663,7 +673,16 @@ export default function MotivationPage() {
           }}
         />
 
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginTop: 4, flexWrap: "wrap" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 8,
+            marginTop: 4,
+            flexWrap: "wrap",
+          }}
+        >
           <span style={{ fontSize: 11, color: "#6b7280" }}>
             {remaining} {t("motivation.messageBlock.remaining", "caractères restants")}
           </span>
