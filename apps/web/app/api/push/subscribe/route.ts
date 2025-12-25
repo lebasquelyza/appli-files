@@ -29,10 +29,6 @@ export async function POST(req: NextRequest) {
 
     const email = (cookies().get("app_email")?.value || "").trim().toLowerCase() || undefined;
 
-    if (!userId && !email) {
-      return NextResponse.json({ ok: false, error: "unauthorized_no_user" }, { status: 401 });
-    }
-
     const body = await req.json().catch(() => null);
     const deviceId = (body?.deviceId as string | undefined)?.trim();
     const subscription = body?.subscription as WebPushSubscription | undefined;
@@ -84,23 +80,49 @@ export async function POST(req: NextRequest) {
     }
 
     // ✅ 2) Fallback email (si pas de session)
+    if (email) {
+      const { error } = await supabase
+        .from("push_subscriptions_email")
+        .upsert(
+          {
+            email,
+            device_id: deviceId,
+            endpoint,
+            p256dh,
+            auth,
+            user_agent: userAgent,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "email,device_id" }
+        );
+
+      if (error) {
+        console.error("[push/subscribe] Supabase upsert failed (email table)", error);
+        return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+      }
+
+      return NextResponse.json({ ok: true });
+    }
+
+    // ✅ 3) NO AUTH fallback => device-only
+    // Table: push_subscriptions_device (device_id, scope) unique/PK
     const { error } = await supabase
-      .from("push_subscriptions_email")
+      .from("push_subscriptions_device")
       .upsert(
         {
-          email,
           device_id: deviceId,
+          scope,
           endpoint,
           p256dh,
           auth,
           user_agent: userAgent,
           updated_at: new Date().toISOString(),
         },
-        { onConflict: "email,device_id" }
+        { onConflict: "device_id,scope" }
       );
 
     if (error) {
-      console.error("[push/subscribe] Supabase upsert failed (email table)", error);
+      console.error("[push/subscribe] Supabase upsert failed (device table)", error);
       return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
     }
 
