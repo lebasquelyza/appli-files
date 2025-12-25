@@ -62,17 +62,7 @@ async function pickCoachMessage() {
   };
 }
 
-async function sendPushToUser(supabase, webpush, userId, payload) {
-  const { data: subs, error } = await supabase
-    .from("push_subscriptions")
-    .select("endpoint, p256dh, auth")
-    .eq("scope", "motivation") // ✅ Motivation only
-    .eq("user_id", userId);   // ✅ SUPABASE UUID (motivation_messages.user_id)
-
-  if (error) {
-    console.error("[push-cron] supabase subs error:", error.message);
-    return 0;
-  }
+async function sendPushToSubs(supabase, webpush, subs, payload, tableName) {
   if (!subs?.length) return 0;
 
   let ok = 0;
@@ -88,7 +78,10 @@ async function sendPushToUser(supabase, webpush, userId, payload) {
       console.error("[push-cron] push error:", code, e?.message || e);
 
       if (code === 410 || code === 404) {
-        await supabase.from("push_subscriptions").delete().eq("endpoint", s.endpoint);
+        // supprime l'endpoint mort
+        try {
+          await supabase.from(tableName).delete().eq("endpoint", s.endpoint);
+        } catch {}
       }
     }
   }
@@ -96,8 +89,28 @@ async function sendPushToUser(supabase, webpush, userId, payload) {
   return ok;
 }
 
-// ✅ NEW: device-only subscriptions
+// ✅ Envoi via user_id (NextAuth / Supabase user)
+async function sendPushToUser(supabase, webpush, userId, payload) {
+  if (!userId) return 0;
+
+  const { data: subs, error } = await supabase
+    .from("push_subscriptions")
+    .select("endpoint, p256dh, auth")
+    .eq("scope", "motivation")
+    .eq("user_id", userId);
+
+  if (error) {
+    console.error("[push-cron] supabase subs error:", error.message);
+    return 0;
+  }
+
+  return sendPushToSubs(supabase, webpush, subs, payload, "push_subscriptions");
+}
+
+// ✅ Envoi via device_id (sans auth)
 async function sendPushToDevice(supabase, webpush, deviceId, payload) {
+  if (!deviceId) return 0;
+
   const { data: subs, error } = await supabase
     .from("push_subscriptions_device")
     .select("endpoint, p256dh, auth")
@@ -108,31 +121,13 @@ async function sendPushToDevice(supabase, webpush, deviceId, payload) {
     console.error("[push-cron] supabase device subs error:", error.message);
     return 0;
   }
-  if (!subs?.length) return 0;
 
-  let ok = 0;
-
-  for (const s of subs) {
-    const subscription = { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } };
-
-    try {
-      await webpush.sendNotification(subscription, JSON.stringify(payload));
-      ok++;
-    } catch (e) {
-      const code = Number(e?.statusCode || e?.status || 0);
-      console.error("[push-cron] push error:", code, e?.message || e);
-
-      if (code === 410 || code === 404) {
-        await supabase.from("push_subscriptions_device").delete().eq("endpoint", s.endpoint);
-      }
-    }
-  }
-
-  return ok;
+  return sendPushToSubs(supabase, webpush, subs, payload, "push_subscriptions_device");
 }
 
 exports.handler = async (event) => {
   try {
+    // (optionnel) secret de protection
     if (process.env.CRON_SECRET) {
       const secret =
         event.headers?.["x-cron-secret"] ||
@@ -164,9 +159,9 @@ exports.handler = async (event) => {
     const ymd = dateYmdParis(now);
     const sendKeyBase = `${ymd}|${hhmm}|${TZ}`;
 
+    // ✅ IMPORTANT: inclure device_id pour "ME sans auth"
     const { data: rows, error: msgErr } = await supabase
       .from("motivation_messages")
-      // ✅ include device_id (non-breaking)
       .select("id, user_id, device_id, target, mode, content, days, time, active")
       .eq("active", true)
       .eq("time", hhmm);
@@ -178,9 +173,13 @@ exports.handler = async (event) => {
 
     const due = (rows || []).filter((m) => parseDays(m.days).includes(dayKey));
     if (!due.length) {
-      return { statusCode: 200, body: JSON.stringify({ ok: true, at: sendKeyBase, due: 0, processed: 0, sent: 0 }) };
+      return {
+        statusCode: 200,
+        body: JSON.stringify({ ok: true, at: sendKeyBase, due: 0, processed: 0, sent: 0 }),
+      };
     }
 
+    // FRIENDS recipients resolution (inchangé)
     const friendMsgIds = due.filter((m) => m.target === "FRIENDS").map((m) => m.id);
     const recByMsg = {};
 
@@ -205,6 +204,7 @@ exports.handler = async (event) => {
     let sent = 0;
 
     for (const msg of due) {
+      // ✅ ME + COACH => envoi à soi (device_id prioritaire sinon user_id)
       if (msg.target === "ME" && msg.mode === "COACH") {
         const send_key = sendKeyBase;
 
@@ -213,32 +213,32 @@ exports.handler = async (event) => {
           send_key,
         });
 
-        if (ins.error) continue;
+        if (ins.error) {
+          // (optionnel) debug utile
+          console.warn("[push-cron] dispatch insert failed:", ins.error.message, { message_id: msg.id, send_key });
+          continue;
+        }
 
         processed++;
 
         const coach = await pickCoachMessage();
+        const payload = {
+          title: coach.title || "Files Le Coach",
+          body: coach.message,
+          scope: "motivation",
+          data: { url: "/dashboard/motivation", scope: "motivation" },
+        };
 
-        // ✅ Prefer device-only (no auth), fallback to user_id (existing)
         if (msg.device_id) {
-          sent += await sendPushToDevice(supabase, webpush, msg.device_id, {
-            title: coach.title || "Files Le Coach",
-            body: coach.message,
-            scope: "motivation",
-            data: { url: "/dashboard/motivation", scope: "motivation" },
-          });
+          sent += await sendPushToDevice(supabase, webpush, msg.device_id, payload);
         } else if (msg.user_id) {
-          sent += await sendPushToUser(supabase, webpush, msg.user_id, {
-            title: coach.title || "Files Le Coach",
-            body: coach.message,
-            scope: "motivation",
-            data: { url: "/dashboard/motivation", scope: "motivation" },
-          });
+          sent += await sendPushToUser(supabase, webpush, msg.user_id, payload);
         }
 
         continue;
       }
 
+      // FRIENDS + CUSTOM => envoi aux recipients (inchangé, via user_id)
       if (msg.target === "FRIENDS" && msg.mode === "CUSTOM") {
         const recipients = recByMsg[msg.id] || [];
         if (!recipients.length) continue;
@@ -253,7 +253,14 @@ exports.handler = async (event) => {
             send_key,
           });
 
-          if (ins.error) continue;
+          if (ins.error) {
+            console.warn("[push-cron] dispatch insert failed:", ins.error.message, {
+              message_id: msg.id,
+              send_key,
+              recipient: rid,
+            });
+            continue;
+          }
 
           sent += await sendPushToUser(supabase, webpush, rid, {
             title: "Files",
