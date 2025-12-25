@@ -50,8 +50,8 @@ function getSessionUserId(session: any): string | undefined {
 
 /**
  * POST /api/motivation/messages
- * - ME      => programmation COACH
- * - FRIENDS => programmation CUSTOM + recipients
+ * - ME      => programmation COACH (✅ maintenant possible sans auth via deviceId)
+ * - FRIENDS => programmation CUSTOM + recipients (auth obligatoire)
  *
  * Stockage: Supabase
  * Vérif amis: Prisma (friendRequest)
@@ -61,22 +61,30 @@ export async function POST(req: NextRequest) {
     const session = await getServerSession(authOptions);
     const userId = getSessionUserId(session);
 
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized (no user id in session)" }, { status: 401 });
-    }
-
     const body = await req.json().catch(() => null);
     if (!body) return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
 
-    const { target, content, days, time, recipientIds } = body as {
+    const { target, content, days, time, recipientIds, deviceId } = body as {
       target: string;
       content?: string;
       days: DayKey[];
       time: string;
       recipientIds?: string[];
+      deviceId?: string; // ✅ added
     };
 
     const normTarget = normalizeTarget(target);
+
+    // ✅ FRIENDS => nécessite toujours auth (logique inchangée)
+    if (normTarget === "FRIENDS" && !userId) {
+      return NextResponse.json({ error: "Unauthorized (no user id in session)" }, { status: 401 });
+    }
+
+    // ✅ ME sans auth => deviceId obligatoire
+    const did = String(deviceId || "").trim();
+    if (normTarget === "ME" && !userId && !did) {
+      return NextResponse.json({ error: "Missing deviceId for ME when not authenticated" }, { status: 400 });
+    }
 
     if (!validateDays(days) || days.length === 0) {
       return NextResponse.json({ error: "At least one valid day is required" }, { status: 400 });
@@ -88,12 +96,13 @@ export async function POST(req: NextRequest) {
 
     const supabase = getSupabaseAdmin();
 
-    // ✅ ME => COACH
+    // ✅ ME => COACH (auth ou device-only)
     if (normTarget === "ME") {
       const msg = await supabase
         .from("motivation_messages")
         .insert({
-          user_id: userId, // ✅ FIX: plus jamais null
+          user_id: userId || null, // ✅ garde la logique si auth, sinon null
+          device_id: did || null,  // ✅ device-only
           target: "ME",
           mode: "COACH",
           content: (content ?? "").trim().slice(0, 240),
@@ -108,7 +117,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(msg.data, { status: 201 });
     }
 
-    // ✅ FRIENDS => CUSTOM + recipients
+    // ✅ FRIENDS => CUSTOM + recipients (inchangé)
     const trimmed = (content ?? "").trim();
     if (!trimmed) return NextResponse.json({ error: "Missing content" }, { status: 400 });
     if (trimmed.length > 240) return NextResponse.json({ error: "Content too long (max 240 chars)" }, { status: 400 });
@@ -176,23 +185,29 @@ export async function POST(req: NextRequest) {
 
 /**
  * GET /api/motivation/messages
- * Liste les programmations actives de l'utilisateur (Supabase)
+ * - connecté => liste par user_id (inchangé)
+ * - non connecté => liste par deviceId query param (✅ nouveau)
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     const userId = getSessionUserId(session);
 
-    if (!userId) return NextResponse.json({ error: "Unauthorized (no user id in session)" }, { status: 401 });
+    const url = new URL(req.url);
+    const deviceId = (url.searchParams.get("deviceId") || "").trim();
+
+    if (!userId && !deviceId) {
+      return NextResponse.json({ error: "Unauthorized (no user id in session and no deviceId)" }, { status: 401 });
+    }
 
     const supabase = getSupabaseAdmin();
 
-    const msgs = await supabase
-      .from("motivation_messages")
-      .select("*")
-      .eq("user_id", userId)
-      .eq("active", true)
-      .order("created_at", { ascending: false });
+    let q = supabase.from("motivation_messages").select("*").eq("active", true);
+
+    if (userId) q = q.eq("user_id", userId);
+    else q = q.eq("device_id", deviceId);
+
+    const msgs = await q.order("created_at", { ascending: false });
 
     if (msgs.error) return NextResponse.json({ error: msgs.error.message }, { status: 500 });
 
@@ -218,6 +233,7 @@ export async function GET() {
     const payload = (msgs.data || []).map((m: any) => ({
       id: m.id,
       userId: m.user_id,
+      deviceId: m.device_id,
       target: m.target,
       mode: m.mode,
       content: m.content,
