@@ -5,7 +5,7 @@ const TZ = "Europe/Paris";
 
 function dayKeyFromParis(date) {
   const wd = new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: TZ }).format(date);
-  return { Mon:"mon", Tue:"tue", Wed:"wed", Thu:"thu", Fri:"fri", Sat:"sat", Sun:"sun" }[wd];
+  return { Mon: "mon", Tue: "tue", Wed: "wed", Thu: "thu", Fri: "fri", Sat: "sat", Sun: "sun" }[wd];
 }
 
 function timeHHmmParis(date) {
@@ -16,15 +16,15 @@ function timeHHmmParis(date) {
     hour12: false,
   }).formatToParts(date);
 
-  const hh = parts.find(p => p.type === "hour")?.value || "00";
-  const mm = parts.find(p => p.type === "minute")?.value || "00";
+  const hh = parts.find((p) => p.type === "hour")?.value || "00";
+  const mm = parts.find((p) => p.type === "minute")?.value || "00";
   return `${hh}:${mm}`;
 }
 
 function parseDays(daysStr) {
   return String(daysStr || "")
     .split(",")
-    .map(x => x.trim())
+    .map((x) => x.trim())
     .filter(Boolean);
 }
 
@@ -35,6 +35,14 @@ function getSupabaseAdmin() {
     process.env.SUPABASE_SERVICE_ROLE_KEY,
     { auth: { persistSession: false } }
   );
+}
+
+// ✅ Fallback coach (à toi d'enrichir si tu veux: DB, random pool, etc.)
+async function pickCoachMessage() {
+  return {
+    title: "Files Le Coach",
+    message: "Petite action aujourd’hui, grand impact demain 💪",
+  };
 }
 
 async function sendPushToDevices(supabase, webpush, payload) {
@@ -57,10 +65,7 @@ async function sendPushToDevices(supabase, webpush, payload) {
     } catch (e) {
       const code = Number(e?.statusCode || e?.status || 0);
       if (code === 404 || code === 410) {
-        await supabase
-          .from("push_subscriptions_device")
-          .delete()
-          .eq("endpoint", s.endpoint);
+        await supabase.from("push_subscriptions_device").delete().eq("endpoint", s.endpoint);
       }
     }
   }
@@ -82,20 +87,39 @@ exports.handler = async () => {
   const hhmm = timeHHmmParis(now);
   const dayKey = dayKeyFromParis(now);
 
-  const { data: msgs } = await supabase
+  const { data: msgs, error: msgErr } = await supabase
     .from("motivation_messages")
     .select("*")
     .eq("active", true)
     .eq("time", hhmm);
 
-  const due = (msgs || []).filter(m => parseDays(m.days).includes(dayKey));
+  if (msgErr) {
+    return { statusCode: 500, body: JSON.stringify({ ok: false, error: msgErr.message }) };
+  }
+
+  const due = (msgs || []).filter((m) => parseDays(m.days).includes(dayKey));
 
   let sent = 0;
 
   for (const msg of due) {
+    const custom = (msg?.content || "").trim();
+
+    let title = "Files Le Coach";
+    let body = "";
+
+    if (custom) {
+      // ✅ 1) Texte client prioritaire
+      body = custom;
+    } else {
+      // ✅ 2) Fallback coach
+      const coach = await pickCoachMessage();
+      title = coach.title || title;
+      body = coach.message || "";
+    }
+
     sent += await sendPushToDevices(supabase, webpush, {
-      title: "Files Le Coach",
-      body: "Petite action aujourd’hui, grand impact demain 💪",
+      title,
+      body,
       scope: "motivation",
       data: { url: "/dashboard/motivation", scope: "motivation" },
     });
@@ -103,6 +127,6 @@ exports.handler = async () => {
 
   return {
     statusCode: 200,
-    body: JSON.stringify({ ok: true, due: due.length, sent }),
+    body: JSON.stringify({ ok: true, at: `${hhmm}|${dayKey}|${TZ}`, due: due.length, sent }),
   };
 };
