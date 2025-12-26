@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
     const deviceId = (body?.deviceId as string | undefined)?.trim();
     const subscription = body?.subscription as WebPushSubscription | undefined;
 
-    // ✅ scope motivation only
+    // ✅ scope motivation only (par défaut)
     const scope = (body?.scope as string | undefined)?.trim() || "motivation";
 
     if (!deviceId || !subscription) {
@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    // ✅ 2) Fallback email (si pas de session)
+    // ✅ 2) Si on a un email (cookie) => table email
     if (email) {
       const { error } = await supabase
         .from("push_subscriptions_email")
@@ -104,8 +104,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    // ✅ 3) NO AUTH fallback => device-only
-    // Table: push_subscriptions_device (device_id, scope) unique/PK
+    // ✅ 3) Fallback device-only (sans auth, sans email)
     const { error } = await supabase
       .from("push_subscriptions_device")
       .upsert(
@@ -118,7 +117,7 @@ export async function POST(req: NextRequest) {
           user_agent: userAgent,
           updated_at: new Date().toISOString(),
         },
-        { onConflict: "device_id,scope" }
+        { onConflict: "device_id,scope" } // ✅ IMPORTANT: nécessite unique(device_id,scope)
       );
 
     if (error) {
@@ -129,6 +128,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true });
   } catch (e: any) {
     console.error("[push/subscribe] Fatal error", e);
-    return NextResponse.json({ ok: false, error: "fatal", message: String(e?.message || e) }, { status: 500 });
+    return NextResponse.json(
+      { ok: false, error: "fatal", message: String(e?.message || e) },
+      { status: 500 }
+    );
   }
 }
