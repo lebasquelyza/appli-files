@@ -48,10 +48,7 @@ function getTomorrowWeekdayIndexInTZ(tz = TZ): Weekday {
   return weekdayIndexInTZ(d, tz);
 }
 
-function rotateSessionsToStartFromIndex<T>(
-  sessions: T[],
-  startIndex: number
-): T[] {
+function rotateSessionsToStartFromIndex<T>(sessions: T[], startIndex: number): T[] {
   const n = sessions.length;
   if (n <= 1) return sessions;
   const start = ((startIndex % n) + n) % n;
@@ -141,10 +138,7 @@ function requiresEquipmentName(s: string): boolean {
 function requiresEquipment(ex: NormalizedExercise): boolean {
   return requiresEquipmentName(`${ex.name || ""} ${ex.notes || ""}`);
 }
-function genericFallback(
-  type: WorkoutType,
-  equip: "full" | "none"
-): NormalizedExercise[] {
+function genericFallback(type: WorkoutType, equip: "full" | "none"): NormalizedExercise[] {
   if (type === "cardio") {
     return [
       { name: "Échauffement Z1", reps: "8–10 min", block: "echauffement" },
@@ -155,11 +149,7 @@ function genericFallback(
   }
   if (type === "mobilité") {
     return [
-      {
-        name: "Respiration diaphragmatique",
-        reps: "2–3 min",
-        block: "echauffement",
-      },
+      { name: "Respiration diaphragmatique", reps: "2–3 min", block: "echauffement" },
       { name: "90/90 hanches", reps: "8–10/ côté", block: "principal" },
       { name: "T-spine rotations", reps: "8–10/ côté", block: "principal" },
       { name: "Down-Dog → Cobra", reps: "6–8", block: "fin" },
@@ -167,65 +157,17 @@ function genericFallback(
   }
   if (equip === "none") {
     return [
-      {
-        name: "Squat au poids du corps",
-        sets: 3,
-        reps: "12–15",
-        rest: "60–75s",
-        block: "principal",
-      },
-      {
-        name: "Pompes",
-        sets: 3,
-        reps: "8–15",
-        rest: "60–75s",
-        block: "principal",
-      },
-      {
-        name: "Fentes alternées",
-        sets: 3,
-        reps: "10–12/ côté",
-        rest: "60–75s",
-        block: "principal",
-      },
-      {
-        name: "Planche",
-        sets: 2,
-        reps: "30–45s",
-        rest: "45s",
-        block: "fin",
-      },
+      { name: "Squat au poids du corps", sets: 3, reps: "12–15", rest: "60–75s", block: "principal" },
+      { name: "Pompes", sets: 3, reps: "8–15", rest: "60–75s", block: "principal" },
+      { name: "Fentes alternées", sets: 3, reps: "10–12/ côté", rest: "60–75s", block: "principal" },
+      { name: "Planche", sets: 2, reps: "30–45s", rest: "45s", block: "fin" },
     ];
   }
   return [
-    {
-      name: "Goblet Squat",
-      sets: 3,
-      reps: "8–12",
-      rest: "75s",
-      block: "principal",
-    },
-    {
-      name: "Développé haltères",
-      sets: 3,
-      reps: "8–12",
-      rest: "75s",
-      block: "principal",
-    },
-    {
-      name: "Rowing unilatéral",
-      sets: 3,
-      reps: "10–12/ côté",
-      rest: "75s",
-      block: "principal",
-    },
-    {
-      name: "Planche",
-      sets: 2,
-      reps: "30–45s",
-      rest: "45s",
-      block: "fin",
-    },
+    { name: "Goblet Squat", sets: 3, reps: "8–12", rest: "75s", block: "principal" },
+    { name: "Développé haltères", sets: 3, reps: "8–12", rest: "75s", block: "principal" },
+    { name: "Rowing unilatéral", sets: 3, reps: "10–12/ côté", rest: "75s", block: "principal" },
+    { name: "Planche", sets: 2, reps: "30–45s", rest: "45s", block: "fin" },
   ];
 }
 function uniqByName(list: NormalizedExercise[]): NormalizedExercise[] {
@@ -249,16 +191,10 @@ function scoreExercise(ex: NormalizedExercise): number {
   if (ex.sets && ex.reps) s += 1;
   return s;
 }
-function ensureAtLeast4(
-  list: NormalizedExercise[],
-  type: WorkoutType,
-  equip: "full" | "none"
-) {
+function ensureAtLeast4(list: NormalizedExercise[], type: WorkoutType, equip: "full" | "none") {
   const out = [...list];
   if (out.length >= 4) return uniqByName(out);
-  const fb = genericFallback(type, equip).sort(
-    (a, b) => scoreExercise(b) - scoreExercise(a)
-  );
+  const fb = genericFallback(type, equip).sort((a, b) => scoreExercise(b) - scoreExercise(a));
   for (const ex of fb) {
     if (out.length >= 4) break;
     if (equip === "none" && requiresEquipment(ex)) continue;
@@ -269,8 +205,7 @@ function ensureAtLeast4(
 
 /* ===== Helpers Supabase admin → programme_insights & programme_lists ===== */
 async function getSupabaseAdmin() {
-  const url =
-    process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 
   if (!url || !serviceKey) {
@@ -284,19 +219,11 @@ async function getSupabaseAdmin() {
   return createClient(url, serviceKey);
 }
 
-async function findUserIdByEmail(
-  supabaseAdmin: any,
-  email: string
-): Promise<string | null> {
+async function findUserIdByEmail(supabaseAdmin: any, email: string): Promise<string | null> {
   const normalized = (email || "").trim().toLowerCase();
   if (!normalized) return null;
   try {
-    const { data, error } = await supabaseAdmin
-      .from("profiles")
-      .select("id")
-      .eq("email", normalized)
-      .single();
-
+    const { data, error } = await supabaseAdmin.from("profiles").select("id").eq("email", normalized).single();
     if (error || !data) return null;
     return data.id as string;
   } catch {
@@ -311,12 +238,7 @@ async function loadPseudoFromSupabase(email: string): Promise<string> {
     const normalizedEmail = (email || "").trim().toLowerCase();
     if (!supabaseAdmin || !normalizedEmail) return "";
 
-    const { data, error } = await supabaseAdmin
-      .from("profiles")
-      .select("pseudo")
-      .eq("email", normalizedEmail)
-      .single();
-
+    const { data, error } = await supabaseAdmin.from("profiles").select("pseudo").eq("email", normalizedEmail).single();
     if (error || !data) return "";
     return typeof (data as any).pseudo === "string" ? (data as any).pseudo : "";
   } catch {
@@ -330,18 +252,13 @@ async function loadPseudoFromSupabase(email: string): Promise<string> {
  * (réponses + toutes les séances)
  * + anti-doublon (si même mail + questionnaire dans les 10s)
  */
-async function logProgrammeInsightToSupabase(
-  email: string,
-  answers: any,
-  sessions: AiSessionT[]
-) {
+async function logProgrammeInsightToSupabase(email: string, answers: any, sessions: AiSessionT[]) {
   try {
     const supabaseAdmin = await getSupabaseAdmin();
     if (!supabaseAdmin || !sessions || !sessions.length) return;
 
     const normalizedEmail = (email || "").trim().toLowerCase();
     const questionnaireKey = "onboarding_v1";
-
     const tenSecondsAgo = new Date(Date.now() - 10_000).toISOString();
 
     const { data: existing, error: existingErr } = await supabaseAdmin
@@ -371,10 +288,7 @@ async function logProgrammeInsightToSupabase(
 }
 
 /* ✅ NEW: load sessions from history matching saved/later keys */
-async function loadSessionsForListsFromInsights(
-  email: string,
-  wantedKeys: Set<string>
-): Promise<AiSessionT[]> {
+async function loadSessionsForListsFromInsights(email: string, wantedKeys: Set<string>): Promise<AiSessionT[]> {
   try {
     const supabaseAdmin = await getSupabaseAdmin();
     const normalizedEmail = (email || "").trim().toLowerCase();
@@ -410,7 +324,6 @@ async function loadSessionsForListsFromInsights(
 }
 
 /* ===== Helpers Supabase → programme_lists (listes faite / plus tard) ===== */
-
 type ProgrammeLists = {
   savedIds: string[];
   laterIds: string[];
@@ -444,11 +357,7 @@ async function loadListsFromSupabase(email: string): Promise<ProgrammeLists> {
   }
 }
 
-async function saveListsToSupabase(
-  email: string,
-  savedIds: string[],
-  laterIds: string[]
-) {
+async function saveListsToSupabase(email: string, savedIds: string[], laterIds: string[]) {
   try {
     const supabaseAdmin = await getSupabaseAdmin();
     const normalizedEmail = (email || "").trim().toLowerCase();
@@ -470,24 +379,15 @@ async function saveListsToSupabase(
 }
 
 /* Loaders — Mes infos */
-async function loadProfile(
-  searchParams?: Record<string, string | string[] | undefined>
-) {
+async function loadProfile(searchParams?: Record<string, string | string[] | undefined>) {
   const forceBlank = ["1", "true", "yes"].includes(
     String(searchParams?.blank || searchParams?.empty || "").toLowerCase()
   );
 
-  // ✅ FIX #1: fallback ?email= (important after Safari reset)
-  const cookieEmail = (cookies().get("app_email")?.value || "")
-    .trim()
-    .toLowerCase();
-
-  const urlEmail = String((searchParams as any)?.email || "")
-    .trim()
-    .toLowerCase();
-
+  // ✅ FIX #1: récupérer l'email même après reset Safari (cookie + session vides)
+  const cookieEmail = (cookies().get("app_email")?.value || "").trim().toLowerCase();
+  const urlEmail = String((searchParams as any)?.email || "").trim().toLowerCase();
   const sessionEmail = (await getEmailFromSupabaseSession()).trim().toLowerCase();
-
   const emailForDisplay = cookieEmail || sessionEmail || urlEmail;
 
   if (forceBlank) {
@@ -514,7 +414,7 @@ async function loadProfile(
     return { emailForDisplay: "", profile, debugInfo, forceBlank };
   }
 
-  // ✅ FIX #2: restore cookie so profile stays stable on refresh
+  // ✅ FIX #2: recréer le cookie app_email pour stabiliser les prochains refresh
   try {
     cookies().set("app_email", emailForDisplay, {
       httpOnly: false,
@@ -523,9 +423,7 @@ async function loadProfile(
       path: "/",
       maxAge: 60 * 60 * 24 * 365, // 1 an
     });
-  } catch {
-    // ignore
-  }
+  } catch {}
 
   try {
     const answers = await getAnswersForEmail(emailForDisplay, { fresh: true });
@@ -546,9 +444,7 @@ async function loadProfile(
   try {
     const pseudo = await loadPseudoFromSupabase(emailForDisplay);
     if (pseudo) (profile as any).pseudo = pseudo;
-  } catch {
-    // ignore
-  }
+  } catch {}
 
   profile.email = emailForDisplay;
   return { emailForDisplay, profile, debugInfo, forceBlank };
@@ -577,11 +473,7 @@ function normalizeAnswersForComparison(raw: any) {
 }
 
 /* Loader — Programme IA côté serveur (liste) */
-async function loadInitialSessions(
-  email: string,
-  equipParam?: string,
-  forceNew?: boolean
-) {
+async function loadInitialSessions(email: string, equipParam?: string, forceNew?: boolean) {
   if (!email) return [];
   const equip: "full" | "none" =
     String(equipParam || "").toLowerCase() === "none" ? "none" : "full";
@@ -613,9 +505,7 @@ async function loadInitialSessions(
           lastInsight = row;
           baseSessions = (row.sessions || []) as AiSessionT[];
         }
-      } catch {
-        // si erreur, on tentera une génération
-      }
+      } catch {}
     }
 
     // 2) Décider si on doit régénérer
@@ -648,7 +538,6 @@ async function loadInitialSessions(
 
     // 3) Génération si nécessaire
     if (mustRegenerate) {
-      // on veut les answers AVANT de choisir le jour de départ
       if (!currentAnswers) {
         try {
           currentAnswers = await getAnswersForEmail(email, { fresh: true });
@@ -659,9 +548,6 @@ async function loadInitialSessions(
 
       const { sessions } = await planProgrammeFromEmail(email, { lang });
 
-      // ✅ start day logic:
-      // - jour explicite dans réponses => commencer ce jour-là
-      // - sinon => commencer demain
       const startIndex = getStartIndexFromAnswersOrTomorrow(currentAnswers, TZ);
       baseSessions = rotateSessionsToStartFromIndex(sessions || [], startIndex);
 
@@ -708,8 +594,7 @@ export default async function Page({
   searchParams,
 }: {
   searchParams?: {
-    // ✅ FIX: allow ?email= fallback (only added, doesn't change logic)
-    email?: string;
+    email?: string; // ✅ FIX: allow ?email= fallback
 
     success?: string;
     error?: string;
@@ -722,21 +607,14 @@ export default async function Page({
     later?: string;
   };
 }) {
-  const { emailForDisplay, profile, debugInfo, forceBlank } =
-    await loadProfile(searchParams as any);
+  const { emailForDisplay, profile, debugInfo, forceBlank } = await loadProfile(searchParams as any);
 
-  const generateParam =
-    String(searchParams?.generate || "").toLowerCase() === "1";
+  const generateParam = String(searchParams?.generate || "").toLowerCase() === "1";
 
   const equipParam = String(searchParams?.equip || "").toLowerCase();
   const equipMode: "full" | "none" = equipParam === "none" ? "none" : "full";
 
-  const initialSessions = await loadInitialSessions(
-    emailForDisplay,
-    equipMode,
-    generateParam
-  );
-
+  const initialSessions = await loadInitialSessions(emailForDisplay, equipMode, generateParam);
   const hasGenerate = initialSessions.length > 0;
 
   // 🔁 Listes "faite / plus tard"
@@ -753,12 +631,9 @@ export default async function Page({
 
   await saveListsToSupabase(emailForDisplay, savedIds, laterIds);
 
-  // ✅ NEW: charger les anciennes séances correspondantes aux saved/later pour les afficher même après régénération
+  // ✅ NEW: charger les anciennes séances correspondantes aux saved/later
   const wantedKeys = new Set<string>([...savedIds, ...laterIds].filter(Boolean));
-  const listSessionsExtra = await loadSessionsForListsFromInsights(
-    emailForDisplay,
-    wantedKeys
-  );
+  const listSessionsExtra = await loadSessionsForListsFromInsights(emailForDisplay, wantedKeys);
 
   const displayedError = searchParams?.error || "";
   const displayedSuccess = searchParams?.success || "";
@@ -766,9 +641,7 @@ export default async function Page({
 
   const p = (profile ?? {}) as Partial<ProfileT>;
   const clientPrenom =
-    typeof p?.prenom === "string" && p.prenom && !/\d/.test(p.prenom)
-      ? p.prenom
-      : "";
+    typeof p?.prenom === "string" && p.prenom && !/\d/.test(p.prenom) ? p.prenom : "";
 
   const questionnaireUrl = (() => {
     const qp = new URLSearchParams();
@@ -795,7 +668,6 @@ export default async function Page({
       questionnaireUrl={questionnaireUrl}
       questionnaireBase={QUESTIONNAIRE_BASE}
       showAdOnGenerate={generateParam}
-      /* ✅ NEW */
       listSessionsExtra={listSessionsExtra}
     />
   );
