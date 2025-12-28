@@ -11,19 +11,17 @@ import { revalidatePath } from "next/cache";
  */
 export async function upsertOnSignIn(emailRaw: string) {
   const email = String(emailRaw || "").trim().toLowerCase();
+
   if (email) {
     cookies().set("app_email", email, {
       path: "/",
-      // httpOnly volontairement false ici pour autoriser l'écriture côté client si besoin;
-      // si tu préfères strict serveur, passe à true et pose le cookie côté client aussi.
-      httpOnly: false,
+      httpOnly: true, // ✅ CRITIQUE pour iOS PWA
       sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      maxAge: 60 * 60 * 24 * 365,
+      secure: true, // ✅ TOUJOURS true en prod (iOS l’exige)
+      maxAge: 60 * 60 * 24 * 365, // 1 an
     });
   }
 
-  // Invalide le cache de la page profil pour refléter l'email immédiatement
   revalidatePath("/dashboard/profile");
   return { ok: true };
 }
