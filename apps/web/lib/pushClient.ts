@@ -46,9 +46,8 @@ export async function ensurePushSubscription(vapidPublicKey: string) {
 }
 
 /**
- * Active les notifications ET enregistre la subscription via /api/push/subscribe.
- * Le serveur doit ensuite l'upsert en DB (Supabase) en associant au user connecté.
- * + scope pour limiter à une page/fonction (ici: motivation).
+ * Active les notifications ET enregistre la subscription via /api/push/subscribe
+ * (sans auth : on identifie par deviceId)
  */
 export async function enableWebPush(vapidPublicKey: string, scope: string) {
   if (typeof window === "undefined") throw new Error("Client only");
@@ -63,28 +62,33 @@ export async function enableWebPush(vapidPublicKey: string, scope: string) {
   const subscription = await ensurePushSubscription(vapidPublicKey);
   const subJson = subscription.toJSON();
 
-  if (!subJson?.endpoint || !subJson?.keys?.p256dh || !subJson?.keys?.auth) {
+  const endpoint = subJson?.endpoint;
+  const p256dh = subJson?.keys?.p256dh;
+  const auth = subJson?.keys?.auth;
+
+  if (!endpoint || !p256dh || !auth) {
     throw new Error("Subscription invalide: endpoint/keys manquants");
   }
 
-  // 3) Envoi au serveur (NextAuth session cookies)
+  // 3) Envoi au serveur
   const deviceId = getDeviceId();
 
   const res = await fetch("/api/push/subscribe", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    credentials: "include", // ✅ IMPORTANT: envoie les cookies NextAuth
+    credentials: "include",
     body: JSON.stringify({
       deviceId,
-      scope, // ✅ AJOUT
-      subscription: subJson,
+      scope: scope || "motivation",
+      endpoint,
+      keys: { p256dh, auth },
       userAgent: navigator.userAgent,
     }),
   });
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err?.error || `Subscribe failed (${res.status})`);
+    throw new Error(err?.error || err?.message || `Subscribe failed (${res.status})`);
   }
 
   return { ok: true };
