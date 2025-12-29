@@ -55,28 +55,30 @@ function getSupabaseAdmin() {
 }
 
 async function pickCoachMessage() {
-  // tu peux enrichir / randomiser plus tard
   return {
     title: "Files Le Coach — From Coaching",
     message: "Petite action aujourd’hui, grand impact demain. Tu avances. 💪",
   };
 }
 
-async function sendPushToDeviceId(supabase, webpush, deviceId, payload) {
-  const did = String(deviceId || "").trim();
-  if (!did) return 0;
-
-  const { data: subs, error } = await supabase
+async function loadSubs(supabase, deviceIdOrNull) {
+  let q = supabase
     .from("push_subscriptions_device")
-    .select("endpoint, p256dh, auth")
-    .eq("scope", "motivation")
-    .eq("device_id", did);
+    .select("endpoint, p256dh, auth, device_id")
+    .eq("scope", "motivation");
 
+  if (deviceIdOrNull) q = q.eq("device_id", deviceIdOrNull);
+
+  const { data, error } = await q;
   if (error) {
     console.error("[push-cron] subs error:", error.message);
-    return 0;
+    return [];
   }
-  if (!subs?.length) return 0;
+  return data || [];
+}
+
+async function sendPushToSubs(supabase, webpush, subs, payload) {
+  if (!subs.length) return 0;
 
   let ok = 0;
 
@@ -99,7 +101,7 @@ async function sendPushToDeviceId(supabase, webpush, deviceId, payload) {
   return ok;
 }
 
-exports.handler = async (event) => {
+exports.handler = async () => {
   try {
     const PUB = process.env.VAPID_PUBLIC_KEY;
     const PRIV = process.env.VAPID_PRIVATE_KEY;
@@ -121,7 +123,6 @@ exports.handler = async (event) => {
     const ymd = dateYmdParis(now);
     const sendKeyBase = `${ymd}|${hhmm}|${TZ}`;
 
-    // ⚠️ On inclut device_id car on envoie "pour moi" par device
     const { data: rows, error: msgErr } = await supabase
       .from("motivation_messages")
       .select("id, target, mode, content, days, time, active, device_id")
@@ -135,24 +136,14 @@ exports.handler = async (event) => {
 
     const due = (rows || []).filter((m) => parseDays(m.days).includes(dayKey));
     if (!due.length) {
-      return {
-        statusCode: 200,
-        body: JSON.stringify({ ok: true, at: sendKeyBase, due: 0, processed: 0, sent: 0 }),
-      };
+      return { statusCode: 200, body: JSON.stringify({ ok: true, at: sendKeyBase, due: 0, processed: 0, sent: 0 }) };
     }
 
     let processed = 0;
     let sent = 0;
 
     for (const msg of due) {
-      // ✅ Pour le moment: seulement "ME"
       if (msg.target !== "ME") continue;
-
-      const deviceId = String(msg.device_id || "").trim();
-      if (!deviceId) {
-        console.warn("[push-cron] ME message without device_id:", msg.id);
-        continue;
-      }
 
       processed++;
 
@@ -160,13 +151,24 @@ exports.handler = async (event) => {
       const coach = await pickCoachMessage();
 
       const payload = {
-        title: coach.title || "Files Le Coach — From Coaching",
+        title: coach.title,
         body: custom ? custom : coach.message,
         scope: "motivation",
         data: { url: "/dashboard/motivation", scope: "motivation" },
       };
 
-      sent += await sendPushToDeviceId(supabase, webpush, deviceId, payload);
+      const did = String(msg.device_id || "").trim();
+
+      // ✅ Si device_id sur le message => envoi ciblé
+      if (did) {
+        const subs = await loadSubs(supabase, did);
+        sent += await sendPushToSubs(supabase, webpush, subs, payload);
+        continue;
+      }
+
+      // ✅ Fallback: aucun device_id => envoi à tous tes devices
+      const all = await loadSubs(supabase, null);
+      sent += await sendPushToSubs(supabase, webpush, all, payload);
     }
 
     return {
