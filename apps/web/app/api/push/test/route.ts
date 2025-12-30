@@ -1,3 +1,4 @@
+// apps/web/app/api/push/test/route.ts
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
@@ -13,8 +14,9 @@ function getSupabaseAdmin() {
 
 export async function POST() {
   try {
-    const PUB = process.env.VAPID_PUBLIC_KEY;
-    const PRIV = process.env.VAPID_PRIVATE_KEY;
+    // ✅ NEW: fallback env vars
+    const PUB = process.env.VAPID_PUBLIC_KEY || process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+    const PRIV = process.env.VAPID_PRIVATE_KEY || process.env.NEXT_PUBLIC_VAPID_PRIVATE_KEY;
     const SUBJ = process.env.VAPID_SUBJECT || "mailto:admin@example.com";
     if (!PUB || !PRIV) return NextResponse.json({ ok: false, error: "missing_vapid_keys" }, { status: 500 });
 
@@ -34,6 +36,9 @@ export async function POST() {
     let sent = 0;
     let failed = 0;
 
+    // ✅ NEW: tag anti-doublons
+    const tag = `motivation|test|${Date.now()}`;
+
     for (const s of subs) {
       const subscription = { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } };
       try {
@@ -43,7 +48,8 @@ export async function POST() {
             title: "Files Le Coach",
             body: "Test push serveur ✅",
             scope: "motivation", // ✅ CRITIQUE (sinon SW filtre)
-            data: { url: "/dashboard/motivation", scope: "motivation" },
+            tag, // ✅ NEW
+            data: { url: "/dashboard/motivation", scope: "motivation", tag }, // ✅ NEW
           })
         );
         sent++;
