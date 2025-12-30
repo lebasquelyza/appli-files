@@ -2,6 +2,7 @@
 exports.config = { schedule: "*/1 * * * *" };
 
 const TZ = "Europe/Paris";
+const WINDOW_MINUTES = 3; // ✅ rattrapage si Netlify est en retard
 
 function dayKeyFromParis(date) {
   const wd = new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: TZ }).format(date);
@@ -20,15 +21,6 @@ function timeHHmmParis(date) {
   const hh = parts.find((p) => p.type === "hour")?.value || "00";
   const mm = parts.find((p) => p.type === "minute")?.value || "00";
   return `${hh}:${mm}`;
-}
-
-function secondParis(date) {
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone: TZ,
-    second: "2-digit",
-    hour12: false,
-  }).formatToParts(date);
-  return Number(parts.find((p) => p.type === "second")?.value || "0");
 }
 
 function dateYmdParis(date) {
@@ -52,11 +44,15 @@ function parseDays(daysStr) {
     .filter(Boolean);
 }
 
-// ✅ NEW: calcule hh:mm de "minute précédente" (tolérance retard)
-function hhmmPrev(date) {
-  // on soustrait 60s en UTC, puis on formate en Europe/Paris
-  const d = new Date(date.getTime() - 60 * 1000);
-  return timeHHmmParis(d);
+function minuteWindowsHHmm(now) {
+  // ✅ retourne une liste de HH:mm pour maintenant et les N-1 minutes
+  const out = [];
+  for (let i = 0; i < WINDOW_MINUTES; i++) {
+    const d = new Date(now.getTime() - i * 60 * 1000);
+    out.push(timeHHmmParis(d));
+  }
+  // unique
+  return [...new Set(out)];
 }
 
 function getSupabaseAdmin() {
@@ -72,7 +68,7 @@ function getSupabaseAdmin() {
 
 async function pickCoachMessage() {
   return {
-    title: "Files Le Coach — From Coaching",
+    title: "Files Le Coach",
     message: "Petite action aujourd’hui, grand impact demain. Tu avances. 💪",
   };
 }
@@ -117,9 +113,27 @@ async function sendPushToSubs(supabase, webpush, subs, payload) {
   return ok;
 }
 
-exports.handler = async () => {
+// ✅ NEW: anti-doublon persistant via table motivation_deliveries
+async function claimDelivery(supabase, messageId, ymd, hhmm) {
+  const { error } = await supabase
+    .from("motivation_deliveries")
+    .insert({ message_id: messageId, ymd, hhmm, tz: TZ });
+
+  // si conflit unique => déjà envoyé
+  if (error) {
+    // Supabase renvoie souvent un message type "duplicate key value violates unique constraint"
+    const msg = String(error.message || "");
+    if (msg.toLowerCase().includes("duplicate")) return false;
+    // autre erreur => on log mais on évite d’envoyer en double sans tracking
+    console.error("[push-cron] deliveries insert error:", msg);
+    return false;
+  }
+
+  return true;
+}
+
+exports.handler = async (event) => {
   try {
-    // ✅ NEW: fallback env vars (évite “missing_vapid_keys” si tu as mis NEXT_PUBLIC_…)
     const PUB = process.env.VAPID_PUBLIC_KEY || process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
     const PRIV = process.env.VAPID_PRIVATE_KEY || process.env.NEXT_PUBLIC_VAPID_PRIVATE_KEY;
     const SUBJ = process.env.VAPID_SUBJECT || "mailto:admin@example.com";
@@ -136,21 +150,16 @@ exports.handler = async () => {
 
     const now = new Date();
     const dayKey = dayKeyFromParis(now);
-    const hhmm = timeHHmmParis(now);
     const ymd = dateYmdParis(now);
+    const times = minuteWindowsHHmm(now);
 
-    // ✅ NEW: si la function démarre “au début de minute”, on tolère la minute précédente
-    // (cas fréquent: cron exécuté à 09:01 au lieu de 09:00)
-    const sec = secondParis(now);
-    const includePrev = sec < 20;
-    const times = includePrev ? [hhmm, hhmmPrev(now)] : [hhmm];
-
-    const sendKeyBase = `${ymd}|${hhmm}|${TZ}`;
+    console.log("[push-cron] tick", { ymd, dayKey, times, tz: TZ });
 
     const { data: rows, error: msgErr } = await supabase
       .from("motivation_messages")
       .select("id, target, mode, content, days, time, active, device_id")
       .eq("active", true)
+      .eq("target", "ME")
       .in("time", times);
 
     if (msgErr) {
@@ -159,53 +168,52 @@ exports.handler = async () => {
     }
 
     const due = (rows || []).filter((m) => parseDays(m.days).includes(dayKey));
-    if (!due.length) {
-      return {
-        statusCode: 200,
-        body: JSON.stringify({ ok: true, at: sendKeyBase, due: 0, processed: 0, sent: 0, times }),
-      };
-    }
+    console.log("[push-cron] due", { count: due.length });
 
     let processed = 0;
     let sent = 0;
+    let skippedAlreadySent = 0;
 
     for (const msg of due) {
-      if (msg.target !== "ME") continue;
-
       processed++;
+
+      const claimed = await claimDelivery(supabase, msg.id, ymd, msg.time);
+      if (!claimed) {
+        skippedAlreadySent++;
+        continue;
+      }
 
       const custom = String(msg.content || "").trim();
       const coach = await pickCoachMessage();
 
-      // ✅ NEW: tag anti-doublons (si jamais on renvoie 2 fois, la notif se remplace)
+      // tag anti-doublons côté OS + utile debug
       const tag = `motivation|${msg.id}|${ymd}|${msg.time}`;
 
       const payload = {
         title: coach.title,
         body: custom ? custom : coach.message,
         scope: "motivation",
-        tag, // ✅ NEW
-        data: { url: "/dashboard/motivation", scope: "motivation", tag }, // ✅ NEW
+        tag,
+        data: { url: "/dashboard/motivation", scope: "motivation", tag },
       };
 
       const did = String(msg.device_id || "").trim();
 
-      // ✅ Si device_id sur le message => envoi ciblé
       if (did) {
         const subs = await loadSubs(supabase, did);
+        console.log("[push-cron] send targeted", { msgId: msg.id, time: msg.time, deviceId: did, subs: subs.length });
         sent += await sendPushToSubs(supabase, webpush, subs, payload);
-        continue;
+      } else {
+        const all = await loadSubs(supabase, null);
+        console.log("[push-cron] send fallback all", { msgId: msg.id, time: msg.time, subs: all.length });
+        sent += await sendPushToSubs(supabase, webpush, all, payload);
       }
-
-      // ✅ Fallback: aucun device_id => envoi à tous tes devices
-      const all = await loadSubs(supabase, null);
-      sent += await sendPushToSubs(supabase, webpush, all, payload);
     }
 
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ ok: true, at: sendKeyBase, due: due.length, processed, sent, times, includePrev }),
-    };
+    const result = { ok: true, ymd, dayKey, times, due: due.length, processed, sent, skippedAlreadySent };
+    console.log("[push-cron] done", result);
+
+    return { statusCode: 200, body: JSON.stringify(result) };
   } catch (e) {
     console.error("[push-cron] fatal error", e);
     return { statusCode: 500, body: String(e?.message || e) };
