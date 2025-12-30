@@ -22,6 +22,15 @@ function timeHHmmParis(date) {
   return `${hh}:${mm}`;
 }
 
+function secondParis(date) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: TZ,
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  return Number(parts.find((p) => p.type === "second")?.value || "0");
+}
+
 function dateYmdParis(date) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: TZ,
@@ -41,6 +50,13 @@ function parseDays(daysStr) {
     .split(",")
     .map((x) => x.trim())
     .filter(Boolean);
+}
+
+// ✅ NEW: calcule hh:mm de "minute précédente" (tolérance retard)
+function hhmmPrev(date) {
+  // on soustrait 60s en UTC, puis on formate en Europe/Paris
+  const d = new Date(date.getTime() - 60 * 1000);
+  return timeHHmmParis(d);
 }
 
 function getSupabaseAdmin() {
@@ -103,8 +119,9 @@ async function sendPushToSubs(supabase, webpush, subs, payload) {
 
 exports.handler = async () => {
   try {
-    const PUB = process.env.VAPID_PUBLIC_KEY;
-    const PRIV = process.env.VAPID_PRIVATE_KEY;
+    // ✅ NEW: fallback env vars (évite “missing_vapid_keys” si tu as mis NEXT_PUBLIC_…)
+    const PUB = process.env.VAPID_PUBLIC_KEY || process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+    const PRIV = process.env.VAPID_PRIVATE_KEY || process.env.NEXT_PUBLIC_VAPID_PRIVATE_KEY;
     const SUBJ = process.env.VAPID_SUBJECT || "mailto:admin@example.com";
 
     if (!PUB || !PRIV) {
@@ -121,13 +138,20 @@ exports.handler = async () => {
     const dayKey = dayKeyFromParis(now);
     const hhmm = timeHHmmParis(now);
     const ymd = dateYmdParis(now);
+
+    // ✅ NEW: si la function démarre “au début de minute”, on tolère la minute précédente
+    // (cas fréquent: cron exécuté à 09:01 au lieu de 09:00)
+    const sec = secondParis(now);
+    const includePrev = sec < 20;
+    const times = includePrev ? [hhmm, hhmmPrev(now)] : [hhmm];
+
     const sendKeyBase = `${ymd}|${hhmm}|${TZ}`;
 
     const { data: rows, error: msgErr } = await supabase
       .from("motivation_messages")
       .select("id, target, mode, content, days, time, active, device_id")
       .eq("active", true)
-      .eq("time", hhmm);
+      .in("time", times);
 
     if (msgErr) {
       console.error("[push-cron] motivation_messages error:", msgErr.message);
@@ -136,7 +160,10 @@ exports.handler = async () => {
 
     const due = (rows || []).filter((m) => parseDays(m.days).includes(dayKey));
     if (!due.length) {
-      return { statusCode: 200, body: JSON.stringify({ ok: true, at: sendKeyBase, due: 0, processed: 0, sent: 0 }) };
+      return {
+        statusCode: 200,
+        body: JSON.stringify({ ok: true, at: sendKeyBase, due: 0, processed: 0, sent: 0, times }),
+      };
     }
 
     let processed = 0;
@@ -150,11 +177,15 @@ exports.handler = async () => {
       const custom = String(msg.content || "").trim();
       const coach = await pickCoachMessage();
 
+      // ✅ NEW: tag anti-doublons (si jamais on renvoie 2 fois, la notif se remplace)
+      const tag = `motivation|${msg.id}|${ymd}|${msg.time}`;
+
       const payload = {
         title: coach.title,
         body: custom ? custom : coach.message,
         scope: "motivation",
-        data: { url: "/dashboard/motivation", scope: "motivation" },
+        tag, // ✅ NEW
+        data: { url: "/dashboard/motivation", scope: "motivation", tag }, // ✅ NEW
       };
 
       const did = String(msg.device_id || "").trim();
@@ -173,7 +204,7 @@ exports.handler = async () => {
 
     return {
       statusCode: 200,
-      body: JSON.stringify({ ok: true, at: sendKeyBase, due: due.length, processed, sent }),
+      body: JSON.stringify({ ok: true, at: sendKeyBase, due: due.length, processed, sent, times, includePrev }),
     };
   } catch (e) {
     console.error("[push-cron] fatal error", e);
