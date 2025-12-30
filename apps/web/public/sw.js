@@ -9,7 +9,7 @@ self.addEventListener("push", (event) => {
     data = {};
   }
 
-  // ✅ AJOUT: filtrage "motivation only"
+  // ✅ filtrage "motivation only"
   const scope = data.scope || data?.data?.scope;
   if (scope && scope !== "motivation") return;
 
@@ -17,10 +17,14 @@ self.addEventListener("push", (event) => {
   const body = data.body || "";
   const url = data?.data?.url || data.url || "/";
 
+  // ✅ NEW: tag anti-doublons (remplace la notif si même tag)
+  const tag = data.tag || data?.data?.tag || undefined;
+
   event.waitUntil(
     self.registration.showNotification(title, {
       body,
-      data: { url },
+      data: { url, tag },
+      tag, // ✅ NEW
       icon: "/icon-192.png",
       badge: "/icon-192.png",
     })
