@@ -56,8 +56,8 @@ type DayKey = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 
 type MotivationMessageApi = {
   id: string;
-  userId: string | null;
-  deviceId?: string | null;
+  userId?: string | null;
+  device_id?: string | null;
   target: string; // "ME" | "FRIENDS"
   mode?: string; // "COACH" | "CUSTOM"
   content: string;
@@ -151,12 +151,8 @@ export default function MotivationPage() {
 
     async function loadMessages() {
       try {
-        // ✅ device-only fallback: si pas de session, on filtre côté API via deviceId
-        const did = getDeviceId();
-        const url = session ? "/api/motivation/messages" : `/api/motivation/messages?deviceId=${encodeURIComponent(did)}`;
-
-        // ✅ IMPORTANT: envoie les cookies NextAuth (si présents)
-        const res = await fetch(url, { credentials: "include" });
+        // ✅ IMPORTANT: envoie les cookies NextAuth
+        const res = await fetch("/api/motivation/messages", { credentials: "include" });
         if (!res.ok) return;
         const data: MotivationMessageApi[] = await res.json();
         if (cancelled || !Array.isArray(data)) return;
@@ -198,7 +194,7 @@ export default function MotivationPage() {
     return () => {
       cancelled = true;
     };
-  }, [t, session]);
+  }, [t]);
 
   const visibleNotifications = useMemo(
     () => (filter === "all" ? notifications : notifications.filter((n) => !n.read)),
@@ -351,21 +347,20 @@ export default function MotivationPage() {
     if (scheduleTarget === "FRIENDS") setSharingCustom(true);
 
     try {
-      const did = getDeviceId();
+      // ✅ NEW: deviceId stable (localStorage) pour lier la programmation au device qui reçoit les push
+      const deviceId = getDeviceId();
 
       const res = await fetch("/api/motivation/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include", // ✅ IMPORTANT: envoie les cookies NextAuth (si présents)
+        credentials: "include",
         body: JSON.stringify({
           target: scheduleTarget,
           content: trimmed,
           days: scheduleDays,
           time: scheduleTime,
           recipientIds: scheduleTarget === "FRIENDS" ? selectedFriendIds : undefined,
-
-          // ✅ device-only: nécessaire pour "ME" sans authentification (ne change rien si connecté)
-          deviceId: scheduleTarget === "ME" ? did : undefined,
+          deviceId, // ✅ AJOUT IMPORTANT
         }),
       });
 
