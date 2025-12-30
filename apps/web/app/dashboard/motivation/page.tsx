@@ -233,6 +233,7 @@ export default function MotivationPage() {
     setScheduleDays((prev) => (prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]));
   };
 
+  // ⚠️ Logique inchangée — cette fonction est conservée même si le bouton a été retiré.
   const sendTestNotification = async () => {
     if (sending) return;
     setSending(true);
@@ -444,13 +445,16 @@ export default function MotivationPage() {
       const res = await fetch("/api/push/test", { method: "POST" });
       if (!res.ok) {
         const txt = await res.text().catch(() => "");
-        alert(`Test push serveur échoué (${res.status})\n\n${txt}`);
+        // ✅ texte renommé uniquement (logique inchangée)
+        alert(`Notification test échouée (${res.status})\n\n${txt}`);
         return;
       }
       const json = await res.json().catch(() => null);
-      alert(`Test push serveur envoyé ✅\n\n${json ? JSON.stringify(json) : ""}`);
+      // ✅ texte renommé uniquement (logique inchangée)
+      alert(`Notification test envoyée ✅\n\n${json ? JSON.stringify(json) : ""}`);
     } catch (e: any) {
-      alert(`Test push serveur erreur:\n\n${e?.message || String(e)}`);
+      // ✅ texte renommé uniquement (logique inchangée)
+      alert(`Notification test erreur:\n\n${e?.message || String(e)}`);
     }
   };
 
@@ -561,13 +565,14 @@ export default function MotivationPage() {
             {pushBusy ? "Activation..." : "Activer les notifications"}
           </button>
 
+          {/* ✅ texte remplacé uniquement (logique inchangée) */}
           <button
             type="button"
             className="btn btn-dash"
             style={{ fontSize: 12, borderRadius: 999, padding: "6px 10px" }}
             onClick={sendServerPushTest}
           >
-            Test push serveur
+            Notification test
           </button>
 
           <div style={{ display: "inline-flex", borderRadius: 999, border: "1px solid #e5e7eb", overflow: "hidden" }}>
@@ -611,15 +616,7 @@ export default function MotivationPage() {
             {t("motivation.bar.markAllRead", "Tout marquer comme lu")}
           </button>
 
-          <button
-            type="button"
-            className="btn"
-            style={{ fontSize: 12, background: "#111827", color: "#ffffff", borderRadius: 999, padding: "6px 10px" }}
-            onClick={sendTestNotification}
-            disabled={sending}
-          >
-            {sending ? t("motivation.bar.sending", "Envoi...") : t("motivation.bar.sendTest", "Envoyer une notif de test")}
-          </button>
+          {/* ❌ Bouton “Envoyer une notif de test” retiré (logique conservée) */}
         </div>
       </div>
 
