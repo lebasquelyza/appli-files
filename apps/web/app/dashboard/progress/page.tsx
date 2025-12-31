@@ -296,7 +296,7 @@ export default async function Page({
     stepsByDayTotal[e.date] = (stepsByDayTotal[e.date] || 0) + (Number(e.value) || 0);
   }
   for (const [date, v] of Object.entries(appleStepsDaily || {})) {
-    stepsByDayTotal[date] = (stepsByDayTotal[date] || 0) + (Number(v) || 0);
+    stepsByDayTotal[date] = (stepsByDayTotal[e.date] || 0) + (Number(v) || 0);
   }
 
   let streakDays = 0;
@@ -403,7 +403,7 @@ export default async function Page({
             <div className="text-sm" style={{ color: "#6b7280" }}>
               🚶 Pas
             </div>
-            <div style={{ fontSize: 24, fontWeight: 900 }}>
+            <div style={{ fontSize: 20, fontWeight: 900 }}>
               {stepsTodayTotal.toLocaleString(locale)}
             </div>
             <div className="badge" style={{ marginTop: 8, alignSelf: "flex-start" }}>
@@ -416,7 +416,7 @@ export default async function Page({
             <div className="text-sm" style={{ color: "#6b7280" }}>
               🔥 Streak
             </div>
-            <div style={{ fontSize: 24, fontWeight: 900 }}>
+            <div style={{ fontSize: 20, fontWeight: 900 }}>
               {streakDays}
               <span className="text-sm" style={{ color: "#6b7280", fontWeight: 600 }}>
                 {" "}
@@ -433,7 +433,7 @@ export default async function Page({
             <div className="text-sm" style={{ color: "#6b7280" }}>
               ⚖️ Poids
             </div>
-            <div style={{ fontSize: 24, fontWeight: 900 }}>
+            <div style={{ fontSize: 20, fontWeight: 900 }}>
               {lastByType.weight ? `${lastByType.weight.value} kg` : "—"}
             </div>
             <div className="badge" style={{ marginTop: 8, alignSelf: "flex-start" }}>
@@ -446,7 +446,7 @@ export default async function Page({
             <div className="text-sm" style={{ color: "#6b7280" }}>
               🏋️ Charge
             </div>
-            <div style={{ fontSize: 24, fontWeight: 900 }}>
+            <div style={{ fontSize: 20, fontWeight: 900 }}>
               {lastByType.load
                 ? `${lastByType.load.value} kg${lastByType.load.reps ? ` × ${lastByType.load.reps}` : ""}`
                 : "—"}
@@ -565,7 +565,7 @@ export default async function Page({
                   <div className="text-sm" style={{ color: "#6b7280" }}>
                     Total semaine
                   </div>
-                  <div style={{ fontSize: 24, fontWeight: 900 }}>
+                  <div style={{ fontSize: 20, fontWeight: 900 }}>
                     {stepsThisWeekTotal.toLocaleString(locale)}
                   </div>
                   <div className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>
@@ -578,7 +578,7 @@ export default async function Page({
                   <div className="text-sm" style={{ color: "#6b7280" }}>
                     Moyenne / jour
                   </div>
-                  <div style={{ fontSize: 24, fontWeight: 900 }}>
+                  <div style={{ fontSize: 20, fontWeight: 900 }}>
                     {avgPerDayTotal.toLocaleString(locale)}
                   </div>
                   <div className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>
@@ -593,7 +593,7 @@ export default async function Page({
                   </div>
 
                   <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
-                    <div style={{ fontSize: 24, fontWeight: 900 }}>{weekProgressPct}%</div>
+                    <div style={{ fontSize: 20, fontWeight: 900 }}>{weekProgressPct}%</div>
                     <div className="badge">
                       {weekRemaining > 0 ? `reste ${weekRemaining.toLocaleString(locale)}` : "ok 🎉"}
                     </div>
@@ -651,7 +651,7 @@ export default async function Page({
             </div>
             {lastByType.steps ? (
               <div style={{ marginTop: 8 }}>
-                <div style={{ fontSize: 22, fontWeight: 900 }}>
+                <div style={{ fontSize: 20, fontWeight: 900 }}>
                   {lastByType.steps.value.toLocaleString(locale)} {t("progress.latest.steps.unit")}
                 </div>
                 <div className="text-sm" style={{ color: "#6b7280" }}>
@@ -674,7 +674,7 @@ export default async function Page({
             </div>
             {lastByType.load ? (
               <div style={{ marginTop: 8 }}>
-                <div style={{ fontSize: 22, fontWeight: 900 }}>
+                <div style={{ fontSize: 20, fontWeight: 900 }}>
                   {lastByType.load.value} kg{lastByType.load.reps ? ` × ${lastByType.load.reps}` : ""}
                 </div>
                 <div className="text-sm" style={{ color: "#6b7280" }}>
@@ -697,7 +697,7 @@ export default async function Page({
             </div>
             {lastByType.weight ? (
               <div style={{ marginTop: 8 }}>
-                <div style={{ fontSize: 22, fontWeight: 900 }}>
+                <div style={{ fontSize: 20, fontWeight: 900 }}>
                   {lastByType.weight.value} kg
                 </div>
                 <div className="text-sm" style={{ color: "#6b7280" }}>
