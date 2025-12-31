@@ -96,8 +96,6 @@ function parseYMDLocal(s: string) {
   const [y, m, d] = s.split("-").map(Number);
   return new Date(y, (m || 1) - 1, d || 1);
 }
-
-/* ✅ streak helper */
 function ymdLocal(d: Date) {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -228,7 +226,7 @@ export default async function Page({
   const dd = String(today.getDate()).padStart(2, "0");
   const defaultDate = `${yyyy}-${mm}-${dd}`;
 
-  // ✅ Apple steps (import Santé) + manuel steps du jour (addition)
+  // ✅ Apple + manuel (addition) — pour stats
   const appleStepsDaily = readAppleStepsDaily();
   const appleStepsToday = Number((appleStepsDaily as any)?.[defaultDate] || 0) || 0;
 
@@ -243,7 +241,7 @@ export default async function Page({
   const mondayYMD = toYMD(monday);
   const sundayYMD = toYMD(sunday);
 
-  const stepsThisWeek = store.entries
+  const stepsThisWeekManual = store.entries
     .filter((e) => e.type === "steps")
     .filter((e) => {
       const d = parseYMDLocal(e.date);
@@ -251,7 +249,6 @@ export default async function Page({
     })
     .reduce((sum, e) => sum + (Number(e.value) || 0), 0);
 
-  // ✅ Apple steps semaine (addition)
   const appleStepsThisWeek = Object.entries(appleStepsDaily || {})
     .filter(([date]) => {
       const d = parseYMDLocal(date);
@@ -259,19 +256,8 @@ export default async function Page({
     })
     .reduce((sum, [, v]) => sum + (Number(v) || 0), 0);
 
-  const stepsThisWeekTotal = stepsThisWeek + appleStepsThisWeek;
+  const stepsThisWeekTotal = stepsThisWeekManual + appleStepsThisWeek;
 
-  const daysCovered = new Set(
-    store.entries
-      .filter((e) => e.type === "steps")
-      .filter((e) => {
-        const d = parseYMDLocal(e.date);
-        return d >= monday && d <= sunday;
-      })
-      .map((e) => e.date),
-  ).size;
-
-  // ✅ jours couverts total (manuel + apple)
   const daysCoveredTotal = new Set(
     [
       ...store.entries
@@ -288,27 +274,27 @@ export default async function Page({
     ],
   ).size;
 
-  const avgPerDayTotal = daysCoveredTotal > 0 ? Math.round(stepsThisWeekTotal / daysCoveredTotal) : 0;
+  const avgPerDayTotal =
+    daysCoveredTotal > 0 ? Math.round(stepsThisWeekTotal / daysCoveredTotal) : 0;
   const hasWeekDataTotal = stepsThisWeekTotal > 0 && daysCoveredTotal > 0;
 
-  // ✅ Objectifs (modifiable)
+  // ✅ Objectifs
   const goalStepsPerDay = 10_000;
   const goalStepsPerWeek = goalStepsPerDay * 7;
 
   const weekProgressPct =
-    goalStepsPerWeek > 0 ? Math.min(100, Math.round((stepsThisWeekTotal / goalStepsPerWeek) * 100)) : 0;
+    goalStepsPerWeek > 0
+      ? Math.min(100, Math.round((stepsThisWeekTotal / goalStepsPerWeek) * 100))
+      : 0;
   const weekRemaining = Math.max(0, goalStepsPerWeek - stepsThisWeekTotal);
 
-  // ✅ Streak (manuel + Apple) : jours consécutifs jusqu'à aujourd'hui
+  // ✅ Streak (manuel + Apple)
   const stepsByDayTotal: Record<string, number> = {};
-
-  // manuel
   for (const e of store.entries) {
     if (e.type !== "steps") continue;
     if (!e.date) continue;
     stepsByDayTotal[e.date] = (stepsByDayTotal[e.date] || 0) + (Number(e.value) || 0);
   }
-  // apple
   for (const [date, v] of Object.entries(appleStepsDaily || {})) {
     stepsByDayTotal[date] = (stepsByDayTotal[date] || 0) + (Number(v) || 0);
   }
@@ -397,7 +383,7 @@ export default async function Page({
         )}
       </div>
 
-      {/* === 0) Aujourd’hui (fitness) === */}
+      {/* === 0) Aujourd’hui === */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
           <h2
@@ -412,58 +398,61 @@ export default async function Page({
         </div>
 
         <div className="grid gap-6 lg:grid-cols-4">
-          {/* Total pas */}
+          {/* Pas total */}
           <article className="card">
             <div className="text-sm" style={{ color: "#6b7280" }}>
-              Pas (total)
+              🚶 Pas
             </div>
-            <div style={{ fontSize: 22, fontWeight: 900 }}>
-              {stepsTodayTotal.toLocaleString(locale)} {t("progress.latest.steps.unit")}
+            <div style={{ fontSize: 24, fontWeight: 900 }}>
+              {stepsTodayTotal.toLocaleString(locale)}
             </div>
-            <div className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>
-              Manuel: {Number(manualStepsToday || 0).toLocaleString(locale)} • Apple:{" "}
-              {Number(appleStepsToday || 0).toLocaleString(locale)}
+            <div className="badge" style={{ marginTop: 8, alignSelf: "flex-start" }}>
+              objectif {goalStepsPerDay.toLocaleString(locale)}
             </div>
           </article>
 
           {/* Streak */}
           <article className="card">
             <div className="text-sm" style={{ color: "#6b7280" }}>
-              Streak
+              🔥 Streak
             </div>
-            <div style={{ fontSize: 22, fontWeight: 900 }}>
-              {streakDays} jour{streakDays > 1 ? "s" : ""}
+            <div style={{ fontSize: 24, fontWeight: 900 }}>
+              {streakDays}
+              <span className="text-sm" style={{ color: "#6b7280", fontWeight: 600 }}>
+                {" "}
+                j
+              </span>
             </div>
-            <div className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>
-              Jours consécutifs avec des pas (manuel + Apple)
+            <div className="badge" style={{ marginTop: 8, alignSelf: "flex-start" }}>
+              {streakDays >= 7 ? "solide" : "en cours"}
             </div>
           </article>
 
-          {/* Poids récent */}
+          {/* Poids */}
           <article className="card">
             <div className="text-sm" style={{ color: "#6b7280" }}>
-              Poids (dernier)
+              ⚖️ Poids
             </div>
-            <div style={{ fontSize: 22, fontWeight: 900 }}>
+            <div style={{ fontSize: 24, fontWeight: 900 }}>
               {lastByType.weight ? `${lastByType.weight.value} kg` : "—"}
             </div>
-            <div className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>
-              {lastByType.weight ? fmtDate(lastByType.weight.date, locale) : "Pas encore de mesure"}
+            <div className="badge" style={{ marginTop: 8, alignSelf: "flex-start" }}>
+              {lastByType.weight ? fmtDate(lastByType.weight.date, locale) : "pas de mesure"}
             </div>
           </article>
 
-          {/* Charge récente */}
+          {/* Charge */}
           <article className="card">
             <div className="text-sm" style={{ color: "#6b7280" }}>
-              Charge (dernier)
+              🏋️ Charge
             </div>
-            <div style={{ fontSize: 22, fontWeight: 900 }}>
+            <div style={{ fontSize: 24, fontWeight: 900 }}>
               {lastByType.load
                 ? `${lastByType.load.value} kg${lastByType.load.reps ? ` × ${lastByType.load.reps}` : ""}`
                 : "—"}
             </div>
-            <div className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>
-              {lastByType.load ? fmtDate(lastByType.load.date, locale) : "Pas encore de charge"}
+            <div className="badge" style={{ marginTop: 8, alignSelf: "flex-start" }}>
+              {lastByType.load ? fmtDate(lastByType.load.date, locale) : "pas de charge"}
             </div>
           </article>
         </div>
@@ -516,13 +505,7 @@ export default async function Page({
 
             <div>
               <label className="label">{t("progress.form.reps.label")}</label>
-              <input
-                className="input"
-                type="number"
-                name="reps"
-                step="1"
-                placeholder={t("progress.form.reps.placeholder")}
-              />
+              <input className="input" type="number" name="reps" step="1" placeholder={t("progress.form.reps.placeholder")} />
             </div>
 
             <div className="lg:col-span-2">
@@ -539,7 +522,7 @@ export default async function Page({
         </div>
       </div>
 
-      {/* === 2) Semaine en cours (card) === */}
+      {/* === 2) Semaine en cours === */}
       <section className="section" style={{ marginTop: 12 }}>
         <div
           className="section-head"
@@ -577,57 +560,43 @@ export default async function Page({
                   marginTop: 12,
                 }}
               >
-                {/* Bloc Total */}
+                {/* Total semaine */}
                 <div className="card" style={{ padding: 12 }}>
                   <div className="text-sm" style={{ color: "#6b7280" }}>
-                    {t("progress.week.totalLabel")}
+                    Total semaine
                   </div>
-                  <div style={{ fontSize: 22, fontWeight: 900 }}>
-                    {stepsThisWeekTotal.toLocaleString(locale)}{" "}
-                    <span className="text-xs" style={{ color: "#6b7280", fontWeight: 400 }}>
-                      {t("progress.week.stepsUnit")}
-                    </span>
+                  <div style={{ fontSize: 24, fontWeight: 900 }}>
+                    {stepsThisWeekTotal.toLocaleString(locale)}
                   </div>
                   <div className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>
-                    Manuel: {stepsThisWeek.toLocaleString(locale)} • Apple: {appleStepsThisWeek.toLocaleString(locale)}
+                    {daysCoveredTotal} jour{daysCoveredTotal > 1 ? "s" : ""} actif{daysCoveredTotal > 1 ? "s" : ""}
                   </div>
                 </div>
 
-                {/* Bloc Moyenne / jour */}
+                {/* Moyenne */}
                 <div className="card" style={{ padding: 12 }}>
                   <div className="text-sm" style={{ color: "#6b7280" }}>
-                    {t("progress.week.avgPerDayLabel")}
+                    Moyenne / jour
                   </div>
-                  <div style={{ fontSize: 22, fontWeight: 900 }}>
-                    {avgPerDayTotal.toLocaleString(locale)}{" "}
-                    <span className="text-xs" style={{ color: "#6b7280", fontWeight: 400 }}>
-                      {t("progress.week.stepsPerDayUnit")}
-                    </span>
+                  <div style={{ fontSize: 24, fontWeight: 900 }}>
+                    {avgPerDayTotal.toLocaleString(locale)}
                   </div>
                   <div className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>
-                    Jours actifs : {daysCoveredTotal}
+                    sur les jours actifs
                   </div>
                 </div>
 
-                {/* Bloc Objectif */}
+                {/* Objectif */}
                 <div className="card" style={{ padding: 12 }}>
                   <div className="text-sm" style={{ color: "#6b7280" }}>
                     Objectif semaine
                   </div>
 
-                  <div style={{ fontSize: 22, fontWeight: 900 }}>
-                    {weekProgressPct}%
-                    <span className="text-xs" style={{ color: "#6b7280", fontWeight: 400 }}>
-                      {" "}
-                      ({stepsThisWeekTotal.toLocaleString(locale)} / {goalStepsPerWeek.toLocaleString(locale)}{" "}
-                      {t("progress.week.stepsUnit")})
-                    </span>
-                  </div>
-
-                  <div className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>
-                    {weekRemaining > 0
-                      ? `Reste : ${weekRemaining.toLocaleString(locale)} ${t("progress.week.stepsUnit")}`
-                      : "Objectif atteint 🎉"}
+                  <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
+                    <div style={{ fontSize: 24, fontWeight: 900 }}>{weekProgressPct}%</div>
+                    <div className="badge">
+                      {weekRemaining > 0 ? `reste ${weekRemaining.toLocaleString(locale)}` : "ok 🎉"}
+                    </div>
                   </div>
 
                   <div
@@ -658,7 +627,7 @@ export default async function Page({
         </article>
       </section>
 
-      {/* === 3) Dernières valeurs (cards en grille) === */}
+      {/* === 3) Dernières valeurs === */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
           <h2
@@ -676,7 +645,9 @@ export default async function Page({
           {/* Pas */}
           <article className="card">
             <div className="flex items-center justify-between">
-              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>{t("progress.latest.steps.title")}</h3>
+              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>
+                {t("progress.latest.steps.title")}
+              </h3>
             </div>
             {lastByType.steps ? (
               <div style={{ marginTop: 8 }}>
@@ -697,7 +668,9 @@ export default async function Page({
           {/* Charges */}
           <article className="card">
             <div className="flex items-center justify-between">
-              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>{t("progress.latest.load.title")}</h3>
+              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>
+                {t("progress.latest.load.title")}
+              </h3>
             </div>
             {lastByType.load ? (
               <div style={{ marginTop: 8 }}>
@@ -718,11 +691,15 @@ export default async function Page({
           {/* Poids */}
           <article className="card">
             <div className="flex items-center justify-between">
-              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>{t("progress.latest.weight.title")}</h3>
+              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>
+                {t("progress.latest.weight.title")}
+              </h3>
             </div>
             {lastByType.weight ? (
               <div style={{ marginTop: 8 }}>
-                <div style={{ fontSize: 22, fontWeight: 900 }}>{lastByType.weight.value} kg</div>
+                <div style={{ fontSize: 22, fontWeight: 900 }}>
+                  {lastByType.weight.value} kg
+                </div>
                 <div className="text-sm" style={{ color: "#6b7280" }}>
                   {fmtDate(lastByType.weight.date, locale)}
                 </div>
@@ -736,7 +713,7 @@ export default async function Page({
         </div>
       </section>
 
-      {/* === 4) Entrées récentes (liste en cartes) === */}
+      {/* === 4) Entrées récentes === */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
           <h2
