@@ -97,6 +97,14 @@ function parseYMDLocal(s: string) {
   return new Date(y, (m || 1) - 1, d || 1);
 }
 
+/* ✅ streak helper */
+function ymdLocal(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const da = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${da}`;
+}
+
 function entryBadgeStyles(t: EntryType): CSSProperties {
   switch (t) {
     case "steps":
@@ -220,10 +228,14 @@ export default async function Page({
   const dd = String(today.getDate()).padStart(2, "0");
   const defaultDate = `${yyyy}-${mm}-${dd}`;
 
-  // ✅ AJOUT: lecture pas Apple importés (cookie apple_health_steps_daily)
+  // ✅ Apple steps (import Santé) + manuel steps du jour (addition)
   const appleStepsDaily = readAppleStepsDaily();
-  const appleStepsToday =
-    typeof appleStepsDaily?.[defaultDate] === "number" ? appleStepsDaily[defaultDate] : null;
+  const appleStepsToday = Number((appleStepsDaily as any)?.[defaultDate] || 0) || 0;
+
+  const manualStepsToday =
+    store.entries.find((e) => e.type === "steps" && e.date === defaultDate)?.value || 0;
+
+  const stepsTodayTotal = (Number(manualStepsToday) || 0) + (Number(appleStepsToday) || 0);
 
   // Semaine en cours
   const monday = startOfWeekMonday(today);
@@ -239,6 +251,16 @@ export default async function Page({
     })
     .reduce((sum, e) => sum + (Number(e.value) || 0), 0);
 
+  // ✅ Apple steps semaine (addition)
+  const appleStepsThisWeek = Object.entries(appleStepsDaily || {})
+    .filter(([date]) => {
+      const d = parseYMDLocal(date);
+      return d >= monday && d <= sunday;
+    })
+    .reduce((sum, [, v]) => sum + (Number(v) || 0), 0);
+
+  const stepsThisWeekTotal = stepsThisWeek + appleStepsThisWeek;
+
   const daysCovered = new Set(
     store.entries
       .filter((e) => e.type === "steps")
@@ -249,9 +271,62 @@ export default async function Page({
       .map((e) => e.date),
   ).size;
 
-  const avgPerDay =
-    daysCovered > 0 ? Math.round(stepsThisWeek / daysCovered) : 0;
-  const hasWeekData = stepsThisWeek > 0 && daysCovered > 0;
+  // ✅ jours couverts total (manuel + apple)
+  const daysCoveredTotal = new Set(
+    [
+      ...store.entries
+        .filter((e) => e.type === "steps")
+        .filter((e) => {
+          const d = parseYMDLocal(e.date);
+          return d >= monday && d <= sunday;
+        })
+        .map((e) => e.date),
+      ...Object.keys(appleStepsDaily || {}).filter((date) => {
+        const d = parseYMDLocal(date);
+        return d >= monday && d <= sunday && (Number((appleStepsDaily as any)[date]) || 0) > 0;
+      }),
+    ],
+  ).size;
+
+  const avgPerDayTotal = daysCoveredTotal > 0 ? Math.round(stepsThisWeekTotal / daysCoveredTotal) : 0;
+  const hasWeekDataTotal = stepsThisWeekTotal > 0 && daysCoveredTotal > 0;
+
+  // ✅ Objectifs (modifiable)
+  const goalStepsPerDay = 10_000;
+  const goalStepsPerWeek = goalStepsPerDay * 7;
+
+  const weekProgressPct =
+    goalStepsPerWeek > 0 ? Math.min(100, Math.round((stepsThisWeekTotal / goalStepsPerWeek) * 100)) : 0;
+  const weekRemaining = Math.max(0, goalStepsPerWeek - stepsThisWeekTotal);
+
+  // ✅ Streak (manuel + Apple) : jours consécutifs jusqu'à aujourd'hui
+  const stepsByDayTotal: Record<string, number> = {};
+
+  // manuel
+  for (const e of store.entries) {
+    if (e.type !== "steps") continue;
+    if (!e.date) continue;
+    stepsByDayTotal[e.date] = (stepsByDayTotal[e.date] || 0) + (Number(e.value) || 0);
+  }
+  // apple
+  for (const [date, v] of Object.entries(appleStepsDaily || {})) {
+    stepsByDayTotal[date] = (stepsByDayTotal[date] || 0) + (Number(v) || 0);
+  }
+
+  let streakDays = 0;
+  {
+    const d = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    while (true) {
+      const key = ymdLocal(d);
+      const val = Number(stepsByDayTotal[key] || 0);
+      if (val > 0) {
+        streakDays += 1;
+        d.setDate(d.getDate() - 1);
+      } else {
+        break;
+      }
+    }
+  }
 
   return (
     <div className="container" style={{ paddingTop: 24, paddingBottom: 32 }}>
@@ -317,11 +392,82 @@ export default async function Page({
               fontWeight: 600,
             }}
           >
-            {t("progress.messages.errorPrefix")}{" "}
-            {searchParams.error}
+            {t("progress.messages.errorPrefix")} {searchParams.error}
           </div>
         )}
       </div>
+
+      {/* === 0) Aujourd’hui (fitness) === */}
+      <section className="section" style={{ marginTop: 12 }}>
+        <div className="section-head" style={{ marginBottom: 8 }}>
+          <h2
+            style={{
+              margin: 0,
+              fontSize: "clamp(16px, 1.9vw, 18px)",
+              lineHeight: 1.2,
+            }}
+          >
+            Aujourd’hui
+          </h2>
+        </div>
+
+        <div className="grid gap-6 lg:grid-cols-4">
+          {/* Total pas */}
+          <article className="card">
+            <div className="text-sm" style={{ color: "#6b7280" }}>
+              Pas (total)
+            </div>
+            <div style={{ fontSize: 22, fontWeight: 900 }}>
+              {stepsTodayTotal.toLocaleString(locale)} {t("progress.latest.steps.unit")}
+            </div>
+            <div className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>
+              Manuel: {Number(manualStepsToday || 0).toLocaleString(locale)} • Apple:{" "}
+              {Number(appleStepsToday || 0).toLocaleString(locale)}
+            </div>
+          </article>
+
+          {/* Streak */}
+          <article className="card">
+            <div className="text-sm" style={{ color: "#6b7280" }}>
+              Streak
+            </div>
+            <div style={{ fontSize: 22, fontWeight: 900 }}>
+              {streakDays} jour{streakDays > 1 ? "s" : ""}
+            </div>
+            <div className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>
+              Jours consécutifs avec des pas (manuel + Apple)
+            </div>
+          </article>
+
+          {/* Poids récent */}
+          <article className="card">
+            <div className="text-sm" style={{ color: "#6b7280" }}>
+              Poids (dernier)
+            </div>
+            <div style={{ fontSize: 22, fontWeight: 900 }}>
+              {lastByType.weight ? `${lastByType.weight.value} kg` : "—"}
+            </div>
+            <div className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>
+              {lastByType.weight ? fmtDate(lastByType.weight.date, locale) : "Pas encore de mesure"}
+            </div>
+          </article>
+
+          {/* Charge récente */}
+          <article className="card">
+            <div className="text-sm" style={{ color: "#6b7280" }}>
+              Charge (dernier)
+            </div>
+            <div style={{ fontSize: 22, fontWeight: 900 }}>
+              {lastByType.load
+                ? `${lastByType.load.value} kg${lastByType.load.reps ? ` × ${lastByType.load.reps}` : ""}`
+                : "—"}
+            </div>
+            <div className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>
+              {lastByType.load ? fmtDate(lastByType.load.date, locale) : "Pas encore de charge"}
+            </div>
+          </article>
+        </div>
+      </section>
 
       {/* === 1) Section Formulaire === */}
       <div className="section" style={{ marginTop: 12 }}>
@@ -340,50 +486,24 @@ export default async function Page({
         <div className="card">
           <form action={addProgressAction} className="grid gap-6 lg:grid-cols-3">
             <div>
-              <label className="label">
-                {t("progress.form.type.label")}
-              </label>
-              <select
-                name="type"
-                className="input"
-                defaultValue="steps"
-                required
-              >
-                <option value="steps">
-                  {t("progress.form.type.steps")}
-                </option>
-                <option value="load">
-                  {t("progress.form.type.load")}
-                </option>
-                <option value="weight">
-                  {t("progress.form.type.weight")}
-                </option>
+              <label className="label">{t("progress.form.type.label")}</label>
+              <select name="type" className="input" defaultValue="steps" required>
+                <option value="steps">{t("progress.form.type.steps")}</option>
+                <option value="load">{t("progress.form.type.load")}</option>
+                <option value="weight">{t("progress.form.type.weight")}</option>
               </select>
-              <div
-                className="text-xs"
-                style={{ color: "#6b7280", marginTop: 6 }}
-              >
+              <div className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>
                 {t("progress.form.type.help")}
               </div>
             </div>
 
             <div>
-              <label className="label">
-                {t("progress.form.date.label")}
-              </label>
-              <input
-                className="input"
-                type="date"
-                name="date"
-                required
-                defaultValue={defaultDate}
-              />
+              <label className="label">{t("progress.form.date.label")}</label>
+              <input className="input" type="date" name="date" required defaultValue={defaultDate} />
             </div>
 
             <div>
-              <label className="label">
-                {t("progress.form.value.label")}
-              </label>
+              <label className="label">{t("progress.form.value.label")}</label>
               <input
                 className="input"
                 type="number"
@@ -395,9 +515,7 @@ export default async function Page({
             </div>
 
             <div>
-              <label className="label">
-                {t("progress.form.reps.label")}
-              </label>
+              <label className="label">{t("progress.form.reps.label")}</label>
               <input
                 className="input"
                 type="number"
@@ -408,25 +526,11 @@ export default async function Page({
             </div>
 
             <div className="lg:col-span-2">
-              <label className="label">
-                {t("progress.form.note.label")}
-              </label>
-              <input
-                className="input"
-                type="text"
-                name="note"
-                placeholder={t("progress.form.note.placeholder")}
-              />
+              <label className="label">{t("progress.form.note.label")}</label>
+              <input className="input" type="text" name="note" placeholder={t("progress.form.note.placeholder")} />
             </div>
 
-            <div
-              className="lg:col-span-3"
-              style={{
-                display: "flex",
-                justifyContent: "flex-end",
-                gap: 10,
-              }}
-            >
+            <div className="lg:col-span-3" style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
               <button className="btn btn-dash" type="submit">
                 {t("progress.form.submit")}
               </button>
@@ -460,18 +564,15 @@ export default async function Page({
         <article className="card" style={{ display: "block", gap: 12 }}>
           <div>
             <div className="text-sm" style={{ color: "#6b7280" }}>
-              {t("progress.week.rangePrefix")}{" "}
-              <b>{fmtDate(mondayYMD, locale)}</b>{" "}
-              {t("progress.week.rangeTo")}{" "}
+              {t("progress.week.rangePrefix")} <b>{fmtDate(mondayYMD, locale)}</b> {t("progress.week.rangeTo")}{" "}
               <b>{fmtDate(sundayYMD, locale)}</b>
             </div>
 
-            {hasWeekData ? (
+            {hasWeekDataTotal ? (
               <div
                 className="grid"
                 style={{
-                  gridTemplateColumns:
-                    "repeat(auto-fit, minmax(220px, 1fr))",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
                   gap: 12,
                   marginTop: 12,
                 }}
@@ -482,16 +583,13 @@ export default async function Page({
                     {t("progress.week.totalLabel")}
                   </div>
                   <div style={{ fontSize: 22, fontWeight: 900 }}>
-                    {stepsThisWeek.toLocaleString(locale)}{" "}
-                    <span
-                      className="text-xs"
-                      style={{
-                        color: "#6b7280",
-                        fontWeight: 400,
-                      }}
-                    >
+                    {stepsThisWeekTotal.toLocaleString(locale)}{" "}
+                    <span className="text-xs" style={{ color: "#6b7280", fontWeight: 400 }}>
                       {t("progress.week.stepsUnit")}
                     </span>
+                  </div>
+                  <div className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>
+                    Manuel: {stepsThisWeek.toLocaleString(locale)} • Apple: {appleStepsThisWeek.toLocaleString(locale)}
                   </div>
                 </div>
 
@@ -501,24 +599,58 @@ export default async function Page({
                     {t("progress.week.avgPerDayLabel")}
                   </div>
                   <div style={{ fontSize: 22, fontWeight: 900 }}>
-                    {avgPerDay.toLocaleString(locale)}{" "}
-                    <span
-                      className="text-xs"
-                      style={{
-                        color: "#6b7280",
-                        fontWeight: 400,
-                      }}
-                    >
+                    {avgPerDayTotal.toLocaleString(locale)}{" "}
+                    <span className="text-xs" style={{ color: "#6b7280", fontWeight: 400 }}>
                       {t("progress.week.stepsPerDayUnit")}
                     </span>
+                  </div>
+                  <div className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>
+                    Jours actifs : {daysCoveredTotal}
+                  </div>
+                </div>
+
+                {/* Bloc Objectif */}
+                <div className="card" style={{ padding: 12 }}>
+                  <div className="text-sm" style={{ color: "#6b7280" }}>
+                    Objectif semaine
+                  </div>
+
+                  <div style={{ fontSize: 22, fontWeight: 900 }}>
+                    {weekProgressPct}%
+                    <span className="text-xs" style={{ color: "#6b7280", fontWeight: 400 }}>
+                      {" "}
+                      ({stepsThisWeekTotal.toLocaleString(locale)} / {goalStepsPerWeek.toLocaleString(locale)}{" "}
+                      {t("progress.week.stepsUnit")})
+                    </span>
+                  </div>
+
+                  <div className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>
+                    {weekRemaining > 0
+                      ? `Reste : ${weekRemaining.toLocaleString(locale)} ${t("progress.week.stepsUnit")}`
+                      : "Objectif atteint 🎉"}
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: 10,
+                      height: 8,
+                      borderRadius: 999,
+                      background: "rgba(107,114,128,.18)",
+                      overflow: "hidden",
+                    }}
+                  >
+                    <div
+                      style={{
+                        height: "100%",
+                        width: `${weekProgressPct}%`,
+                        background: "rgba(14,165,233,.55)",
+                      }}
+                    />
                   </div>
                 </div>
               </div>
             ) : (
-              <div
-                className="text-sm"
-                style={{ color: "#6b7280", marginTop: 10 }}
-              >
+              <div className="text-sm" style={{ color: "#6b7280", marginTop: 10 }}>
                 {t("progress.week.noData")}
               </div>
             )}
@@ -540,39 +672,23 @@ export default async function Page({
           </h2>
         </div>
 
-        {/* ✅ CHANGÉ: 3 -> 4 colonnes pour ajouter Apple */}
-        <div className="grid gap-6 lg:grid-cols-4">
+        <div className="grid gap-6 lg:grid-cols-3">
           {/* Pas */}
           <article className="card">
             <div className="flex items-center justify-between">
-              <h3
-                style={{
-                  margin: 0,
-                  fontSize: 18,
-                  fontWeight: 800,
-                }}
-              >
-                {t("progress.latest.steps.title")}
-              </h3>
+              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>{t("progress.latest.steps.title")}</h3>
             </div>
             {lastByType.steps ? (
               <div style={{ marginTop: 8 }}>
                 <div style={{ fontSize: 22, fontWeight: 900 }}>
-                  {lastByType.steps.value.toLocaleString(locale)}{" "}
-                  {t("progress.latest.steps.unit")}
+                  {lastByType.steps.value.toLocaleString(locale)} {t("progress.latest.steps.unit")}
                 </div>
-                <div
-                  className="text-sm"
-                  style={{ color: "#6b7280" }}
-                >
+                <div className="text-sm" style={{ color: "#6b7280" }}>
                   {fmtDate(lastByType.steps.date, locale)}
                 </div>
               </div>
             ) : (
-              <div
-                className="text-sm"
-                style={{ color: "#6b7280", marginTop: 6 }}
-              >
+              <div className="text-sm" style={{ color: "#6b7280", marginTop: 6 }}>
                 {t("progress.latest.noData")}
               </div>
             )}
@@ -581,36 +697,19 @@ export default async function Page({
           {/* Charges */}
           <article className="card">
             <div className="flex items-center justify-between">
-              <h3
-                style={{
-                  margin: 0,
-                  fontSize: 18,
-                  fontWeight: 800,
-                }}
-              >
-                {t("progress.latest.load.title")}
-              </h3>
+              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>{t("progress.latest.load.title")}</h3>
             </div>
             {lastByType.load ? (
               <div style={{ marginTop: 8 }}>
                 <div style={{ fontSize: 22, fontWeight: 900 }}>
-                  {lastByType.load.value} kg
-                  {lastByType.load.reps
-                    ? ` × ${lastByType.load.reps}`
-                    : ""}
+                  {lastByType.load.value} kg{lastByType.load.reps ? ` × ${lastByType.load.reps}` : ""}
                 </div>
-                <div
-                  className="text-sm"
-                  style={{ color: "#6b7280" }}
-                >
+                <div className="text-sm" style={{ color: "#6b7280" }}>
                   {fmtDate(lastByType.load.date, locale)}
                 </div>
               </div>
             ) : (
-              <div
-                className="text-sm"
-                style={{ color: "#6b7280", marginTop: 6 }}
-              >
+              <div className="text-sm" style={{ color: "#6b7280", marginTop: 6 }}>
                 {t("progress.latest.noData")}
               </div>
             )}
@@ -619,65 +718,18 @@ export default async function Page({
           {/* Poids */}
           <article className="card">
             <div className="flex items-center justify-between">
-              <h3
-                style={{
-                  margin: 0,
-                  fontSize: 18,
-                  fontWeight: 800,
-                }}
-              >
-                {t("progress.latest.weight.title")}
-              </h3>
+              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>{t("progress.latest.weight.title")}</h3>
             </div>
             {lastByType.weight ? (
               <div style={{ marginTop: 8 }}>
-                <div style={{ fontSize: 22, fontWeight: 900 }}>
-                  {lastByType.weight.value} kg
-                </div>
-                <div
-                  className="text-sm"
-                  style={{ color: "#6b7280" }}
-                >
+                <div style={{ fontSize: 22, fontWeight: 900 }}>{lastByType.weight.value} kg</div>
+                <div className="text-sm" style={{ color: "#6b7280" }}>
                   {fmtDate(lastByType.weight.date, locale)}
                 </div>
               </div>
             ) : (
-              <div
-                className="text-sm"
-                style={{ color: "#6b7280", marginTop: 6 }}
-              >
-                {t("progress.latest.noData")}
-              </div>
-            )}
-          </article>
-
-          {/* ✅ AJOUT: Pas Apple Santé du jour (import export.zip) */}
-          <article className="card">
-            <div className="flex items-center justify-between">
-              <h3
-                style={{
-                  margin: 0,
-                  fontSize: 18,
-                  fontWeight: 800,
-                }}
-              >
-                Pas (Apple Santé)
-              </h3>
-            </div>
-
-            {appleStepsToday != null ? (
-              <div style={{ marginTop: 8 }}>
-                <div style={{ fontSize: 22, fontWeight: 900 }}>
-                  {appleStepsToday.toLocaleString(locale)}{" "}
-                  {t("progress.latest.steps.unit")}
-                </div>
-                <div className="text-sm" style={{ color: "#6b7280" }}>
-                  {fmtDate(defaultDate, locale)}
-                </div>
-              </div>
-            ) : (
               <div className="text-sm" style={{ color: "#6b7280", marginTop: 6 }}>
-                Pas non importés (Apple Santé)
+                {t("progress.latest.noData")}
               </div>
             )}
           </article>
@@ -716,46 +768,29 @@ export default async function Page({
               >
                 <div className="flex items-center justify-between">
                   <strong style={{ fontSize: 18 }}>
-                    {e.type === "steps" &&
-                      t("progress.recent.type.steps")}
-                    {e.type === "load" &&
-                      t("progress.recent.type.load")}
-                    {e.type === "weight" &&
-                      t("progress.recent.type.weight")}
+                    {e.type === "steps" && t("progress.recent.type.steps")}
+                    {e.type === "load" && t("progress.recent.type.load")}
+                    {e.type === "weight" && t("progress.recent.type.weight")}
                   </strong>
-                  <span className="badge">
-                    {fmtDate(e.date, locale)}
-                  </span>
+                  <span className="badge">{fmtDate(e.date, locale)}</span>
                 </div>
 
                 <div style={{ fontSize: 18, fontWeight: 800 }}>
                   {e.type === "steps" &&
-                    `${e.value.toLocaleString(locale)} ${t(
-                      "progress.latest.steps.unit",
-                    )}`}
-                  {e.type === "load" &&
-                    `${e.value} kg${
-                      e.reps ? ` × ${e.reps}` : ""
-                    }`}
+                    `${e.value.toLocaleString(locale)} ${t("progress.latest.steps.unit")}`}
+                  {e.type === "load" && `${e.value} kg${e.reps ? ` × ${e.reps}` : ""}`}
                   {e.type === "weight" && `${e.value} kg`}
                 </div>
 
                 {e.note && (
-                  <div
-                    className="text-sm"
-                    style={{ color: "#6b7280" }}
-                  >
+                  <div className="text-sm" style={{ color: "#6b7280" }}>
                     {e.note}
                   </div>
                 )}
 
                 <form action={deleteEntryAction} style={{ marginTop: 4 }}>
                   <input type="hidden" name="id" value={e.id} />
-                  <button
-                    className="btn btn-outline"
-                    type="submit"
-                    style={{ color: "#111" }}
-                  >
+                  <button className="btn btn-outline" type="submit" style={{ color: "#111" }}>
                     {t("progress.recent.delete")}
                   </button>
                 </form>
