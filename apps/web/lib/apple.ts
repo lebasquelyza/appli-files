@@ -21,14 +21,36 @@ export function readAppleRecent(): AppleRecent {
   }
 }
 
+/** ✅ Nouveau : pas par jour (YYYY-MM-DD -> steps) */
+export function readAppleStepsDaily(): Record<string, number> {
+  const b64 = cookies().get("apple_health_steps_daily")?.value || "";
+  if (!b64) return {};
+  try {
+    const json = Buffer.from(b64, "base64").toString("utf8");
+    const obj = JSON.parse(json);
+    if (obj && typeof obj === "object") return obj as Record<string, number>;
+    return {};
+  } catch {
+    return {};
+  }
+}
+
 export function fmtAppleType(t: string) {
   return t.replace(/^HKWorkoutActivityType/, "");
 }
 export function fmtAppleDate(iso: string) {
   try {
     const d = new Date(iso);
-    return d.toLocaleString("fr-FR", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
-  } catch { return iso; }
+    return d.toLocaleString("fr-FR", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
 }
 export function fmtDuration(min?: number) {
   if (!min || min <= 0) return "";
