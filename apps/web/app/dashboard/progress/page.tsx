@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import type { CSSProperties } from "react";
 import { translations } from "@/app/i18n/translations";
+import { readAppleStepsDaily } from "@/lib/apple"; // ✅ AJOUT
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,9 +35,9 @@ type EntryType = "steps" | "load" | "weight";
 type ProgressEntry = {
   id: string;
   type: EntryType;
-  date: string;      // YYYY-MM-DD
-  value: number;     // pas / kg
-  reps?: number;     // seulement pour "load"
+  date: string; // YYYY-MM-DD
+  value: number; // pas / kg
+  reps?: number; // seulement pour "load"
   note?: string;
   createdAt: string; // ISO
 };
@@ -218,6 +219,11 @@ export default async function Page({
   const mm = String(today.getMonth() + 1).padStart(2, "0");
   const dd = String(today.getDate()).padStart(2, "0");
   const defaultDate = `${yyyy}-${mm}-${dd}`;
+
+  // ✅ AJOUT: lecture pas Apple importés (cookie apple_health_steps_daily)
+  const appleStepsDaily = readAppleStepsDaily();
+  const appleStepsToday =
+    typeof appleStepsDaily?.[defaultDate] === "number" ? appleStepsDaily[defaultDate] : null;
 
   // Semaine en cours
   const monday = startOfWeekMonday(today);
@@ -534,7 +540,8 @@ export default async function Page({
           </h2>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-3">
+        {/* ✅ CHANGÉ: 3 -> 4 colonnes pour ajouter Apple */}
+        <div className="grid gap-6 lg:grid-cols-4">
           {/* Pas */}
           <article className="card">
             <div className="flex items-center justify-between">
@@ -640,6 +647,37 @@ export default async function Page({
                 style={{ color: "#6b7280", marginTop: 6 }}
               >
                 {t("progress.latest.noData")}
+              </div>
+            )}
+          </article>
+
+          {/* ✅ AJOUT: Pas Apple Santé du jour (import export.zip) */}
+          <article className="card">
+            <div className="flex items-center justify-between">
+              <h3
+                style={{
+                  margin: 0,
+                  fontSize: 18,
+                  fontWeight: 800,
+                }}
+              >
+                Pas (Apple Santé)
+              </h3>
+            </div>
+
+            {appleStepsToday != null ? (
+              <div style={{ marginTop: 8 }}>
+                <div style={{ fontSize: 22, fontWeight: 900 }}>
+                  {appleStepsToday.toLocaleString(locale)}{" "}
+                  {t("progress.latest.steps.unit")}
+                </div>
+                <div className="text-sm" style={{ color: "#6b7280" }}>
+                  {fmtDate(defaultDate, locale)}
+                </div>
+              </div>
+            ) : (
+              <div className="text-sm" style={{ color: "#6b7280", marginTop: 6 }}>
+                Pas non importés (Apple Santé)
               </div>
             )}
           </article>
