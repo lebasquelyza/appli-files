@@ -91,6 +91,24 @@ function formatTime(dateStr: string) {
   });
 }
 
+function formatDaysFr(daysCsv: string) {
+  const map: Record<string, string> = {
+    mon: "Lun",
+    tue: "Mar",
+    wed: "Mer",
+    thu: "Jeu",
+    fri: "Ven",
+    sat: "Sam",
+    sun: "Dim",
+  };
+  return String(daysCsv || "")
+    .split(",")
+    .map((d) => d.trim())
+    .filter(Boolean)
+    .map((d) => map[d] || d)
+    .join(", ");
+}
+
 export default function MotivationPage() {
   const { data: session, status } = useSession();
   const t = useT();
@@ -116,6 +134,9 @@ export default function MotivationPage() {
 
   const [pushBusy, setPushBusy] = useState(false);
   const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || "";
+
+  // ✅ NEW: liste dédiée aux programmations (déroulable)
+  const [scheduledMessages, setScheduledMessages] = useState<MotivationMessageApi[]>([]);
 
   useEffect(() => {
     setNotifications([
@@ -151,12 +172,15 @@ export default function MotivationPage() {
 
     async function loadMessages() {
       try {
-        // ✅ IMPORTANT: envoie les cookies NextAuth
         const res = await fetch("/api/motivation/messages", { credentials: "include" });
         if (!res.ok) return;
         const data: MotivationMessageApi[] = await res.json();
         if (cancelled || !Array.isArray(data)) return;
 
+        // ✅ NEW: alimente la section "Programmations"
+        setScheduledMessages(data);
+
+        // logique existante: injecter dans la liste d'historique (notifications UI)
         setNotifications((prev) => {
           const existingIds = new Set(prev.map((n) => n.id));
           const extra: CoachingNotification[] = data
@@ -348,7 +372,6 @@ export default function MotivationPage() {
     if (scheduleTarget === "FRIENDS") setSharingCustom(true);
 
     try {
-      // ✅ NEW: deviceId stable (localStorage) pour lier la programmation au device qui reçoit les push
       const deviceId = getDeviceId();
 
       const res = await fetch("/api/motivation/messages", {
@@ -361,7 +384,7 @@ export default function MotivationPage() {
           days: scheduleDays,
           time: scheduleTime,
           recipientIds: scheduleTarget === "FRIENDS" ? selectedFriendIds : undefined,
-          deviceId, // ✅ AJOUT IMPORTANT
+          deviceId,
         }),
       });
 
@@ -381,6 +404,9 @@ export default function MotivationPage() {
       const msg: MotivationMessageApi = (json as MotivationMessageApi) ?? ({} as any);
       const isMe = msg.target === "ME";
       const daysLabel = (msg.days || "").split(",").filter(Boolean).join(", ");
+
+      // ✅ NEW: rafraîchit la liste déroulable des programmations (sans changer le backend)
+      setScheduledMessages((prev) => [msg, ...prev]);
 
       setNotifications((prev) => [
         {
@@ -445,15 +471,12 @@ export default function MotivationPage() {
       const res = await fetch("/api/push/test", { method: "POST" });
       if (!res.ok) {
         const txt = await res.text().catch(() => "");
-        // ✅ texte renommé uniquement (logique inchangée)
         alert(`Notification test échouée (${res.status})\n\n${txt}`);
         return;
       }
       const json = await res.json().catch(() => null);
-      // ✅ texte renommé uniquement (logique inchangée)
       alert(`Notification test envoyée ✅\n\n${json ? JSON.stringify(json) : ""}`);
     } catch (e: any) {
-      // ✅ texte renommé uniquement (logique inchangée)
       alert(`Notification test erreur:\n\n${e?.message || String(e)}`);
     }
   };
@@ -480,6 +503,8 @@ export default function MotivationPage() {
       </div>
     );
   }
+
+  const scheduledCount = scheduledMessages.filter((m) => m.active).length;
 
   return (
     <div
@@ -523,6 +548,74 @@ export default function MotivationPage() {
         )}
       </div>
 
+      {/* ✅ NEW: Programmations déroulables */}
+      <details
+        className="card"
+        style={{
+          padding: 10,
+          marginBottom: 10,
+          border: "1px solid #e5e7eb",
+          background: "#ffffff",
+          borderRadius: 12,
+        }}
+      >
+        <summary style={{ cursor: "pointer", fontSize: 13, fontWeight: 700, color: "#111827" }}>
+          📅 Programmations ({scheduledCount})
+          <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 400, color: "#6b7280" }}>
+            (dérouler pour voir les horaires)
+          </span>
+        </summary>
+
+        <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+          {scheduledMessages.length === 0 ? (
+            <div style={{ fontSize: 12, color: "#6b7280" }}>Aucune programmation pour le moment.</div>
+          ) : (
+            scheduledMessages
+              .filter((m) => m.active)
+              .slice(0, 50)
+              .map((m) => {
+                const isMe = m.target === "ME";
+                return (
+                  <div
+                    key={m.id}
+                    style={{
+                      border: "1px solid #e5e7eb",
+                      borderRadius: 10,
+                      padding: 10,
+                      display: "grid",
+                      gap: 4,
+                      background: "#f9fafb",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>
+                        {isMe ? "Pour moi (Files Le Coach)" : "Pour mes amis"}
+                      </div>
+                      <div style={{ fontSize: 12, color: "#111827", whiteSpace: "nowrap" }}>
+                        ⏰ {m.time}
+                      </div>
+                    </div>
+
+                    <div style={{ fontSize: 12, color: "#374151" }}>
+                      Jours : <strong>{formatDaysFr(m.days)}</strong>
+                    </div>
+
+                    {!isMe && (
+                      <div style={{ fontSize: 12, color: "#374151" }}>
+                        Message : <span style={{ color: "#111827" }}>{m.content}</span>
+                      </div>
+                    )}
+
+                    <div style={{ fontSize: 11, color: "#6b7280" }}>
+                      Créé le {formatTime(m.createdAt)}
+                    </div>
+                  </div>
+                );
+              })
+          )}
+        </div>
+      </details>
+
       {/* Actions */}
       <div
         className="card"
@@ -565,7 +658,6 @@ export default function MotivationPage() {
             {pushBusy ? "Activation..." : "Activer les notifications"}
           </button>
 
-          {/* ✅ texte remplacé uniquement (logique inchangée) */}
           <button
             type="button"
             className="btn btn-dash"
@@ -615,8 +707,6 @@ export default function MotivationPage() {
           >
             {t("motivation.bar.markAllRead", "Tout marquer comme lu")}
           </button>
-
-          {/* ❌ Bouton “Envoyer une notif de test” retiré (logique conservée) */}
         </div>
       </div>
 
