@@ -448,9 +448,6 @@ export default async function Page({
                 <option value="load">{t("progress.form.type.load")}</option>
                 <option value="weight">{t("progress.form.type.weight")}</option>
               </select>
-              <div className="text-xs" style={{ color: "#6b7280", marginTop: 6 }}>
-                {t("progress.form.type.help")}
-              </div>
             </div>
 
             <div>
@@ -472,12 +469,23 @@ export default async function Page({
 
             <div>
               <label className="label">{t("progress.form.reps.label")}</label>
-              <input className="input" type="number" name="reps" step="1" placeholder={t("progress.form.reps.placeholder")} />
+              <input
+                className="input"
+                type="number"
+                name="reps"
+                step="1"
+                placeholder={t("progress.form.reps.placeholder")}
+              />
             </div>
 
             <div className="lg:col-span-2">
               <label className="label">{t("progress.form.note.label")}</label>
-              <input className="input" type="text" name="note" placeholder={t("progress.form.note.placeholder")} />
+              <input
+                className="input"
+                type="text"
+                name="note"
+                placeholder={t("progress.form.note.placeholder")}
+              />
             </div>
 
             <div className="lg:col-span-3" style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
