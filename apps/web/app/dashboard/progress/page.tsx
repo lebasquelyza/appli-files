@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import type { CSSProperties } from "react";
 import { translations } from "@/app/i18n/translations";
-import { readAppleStepsDaily } from "@/lib/apple"; // ✅ AJOUT
+import { readAppleStepsDaily } from "@/lib/apple";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -210,10 +210,6 @@ export default async function Page({
   const jar = cookies();
   const store = parseStore(jar.get("app_progress")?.value);
 
-  const recent = [...store.entries]
-    .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""))
-    .slice(0, 12);
-
   const lastByType: Record<EntryType, ProgressEntry | undefined> = {
     steps: store.entries.find((e) => e.type === "steps"),
     load: store.entries.find((e) => e.type === "load"),
@@ -295,8 +291,6 @@ export default async function Page({
     if (!e.date) continue;
     stepsByDayTotal[e.date] = (stepsByDayTotal[e.date] || 0) + (Number(e.value) || 0);
   }
-
-  // ✅ FIX ICI : utiliser [date], pas e.date
   for (const [date, v] of Object.entries(appleStepsDaily || {})) {
     stepsByDayTotal[date] = (stepsByDayTotal[date] || 0) + (Number(v) || 0);
   }
@@ -385,7 +379,7 @@ export default async function Page({
         )}
       </div>
 
-      {/* === 0) Aujourd’hui === */}
+      {/* === Aujourd’hui === */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
           <h2 style={{ margin: 0, fontSize: "clamp(16px, 1.9vw, 18px)", lineHeight: 1.2 }}>
@@ -437,7 +431,7 @@ export default async function Page({
         </div>
       </section>
 
-      {/* === 1) Formulaire === */}
+      {/* === Formulaire === */}
       <div className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
           <h2 style={{ margin: 0, fontSize: "clamp(16px, 1.9vw, 18px)", lineHeight: 1.2 }}>
@@ -466,7 +460,14 @@ export default async function Page({
 
             <div>
               <label className="label">{t("progress.form.value.label")}</label>
-              <input className="input" type="number" name="value" step="any" placeholder={t("progress.form.value.placeholder")} required />
+              <input
+                className="input"
+                type="number"
+                name="value"
+                step="any"
+                placeholder={t("progress.form.value.placeholder")}
+                required
+              />
             </div>
 
             <div>
@@ -488,7 +489,7 @@ export default async function Page({
         </div>
       </div>
 
-      {/* === 2) Semaine en cours === */}
+      {/* === Semaine en cours === */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
           <h2 style={{ margin: 0, fontSize: "clamp(16px, 1.9vw, 18px)", lineHeight: 1.2 }}>
@@ -530,7 +531,9 @@ export default async function Page({
                   <div className="text-sm" style={{ color: "#6b7280" }}>Objectif semaine</div>
                   <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
                     <div style={{ fontSize: 20, fontWeight: 900 }}>{weekProgressPct}%</div>
-                    <div className="badge">{weekRemaining > 0 ? `reste ${weekRemaining.toLocaleString(locale)}` : "ok 🎉"}</div>
+                    <div className="badge">
+                      {weekRemaining > 0 ? `reste ${weekRemaining.toLocaleString(locale)}` : "ok 🎉"}
+                    </div>
                   </div>
                   <div
                     style={{
@@ -554,7 +557,7 @@ export default async function Page({
         </article>
       </section>
 
-      {/* === 3) Dernières valeurs === */}
+      {/* === Dernières valeurs === */}
       <section className="section" style={{ marginTop: 12 }}>
         <div className="section-head" style={{ marginBottom: 8 }}>
           <h2 style={{ margin: 0, fontSize: "clamp(16px, 1.9vw, 18px)", lineHeight: 1.2 }}>
@@ -629,64 +632,6 @@ export default async function Page({
             )}
           </article>
         </div>
-      </section>
-
-      {/* === 4) Entrées récentes === */}
-      <section className="section" style={{ marginTop: 12 }}>
-        <div className="section-head" style={{ marginBottom: 8 }}>
-          <h2 style={{ margin: 0, fontSize: "clamp(16px, 1.9vw, 18px)", lineHeight: 1.2 }}>
-            {t("progress.recent.title")}
-          </h2>
-        </div>
-
-        {recent.length === 0 ? (
-          <div className="card text-sm" style={{ color: "#6b7280" }}>
-            {t("progress.recent.empty")}
-          </div>
-        ) : (
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {recent.map((e) => (
-              <article
-                key={e.id}
-                className="card"
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 8,
-                }}
-              >
-                <div className="flex items-center justify-between">
-                  <strong style={{ fontSize: 18 }}>
-                    {e.type === "steps" && t("progress.recent.type.steps")}
-                    {e.type === "load" && t("progress.recent.type.load")}
-                    {e.type === "weight" && t("progress.recent.type.weight")}
-                  </strong>
-                  <span className="badge">{fmtDate(e.date, locale)}</span>
-                </div>
-
-                <div style={{ fontSize: 18, fontWeight: 800 }}>
-                  {e.type === "steps" &&
-                    `${e.value.toLocaleString(locale)} ${t("progress.latest.steps.unit")}`}
-                  {e.type === "load" && `${e.value} kg${e.reps ? ` × ${e.reps}` : ""}`}
-                  {e.type === "weight" && `${e.value} kg`}
-                </div>
-
-                {e.note && (
-                  <div className="text-sm" style={{ color: "#6b7280" }}>
-                    {e.note}
-                  </div>
-                )}
-
-                <form action={deleteEntryAction} style={{ marginTop: 4 }}>
-                  <input type="hidden" name="id" value={e.id} />
-                  <button className="btn btn-outline" type="submit" style={{ color: "#111" }}>
-                    {t("progress.recent.delete")}
-                  </button>
-                </form>
-              </article>
-            ))}
-          </div>
-        )}
       </section>
     </div>
   );
